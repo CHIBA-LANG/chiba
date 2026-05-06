@@ -1,123 +1,125 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=9] Ident("operators")
-[1:31 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=9] Ident("operators")
-[3:14 len=1] LParen
-[3:15 len=1] Ident("a")
-[3:16 len=1] Colon
-[3:18 len=3] Ident("i64")
-[3:21 len=1] Comma
-[3:23 len=1] Ident("b")
-[3:24 len=1] Colon
-[3:26 len=3] Ident("i64")
-[3:29 len=1] Comma
-[3:31 len=5] Ident("flags")
-[3:36 len=1] Colon
-[3:38 len=3] Ident("i64")
-[3:41 len=1] RParen
-[3:42 len=1] Colon
-[3:44 len=3] Ident("i64")
-[3:48 len=1] Eq
-[3:50 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=10] Ident("arithmetic")
-[4:20 len=1] Eq
-[4:22 len=1] Ident("a")
-[4:24 len=1] Plus
-[4:26 len=1] Ident("b")
-[4:28 len=1] Minus
-[4:30 len=1] Ident("a")
-[4:32 len=1] Star
-[4:34 len=1] Ident("b")
-[4:36 len=1] Slash
-[4:38 len=1] IntLit("2")
-[4:40 len=1] Percent
-[4:42 len=1] IntLit("3")
-[4:43 len=5] Newline("\n    ")
-[5:5 len=3] KwLet
-[5:9 len=7] Ident("compare")
-[5:17 len=1] Eq
-[5:19 len=1] Ident("a")
-[5:21 len=2] EqEq
-[5:24 len=1] Ident("b")
-[5:26 len=2] PipePipe
-[5:29 len=1] Ident("a")
-[5:31 len=2] BangEq
-[5:34 len=1] Ident("b")
-[5:36 len=2] AmpAmp
-[5:39 len=1] Ident("a")
-[5:41 len=2] LtEq
-[5:44 len=1] Ident("b")
-[5:46 len=2] AmpAmp
-[5:49 len=1] Ident("a")
-[5:51 len=2] GtEq
-[5:54 len=1] Ident("b")
-[5:56 len=2] AmpAmp
-[5:59 len=1] Ident("a")
-[5:61 len=1] Lt
-[5:63 len=1] Ident("b")
-[5:65 len=2] AmpAmp
-[5:68 len=1] Ident("a")
-[5:70 len=1] Gt
-[5:72 len=1] Ident("b")
-[5:73 len=5] Newline("\n    ")
-[6:5 len=3] KwLet
-[6:9 len=4] Ident("bits")
-[6:14 len=1] Eq
-[6:16 len=1] LParen
-[6:17 len=5] Ident("flags")
-[6:23 len=1] Amp
-[6:25 len=4] IntLit("0xff")
-[6:29 len=1] RParen
-[6:31 len=1] Pipe
-[6:33 len=4] IntLit("0b10")
-[6:38 len=1] Caret
-[6:40 len=1] LParen
-[6:41 len=1] IntLit("1")
-[6:43 len=2] LtLt
-[6:46 len=1] IntLit("3")
-[6:47 len=1] RParen
-[6:49 len=2] GtGt
-[6:52 len=1] IntLit("1")
-[6:53 len=5] Newline("\n    ")
-[7:5 len=3] KwLet
-[7:9 len=5] Ident("unary")
-[7:15 len=1] Eq
-[7:17 len=1] Minus
-[7:18 len=1] Ident("a")
-[7:20 len=1] Plus
-[7:22 len=1] Bang
-[7:23 len=7] Ident("compare")
-[7:31 len=2] KwAs
-[7:34 len=3] Ident("i64")
-[7:37 len=5] Newline("\n    ")
-[8:5 len=3] KwLet
-[8:9 len=9] Ident("ptr_value")
-[8:19 len=1] Eq
-[8:21 len=3] Ident("ptr")
-[8:24 len=7] DotStar
-[9:5 len=4] Ident("cell")
-[9:10 len=2] ColonEq
-[9:13 len=1] Ident("a")
-[9:15 len=2] ColonEq
-[9:18 len=1] Ident("b")
-[9:19 len=5] Newline("\n    ")
-[10:5 len=6] KwReturn
-[10:12 len=10] Ident("arithmetic")
-[10:23 len=2] PipeGt
-[10:26 len=4] Ident("step")
-[10:30 len=1] LParen
-[10:31 len=1] Ident("_")
-[10:32 len=1] RParen
-[10:34 len=2] PipeGt
-[10:37 len=6] Ident("finish")
-[10:43 len=1] LParen
-[10:44 len=1] RParen
-[10:45 len=2] RBrace
-[11:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=9] leading=[] Ident("operators") trailing=[]
+[1:31 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=9] leading=[] Ident("operators") trailing=[]
+[3:14 len=1] leading=[] LParen trailing=[]
+[3:15 len=1] leading=[] Ident("a") trailing=[]
+[3:16 len=1] leading=[] Colon trailing=[]
+[3:18 len=3] leading=[] Ident("i64") trailing=[]
+[3:21 len=1] leading=[] Comma trailing=[]
+[3:23 len=1] leading=[] Ident("b") trailing=[]
+[3:24 len=1] leading=[] Colon trailing=[]
+[3:26 len=3] leading=[] Ident("i64") trailing=[]
+[3:29 len=1] leading=[] Comma trailing=[]
+[3:31 len=5] leading=[] Ident("flags") trailing=[]
+[3:36 len=1] leading=[] Colon trailing=[]
+[3:38 len=3] leading=[] Ident("i64") trailing=[]
+[3:41 len=1] leading=[] RParen trailing=[]
+[3:42 len=1] leading=[] Colon trailing=[]
+[3:44 len=3] leading=[] Ident("i64") trailing=[]
+[3:48 len=1] leading=[] Eq trailing=[]
+[3:50 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=10] leading=[] Ident("arithmetic") trailing=[]
+[4:20 len=1] leading=[] Eq trailing=[]
+[4:22 len=1] leading=[] Ident("a") trailing=[]
+[4:24 len=1] leading=[] Plus trailing=[]
+[4:26 len=1] leading=[] Ident("b") trailing=[]
+[4:28 len=1] leading=[] Minus trailing=[]
+[4:30 len=1] leading=[] Ident("a") trailing=[]
+[4:32 len=1] leading=[] Star trailing=[]
+[4:34 len=1] leading=[] Ident("b") trailing=[]
+[4:36 len=1] leading=[] Slash trailing=[]
+[4:38 len=1] leading=[] IntLit("2") trailing=[]
+[4:40 len=1] leading=[] Percent trailing=[]
+[4:42 len=1] leading=[] IntLit("3") trailing=[]
+[4:43 len=5] leading=[] Newline("\n    ") trailing=[]
+[5:5 len=3] leading=[] KwLet trailing=[]
+[5:9 len=7] leading=[] Ident("compare") trailing=[]
+[5:17 len=1] leading=[] Eq trailing=[]
+[5:19 len=1] leading=[] Ident("a") trailing=[]
+[5:21 len=2] leading=[] EqEq trailing=[]
+[5:24 len=1] leading=[] Ident("b") trailing=[]
+[5:26 len=2] leading=[] PipePipe trailing=[]
+[5:29 len=1] leading=[] Ident("a") trailing=[]
+[5:31 len=2] leading=[] BangEq trailing=[]
+[5:34 len=1] leading=[] Ident("b") trailing=[]
+[5:36 len=2] leading=[] AmpAmp trailing=[]
+[5:39 len=1] leading=[] Ident("a") trailing=[]
+[5:41 len=2] leading=[] LtEq trailing=[]
+[5:44 len=1] leading=[] Ident("b") trailing=[]
+[5:46 len=2] leading=[] AmpAmp trailing=[]
+[5:49 len=1] leading=[] Ident("a") trailing=[]
+[5:51 len=2] leading=[] GtEq trailing=[]
+[5:54 len=1] leading=[] Ident("b") trailing=[]
+[5:56 len=2] leading=[] AmpAmp trailing=[]
+[5:59 len=1] leading=[] Ident("a") trailing=[]
+[5:61 len=1] leading=[] Lt trailing=[]
+[5:63 len=1] leading=[] Ident("b") trailing=[]
+[5:65 len=2] leading=[] AmpAmp trailing=[]
+[5:68 len=1] leading=[] Ident("a") trailing=[]
+[5:70 len=1] leading=[] Gt trailing=[]
+[5:72 len=1] leading=[] Ident("b") trailing=[]
+[5:73 len=5] leading=[] Newline("\n    ") trailing=[]
+[6:5 len=3] leading=[] KwLet trailing=[]
+[6:9 len=4] leading=[] Ident("bits") trailing=[]
+[6:14 len=1] leading=[] Eq trailing=[]
+[6:16 len=1] leading=[] LParen trailing=[]
+[6:17 len=5] leading=[] Ident("flags") trailing=[]
+[6:23 len=1] leading=[] Amp trailing=[]
+[6:25 len=4] leading=[] IntLit("0xff") trailing=[]
+[6:29 len=1] leading=[] RParen trailing=[]
+[6:31 len=1] leading=[] Pipe trailing=[]
+[6:33 len=4] leading=[] IntLit("0b10") trailing=[]
+[6:38 len=1] leading=[] Caret trailing=[]
+[6:40 len=1] leading=[] LParen trailing=[]
+[6:41 len=1] leading=[] IntLit("1") trailing=[]
+[6:43 len=2] leading=[] LtLt trailing=[]
+[6:46 len=1] leading=[] IntLit("3") trailing=[]
+[6:47 len=1] leading=[] RParen trailing=[]
+[6:49 len=2] leading=[] GtGt trailing=[]
+[6:52 len=1] leading=[] IntLit("1") trailing=[]
+[6:53 len=5] leading=[] Newline("\n    ") trailing=[]
+[7:5 len=3] leading=[] KwLet trailing=[]
+[7:9 len=5] leading=[] Ident("unary") trailing=[]
+[7:15 len=1] leading=[] Eq trailing=[]
+[7:17 len=1] leading=[] Minus trailing=[]
+[7:18 len=1] leading=[] Ident("a") trailing=[]
+[7:20 len=1] leading=[] Plus trailing=[]
+[7:22 len=1] leading=[] Bang trailing=[]
+[7:23 len=7] leading=[] Ident("compare") trailing=[]
+[7:31 len=2] leading=[] KwAs trailing=[]
+[7:34 len=3] leading=[] Ident("i64") trailing=[]
+[7:37 len=5] leading=[] Newline("\n    ") trailing=[]
+[8:5 len=3] leading=[] KwLet trailing=[]
+[8:9 len=9] leading=[] Ident("ptr_value") trailing=[]
+[8:19 len=1] leading=[] Eq trailing=[]
+[8:21 len=3] leading=[] Ident("ptr") trailing=[]
+[8:24 len=2] leading=[] DotStar trailing=[]
+[8:26 len=5] leading=[] Newline("\n    ") trailing=[]
+[9:5 len=4] leading=[] Ident("cell") trailing=[]
+[9:10 len=2] leading=[] ColonEq trailing=[]
+[9:13 len=1] leading=[] Ident("a") trailing=[]
+[9:15 len=2] leading=[] ColonEq trailing=[]
+[9:18 len=1] leading=[] Ident("b") trailing=[]
+[9:19 len=5] leading=[] Newline("\n    ") trailing=[]
+[10:5 len=6] leading=[] KwReturn trailing=[]
+[10:12 len=10] leading=[] Ident("arithmetic") trailing=[]
+[10:23 len=2] leading=[] PipeGt trailing=[]
+[10:26 len=4] leading=[] Ident("step") trailing=[]
+[10:30 len=1] leading=[] LParen trailing=[]
+[10:31 len=1] leading=[] Ident("_") trailing=[]
+[10:32 len=1] leading=[] RParen trailing=[]
+[10:34 len=2] leading=[] PipeGt trailing=[]
+[10:37 len=6] leading=[] Ident("finish") trailing=[]
+[10:43 len=1] leading=[] LParen trailing=[]
+[10:44 len=1] leading=[] RParen trailing=[]
+[10:45 len=2] leading=[] RBrace trailing=[]
+[11:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

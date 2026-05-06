@@ -1,77 +1,79 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=5] Ident("paths")
-[1:27 len=1] Dot
-[1:28 len=8] Ident("generics")
-[1:36 len=2] Newline("\n\n")
-[3:1 len=3] KwUse
-[3:5 len=4] Ident("demo")
-[3:9 len=2] Dot
-[4:1 len=4] Ident("math")
-[4:5 len=2] Dot
-[5:1 len=3] Ident("add")
-[5:4 len=1] Newline("\n")
-[6:1 len=3] KwUse
-[6:5 len=4] Ident("demo")
-[6:9 len=1] Dot
-[6:10 len=2] Ident("io")
-[6:12 len=1] Dot
-[6:13 len=1] LBrace
-[6:14 len=5] Ident("print")
-[6:19 len=1] Comma
-[6:21 len=7] Ident("println")
-[6:28 len=1] RBrace
-[6:29 len=1] Newline("\n")
-[7:1 len=3] KwUse
-[7:5 len=4] Ident("demo")
-[7:9 len=2] Dot
-[8:1 len=7] Ident("prelude")
-[8:8 len=4] DotStar
-[10:1 len=3] KwDef
-[10:5 len=13] Ident("generic_paths")
-[10:18 len=1] LParen
-[10:19 len=2] Ident("xs")
-[10:21 len=1] Colon
-[10:23 len=3] Ident("Vec")
-[10:26 len=1] LBracket
-[10:27 len=6] Ident("Option")
-[10:33 len=1] LBracket
-[10:34 len=6] Ident("Result")
-[10:40 len=1] LBracket
-[10:41 len=3] Ident("i64")
-[10:44 len=1] Comma
-[10:46 len=6] Atom("error")
-[10:52 len=1] RBracket
-[10:53 len=1] RBracket
-[10:54 len=1] RBracket
-[10:55 len=1] RParen
-[10:56 len=1] Colon
-[10:58 len=6] Ident("Option")
-[10:64 len=1] LBracket
-[10:65 len=3] Ident("i64")
-[10:68 len=1] RBracket
-[10:70 len=1] Eq
-[10:72 len=6] LBrace
-[11:5 len=3] KwLet
-[11:9 len=5] Ident("value")
-[11:15 len=1] Eq
-[11:17 len=6] Ident("Option")
-[11:23 len=1] Dot
-[11:24 len=4] Ident("Some")
-[11:28 len=1] LParen
-[11:29 len=6] Ident("Result")
-[11:35 len=1] Dot
-[11:36 len=2] Ident("Ok")
-[11:38 len=1] LParen
-[11:39 len=1] IntLit("1")
-[11:40 len=1] RParen
-[11:41 len=1] RParen
-[11:42 len=5] Newline("\n    ")
-[12:5 len=6] KwReturn
-[12:12 len=5] Ident("value")
-[12:17 len=2] RBrace
-[13:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=5] leading=[] Ident("paths") trailing=[]
+[1:27 len=1] leading=[] Dot trailing=[]
+[1:28 len=8] leading=[] Ident("generics") trailing=[]
+[1:36 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwUse trailing=[]
+[3:5 len=4] leading=[] Ident("demo") trailing=[]
+[3:9 len=2] leading=[] Dot trailing=[]
+[4:1 len=4] leading=[] Ident("math") trailing=[]
+[4:5 len=2] leading=[] Dot trailing=[]
+[5:1 len=3] leading=[] Ident("add") trailing=[]
+[5:4 len=1] leading=[] Newline("\n") trailing=[]
+[6:1 len=3] leading=[] KwUse trailing=[]
+[6:5 len=4] leading=[] Ident("demo") trailing=[]
+[6:9 len=1] leading=[] Dot trailing=[]
+[6:10 len=2] leading=[] Ident("io") trailing=[]
+[6:12 len=1] leading=[] Dot trailing=[]
+[6:13 len=1] leading=[] LBrace trailing=[]
+[6:14 len=5] leading=[] Ident("print") trailing=[]
+[6:19 len=1] leading=[] Comma trailing=[]
+[6:21 len=7] leading=[] Ident("println") trailing=[]
+[6:28 len=1] leading=[] RBrace trailing=[]
+[6:29 len=1] leading=[] Newline("\n") trailing=[]
+[7:1 len=3] leading=[] KwUse trailing=[]
+[7:5 len=4] leading=[] Ident("demo") trailing=[]
+[7:9 len=2] leading=[] Dot trailing=[]
+[8:1 len=7] leading=[] Ident("prelude") trailing=[]
+[8:8 len=2] leading=[] DotStar trailing=[]
+[8:10 len=2] leading=[] Newline("\n\n") trailing=[]
+[10:1 len=3] leading=[] KwDef trailing=[]
+[10:5 len=13] leading=[] Ident("generic_paths") trailing=[]
+[10:18 len=1] leading=[] LParen trailing=[]
+[10:19 len=2] leading=[] Ident("xs") trailing=[]
+[10:21 len=1] leading=[] Colon trailing=[]
+[10:23 len=3] leading=[] Ident("Vec") trailing=[]
+[10:26 len=1] leading=[] LBracket trailing=[]
+[10:27 len=6] leading=[] Ident("Option") trailing=[]
+[10:33 len=1] leading=[] LBracket trailing=[]
+[10:34 len=6] leading=[] Ident("Result") trailing=[]
+[10:40 len=1] leading=[] LBracket trailing=[]
+[10:41 len=3] leading=[] Ident("i64") trailing=[]
+[10:44 len=1] leading=[] Comma trailing=[]
+[10:46 len=6] leading=[] Atom("error") trailing=[]
+[10:52 len=1] leading=[] RBracket trailing=[]
+[10:53 len=1] leading=[] RBracket trailing=[]
+[10:54 len=1] leading=[] RBracket trailing=[]
+[10:55 len=1] leading=[] RParen trailing=[]
+[10:56 len=1] leading=[] Colon trailing=[]
+[10:58 len=6] leading=[] Ident("Option") trailing=[]
+[10:64 len=1] leading=[] LBracket trailing=[]
+[10:65 len=3] leading=[] Ident("i64") trailing=[]
+[10:68 len=1] leading=[] RBracket trailing=[]
+[10:70 len=1] leading=[] Eq trailing=[]
+[10:72 len=6] leading=[] LBrace trailing=[]
+[11:5 len=3] leading=[] KwLet trailing=[]
+[11:9 len=5] leading=[] Ident("value") trailing=[]
+[11:15 len=1] leading=[] Eq trailing=[]
+[11:17 len=6] leading=[] Ident("Option") trailing=[]
+[11:23 len=1] leading=[] Dot trailing=[]
+[11:24 len=4] leading=[] Ident("Some") trailing=[]
+[11:28 len=1] leading=[] LParen trailing=[]
+[11:29 len=6] leading=[] Ident("Result") trailing=[]
+[11:35 len=1] leading=[] Dot trailing=[]
+[11:36 len=2] leading=[] Ident("Ok") trailing=[]
+[11:38 len=1] leading=[] LParen trailing=[]
+[11:39 len=1] leading=[] IntLit("1") trailing=[]
+[11:40 len=1] leading=[] RParen trailing=[]
+[11:41 len=1] leading=[] RParen trailing=[]
+[11:42 len=5] leading=[] Newline("\n    ") trailing=[]
+[12:5 len=6] leading=[] KwReturn trailing=[]
+[12:12 len=5] leading=[] Ident("value") trailing=[]
+[12:17 len=2] leading=[] RBrace trailing=[]
+[13:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

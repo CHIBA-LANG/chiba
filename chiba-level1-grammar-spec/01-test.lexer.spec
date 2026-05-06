@@ -1,34 +1,35 @@
-[1:1 len=86] LineComment("// contiguous line comment 1\n// contiguous line comment 2\n// contiguous line comment 3")
-[3:29 len=2] Newline("\n\n")
-[5:1 len=38] LineComment("// separated comment block starts here")
-[5:39 len=2] Newline("\n\n")
-[7:1 len=45] LineComment("// separated comment block after a blank line")
-[7:46 len=1] Newline("\n")
-[8:1 len=9] KwNamespace
-[8:11 len=5] Ident("lexer")
-[8:16 len=1] Dot
-[8:17 len=4] Ident("spec")
-[8:21 len=1] Dot
-[8:22 len=8] Ident("comments")
-[8:30 len=2] Newline("\n\n")
-[10:1 len=3] KwDef
-[10:5 len=13] Ident("keep_comments")
-[10:18 len=1] LParen
-[10:19 len=1] RParen
-[10:20 len=1] Colon
-[10:22 len=3] Ident("i32")
-[10:26 len=1] Eq
-[10:28 len=6] LBrace
-[11:5 len=28] LineComment("// leading statement comment")
-[11:33 len=5] Newline("\n    ")
-[12:5 len=3] KwLet
-[12:9 len=5] Ident("value")
-[12:15 len=1] Eq
-[12:17 len=1] IntLit("1")
-[12:19 len=59] LineComment("// trailing comment after code\n    // comment before return")
-[13:29 len=5] Newline("\n    ")
-[14:5 len=6] KwReturn
-[14:12 len=5] Ident("value")
-[14:17 len=2] RBrace
-[15:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=86] leading=[] LineComment("// contiguous line comment 1\n// contiguous line comment 2\n// contiguous line comment 3") trailing=[]
+[3:29 len=2] leading=[] Newline("\n\n") trailing=[]
+[5:1 len=38] leading=[] LineComment("// separated comment block starts here") trailing=[]
+[5:39 len=2] leading=[] Newline("\n\n") trailing=[]
+[7:1 len=45] leading=[] LineComment("// separated comment block after a blank line") trailing=[]
+[7:46 len=1] leading=[] Newline("\n") trailing=[]
+[8:1 len=9] leading=[[1:1 len=86] LineComment("// contiguous line comment 1\n// contiguous line comment 2\n// contiguous line comment 3"), [5:1 len=38] LineComment("// separated comment block starts here"), [7:1 len=45] LineComment("// separated comment block after a blank line")] KwNamespace trailing=[]
+[8:11 len=5] leading=[] Ident("lexer") trailing=[]
+[8:16 len=1] leading=[] Dot trailing=[]
+[8:17 len=4] leading=[] Ident("spec") trailing=[]
+[8:21 len=1] leading=[] Dot trailing=[]
+[8:22 len=8] leading=[] Ident("comments") trailing=[]
+[8:30 len=2] leading=[] Newline("\n\n") trailing=[]
+[10:1 len=3] leading=[] KwDef trailing=[]
+[10:5 len=13] leading=[] Ident("keep_comments") trailing=[]
+[10:18 len=1] leading=[] LParen trailing=[]
+[10:19 len=1] leading=[] RParen trailing=[]
+[10:20 len=1] leading=[] Colon trailing=[]
+[10:22 len=3] leading=[] Ident("i32") trailing=[]
+[10:26 len=1] leading=[] Eq trailing=[]
+[10:28 len=6] leading=[] LBrace trailing=[[11:5 len=28] LineComment("// leading statement comment")]
+[11:5 len=28] leading=[] LineComment("// leading statement comment") trailing=[]
+[11:33 len=5] leading=[] Newline("\n    ") trailing=[]
+[12:5 len=3] leading=[] KwLet trailing=[]
+[12:9 len=5] leading=[] Ident("value") trailing=[]
+[12:15 len=1] leading=[] Eq trailing=[]
+[12:17 len=1] leading=[] IntLit("1") trailing=[[12:19 len=59] LineComment("// trailing comment after code\n    // comment before return")]
+[12:19 len=59] leading=[] LineComment("// trailing comment after code\n    // comment before return") trailing=[]
+[13:29 len=5] leading=[] Newline("\n    ") trailing=[]
+[14:5 len=6] leading=[] KwReturn trailing=[]
+[14:12 len=5] leading=[] Ident("value") trailing=[]
+[14:17 len=2] leading=[] RBrace trailing=[]
+[15:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

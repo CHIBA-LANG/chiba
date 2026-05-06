@@ -1,89 +1,90 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=11] Ident("letdestruct")
-[1:33 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=8] Ident("destruct")
-[3:13 len=1] LParen
-[3:14 len=5] Ident("point")
-[3:19 len=1] Colon
-[3:21 len=5] Ident("Shape")
-[3:26 len=1] RParen
-[3:27 len=1] Colon
-[3:29 len=3] Ident("i64")
-[3:33 len=1] Eq
-[3:35 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=1] LParen
-[4:10 len=1] Ident("x")
-[4:11 len=7] Comma
-[5:5 len=1] LParen
-[5:6 len=1] Ident("y")
-[5:7 len=1] Comma
-[5:9 len=1] Ident("z")
-[5:10 len=1] RParen
-[5:11 len=1] RParen
-[5:13 len=1] Eq
-[5:15 len=5] Ident("point")
-[5:20 len=1] Dot
-[5:21 len=6] Ident("coords")
-[5:27 len=5] Newline("\n    ")
-[6:5 len=3] KwLet
-[6:9 len=1] LBrace
-[6:11 len=4] Ident("name")
-[6:15 len=1] Comma
-[6:17 len=4] Ident("meta")
-[6:21 len=1] Colon
-[6:23 len=1] LBrace
-[6:25 len=3] Ident("age")
-[6:28 len=1] Comma
-[6:30 len=6] Ident("active")
-[6:37 len=1] RBrace
-[6:39 len=1] RBrace
-[6:41 len=1] Eq
-[6:43 len=5] Ident("point")
-[6:48 len=5] Newline("\n    ")
-[7:5 len=3] KwLet
-[7:9 len=5] Ident("whole")
-[7:15 len=1] At
-[7:17 len=1] LBrace
-[7:19 len=6] Ident("center")
-[7:25 len=1] Colon
-[7:27 len=1] LBrace
-[7:29 len=1] Ident("x")
-[7:30 len=1] Colon
-[7:32 len=2] Ident("cx")
-[7:34 len=1] Comma
-[7:36 len=1] Ident("y")
-[7:37 len=7] Colon
-[8:5 len=2] Ident("cy")
-[8:8 len=1] RBrace
-[8:9 len=1] Comma
-[8:11 len=5] Ident("color")
-[8:17 len=1] RBrace
-[8:19 len=1] Eq
-[8:21 len=5] Ident("point")
-[8:26 len=5] Newline("\n    ")
-[9:5 len=3] KwLet
-[9:9 len=1] Ident("_")
-[9:11 len=1] Eq
-[9:13 len=6] Ident("active")
-[9:19 len=5] Newline("\n    ")
-[10:5 len=6] KwReturn
-[10:12 len=1] Ident("x")
-[10:14 len=1] Plus
-[10:16 len=1] Ident("y")
-[10:18 len=1] Plus
-[10:20 len=1] Ident("z")
-[10:22 len=1] Plus
-[10:24 len=3] Ident("age")
-[10:28 len=1] Plus
-[10:30 len=2] Ident("cx")
-[10:33 len=1] Plus
-[10:35 len=2] Ident("cy")
-[10:37 len=2] RBrace
-[11:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=11] leading=[] Ident("letdestruct") trailing=[]
+[1:33 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=8] leading=[] Ident("destruct") trailing=[]
+[3:13 len=1] leading=[] LParen trailing=[]
+[3:14 len=5] leading=[] Ident("point") trailing=[]
+[3:19 len=1] leading=[] Colon trailing=[]
+[3:21 len=5] leading=[] Ident("Shape") trailing=[]
+[3:26 len=1] leading=[] RParen trailing=[]
+[3:27 len=1] leading=[] Colon trailing=[]
+[3:29 len=3] leading=[] Ident("i64") trailing=[]
+[3:33 len=1] leading=[] Eq trailing=[]
+[3:35 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=1] leading=[] LParen trailing=[]
+[4:10 len=1] leading=[] Ident("x") trailing=[]
+[4:11 len=7] leading=[] Comma trailing=[]
+[5:5 len=1] leading=[] LParen trailing=[]
+[5:6 len=1] leading=[] Ident("y") trailing=[]
+[5:7 len=1] leading=[] Comma trailing=[]
+[5:9 len=1] leading=[] Ident("z") trailing=[]
+[5:10 len=1] leading=[] RParen trailing=[]
+[5:11 len=1] leading=[] RParen trailing=[]
+[5:13 len=1] leading=[] Eq trailing=[]
+[5:15 len=5] leading=[] Ident("point") trailing=[]
+[5:20 len=1] leading=[] Dot trailing=[]
+[5:21 len=6] leading=[] Ident("coords") trailing=[]
+[5:27 len=5] leading=[] Newline("\n    ") trailing=[]
+[6:5 len=3] leading=[] KwLet trailing=[]
+[6:9 len=1] leading=[] LBrace trailing=[]
+[6:11 len=4] leading=[] Ident("name") trailing=[]
+[6:15 len=1] leading=[] Comma trailing=[]
+[6:17 len=4] leading=[] Ident("meta") trailing=[]
+[6:21 len=1] leading=[] Colon trailing=[]
+[6:23 len=1] leading=[] LBrace trailing=[]
+[6:25 len=3] leading=[] Ident("age") trailing=[]
+[6:28 len=1] leading=[] Comma trailing=[]
+[6:30 len=6] leading=[] Ident("active") trailing=[]
+[6:37 len=1] leading=[] RBrace trailing=[]
+[6:39 len=1] leading=[] RBrace trailing=[]
+[6:41 len=1] leading=[] Eq trailing=[]
+[6:43 len=5] leading=[] Ident("point") trailing=[]
+[6:48 len=5] leading=[] Newline("\n    ") trailing=[]
+[7:5 len=3] leading=[] KwLet trailing=[]
+[7:9 len=5] leading=[] Ident("whole") trailing=[]
+[7:15 len=1] leading=[] At trailing=[]
+[7:17 len=1] leading=[] LBrace trailing=[]
+[7:19 len=6] leading=[] Ident("center") trailing=[]
+[7:25 len=1] leading=[] Colon trailing=[]
+[7:27 len=1] leading=[] LBrace trailing=[]
+[7:29 len=1] leading=[] Ident("x") trailing=[]
+[7:30 len=1] leading=[] Colon trailing=[]
+[7:32 len=2] leading=[] Ident("cx") trailing=[]
+[7:34 len=1] leading=[] Comma trailing=[]
+[7:36 len=1] leading=[] Ident("y") trailing=[]
+[7:37 len=7] leading=[] Colon trailing=[]
+[8:5 len=2] leading=[] Ident("cy") trailing=[]
+[8:8 len=1] leading=[] RBrace trailing=[]
+[8:9 len=1] leading=[] Comma trailing=[]
+[8:11 len=5] leading=[] Ident("color") trailing=[]
+[8:17 len=1] leading=[] RBrace trailing=[]
+[8:19 len=1] leading=[] Eq trailing=[]
+[8:21 len=5] leading=[] Ident("point") trailing=[]
+[8:26 len=5] leading=[] Newline("\n    ") trailing=[]
+[9:5 len=3] leading=[] KwLet trailing=[]
+[9:9 len=1] leading=[] Ident("_") trailing=[]
+[9:11 len=1] leading=[] Eq trailing=[]
+[9:13 len=6] leading=[] Ident("active") trailing=[]
+[9:19 len=5] leading=[] Newline("\n    ") trailing=[]
+[10:5 len=6] leading=[] KwReturn trailing=[]
+[10:12 len=1] leading=[] Ident("x") trailing=[]
+[10:14 len=1] leading=[] Plus trailing=[]
+[10:16 len=1] leading=[] Ident("y") trailing=[]
+[10:18 len=1] leading=[] Plus trailing=[]
+[10:20 len=1] leading=[] Ident("z") trailing=[]
+[10:22 len=1] leading=[] Plus trailing=[]
+[10:24 len=3] leading=[] Ident("age") trailing=[]
+[10:28 len=1] leading=[] Plus trailing=[]
+[10:30 len=2] leading=[] Ident("cx") trailing=[]
+[10:33 len=1] leading=[] Plus trailing=[]
+[10:35 len=2] leading=[] Ident("cy") trailing=[]
+[10:37 len=2] leading=[] RBrace trailing=[]
+[11:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

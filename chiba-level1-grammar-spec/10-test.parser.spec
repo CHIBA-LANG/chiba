@@ -1,5 +1,6 @@
 OK(
   SourceFile(
+    Attr_End,
     Namespace(
       Path_Cons(
         "lexer",
@@ -59,6 +60,7 @@ OK(
                         Arg_End
                       ),
                       IdentCallClosure_Some(
+                        Attr_End,
                         Expr_Closure(
                           Param_Cons(
                             Param(
@@ -110,6 +112,7 @@ OK(
                       IdentTail_Call(
                         Arg_End,
                         IdentCallClosure_Some(
+                          Attr_End,
                           Expr_Closure(
                             Param_End,
                             Expr_Block(
@@ -156,6 +159,7 @@ OK(
                             )
                           ),
                           IdentCallClosure_Some(
+                            Attr_End,
                             Expr_Closure(
                               Param_Cons(
                                 Param(
@@ -221,3 +225,4 @@ OK(
     )
   )
 )
+0

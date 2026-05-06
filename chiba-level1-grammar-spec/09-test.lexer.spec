@@ -1,61 +1,62 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=10] Ident("delimiters")
-[1:32 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=18] Ident("delimiter_newlines")
-[3:23 len=1] LParen
-[3:24 len=1] RParen
-[3:25 len=1] Colon
-[3:27 len=3] Ident("i32")
-[3:31 len=1] Eq
-[3:33 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=7] Ident("grouped")
-[4:17 len=1] Eq
-[4:19 len=10] LParen
-[5:9 len=1] IntLit("1")
-[5:11 len=10] Plus
-[6:9 len=1] IntLit("2")
-[6:10 len=6] RParen
-[7:6 len=5] Newline("\n    ")
-[8:5 len=3] KwLet
-[8:9 len=5] Ident("tuple")
-[8:15 len=1] Eq
-[8:17 len=10] LParen
-[9:9 len=7] Ident("grouped")
-[9:16 len=10] Comma
-[10:9 len=7] Ident("grouped")
-[10:17 len=1] Plus
-[10:19 len=1] IntLit("1")
-[10:20 len=6] Comma
-[11:5 len=1] RParen
-[11:6 len=5] Newline("\n    ")
-[12:5 len=3] KwLet
-[12:9 len=5] Ident("slice")
-[12:15 len=1] Eq
-[12:17 len=10] LBracket
-[13:9 len=7] Ident("grouped")
-[13:16 len=10] Comma
-[14:9 len=7] Ident("grouped")
-[14:17 len=1] Plus
-[14:19 len=1] IntLit("1")
-[14:20 len=6] Comma
-[15:5 len=1] RBracket
-[15:6 len=5] Newline("\n    ")
-[16:5 len=3] KwLet
-[16:9 len=7] Ident("indexed")
-[16:17 len=1] Eq
-[16:19 len=5] Ident("slice")
-[16:24 len=10] LBracket
-[17:9 len=1] IntLit("0")
-[17:10 len=6] RBracket
-[18:6 len=5] Newline("\n    ")
-[19:5 len=6] KwReturn
-[19:12 len=7] Ident("indexed")
-[19:19 len=2] RBrace
-[20:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=10] leading=[] Ident("delimiters") trailing=[]
+[1:32 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=18] leading=[] Ident("delimiter_newlines") trailing=[]
+[3:23 len=1] leading=[] LParen trailing=[]
+[3:24 len=1] leading=[] RParen trailing=[]
+[3:25 len=1] leading=[] Colon trailing=[]
+[3:27 len=3] leading=[] Ident("i32") trailing=[]
+[3:31 len=1] leading=[] Eq trailing=[]
+[3:33 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=7] leading=[] Ident("grouped") trailing=[]
+[4:17 len=1] leading=[] Eq trailing=[]
+[4:19 len=10] leading=[] LParen trailing=[]
+[5:9 len=1] leading=[] IntLit("1") trailing=[]
+[5:11 len=10] leading=[] Plus trailing=[]
+[6:9 len=1] leading=[] IntLit("2") trailing=[]
+[6:10 len=6] leading=[] RParen trailing=[]
+[7:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[8:5 len=3] leading=[] KwLet trailing=[]
+[8:9 len=5] leading=[] Ident("tuple") trailing=[]
+[8:15 len=1] leading=[] Eq trailing=[]
+[8:17 len=10] leading=[] LParen trailing=[]
+[9:9 len=7] leading=[] Ident("grouped") trailing=[]
+[9:16 len=10] leading=[] Comma trailing=[]
+[10:9 len=7] leading=[] Ident("grouped") trailing=[]
+[10:17 len=1] leading=[] Plus trailing=[]
+[10:19 len=1] leading=[] IntLit("1") trailing=[]
+[10:20 len=6] leading=[] Comma trailing=[]
+[11:5 len=1] leading=[] RParen trailing=[]
+[11:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[12:5 len=3] leading=[] KwLet trailing=[]
+[12:9 len=5] leading=[] Ident("slice") trailing=[]
+[12:15 len=1] leading=[] Eq trailing=[]
+[12:17 len=10] leading=[] LBracket trailing=[]
+[13:9 len=7] leading=[] Ident("grouped") trailing=[]
+[13:16 len=10] leading=[] Comma trailing=[]
+[14:9 len=7] leading=[] Ident("grouped") trailing=[]
+[14:17 len=1] leading=[] Plus trailing=[]
+[14:19 len=1] leading=[] IntLit("1") trailing=[]
+[14:20 len=6] leading=[] Comma trailing=[]
+[15:5 len=1] leading=[] RBracket trailing=[]
+[15:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[16:5 len=3] leading=[] KwLet trailing=[]
+[16:9 len=7] leading=[] Ident("indexed") trailing=[]
+[16:17 len=1] leading=[] Eq trailing=[]
+[16:19 len=5] leading=[] Ident("slice") trailing=[]
+[16:24 len=10] leading=[] LBracket trailing=[]
+[17:9 len=1] leading=[] IntLit("0") trailing=[]
+[17:10 len=6] leading=[] RBracket trailing=[]
+[18:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[19:5 len=6] leading=[] KwReturn trailing=[]
+[19:12 len=7] leading=[] Ident("indexed") trailing=[]
+[19:19 len=2] leading=[] RBrace trailing=[]
+[20:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

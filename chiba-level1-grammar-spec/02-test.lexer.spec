@@ -1,45 +1,47 @@
-[1:1 len=8] FileAttrStart
-[2:5 len=5] Ident("Metal")
-[2:10 len=2] RBracket
-[3:2 len=2] Newline("\n\n")
-[5:1 len=7] ItemAttrStart
-[6:5 len=5] Ident("entry")
-[6:10 len=2] RBracket
-[7:2 len=1] Newline("\n")
-[8:1 len=14] KwNamespace
-[9:5 len=5] Ident("lexer")
-[9:10 len=1] Dot
-[9:11 len=4] Ident("spec")
-[9:15 len=1] Dot
-[9:16 len=5] Ident("attrs")
-[9:21 len=2] Newline("\n\n")
-[11:1 len=8] KwUse
-[12:5 len=4] Ident("demo")
-[12:9 len=1] Dot
-[12:10 len=4] Ident("math")
-[12:14 len=1] Dot
-[12:15 len=1] LBrace
-[12:16 len=3] Ident("add")
-[12:19 len=1] Comma
-[12:21 len=3] Ident("sub")
-[12:24 len=1] RBrace
-[12:25 len=1] Newline("\n")
-[13:1 len=3] KwUse
-[13:5 len=4] Ident("demo")
-[13:9 len=1] Dot
-[13:10 len=7] Ident("prelude")
-[13:17 len=4] DotStar
-[15:1 len=8] KwPrivate
-[16:1 len=8] KwDef
-[17:5 len=5] Ident("entry")
-[17:10 len=1] LParen
-[17:11 len=1] RParen
-[17:12 len=1] Colon
-[17:14 len=3] Ident("i32")
-[17:18 len=1] Eq
-[17:20 len=6] LBrace
-[18:5 len=6] KwReturn
-[18:12 len=1] IntLit("0")
-[18:13 len=2] RBrace
-[19:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=8] leading=[] FileAttrStart trailing=[]
+[2:5 len=5] leading=[] Ident("Metal") trailing=[]
+[2:10 len=2] leading=[] RBracket trailing=[]
+[3:2 len=2] leading=[] Newline("\n\n") trailing=[]
+[5:1 len=7] leading=[] ItemAttrStart trailing=[]
+[6:5 len=5] leading=[] Ident("entry") trailing=[]
+[6:10 len=2] leading=[] RBracket trailing=[]
+[7:2 len=1] leading=[] Newline("\n") trailing=[]
+[8:1 len=14] leading=[] KwNamespace trailing=[]
+[9:5 len=5] leading=[] Ident("lexer") trailing=[]
+[9:10 len=1] leading=[] Dot trailing=[]
+[9:11 len=4] leading=[] Ident("spec") trailing=[]
+[9:15 len=1] leading=[] Dot trailing=[]
+[9:16 len=5] leading=[] Ident("attrs") trailing=[]
+[9:21 len=2] leading=[] Newline("\n\n") trailing=[]
+[11:1 len=8] leading=[] KwUse trailing=[]
+[12:5 len=4] leading=[] Ident("demo") trailing=[]
+[12:9 len=1] leading=[] Dot trailing=[]
+[12:10 len=4] leading=[] Ident("math") trailing=[]
+[12:14 len=1] leading=[] Dot trailing=[]
+[12:15 len=1] leading=[] LBrace trailing=[]
+[12:16 len=3] leading=[] Ident("add") trailing=[]
+[12:19 len=1] leading=[] Comma trailing=[]
+[12:21 len=3] leading=[] Ident("sub") trailing=[]
+[12:24 len=1] leading=[] RBrace trailing=[]
+[12:25 len=1] leading=[] Newline("\n") trailing=[]
+[13:1 len=3] leading=[] KwUse trailing=[]
+[13:5 len=4] leading=[] Ident("demo") trailing=[]
+[13:9 len=1] leading=[] Dot trailing=[]
+[13:10 len=7] leading=[] Ident("prelude") trailing=[]
+[13:17 len=2] leading=[] DotStar trailing=[]
+[13:19 len=2] leading=[] Newline("\n\n") trailing=[]
+[15:1 len=8] leading=[] KwPrivate trailing=[]
+[16:1 len=8] leading=[] KwDef trailing=[]
+[17:5 len=5] leading=[] Ident("entry") trailing=[]
+[17:10 len=1] leading=[] LParen trailing=[]
+[17:11 len=1] leading=[] RParen trailing=[]
+[17:12 len=1] leading=[] Colon trailing=[]
+[17:14 len=3] leading=[] Ident("i32") trailing=[]
+[17:18 len=1] leading=[] Eq trailing=[]
+[17:20 len=6] leading=[] LBrace trailing=[]
+[18:5 len=6] leading=[] KwReturn trailing=[]
+[18:12 len=1] leading=[] IntLit("0") trailing=[]
+[18:13 len=2] leading=[] RBrace trailing=[]
+[19:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

@@ -1,44 +1,45 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=7] Ident("unicode")
-[1:29 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=14] Ident("unicode_idents")
-[3:19 len=1] LParen
-[3:20 len=4] Ident("🍋")
-[3:24 len=1] Colon
-[3:26 len=3] Ident("i64")
-[3:29 len=1] Comma
-[3:31 len=3] Ident("火")
-[3:34 len=1] Colon
-[3:36 len=3] Ident("i64")
-[3:39 len=1] RParen
-[3:40 len=1] Colon
-[3:42 len=3] Ident("i64")
-[3:46 len=1] Eq
-[3:48 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=27] Ident("测试一下语法容忍度")
-[4:37 len=1] Eq
-[4:39 len=4] Ident("🍋")
-[4:44 len=1] Plus
-[4:46 len=3] Ident("火")
-[4:49 len=5] Newline("\n    ")
-[5:5 len=3] KwLet
-[5:9 len=8] Ident("_🥲123")
-[5:18 len=1] Eq
-[5:20 len=27] Ident("测试一下语法容忍度")
-[5:47 len=5] Newline("\n    ")
-[6:5 len=3] KwLet
-[6:9 len=5] Ident("café")
-[6:15 len=1] Eq
-[6:17 len=8] Ident("_🥲123")
-[6:25 len=5] Newline("\n    ")
-[7:5 len=6] KwReturn
-[7:12 len=5] Ident("café")
-[7:17 len=2] RBrace
-[8:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=7] leading=[] Ident("unicode") trailing=[]
+[1:29 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=14] leading=[] Ident("unicode_idents") trailing=[]
+[3:19 len=1] leading=[] LParen trailing=[]
+[3:20 len=4] leading=[] Ident("🍋") trailing=[]
+[3:24 len=1] leading=[] Colon trailing=[]
+[3:26 len=3] leading=[] Ident("i64") trailing=[]
+[3:29 len=1] leading=[] Comma trailing=[]
+[3:31 len=3] leading=[] Ident("火") trailing=[]
+[3:34 len=1] leading=[] Colon trailing=[]
+[3:36 len=3] leading=[] Ident("i64") trailing=[]
+[3:39 len=1] leading=[] RParen trailing=[]
+[3:40 len=1] leading=[] Colon trailing=[]
+[3:42 len=3] leading=[] Ident("i64") trailing=[]
+[3:46 len=1] leading=[] Eq trailing=[]
+[3:48 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=27] leading=[] Ident("测试一下语法容忍度") trailing=[]
+[4:37 len=1] leading=[] Eq trailing=[]
+[4:39 len=4] leading=[] Ident("🍋") trailing=[]
+[4:44 len=1] leading=[] Plus trailing=[]
+[4:46 len=3] leading=[] Ident("火") trailing=[]
+[4:49 len=5] leading=[] Newline("\n    ") trailing=[]
+[5:5 len=3] leading=[] KwLet trailing=[]
+[5:9 len=8] leading=[] Ident("_🥲123") trailing=[]
+[5:18 len=1] leading=[] Eq trailing=[]
+[5:20 len=27] leading=[] Ident("测试一下语法容忍度") trailing=[]
+[5:47 len=5] leading=[] Newline("\n    ") trailing=[]
+[6:5 len=3] leading=[] KwLet trailing=[]
+[6:9 len=5] leading=[] Ident("café") trailing=[]
+[6:15 len=1] leading=[] Eq trailing=[]
+[6:17 len=8] leading=[] Ident("_🥲123") trailing=[]
+[6:25 len=5] leading=[] Newline("\n    ") trailing=[]
+[7:5 len=6] leading=[] KwReturn trailing=[]
+[7:12 len=5] leading=[] Ident("café") trailing=[]
+[7:17 len=2] leading=[] RBrace trailing=[]
+[8:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

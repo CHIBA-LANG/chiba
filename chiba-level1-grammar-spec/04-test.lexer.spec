@@ -1,90 +1,91 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=7] Ident("strings")
-[1:29 len=1] Dot
-[1:30 len=5] Ident("basic")
-[1:35 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=7] Ident("strings")
-[3:12 len=1] LParen
-[3:13 len=1] RParen
-[3:14 len=1] Colon
-[3:16 len=3] Ident("i32")
-[3:20 len=1] Eq
-[3:22 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=5] Ident("plain")
-[4:15 len=1] Eq
-[4:17 len=1] StringStart("", raw=0, hashes=0)
-[4:18 len=11] StringChunk("hello world")
-[4:29 len=1] StringEnd
-[4:30 len=5] Newline("\n    ")
-[5:5 len=3] KwLet
-[5:9 len=7] Ident("escaped")
-[5:17 len=1] Eq
-[5:19 len=1] StringStart("", raw=0, hashes=0)
-[5:20 len=20] StringChunk("line1\\nline2\\tindent")
-[5:40 len=1] StringEnd
-[5:41 len=5] Newline("\n    ")
-[6:5 len=3] KwLet
-[6:9 len=6] Ident("c_text")
-[6:16 len=1] Eq
-[6:18 len=1] StringStart("c", raw=0, hashes=0)
-[6:20 len=16] StringChunk("hello from c abi")
-[6:36 len=1] StringEnd
-[6:37 len=5] Newline("\n    ")
-[7:5 len=3] KwLet
-[7:9 len=7] Ident("raw_one")
-[7:17 len=1] Eq
-[7:19 len=1] StringStart("", raw=1, hashes=0)
-[7:21 len=18] StringChunk("raw keeps \\\\n text")
-[7:39 len=1] StringEnd
-[7:40 len=5] Newline("\n    ")
-[8:5 len=3] KwLet
-[8:9 len=8] Ident("raw_hash")
-[8:18 len=1] Eq
-[8:20 len=1] StringStart("", raw=1, hashes=1)
-[8:23 len=16] StringChunk("raw can contain ")
-[8:39 len=1] StringChunk("\"")
-[8:40 len=6] StringChunk("quotes")
-[8:46 len=1] StringChunk("\"")
-[8:47 len=1] StringEnd
-[8:49 len=5] Newline("\n    ")
-[9:5 len=3] KwLet
-[9:9 len=5] Ident("trick")
-[9:15 len=1] Eq
-[9:17 len=4] StringStart("", raw=0, hashes=3)
-[9:21 len=2] StringChunk("##")
-[9:23 len=1] StringChunk("\"")
-[9:24 len=2] StringChunk("##")
-[9:26 len=1] StringChunk("\"")
-[9:27 len=8] StringChunk(" \n    ;;")
-[10:7 len=1] StringEnd
-[10:11 len=1] Semicolon
-[10:12 len=6] Semicolon
-[11:5 len=3] KwLet
-[11:9 len=8] Ident("prefixed")
-[11:18 len=1] Eq
-[11:20 len=3] StringStart("sql", raw=0, hashes=0)
-[11:24 len=32] StringChunk("select * from users where id = 1")
-[11:56 len=1] StringEnd
-[11:57 len=5] Newline("\n    ")
-[12:5 len=3] KwLet
-[12:9 len=12] Ident("prefixed_raw")
-[12:22 len=1] Eq
-[12:24 len=4] StringStart("sql", raw=1, hashes=1)
-[12:30 len=7] StringChunk("select ")
-[12:37 len=1] StringChunk("\"")
-[12:38 len=4] StringChunk("name")
-[12:42 len=1] StringChunk("\"")
-[12:43 len=11] StringChunk(" from users")
-[12:54 len=1] StringEnd
-[12:56 len=5] Newline("\n    ")
-[13:5 len=6] KwReturn
-[13:12 len=1] IntLit("0")
-[13:13 len=2] RBrace
-[14:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=7] leading=[] Ident("strings") trailing=[]
+[1:29 len=1] leading=[] Dot trailing=[]
+[1:30 len=5] leading=[] Ident("basic") trailing=[]
+[1:35 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=7] leading=[] Ident("strings") trailing=[]
+[3:12 len=1] leading=[] LParen trailing=[]
+[3:13 len=1] leading=[] RParen trailing=[]
+[3:14 len=1] leading=[] Colon trailing=[]
+[3:16 len=3] leading=[] Ident("i32") trailing=[]
+[3:20 len=1] leading=[] Eq trailing=[]
+[3:22 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=5] leading=[] Ident("plain") trailing=[]
+[4:15 len=1] leading=[] Eq trailing=[]
+[4:17 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
+[4:18 len=11] leading=[] StringChunk("hello world") trailing=[]
+[4:29 len=1] leading=[] StringEnd trailing=[]
+[4:30 len=5] leading=[] Newline("\n    ") trailing=[]
+[5:5 len=3] leading=[] KwLet trailing=[]
+[5:9 len=7] leading=[] Ident("escaped") trailing=[]
+[5:17 len=1] leading=[] Eq trailing=[]
+[5:19 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
+[5:20 len=20] leading=[] StringChunk("line1\\nline2\\tindent") trailing=[]
+[5:40 len=1] leading=[] StringEnd trailing=[]
+[5:41 len=5] leading=[] Newline("\n    ") trailing=[]
+[6:5 len=3] leading=[] KwLet trailing=[]
+[6:9 len=6] leading=[] Ident("c_text") trailing=[]
+[6:16 len=1] leading=[] Eq trailing=[]
+[6:18 len=1] leading=[] StringStart("c", raw=0, hashes=0) trailing=[]
+[6:20 len=16] leading=[] StringChunk("hello from c abi") trailing=[]
+[6:36 len=1] leading=[] StringEnd trailing=[]
+[6:37 len=5] leading=[] Newline("\n    ") trailing=[]
+[7:5 len=3] leading=[] KwLet trailing=[]
+[7:9 len=7] leading=[] Ident("raw_one") trailing=[]
+[7:17 len=1] leading=[] Eq trailing=[]
+[7:19 len=1] leading=[] StringStart("", raw=1, hashes=0) trailing=[]
+[7:21 len=18] leading=[] StringChunk("raw keeps \\\\n text") trailing=[]
+[7:39 len=1] leading=[] StringEnd trailing=[]
+[7:40 len=5] leading=[] Newline("\n    ") trailing=[]
+[8:5 len=3] leading=[] KwLet trailing=[]
+[8:9 len=8] leading=[] Ident("raw_hash") trailing=[]
+[8:18 len=1] leading=[] Eq trailing=[]
+[8:20 len=1] leading=[] StringStart("", raw=1, hashes=1) trailing=[]
+[8:23 len=16] leading=[] StringChunk("raw can contain ") trailing=[]
+[8:39 len=1] leading=[] StringChunk("\"") trailing=[]
+[8:40 len=6] leading=[] StringChunk("quotes") trailing=[]
+[8:46 len=1] leading=[] StringChunk("\"") trailing=[]
+[8:47 len=1] leading=[] StringEnd trailing=[]
+[8:49 len=5] leading=[] Newline("\n    ") trailing=[]
+[9:5 len=3] leading=[] KwLet trailing=[]
+[9:9 len=5] leading=[] Ident("trick") trailing=[]
+[9:15 len=1] leading=[] Eq trailing=[]
+[9:17 len=4] leading=[] StringStart("", raw=0, hashes=3) trailing=[]
+[9:21 len=2] leading=[] StringChunk("##") trailing=[]
+[9:23 len=1] leading=[] StringChunk("\"") trailing=[]
+[9:24 len=2] leading=[] StringChunk("##") trailing=[]
+[9:26 len=1] leading=[] StringChunk("\"") trailing=[]
+[9:27 len=8] leading=[] StringChunk(" \n    ;;") trailing=[]
+[10:7 len=1] leading=[] StringEnd trailing=[]
+[10:11 len=1] leading=[] Semicolon trailing=[]
+[10:12 len=6] leading=[] Semicolon trailing=[]
+[11:5 len=3] leading=[] KwLet trailing=[]
+[11:9 len=8] leading=[] Ident("prefixed") trailing=[]
+[11:18 len=1] leading=[] Eq trailing=[]
+[11:20 len=3] leading=[] StringStart("sql", raw=0, hashes=0) trailing=[]
+[11:24 len=32] leading=[] StringChunk("select * from users where id = 1") trailing=[]
+[11:56 len=1] leading=[] StringEnd trailing=[]
+[11:57 len=5] leading=[] Newline("\n    ") trailing=[]
+[12:5 len=3] leading=[] KwLet trailing=[]
+[12:9 len=12] leading=[] Ident("prefixed_raw") trailing=[]
+[12:22 len=1] leading=[] Eq trailing=[]
+[12:24 len=4] leading=[] StringStart("sql", raw=1, hashes=1) trailing=[]
+[12:30 len=7] leading=[] StringChunk("select ") trailing=[]
+[12:37 len=1] leading=[] StringChunk("\"") trailing=[]
+[12:38 len=4] leading=[] StringChunk("name") trailing=[]
+[12:42 len=1] leading=[] StringChunk("\"") trailing=[]
+[12:43 len=11] leading=[] StringChunk(" from users") trailing=[]
+[12:54 len=1] leading=[] StringEnd trailing=[]
+[12:56 len=5] leading=[] Newline("\n    ") trailing=[]
+[13:5 len=6] leading=[] KwReturn trailing=[]
+[13:12 len=1] leading=[] IntLit("0") trailing=[]
+[13:13 len=2] leading=[] RBrace trailing=[]
+[14:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

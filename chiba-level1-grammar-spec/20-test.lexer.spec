@@ -1,59 +1,61 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=6] Ident("memory")
-[1:28 len=1] Dot
-[1:29 len=5] Ident("types")
-[1:34 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=12] Ident("capabilities")
-[3:17 len=1] LParen
-[3:18 len=1] Ident("p")
-[3:19 len=1] Colon
-[3:21 len=3] Ident("Ptr")
-[3:24 len=1] LBracket
-[3:25 len=2] Ident("u8")
-[3:27 len=1] RBracket
-[3:28 len=1] Comma
-[3:30 len=1] Ident("r")
-[3:31 len=1] Colon
-[3:33 len=3] Ident("Ref")
-[3:36 len=1] LBracket
-[3:37 len=3] Ident("i64")
-[3:40 len=1] RBracket
-[3:41 len=1] Comma
-[3:43 len=1] Ident("u")
-[3:44 len=1] Colon
-[3:46 len=9] Ident("UnsafeRef")
-[3:55 len=1] LBracket
-[3:56 len=4] Ident("File")
-[3:60 len=1] RBracket
-[3:61 len=1] RParen
-[3:62 len=1] Colon
-[3:64 len=1] LParen
-[3:65 len=1] RParen
-[3:67 len=1] Eq
-[3:69 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=1] Ident("x")
-[4:11 len=1] Eq
-[4:13 len=1] Ident("p")
-[4:14 len=7] DotStar
-[5:5 len=1] Ident("r")
-[5:7 len=8] ColonEq
-[6:5 len=1] Ident("r")
-[6:6 len=6] Dot
-[7:5 len=4] Ident("read")
-[7:9 len=7] LParen
-[9:5 len=1] RParen
-[9:7 len=7] Plus
-[10:5 len=1] IntLit("1")
-[10:6 len=5] Newline("\n    ")
-[11:5 len=6] KwReturn
-[11:12 len=1] LParen
-[11:13 len=1] RParen
-[11:14 len=2] RBrace
-[12:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=6] leading=[] Ident("memory") trailing=[]
+[1:28 len=1] leading=[] Dot trailing=[]
+[1:29 len=5] leading=[] Ident("types") trailing=[]
+[1:34 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=12] leading=[] Ident("capabilities") trailing=[]
+[3:17 len=1] leading=[] LParen trailing=[]
+[3:18 len=1] leading=[] Ident("p") trailing=[]
+[3:19 len=1] leading=[] Colon trailing=[]
+[3:21 len=3] leading=[] Ident("Ptr") trailing=[]
+[3:24 len=1] leading=[] LBracket trailing=[]
+[3:25 len=2] leading=[] Ident("u8") trailing=[]
+[3:27 len=1] leading=[] RBracket trailing=[]
+[3:28 len=1] leading=[] Comma trailing=[]
+[3:30 len=1] leading=[] Ident("r") trailing=[]
+[3:31 len=1] leading=[] Colon trailing=[]
+[3:33 len=3] leading=[] Ident("Ref") trailing=[]
+[3:36 len=1] leading=[] LBracket trailing=[]
+[3:37 len=3] leading=[] Ident("i64") trailing=[]
+[3:40 len=1] leading=[] RBracket trailing=[]
+[3:41 len=1] leading=[] Comma trailing=[]
+[3:43 len=1] leading=[] Ident("u") trailing=[]
+[3:44 len=1] leading=[] Colon trailing=[]
+[3:46 len=9] leading=[] Ident("UnsafeRef") trailing=[]
+[3:55 len=1] leading=[] LBracket trailing=[]
+[3:56 len=4] leading=[] Ident("File") trailing=[]
+[3:60 len=1] leading=[] RBracket trailing=[]
+[3:61 len=1] leading=[] RParen trailing=[]
+[3:62 len=1] leading=[] Colon trailing=[]
+[3:64 len=1] leading=[] LParen trailing=[]
+[3:65 len=1] leading=[] RParen trailing=[]
+[3:67 len=1] leading=[] Eq trailing=[]
+[3:69 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=1] leading=[] Ident("x") trailing=[]
+[4:11 len=1] leading=[] Eq trailing=[]
+[4:13 len=1] leading=[] Ident("p") trailing=[]
+[4:14 len=2] leading=[] DotStar trailing=[]
+[4:16 len=5] leading=[] Newline("\n    ") trailing=[]
+[5:5 len=1] leading=[] Ident("r") trailing=[]
+[5:7 len=8] leading=[] ColonEq trailing=[]
+[6:5 len=1] leading=[] Ident("r") trailing=[]
+[6:6 len=6] leading=[] Dot trailing=[]
+[7:5 len=4] leading=[] Ident("read") trailing=[]
+[7:9 len=7] leading=[] LParen trailing=[]
+[9:5 len=1] leading=[] RParen trailing=[]
+[9:7 len=7] leading=[] Plus trailing=[]
+[10:5 len=1] leading=[] IntLit("1") trailing=[]
+[10:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[11:5 len=6] leading=[] KwReturn trailing=[]
+[11:12 len=1] leading=[] LParen trailing=[]
+[11:13 len=1] leading=[] RParen trailing=[]
+[11:14 len=2] leading=[] RBrace trailing=[]
+[12:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

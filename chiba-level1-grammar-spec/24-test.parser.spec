@@ -1,5 +1,6 @@
 OK(
   SourceFile(
+    Attr_End,
     Namespace(
       Path_Cons(
         "lexer",
@@ -16,34 +17,51 @@ OK(
       )
     ),
     Item_Cons(
-      Item_Adt(
-        AdtItem(
-          "Smoke",
-          Generic_Cons(
-            "T",
-            Generic_End
-          ),
-          AdtVariant_Cons(
-            AdtVariant(
-              "Smoke",
-              AdtVariantArg_Ident(
-                "value",
-                AdtVariantArg_Field(
-                  Type_Path(
-                    "T",
-                    Type_Tail_End
-                  ),
-                  AdtVariantField_Cons(
-                    "tag",
-                    Type_Atom(
-                      "ok"
-                    ),
-                    AdtVariantField_End
-                  )
+      Item_WithAttrs(
+        Attr_Cons(
+          ItemAttr(
+            Attr(
+              "derive",
+              AttrArg_Cons(
+                "Debug",
+                AttrArg_Cons(
+                  "Clone",
+                  AttrArg_End
                 )
               )
+            )
+          ),
+          Attr_End
+        ),
+        Item_Adt(
+          AdtItem(
+            "Smoke",
+            Generic_Cons(
+              "T",
+              Generic_End
             ),
-            AdtVariant_End
+            AdtVariant_Cons(
+              AdtVariant(
+                "Smoke",
+                AdtVariantArg_Ident(
+                  "value",
+                  AdtVariantArg_Field(
+                    Type_Path(
+                      "T",
+                      Type_Tail_End
+                    ),
+                    AdtVariantField_Cons(
+                      "tag",
+                      Type_Atom(
+                        "ok"
+                      ),
+                      AdtVariantField_End
+                    )
+                  )
+                )
+              ),
+              AdtVariant_End
+            )
           )
         )
       ),
@@ -301,3 +319,4 @@ OK(
     )
   )
 )
+0

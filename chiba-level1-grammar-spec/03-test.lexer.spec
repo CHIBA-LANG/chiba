@@ -1,85 +1,86 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=8] Ident("literals")
-[1:30 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=17] Ident("numbers_and_names")
-[3:22 len=1] LParen
-[3:23 len=1] RParen
-[3:24 len=1] Colon
-[3:26 len=3] Ident("i64")
-[3:30 len=1] Eq
-[3:32 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=3] Ident("dec")
-[4:13 len=1] Eq
-[4:15 len=7] IntLit("123_456")
-[4:22 len=5] Newline("\n    ")
-[5:5 len=3] KwLet
-[5:9 len=3] Ident("hex")
-[5:13 len=1] Eq
-[5:15 len=11] IntLit("0xCAFE_babe")
-[5:26 len=5] Newline("\n    ")
-[6:5 len=3] KwLet
-[6:9 len=3] Ident("oct")
-[6:13 len=1] Eq
-[6:15 len=5] IntLit("0o755")
-[6:20 len=5] Newline("\n    ")
-[7:5 len=3] KwLet
-[7:9 len=3] Ident("bin")
-[7:13 len=1] Eq
-[7:15 len=11] IntLit("0b1010_0101")
-[7:26 len=5] Newline("\n    ")
-[8:5 len=3] KwLet
-[8:9 len=7] Ident("float_a")
-[8:17 len=1] Eq
-[8:19 len=4] FloatLit("1.25")
-[8:23 len=5] Newline("\n    ")
-[9:5 len=3] KwLet
-[9:9 len=7] Ident("float_b")
-[9:17 len=1] Eq
-[9:19 len=7] FloatLit("6.02e23")
-[9:26 len=5] Newline("\n    ")
-[10:5 len=3] KwLet
-[10:9 len=7] Ident("float_c")
-[10:17 len=1] Eq
-[10:19 len=7] FloatLit("3.14f32")
-[10:26 len=5] Newline("\n    ")
-[11:5 len=3] KwLet
-[11:9 len=10] Ident("int_suffix")
-[11:20 len=1] Eq
-[11:22 len=7] IntLit("99usize")
-[11:29 len=5] Newline("\n    ")
-[12:5 len=3] KwLet
-[12:9 len=2] Ident("ok")
-[12:12 len=1] Eq
-[12:14 len=4] KwTrue
-[12:18 len=5] Newline("\n    ")
-[13:5 len=3] KwLet
-[13:9 len=2] Ident("no")
-[13:12 len=1] Eq
-[13:14 len=5] KwFalse
-[13:19 len=5] Newline("\n    ")
-[14:5 len=3] KwLet
-[14:9 len=4] Ident("atom")
-[14:14 len=1] Eq
-[14:16 len=3] Atom("ok")
-[14:19 len=5] Newline("\n    ")
-[15:5 len=3] KwLet
-[15:9 len=7] Ident("unicode")
-[15:17 len=1] Eq
-[15:19 len=27] Ident("测试一下语法容忍度")
-[15:46 len=5] Newline("\n    ")
-[16:5 len=3] KwLet
-[16:9 len=5] Ident("emoji")
-[16:15 len=1] Eq
-[16:17 len=4] Ident("🍋")
-[16:21 len=5] Newline("\n    ")
-[17:5 len=6] KwReturn
-[17:12 len=3] Ident("dec")
-[17:15 len=2] RBrace
-[18:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=8] leading=[] Ident("literals") trailing=[]
+[1:30 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=17] leading=[] Ident("numbers_and_names") trailing=[]
+[3:22 len=1] leading=[] LParen trailing=[]
+[3:23 len=1] leading=[] RParen trailing=[]
+[3:24 len=1] leading=[] Colon trailing=[]
+[3:26 len=3] leading=[] Ident("i64") trailing=[]
+[3:30 len=1] leading=[] Eq trailing=[]
+[3:32 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=3] leading=[] Ident("dec") trailing=[]
+[4:13 len=1] leading=[] Eq trailing=[]
+[4:15 len=7] leading=[] IntLit("123_456") trailing=[]
+[4:22 len=5] leading=[] Newline("\n    ") trailing=[]
+[5:5 len=3] leading=[] KwLet trailing=[]
+[5:9 len=3] leading=[] Ident("hex") trailing=[]
+[5:13 len=1] leading=[] Eq trailing=[]
+[5:15 len=11] leading=[] IntLit("0xCAFE_babe") trailing=[]
+[5:26 len=5] leading=[] Newline("\n    ") trailing=[]
+[6:5 len=3] leading=[] KwLet trailing=[]
+[6:9 len=3] leading=[] Ident("oct") trailing=[]
+[6:13 len=1] leading=[] Eq trailing=[]
+[6:15 len=5] leading=[] IntLit("0o755") trailing=[]
+[6:20 len=5] leading=[] Newline("\n    ") trailing=[]
+[7:5 len=3] leading=[] KwLet trailing=[]
+[7:9 len=3] leading=[] Ident("bin") trailing=[]
+[7:13 len=1] leading=[] Eq trailing=[]
+[7:15 len=11] leading=[] IntLit("0b1010_0101") trailing=[]
+[7:26 len=5] leading=[] Newline("\n    ") trailing=[]
+[8:5 len=3] leading=[] KwLet trailing=[]
+[8:9 len=7] leading=[] Ident("float_a") trailing=[]
+[8:17 len=1] leading=[] Eq trailing=[]
+[8:19 len=4] leading=[] FloatLit("1.25") trailing=[]
+[8:23 len=5] leading=[] Newline("\n    ") trailing=[]
+[9:5 len=3] leading=[] KwLet trailing=[]
+[9:9 len=7] leading=[] Ident("float_b") trailing=[]
+[9:17 len=1] leading=[] Eq trailing=[]
+[9:19 len=7] leading=[] FloatLit("6.02e23") trailing=[]
+[9:26 len=5] leading=[] Newline("\n    ") trailing=[]
+[10:5 len=3] leading=[] KwLet trailing=[]
+[10:9 len=7] leading=[] Ident("float_c") trailing=[]
+[10:17 len=1] leading=[] Eq trailing=[]
+[10:19 len=7] leading=[] FloatLit("3.14f32") trailing=[]
+[10:26 len=5] leading=[] Newline("\n    ") trailing=[]
+[11:5 len=3] leading=[] KwLet trailing=[]
+[11:9 len=10] leading=[] Ident("int_suffix") trailing=[]
+[11:20 len=1] leading=[] Eq trailing=[]
+[11:22 len=7] leading=[] IntLit("99usize") trailing=[]
+[11:29 len=5] leading=[] Newline("\n    ") trailing=[]
+[12:5 len=3] leading=[] KwLet trailing=[]
+[12:9 len=2] leading=[] Ident("ok") trailing=[]
+[12:12 len=1] leading=[] Eq trailing=[]
+[12:14 len=4] leading=[] KwTrue trailing=[]
+[12:18 len=5] leading=[] Newline("\n    ") trailing=[]
+[13:5 len=3] leading=[] KwLet trailing=[]
+[13:9 len=2] leading=[] Ident("no") trailing=[]
+[13:12 len=1] leading=[] Eq trailing=[]
+[13:14 len=5] leading=[] KwFalse trailing=[]
+[13:19 len=5] leading=[] Newline("\n    ") trailing=[]
+[14:5 len=3] leading=[] KwLet trailing=[]
+[14:9 len=4] leading=[] Ident("atom") trailing=[]
+[14:14 len=1] leading=[] Eq trailing=[]
+[14:16 len=3] leading=[] Atom("ok") trailing=[]
+[14:19 len=5] leading=[] Newline("\n    ") trailing=[]
+[15:5 len=3] leading=[] KwLet trailing=[]
+[15:9 len=7] leading=[] Ident("unicode") trailing=[]
+[15:17 len=1] leading=[] Eq trailing=[]
+[15:19 len=27] leading=[] Ident("测试一下语法容忍度") trailing=[]
+[15:46 len=5] leading=[] Newline("\n    ") trailing=[]
+[16:5 len=3] leading=[] KwLet trailing=[]
+[16:9 len=5] leading=[] Ident("emoji") trailing=[]
+[16:15 len=1] leading=[] Eq trailing=[]
+[16:17 len=4] leading=[] Ident("🍋") trailing=[]
+[16:21 len=5] leading=[] Newline("\n    ") trailing=[]
+[17:5 len=6] leading=[] KwReturn trailing=[]
+[17:12 len=3] leading=[] Ident("dec") trailing=[]
+[17:15 len=2] leading=[] RBrace trailing=[]
+[18:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

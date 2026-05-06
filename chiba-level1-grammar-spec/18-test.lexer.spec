@@ -1,92 +1,93 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=6] Ident("lambda")
-[1:28 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=8] Ident("closures")
-[3:13 len=1] LParen
-[3:14 len=1] Ident("x")
-[3:15 len=1] Colon
-[3:17 len=3] Ident("i64")
-[3:20 len=1] RParen
-[3:21 len=1] Colon
-[3:23 len=3] Ident("i64")
-[3:27 len=1] Eq
-[3:29 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=3] Ident("inc")
-[4:13 len=1] Eq
-[4:15 len=1] LParen
-[4:16 len=1] Ident("v")
-[4:17 len=1] Colon
-[4:19 len=3] Ident("i64")
-[4:22 len=1] RParen
-[4:23 len=1] Colon
-[4:25 len=3] Ident("i64")
-[4:29 len=2] FatArrow
-[4:32 len=1] Ident("v")
-[4:34 len=1] Plus
-[4:36 len=1] IntLit("1")
-[4:37 len=5] Newline("\n    ")
-[5:5 len=3] KwLet
-[5:9 len=6] Ident("blocky")
-[5:16 len=1] Eq
-[5:18 len=1] LParen
-[5:19 len=1] RParen
-[5:20 len=1] Colon
-[5:22 len=3] Ident("i64")
-[5:26 len=2] FatArrow
-[5:29 len=10] LBrace
-[6:9 len=3] KwLet
-[6:13 len=5] Ident("local")
-[6:19 len=1] Eq
-[6:21 len=1] Ident("x")
-[6:23 len=1] Plus
-[6:25 len=1] IntLit("1")
-[6:26 len=9] Newline("\n        ")
-[7:9 len=6] KwReturn
-[7:16 len=5] Ident("local")
-[7:21 len=6] RBrace
-[8:6 len=5] Newline("\n    ")
-[9:5 len=3] KwLet
-[9:9 len=4] Ident("pair")
-[9:14 len=1] Eq
-[9:16 len=1] LParen
-[9:17 len=1] Ident("a")
-[9:18 len=1] Colon
-[9:20 len=3] Ident("i64")
-[9:23 len=1] Comma
-[9:25 len=1] Ident("b")
-[9:26 len=1] Colon
-[9:28 len=3] Ident("i64")
-[9:31 len=1] RParen
-[9:32 len=1] Colon
-[9:34 len=3] Ident("i64")
-[9:38 len=2] FatArrow
-[9:41 len=10] LBrace
-[10:9 len=6] KwReturn
-[10:16 len=1] Ident("a")
-[10:18 len=1] Plus
-[10:20 len=1] Ident("b")
-[10:21 len=6] RBrace
-[11:6 len=5] Newline("\n    ")
-[12:5 len=6] KwReturn
-[12:12 len=3] Ident("inc")
-[12:15 len=1] LParen
-[12:16 len=6] Ident("blocky")
-[12:22 len=1] LParen
-[12:23 len=1] RParen
-[12:24 len=1] RParen
-[12:26 len=1] Plus
-[12:28 len=4] Ident("pair")
-[12:32 len=1] LParen
-[12:33 len=1] IntLit("1")
-[12:34 len=1] Comma
-[12:36 len=1] IntLit("2")
-[12:37 len=1] RParen
-[12:38 len=2] RBrace
-[13:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=6] leading=[] Ident("lambda") trailing=[]
+[1:28 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=8] leading=[] Ident("closures") trailing=[]
+[3:13 len=1] leading=[] LParen trailing=[]
+[3:14 len=1] leading=[] Ident("x") trailing=[]
+[3:15 len=1] leading=[] Colon trailing=[]
+[3:17 len=3] leading=[] Ident("i64") trailing=[]
+[3:20 len=1] leading=[] RParen trailing=[]
+[3:21 len=1] leading=[] Colon trailing=[]
+[3:23 len=3] leading=[] Ident("i64") trailing=[]
+[3:27 len=1] leading=[] Eq trailing=[]
+[3:29 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=3] leading=[] Ident("inc") trailing=[]
+[4:13 len=1] leading=[] Eq trailing=[]
+[4:15 len=1] leading=[] LParen trailing=[]
+[4:16 len=1] leading=[] Ident("v") trailing=[]
+[4:17 len=1] leading=[] Colon trailing=[]
+[4:19 len=3] leading=[] Ident("i64") trailing=[]
+[4:22 len=1] leading=[] RParen trailing=[]
+[4:23 len=1] leading=[] Colon trailing=[]
+[4:25 len=3] leading=[] Ident("i64") trailing=[]
+[4:29 len=2] leading=[] FatArrow trailing=[]
+[4:32 len=1] leading=[] Ident("v") trailing=[]
+[4:34 len=1] leading=[] Plus trailing=[]
+[4:36 len=1] leading=[] IntLit("1") trailing=[]
+[4:37 len=5] leading=[] Newline("\n    ") trailing=[]
+[5:5 len=3] leading=[] KwLet trailing=[]
+[5:9 len=6] leading=[] Ident("blocky") trailing=[]
+[5:16 len=1] leading=[] Eq trailing=[]
+[5:18 len=1] leading=[] LParen trailing=[]
+[5:19 len=1] leading=[] RParen trailing=[]
+[5:20 len=1] leading=[] Colon trailing=[]
+[5:22 len=3] leading=[] Ident("i64") trailing=[]
+[5:26 len=2] leading=[] FatArrow trailing=[]
+[5:29 len=10] leading=[] LBrace trailing=[]
+[6:9 len=3] leading=[] KwLet trailing=[]
+[6:13 len=5] leading=[] Ident("local") trailing=[]
+[6:19 len=1] leading=[] Eq trailing=[]
+[6:21 len=1] leading=[] Ident("x") trailing=[]
+[6:23 len=1] leading=[] Plus trailing=[]
+[6:25 len=1] leading=[] IntLit("1") trailing=[]
+[6:26 len=9] leading=[] Newline("\n        ") trailing=[]
+[7:9 len=6] leading=[] KwReturn trailing=[]
+[7:16 len=5] leading=[] Ident("local") trailing=[]
+[7:21 len=6] leading=[] RBrace trailing=[]
+[8:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[9:5 len=3] leading=[] KwLet trailing=[]
+[9:9 len=4] leading=[] Ident("pair") trailing=[]
+[9:14 len=1] leading=[] Eq trailing=[]
+[9:16 len=1] leading=[] LParen trailing=[]
+[9:17 len=1] leading=[] Ident("a") trailing=[]
+[9:18 len=1] leading=[] Colon trailing=[]
+[9:20 len=3] leading=[] Ident("i64") trailing=[]
+[9:23 len=1] leading=[] Comma trailing=[]
+[9:25 len=1] leading=[] Ident("b") trailing=[]
+[9:26 len=1] leading=[] Colon trailing=[]
+[9:28 len=3] leading=[] Ident("i64") trailing=[]
+[9:31 len=1] leading=[] RParen trailing=[]
+[9:32 len=1] leading=[] Colon trailing=[]
+[9:34 len=3] leading=[] Ident("i64") trailing=[]
+[9:38 len=2] leading=[] FatArrow trailing=[]
+[9:41 len=10] leading=[] LBrace trailing=[]
+[10:9 len=6] leading=[] KwReturn trailing=[]
+[10:16 len=1] leading=[] Ident("a") trailing=[]
+[10:18 len=1] leading=[] Plus trailing=[]
+[10:20 len=1] leading=[] Ident("b") trailing=[]
+[10:21 len=6] leading=[] RBrace trailing=[]
+[11:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[12:5 len=6] leading=[] KwReturn trailing=[]
+[12:12 len=3] leading=[] Ident("inc") trailing=[]
+[12:15 len=1] leading=[] LParen trailing=[]
+[12:16 len=6] leading=[] Ident("blocky") trailing=[]
+[12:22 len=1] leading=[] LParen trailing=[]
+[12:23 len=1] leading=[] RParen trailing=[]
+[12:24 len=1] leading=[] RParen trailing=[]
+[12:26 len=1] leading=[] Plus trailing=[]
+[12:28 len=4] leading=[] Ident("pair") trailing=[]
+[12:32 len=1] leading=[] LParen trailing=[]
+[12:33 len=1] leading=[] IntLit("1") trailing=[]
+[12:34 len=1] leading=[] Comma trailing=[]
+[12:36 len=1] leading=[] IntLit("2") trailing=[]
+[12:37 len=1] leading=[] RParen trailing=[]
+[12:38 len=2] leading=[] RBrace trailing=[]
+[13:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

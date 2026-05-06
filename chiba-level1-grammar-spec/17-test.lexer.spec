@@ -1,97 +1,98 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=4] Ident("defs")
-[1:26 len=2] Newline("\n\n")
-[3:1 len=4] KwType
-[3:6 len=6] Ident("UserId")
-[3:13 len=1] Eq
-[3:15 len=3] Ident("i64")
-[3:18 len=2] Newline("\n\n")
-[5:1 len=4] KwData
-[5:6 len=6] Ident("Option")
-[5:12 len=1] LBracket
-[5:13 len=1] Ident("T")
-[5:14 len=1] RBracket
-[5:16 len=6] LBrace
-[6:5 len=4] Ident("Some")
-[6:9 len=1] LParen
-[6:10 len=1] Ident("T")
-[6:11 len=1] RParen
-[6:12 len=5] Newline("\n    ")
-[7:5 len=4] Ident("None")
-[7:9 len=2] RBrace
-[8:2 len=2] Newline("\n\n")
-[10:1 len=5] KwUnion
-[10:7 len=4] Ident("Bits")
-[10:12 len=6] LBrace
-[11:5 len=4] Ident("u32v")
-[11:9 len=1] Colon
-[11:11 len=3] Ident("u32")
-[11:14 len=6] Comma
-[12:5 len=4] Ident("f32v")
-[12:9 len=1] Colon
-[12:11 len=3] Ident("f32")
-[12:14 len=2] Comma
-[13:1 len=1] RBrace
-[13:2 len=2] Newline("\n\n")
-[15:1 len=3] KwDef
-[15:5 len=2] Ident("pi")
-[15:7 len=1] Colon
-[15:9 len=3] Ident("f32")
-[15:13 len=1] Eq
-[15:15 len=9] FloatLit("3.1415926")
-[15:24 len=2] Newline("\n\n")
-[17:1 len=9] KwPrivate
-[18:1 len=5] KwDef
-[19:1 len=6] Ident("helper")
-[19:7 len=6] LParen
-[20:5 len=1] Ident("x")
-[20:6 len=1] Colon
-[20:8 len=3] Ident("i64")
-[20:11 len=2] RParen
-[21:2 len=3] Colon
-[22:1 len=3] Ident("i64")
-[22:5 len=1] Eq
-[22:7 len=6] LBrace
-[23:5 len=6] KwReturn
-[23:12 len=1] Ident("x")
-[23:14 len=7] Plus
-[24:6 len=1] IntLit("1")
-[24:7 len=2] RBrace
-[25:2 len=2] Newline("\n\n")
-[27:1 len=3] KwDef
-[27:5 len=4] Ident("Vec2")
-[27:9 len=1] Dot
-[27:10 len=4] Ident("norm")
-[27:14 len=1] LParen
-[27:15 len=4] Ident("self")
-[27:19 len=1] RParen
-[27:20 len=1] Colon
-[27:22 len=3] Ident("f32")
-[27:26 len=1] Eq
-[27:28 len=6] LBrace
-[28:5 len=6] KwReturn
-[28:12 len=4] Ident("sqrt")
-[28:16 len=1] LParen
-[28:17 len=4] Ident("self")
-[28:21 len=1] Dot
-[28:22 len=1] Ident("x")
-[28:24 len=1] Star
-[28:26 len=4] Ident("self")
-[28:30 len=1] Dot
-[28:31 len=1] Ident("x")
-[28:33 len=1] Plus
-[28:35 len=4] Ident("self")
-[28:39 len=1] Dot
-[28:40 len=1] Ident("y")
-[28:42 len=1] Star
-[28:44 len=4] Ident("self")
-[28:48 len=1] Dot
-[28:49 len=1] Ident("y")
-[28:50 len=1] RParen
-[28:51 len=2] RBrace
-[29:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=4] leading=[] Ident("defs") trailing=[]
+[1:26 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=4] leading=[] KwType trailing=[]
+[3:6 len=6] leading=[] Ident("UserId") trailing=[]
+[3:13 len=1] leading=[] Eq trailing=[]
+[3:15 len=3] leading=[] Ident("i64") trailing=[]
+[3:18 len=2] leading=[] Newline("\n\n") trailing=[]
+[5:1 len=4] leading=[] KwData trailing=[]
+[5:6 len=6] leading=[] Ident("Option") trailing=[]
+[5:12 len=1] leading=[] LBracket trailing=[]
+[5:13 len=1] leading=[] Ident("T") trailing=[]
+[5:14 len=1] leading=[] RBracket trailing=[]
+[5:16 len=6] leading=[] LBrace trailing=[]
+[6:5 len=4] leading=[] Ident("Some") trailing=[]
+[6:9 len=1] leading=[] LParen trailing=[]
+[6:10 len=1] leading=[] Ident("T") trailing=[]
+[6:11 len=1] leading=[] RParen trailing=[]
+[6:12 len=5] leading=[] Newline("\n    ") trailing=[]
+[7:5 len=4] leading=[] Ident("None") trailing=[]
+[7:9 len=2] leading=[] RBrace trailing=[]
+[8:2 len=2] leading=[] Newline("\n\n") trailing=[]
+[10:1 len=5] leading=[] KwUnion trailing=[]
+[10:7 len=4] leading=[] Ident("Bits") trailing=[]
+[10:12 len=6] leading=[] LBrace trailing=[]
+[11:5 len=4] leading=[] Ident("u32v") trailing=[]
+[11:9 len=1] leading=[] Colon trailing=[]
+[11:11 len=3] leading=[] Ident("u32") trailing=[]
+[11:14 len=6] leading=[] Comma trailing=[]
+[12:5 len=4] leading=[] Ident("f32v") trailing=[]
+[12:9 len=1] leading=[] Colon trailing=[]
+[12:11 len=3] leading=[] Ident("f32") trailing=[]
+[12:14 len=2] leading=[] Comma trailing=[]
+[13:1 len=1] leading=[] RBrace trailing=[]
+[13:2 len=2] leading=[] Newline("\n\n") trailing=[]
+[15:1 len=3] leading=[] KwDef trailing=[]
+[15:5 len=2] leading=[] Ident("pi") trailing=[]
+[15:7 len=1] leading=[] Colon trailing=[]
+[15:9 len=3] leading=[] Ident("f32") trailing=[]
+[15:13 len=1] leading=[] Eq trailing=[]
+[15:15 len=9] leading=[] FloatLit("3.1415926") trailing=[]
+[15:24 len=2] leading=[] Newline("\n\n") trailing=[]
+[17:1 len=9] leading=[] KwPrivate trailing=[]
+[18:1 len=5] leading=[] KwDef trailing=[]
+[19:1 len=6] leading=[] Ident("helper") trailing=[]
+[19:7 len=6] leading=[] LParen trailing=[]
+[20:5 len=1] leading=[] Ident("x") trailing=[]
+[20:6 len=1] leading=[] Colon trailing=[]
+[20:8 len=3] leading=[] Ident("i64") trailing=[]
+[20:11 len=2] leading=[] RParen trailing=[]
+[21:2 len=3] leading=[] Colon trailing=[]
+[22:1 len=3] leading=[] Ident("i64") trailing=[]
+[22:5 len=1] leading=[] Eq trailing=[]
+[22:7 len=6] leading=[] LBrace trailing=[]
+[23:5 len=6] leading=[] KwReturn trailing=[]
+[23:12 len=1] leading=[] Ident("x") trailing=[]
+[23:14 len=7] leading=[] Plus trailing=[]
+[24:6 len=1] leading=[] IntLit("1") trailing=[]
+[24:7 len=2] leading=[] RBrace trailing=[]
+[25:2 len=2] leading=[] Newline("\n\n") trailing=[]
+[27:1 len=3] leading=[] KwDef trailing=[]
+[27:5 len=4] leading=[] Ident("Vec2") trailing=[]
+[27:9 len=1] leading=[] Dot trailing=[]
+[27:10 len=4] leading=[] Ident("norm") trailing=[]
+[27:14 len=1] leading=[] LParen trailing=[]
+[27:15 len=4] leading=[] Ident("self") trailing=[]
+[27:19 len=1] leading=[] RParen trailing=[]
+[27:20 len=1] leading=[] Colon trailing=[]
+[27:22 len=3] leading=[] Ident("f32") trailing=[]
+[27:26 len=1] leading=[] Eq trailing=[]
+[27:28 len=6] leading=[] LBrace trailing=[]
+[28:5 len=6] leading=[] KwReturn trailing=[]
+[28:12 len=4] leading=[] Ident("sqrt") trailing=[]
+[28:16 len=1] leading=[] LParen trailing=[]
+[28:17 len=4] leading=[] Ident("self") trailing=[]
+[28:21 len=1] leading=[] Dot trailing=[]
+[28:22 len=1] leading=[] Ident("x") trailing=[]
+[28:24 len=1] leading=[] Star trailing=[]
+[28:26 len=4] leading=[] Ident("self") trailing=[]
+[28:30 len=1] leading=[] Dot trailing=[]
+[28:31 len=1] leading=[] Ident("x") trailing=[]
+[28:33 len=1] leading=[] Plus trailing=[]
+[28:35 len=4] leading=[] Ident("self") trailing=[]
+[28:39 len=1] leading=[] Dot trailing=[]
+[28:40 len=1] leading=[] Ident("y") trailing=[]
+[28:42 len=1] leading=[] Star trailing=[]
+[28:44 len=4] leading=[] Ident("self") trailing=[]
+[28:48 len=1] leading=[] Dot trailing=[]
+[28:49 len=1] leading=[] Ident("y") trailing=[]
+[28:50 len=1] leading=[] RParen trailing=[]
+[28:51 len=2] leading=[] RBrace trailing=[]
+[29:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

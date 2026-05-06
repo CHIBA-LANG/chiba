@@ -1,5 +1,22 @@
 OK(
   SourceFile(
+    Attr_Cons(
+      FileAttr(
+        Attr(
+          "Metal",
+          AttrArg_End
+        )
+      ),
+      Attr_Cons(
+        ItemAttr(
+          Attr(
+            "entry",
+            AttrArg_End
+          )
+        ),
+        Attr_End
+      )
+    ),
     Namespace(
       Path_Cons(
         "lexer",
@@ -41,3 +58,4 @@ OK(
     )
   )
 )
+0

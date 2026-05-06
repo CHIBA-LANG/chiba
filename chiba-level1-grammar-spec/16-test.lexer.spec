@@ -1,56 +1,57 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=7] Ident("control")
-[1:29 len=1] Dot
-[1:30 len=10] Ident("resetshift")
-[1:40 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=11] Ident("reset_shift")
-[3:16 len=1] LParen
-[3:17 len=1] RParen
-[3:18 len=1] Colon
-[3:20 len=3] Ident("i64")
-[3:24 len=1] Eq
-[3:26 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=5] Ident("value")
-[4:15 len=1] Eq
-[4:17 len=5] KwReset
-[4:23 len=6] Atom("parse")
-[4:30 len=10] LBrace
-[5:9 len=1] IntLit("1")
-[5:11 len=1] Plus
-[5:13 len=5] KwShift
-[5:19 len=6] Atom("parse")
-[5:26 len=1] Ident("k")
-[5:28 len=14] LBrace
-[6:13 len=1] Ident("k")
-[6:14 len=1] LParen
-[6:15 len=2] IntLit("41")
-[6:17 len=1] RParen
-[6:18 len=10] RBrace
-[7:10 len=6] RBrace
-[8:6 len=5] Newline("\n    ")
-[9:5 len=3] KwLet
-[9:9 len=5] Ident("plain")
-[9:15 len=1] Eq
-[9:17 len=5] KwReset
-[9:23 len=10] LBrace
-[10:9 len=5] KwShift
-[10:15 len=4] Ident("cont")
-[10:20 len=14] LBrace
-[11:13 len=4] Ident("cont")
-[11:17 len=1] LParen
-[11:18 len=5] Ident("value")
-[11:23 len=1] RParen
-[11:24 len=10] RBrace
-[12:10 len=6] RBrace
-[13:6 len=5] Newline("\n    ")
-[14:5 len=6] KwReturn
-[14:12 len=5] Ident("plain")
-[14:17 len=2] RBrace
-[15:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=7] leading=[] Ident("control") trailing=[]
+[1:29 len=1] leading=[] Dot trailing=[]
+[1:30 len=10] leading=[] Ident("resetshift") trailing=[]
+[1:40 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=11] leading=[] Ident("reset_shift") trailing=[]
+[3:16 len=1] leading=[] LParen trailing=[]
+[3:17 len=1] leading=[] RParen trailing=[]
+[3:18 len=1] leading=[] Colon trailing=[]
+[3:20 len=3] leading=[] Ident("i64") trailing=[]
+[3:24 len=1] leading=[] Eq trailing=[]
+[3:26 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=5] leading=[] Ident("value") trailing=[]
+[4:15 len=1] leading=[] Eq trailing=[]
+[4:17 len=5] leading=[] KwReset trailing=[]
+[4:23 len=6] leading=[] Atom("parse") trailing=[]
+[4:30 len=10] leading=[] LBrace trailing=[]
+[5:9 len=1] leading=[] IntLit("1") trailing=[]
+[5:11 len=1] leading=[] Plus trailing=[]
+[5:13 len=5] leading=[] KwShift trailing=[]
+[5:19 len=6] leading=[] Atom("parse") trailing=[]
+[5:26 len=1] leading=[] Ident("k") trailing=[]
+[5:28 len=14] leading=[] LBrace trailing=[]
+[6:13 len=1] leading=[] Ident("k") trailing=[]
+[6:14 len=1] leading=[] LParen trailing=[]
+[6:15 len=2] leading=[] IntLit("41") trailing=[]
+[6:17 len=1] leading=[] RParen trailing=[]
+[6:18 len=10] leading=[] RBrace trailing=[]
+[7:10 len=6] leading=[] RBrace trailing=[]
+[8:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[9:5 len=3] leading=[] KwLet trailing=[]
+[9:9 len=5] leading=[] Ident("plain") trailing=[]
+[9:15 len=1] leading=[] Eq trailing=[]
+[9:17 len=5] leading=[] KwReset trailing=[]
+[9:23 len=10] leading=[] LBrace trailing=[]
+[10:9 len=5] leading=[] KwShift trailing=[]
+[10:15 len=4] leading=[] Ident("cont") trailing=[]
+[10:20 len=14] leading=[] LBrace trailing=[]
+[11:13 len=4] leading=[] Ident("cont") trailing=[]
+[11:17 len=1] leading=[] LParen trailing=[]
+[11:18 len=5] leading=[] Ident("value") trailing=[]
+[11:23 len=1] leading=[] RParen trailing=[]
+[11:24 len=10] leading=[] RBrace trailing=[]
+[12:10 len=6] leading=[] RBrace trailing=[]
+[13:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[14:5 len=6] leading=[] KwReturn trailing=[]
+[14:12 len=5] leading=[] Ident("plain") trailing=[]
+[14:17 len=2] leading=[] RBrace trailing=[]
+[15:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

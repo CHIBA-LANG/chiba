@@ -1,67 +1,69 @@
-[1:1 len=3] FileAttrStart
-[1:4 len=3] Ident("CBI")
-[1:7 len=1] RBracket
-[1:8 len=2] Newline("\n\n")
-[3:1 len=9] KwNamespace
-[3:11 len=5] Ident("lexer")
-[3:16 len=1] Dot
-[3:17 len=4] Ident("spec")
-[3:21 len=1] Dot
-[3:22 len=9] Ident("attribute")
-[3:31 len=1] Dot
-[3:32 len=7] Ident("targets")
-[3:39 len=2] Newline("\n\n")
-[5:1 len=2] ItemAttrStart
-[5:3 len=5] Ident("entry")
-[5:8 len=1] RBracket
-[5:9 len=1] Newline("\n")
-[6:1 len=3] KwDef
-[6:5 len=4] Ident("main")
-[6:9 len=1] LParen
-[6:10 len=1] RParen
-[6:11 len=1] Colon
-[6:13 len=3] Ident("i32")
-[6:17 len=1] Eq
-[6:19 len=6] LBrace
-[7:5 len=2] ItemAttrStart
-[7:7 len=5] Ident("trace")
-[7:12 len=1] RBracket
-[7:13 len=5] Newline("\n    ")
-[8:5 len=3] KwLet
-[8:9 len=5] Ident("value")
-[8:15 len=1] Eq
-[8:17 len=1] IntLit("1")
-[8:18 len=6] Newline("\n\n    ")
-[10:5 len=2] ItemAttrStart
-[10:7 len=6] Ident("inline")
-[10:13 len=1] RBracket
-[10:14 len=5] Newline("\n    ")
-[11:5 len=6] KwUnsafe
-[11:12 len=10] LBrace
-[12:9 len=13] Ident("use_low_level")
-[12:22 len=1] LParen
-[12:23 len=1] RParen
-[12:24 len=6] RBrace
-[13:6 len=5] Newline("\n    ")
-[14:5 len=4] Ident("call")
-[14:9 len=1] LParen
-[14:10 len=5] Ident("value")
-[14:15 len=1] RParen
-[14:17 len=2] ItemAttrStart
-[14:19 len=4] Ident("tail")
-[14:23 len=1] RBracket
-[14:24 len=5] Newline("\n    ")
-[15:5 len=1] LBrace
-[15:6 len=1] Pipe
-[15:7 len=1] Ident("x")
-[15:8 len=10] Pipe
-[16:9 len=1] Ident("x")
-[16:11 len=1] Plus
-[16:13 len=1] IntLit("1")
-[16:14 len=6] RBrace
-[17:6 len=5] Newline("\n    ")
-[18:5 len=6] KwReturn
-[18:12 len=1] IntLit("0")
-[18:13 len=2] RBrace
-[19:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=3] leading=[] FileAttrStart trailing=[]
+[1:4 len=3] leading=[] Ident("CBI") trailing=[]
+[1:7 len=1] leading=[] RBracket trailing=[]
+[1:8 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=9] leading=[] KwNamespace trailing=[]
+[3:11 len=5] leading=[] Ident("lexer") trailing=[]
+[3:16 len=1] leading=[] Dot trailing=[]
+[3:17 len=4] leading=[] Ident("spec") trailing=[]
+[3:21 len=1] leading=[] Dot trailing=[]
+[3:22 len=9] leading=[] Ident("attribute") trailing=[]
+[3:31 len=1] leading=[] Dot trailing=[]
+[3:32 len=7] leading=[] Ident("targets") trailing=[]
+[3:39 len=2] leading=[] Newline("\n\n") trailing=[]
+[5:1 len=2] leading=[] ItemAttrStart trailing=[]
+[5:3 len=5] leading=[] Ident("entry") trailing=[]
+[5:8 len=1] leading=[] RBracket trailing=[]
+[5:9 len=1] leading=[] Newline("\n") trailing=[]
+[6:1 len=3] leading=[] KwDef trailing=[]
+[6:5 len=4] leading=[] Ident("main") trailing=[]
+[6:9 len=1] leading=[] LParen trailing=[]
+[6:10 len=1] leading=[] RParen trailing=[]
+[6:11 len=1] leading=[] Colon trailing=[]
+[6:13 len=3] leading=[] Ident("i32") trailing=[]
+[6:17 len=1] leading=[] Eq trailing=[]
+[6:19 len=6] leading=[] LBrace trailing=[]
+[7:5 len=2] leading=[] ItemAttrStart trailing=[]
+[7:7 len=5] leading=[] Ident("trace") trailing=[]
+[7:12 len=1] leading=[] RBracket trailing=[]
+[7:13 len=5] leading=[] Newline("\n    ") trailing=[]
+[8:5 len=3] leading=[] KwLet trailing=[]
+[8:9 len=5] leading=[] Ident("value") trailing=[]
+[8:15 len=1] leading=[] Eq trailing=[]
+[8:17 len=1] leading=[] IntLit("1") trailing=[]
+[8:18 len=6] leading=[] Newline("\n\n    ") trailing=[]
+[10:5 len=2] leading=[] ItemAttrStart trailing=[]
+[10:7 len=6] leading=[] Ident("inline") trailing=[]
+[10:13 len=1] leading=[] RBracket trailing=[]
+[10:14 len=5] leading=[] Newline("\n    ") trailing=[]
+[11:5 len=6] leading=[] KwUnsafe trailing=[]
+[11:12 len=10] leading=[] LBrace trailing=[]
+[12:9 len=13] leading=[] Ident("use_low_level") trailing=[]
+[12:22 len=1] leading=[] LParen trailing=[]
+[12:23 len=1] leading=[] RParen trailing=[]
+[12:24 len=6] leading=[] RBrace trailing=[]
+[13:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[14:5 len=4] leading=[] Ident("call") trailing=[]
+[14:9 len=1] leading=[] LParen trailing=[]
+[14:10 len=5] leading=[] Ident("value") trailing=[]
+[14:15 len=1] leading=[] RParen trailing=[]
+[14:17 len=2] leading=[] ItemAttrStart trailing=[]
+[14:19 len=4] leading=[] Ident("tail") trailing=[]
+[14:23 len=1] leading=[] RBracket trailing=[]
+[14:24 len=5] leading=[] Newline("\n    ") trailing=[]
+[15:5 len=1] leading=[] LBrace trailing=[]
+[15:6 len=1] leading=[] Pipe trailing=[]
+[15:7 len=1] leading=[] Ident("x") trailing=[]
+[15:8 len=1] leading=[] Pipe trailing=[]
+[15:9 len=9] leading=[] Newline("\n        ") trailing=[]
+[16:9 len=1] leading=[] Ident("x") trailing=[]
+[16:11 len=1] leading=[] Plus trailing=[]
+[16:13 len=1] leading=[] IntLit("1") trailing=[]
+[16:14 len=6] leading=[] RBrace trailing=[]
+[17:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[18:5 len=6] leading=[] KwReturn trailing=[]
+[18:12 len=1] leading=[] IntLit("0") trailing=[]
+[18:13 len=2] leading=[] RBrace trailing=[]
+[19:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

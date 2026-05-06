@@ -1,64 +1,66 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=9] Ident("statement")
-[1:31 len=1] Dot
-[1:32 len=10] Ident("boundaries")
-[1:42 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=20] Ident("statement_boundaries")
-[3:25 len=1] LParen
-[3:26 len=1] RParen
-[3:27 len=1] Colon
-[3:29 len=3] Ident("i32")
-[3:33 len=1] Eq
-[3:35 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=1] Ident("a")
-[4:11 len=1] Eq
-[4:13 len=1] IntLit("1")
-[4:14 len=5] Newline("\n    ")
-[5:5 len=3] KwLet
-[5:9 len=1] Ident("b")
-[5:11 len=1] Eq
-[5:13 len=1] IntLit("2")
-[5:14 len=1] Semicolon
-[5:16 len=3] KwLet
-[5:20 len=1] Ident("c")
-[5:22 len=1] Eq
-[5:24 len=1] IntLit("3")
-[5:25 len=5] Newline("\n    ")
-[6:5 len=4] Ident("call")
-[6:9 len=1] LParen
-[6:10 len=1] Ident("a")
-[6:11 len=1] RParen
-[6:13 len=1] LBrace
-[6:14 len=1] Pipe
-[6:15 len=1] Ident("x")
-[6:16 len=10] Pipe
-[7:9 len=1] Ident("x")
-[7:11 len=1] Plus
-[7:13 len=1] IntLit("1")
-[7:14 len=6] RBrace
-[8:6 len=6] Newline("\n\n    ")
-[10:5 len=3] KwLet
-[10:9 len=26] Ident("same_line_is_not_separator")
-[10:36 len=1] Eq
-[10:38 len=1] IntLit("1")
-[10:39 len=1] Semicolon
-[10:41 len=3] KwLet
-[10:45 len=20] Ident("next_token_same_line")
-[10:66 len=1] Eq
-[10:68 len=1] IntLit("2")
-[10:69 len=5] Newline("\n    ")
-[11:5 len=6] KwReturn
-[11:12 len=1] Ident("a")
-[11:14 len=1] Plus
-[11:16 len=1] Ident("b")
-[11:18 len=1] Plus
-[11:20 len=1] Ident("c")
-[11:21 len=2] RBrace
-[12:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=9] leading=[] Ident("statement") trailing=[]
+[1:31 len=1] leading=[] Dot trailing=[]
+[1:32 len=10] leading=[] Ident("boundaries") trailing=[]
+[1:42 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=20] leading=[] Ident("statement_boundaries") trailing=[]
+[3:25 len=1] leading=[] LParen trailing=[]
+[3:26 len=1] leading=[] RParen trailing=[]
+[3:27 len=1] leading=[] Colon trailing=[]
+[3:29 len=3] leading=[] Ident("i32") trailing=[]
+[3:33 len=1] leading=[] Eq trailing=[]
+[3:35 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=1] leading=[] Ident("a") trailing=[]
+[4:11 len=1] leading=[] Eq trailing=[]
+[4:13 len=1] leading=[] IntLit("1") trailing=[]
+[4:14 len=5] leading=[] Newline("\n    ") trailing=[]
+[5:5 len=3] leading=[] KwLet trailing=[]
+[5:9 len=1] leading=[] Ident("b") trailing=[]
+[5:11 len=1] leading=[] Eq trailing=[]
+[5:13 len=1] leading=[] IntLit("2") trailing=[]
+[5:14 len=1] leading=[] Semicolon trailing=[]
+[5:16 len=3] leading=[] KwLet trailing=[]
+[5:20 len=1] leading=[] Ident("c") trailing=[]
+[5:22 len=1] leading=[] Eq trailing=[]
+[5:24 len=1] leading=[] IntLit("3") trailing=[]
+[5:25 len=5] leading=[] Newline("\n    ") trailing=[]
+[6:5 len=4] leading=[] Ident("call") trailing=[]
+[6:9 len=1] leading=[] LParen trailing=[]
+[6:10 len=1] leading=[] Ident("a") trailing=[]
+[6:11 len=1] leading=[] RParen trailing=[]
+[6:13 len=1] leading=[] LBrace trailing=[]
+[6:14 len=1] leading=[] Pipe trailing=[]
+[6:15 len=1] leading=[] Ident("x") trailing=[]
+[6:16 len=1] leading=[] Pipe trailing=[]
+[6:17 len=9] leading=[] Newline("\n        ") trailing=[]
+[7:9 len=1] leading=[] Ident("x") trailing=[]
+[7:11 len=1] leading=[] Plus trailing=[]
+[7:13 len=1] leading=[] IntLit("1") trailing=[]
+[7:14 len=6] leading=[] RBrace trailing=[]
+[8:6 len=6] leading=[] Newline("\n\n    ") trailing=[]
+[10:5 len=3] leading=[] KwLet trailing=[]
+[10:9 len=26] leading=[] Ident("same_line_is_not_separator") trailing=[]
+[10:36 len=1] leading=[] Eq trailing=[]
+[10:38 len=1] leading=[] IntLit("1") trailing=[]
+[10:39 len=1] leading=[] Semicolon trailing=[]
+[10:41 len=3] leading=[] KwLet trailing=[]
+[10:45 len=20] leading=[] Ident("next_token_same_line") trailing=[]
+[10:66 len=1] leading=[] Eq trailing=[]
+[10:68 len=1] leading=[] IntLit("2") trailing=[]
+[10:69 len=5] leading=[] Newline("\n    ") trailing=[]
+[11:5 len=6] leading=[] KwReturn trailing=[]
+[11:12 len=1] leading=[] Ident("a") trailing=[]
+[11:14 len=1] leading=[] Plus trailing=[]
+[11:16 len=1] leading=[] Ident("b") trailing=[]
+[11:18 len=1] leading=[] Plus trailing=[]
+[11:20 len=1] leading=[] Ident("c") trailing=[]
+[11:21 len=2] leading=[] RBrace trailing=[]
+[12:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

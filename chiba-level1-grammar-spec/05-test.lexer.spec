@@ -1,61 +1,62 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=7] Ident("strings")
-[1:29 len=1] Dot
-[1:30 len=9] Ident("multiline")
-[1:39 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=9] Ident("multiline")
-[3:14 len=1] LParen
-[3:15 len=4] Ident("name")
-[3:19 len=1] Colon
-[3:21 len=6] Ident("String")
-[3:27 len=1] Comma
-[3:29 len=2] Ident("id")
-[3:31 len=1] Colon
-[3:33 len=3] Ident("i64")
-[3:36 len=1] RParen
-[3:37 len=1] Colon
-[3:39 len=6] Ident("String")
-[3:46 len=1] Eq
-[3:48 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=6] Ident("normal")
-[4:16 len=1] Eq
-[4:18 len=1] StringStart("", raw=0, hashes=0)
-[4:19 len=13] StringChunk("hello\nworld\n$")
-[6:2 len=1] StringExprStart
-[6:3 len=4] Ident("name")
-[6:7 len=1] StringExprEnd
-[6:8 len=1] StringEnd
-[6:9 len=5] Newline("\n    ")
-[7:5 len=3] KwLet
-[7:9 len=9] Ident("delimited")
-[7:19 len=1] Eq
-[7:21 len=3] StringStart("", raw=0, hashes=2)
-[7:24 len=13] StringChunk("\nfirst line\n$")
-[9:2 len=1] StringExprStart
-[9:3 len=2] Ident("id")
-[9:5 len=1] StringExprEnd
-[9:6 len=1] StringChunk("\n")
-[10:1 len=1] StringEnd
-[10:4 len=5] Newline("\n    ")
-[11:5 len=3] KwLet
-[11:9 len=9] Ident("raw_multi")
-[11:19 len=1] Eq
-[11:21 len=1] StringStart("", raw=1, hashes=2)
-[11:25 len=2] StringChunk("\n$")
-[12:2 len=1] StringChunk("{")
-[12:3 len=4] StringChunk("name")
-[12:7 len=1] StringChunk("}")
-[12:8 len=24] StringChunk(" stays text in raw mode\n")
-[13:1 len=1] StringEnd
-[13:4 len=5] Newline("\n    ")
-[14:5 len=6] KwReturn
-[14:12 len=6] Ident("normal")
-[14:18 len=2] RBrace
-[15:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=7] leading=[] Ident("strings") trailing=[]
+[1:29 len=1] leading=[] Dot trailing=[]
+[1:30 len=9] leading=[] Ident("multiline") trailing=[]
+[1:39 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=9] leading=[] Ident("multiline") trailing=[]
+[3:14 len=1] leading=[] LParen trailing=[]
+[3:15 len=4] leading=[] Ident("name") trailing=[]
+[3:19 len=1] leading=[] Colon trailing=[]
+[3:21 len=6] leading=[] Ident("String") trailing=[]
+[3:27 len=1] leading=[] Comma trailing=[]
+[3:29 len=2] leading=[] Ident("id") trailing=[]
+[3:31 len=1] leading=[] Colon trailing=[]
+[3:33 len=3] leading=[] Ident("i64") trailing=[]
+[3:36 len=1] leading=[] RParen trailing=[]
+[3:37 len=1] leading=[] Colon trailing=[]
+[3:39 len=6] leading=[] Ident("String") trailing=[]
+[3:46 len=1] leading=[] Eq trailing=[]
+[3:48 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=6] leading=[] Ident("normal") trailing=[]
+[4:16 len=1] leading=[] Eq trailing=[]
+[4:18 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
+[4:19 len=13] leading=[] StringChunk("hello\nworld\n$") trailing=[]
+[6:2 len=1] leading=[] StringExprStart trailing=[]
+[6:3 len=4] leading=[] Ident("name") trailing=[]
+[6:7 len=1] leading=[] StringExprEnd trailing=[]
+[6:8 len=1] leading=[] StringEnd trailing=[]
+[6:9 len=5] leading=[] Newline("\n    ") trailing=[]
+[7:5 len=3] leading=[] KwLet trailing=[]
+[7:9 len=9] leading=[] Ident("delimited") trailing=[]
+[7:19 len=1] leading=[] Eq trailing=[]
+[7:21 len=3] leading=[] StringStart("", raw=0, hashes=2) trailing=[]
+[7:24 len=13] leading=[] StringChunk("\nfirst line\n$") trailing=[]
+[9:2 len=1] leading=[] StringExprStart trailing=[]
+[9:3 len=2] leading=[] Ident("id") trailing=[]
+[9:5 len=1] leading=[] StringExprEnd trailing=[]
+[9:6 len=1] leading=[] StringChunk("\n") trailing=[]
+[10:1 len=1] leading=[] StringEnd trailing=[]
+[10:4 len=5] leading=[] Newline("\n    ") trailing=[]
+[11:5 len=3] leading=[] KwLet trailing=[]
+[11:9 len=9] leading=[] Ident("raw_multi") trailing=[]
+[11:19 len=1] leading=[] Eq trailing=[]
+[11:21 len=1] leading=[] StringStart("", raw=1, hashes=2) trailing=[]
+[11:25 len=2] leading=[] StringChunk("\n$") trailing=[]
+[12:2 len=1] leading=[] StringChunk("{") trailing=[]
+[12:3 len=4] leading=[] StringChunk("name") trailing=[]
+[12:7 len=1] leading=[] StringChunk("}") trailing=[]
+[12:8 len=24] leading=[] StringChunk(" stays text in raw mode\n") trailing=[]
+[13:1 len=1] leading=[] StringEnd trailing=[]
+[13:4 len=5] leading=[] Newline("\n    ") trailing=[]
+[14:5 len=6] leading=[] KwReturn trailing=[]
+[14:12 len=6] leading=[] Ident("normal") trailing=[]
+[14:18 len=2] leading=[] RBrace trailing=[]
+[15:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

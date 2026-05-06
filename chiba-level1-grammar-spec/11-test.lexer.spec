@@ -1,97 +1,99 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=7] Ident("records")
-[1:29 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=7] Ident("records")
-[3:12 len=1] LParen
-[3:13 len=4] Ident("base")
-[3:17 len=1] Colon
-[3:19 len=5] Ident("Point")
-[3:24 len=1] RParen
-[3:25 len=1] Colon
-[3:27 len=5] Ident("Point")
-[3:33 len=1] Eq
-[3:35 len=6] LBrace
-[4:5 len=3] KwLet
-[4:9 len=1] Ident("x")
-[4:11 len=1] Eq
-[4:13 len=1] IntLit("1")
-[4:14 len=5] Newline("\n    ")
-[5:5 len=3] KwLet
-[5:9 len=1] Ident("y")
-[5:11 len=1] Eq
-[5:13 len=1] IntLit("2")
-[5:14 len=5] Newline("\n    ")
-[6:5 len=3] KwLet
-[6:9 len=7] Ident("literal")
-[6:17 len=1] Eq
-[6:19 len=1] LBrace
-[6:21 len=1] Ident("x")
-[6:22 len=1] Comma
-[6:24 len=1] Ident("y")
-[6:25 len=1] Comma
-[6:27 len=4] Ident("name")
-[6:31 len=1] Colon
-[6:33 len=1] StringStart("", raw=0, hashes=0)
-[6:34 len=5] StringChunk("point")
-[6:39 len=1] StringEnd
-[6:41 len=1] RBrace
-[6:42 len=5] Newline("\n    ")
-[7:5 len=3] KwLet
-[7:9 len=5] Ident("multi")
-[7:15 len=1] Eq
-[7:17 len=10] LBrace
-[8:9 len=1] Ident("x")
-[8:10 len=1] Colon
-[8:12 len=1] IntLit("1")
-[8:13 len=10] Comma
-[9:9 len=1] Ident("y")
-[9:10 len=1] Colon
-[9:12 len=1] IntLit("2")
-[9:13 len=6] Comma
-[10:5 len=1] RBrace
-[10:6 len=5] Newline("\n    ")
-[11:5 len=3] KwLet
-[11:9 len=6] Ident("update")
-[11:16 len=1] Eq
-[11:18 len=1] LBrace
-[11:19 len=4] Ident("base")
-[11:24 len=1] Pipe
-[11:26 len=1] Ident("y")
-[11:27 len=1] Colon
-[11:29 len=1] IntLit("3")
-[11:30 len=1] Comma
-[11:32 len=1] Ident("z")
-[11:33 len=1] Colon
-[11:35 len=1] IntLit("4")
-[11:36 len=1] RBrace
-[11:37 len=5] Newline("\n    ")
-[12:5 len=3] KwLet
-[12:9 len=12] Ident("update_multi")
-[12:22 len=1] Eq
-[12:24 len=1] LBrace
-[12:25 len=4] Ident("base")
-[12:30 len=10] Pipe
-[13:9 len=1] Ident("x")
-[13:10 len=1] Colon
-[13:12 len=7] Ident("literal")
-[13:19 len=1] Dot
-[13:20 len=1] Ident("x")
-[13:21 len=10] Comma
-[14:9 len=1] Ident("y")
-[14:10 len=1] Colon
-[14:12 len=5] Ident("multi")
-[14:17 len=14] Dot
-[15:13 len=1] Ident("y")
-[15:14 len=6] Comma
-[16:5 len=1] RBrace
-[16:6 len=5] Newline("\n    ")
-[17:5 len=6] KwReturn
-[17:12 len=6] Ident("update")
-[17:18 len=2] RBrace
-[18:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=7] leading=[] Ident("records") trailing=[]
+[1:29 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=7] leading=[] Ident("records") trailing=[]
+[3:12 len=1] leading=[] LParen trailing=[]
+[3:13 len=4] leading=[] Ident("base") trailing=[]
+[3:17 len=1] leading=[] Colon trailing=[]
+[3:19 len=5] leading=[] Ident("Point") trailing=[]
+[3:24 len=1] leading=[] RParen trailing=[]
+[3:25 len=1] leading=[] Colon trailing=[]
+[3:27 len=5] leading=[] Ident("Point") trailing=[]
+[3:33 len=1] leading=[] Eq trailing=[]
+[3:35 len=6] leading=[] LBrace trailing=[]
+[4:5 len=3] leading=[] KwLet trailing=[]
+[4:9 len=1] leading=[] Ident("x") trailing=[]
+[4:11 len=1] leading=[] Eq trailing=[]
+[4:13 len=1] leading=[] IntLit("1") trailing=[]
+[4:14 len=5] leading=[] Newline("\n    ") trailing=[]
+[5:5 len=3] leading=[] KwLet trailing=[]
+[5:9 len=1] leading=[] Ident("y") trailing=[]
+[5:11 len=1] leading=[] Eq trailing=[]
+[5:13 len=1] leading=[] IntLit("2") trailing=[]
+[5:14 len=5] leading=[] Newline("\n    ") trailing=[]
+[6:5 len=3] leading=[] KwLet trailing=[]
+[6:9 len=7] leading=[] Ident("literal") trailing=[]
+[6:17 len=1] leading=[] Eq trailing=[]
+[6:19 len=1] leading=[] LBrace trailing=[]
+[6:21 len=1] leading=[] Ident("x") trailing=[]
+[6:22 len=1] leading=[] Comma trailing=[]
+[6:24 len=1] leading=[] Ident("y") trailing=[]
+[6:25 len=1] leading=[] Comma trailing=[]
+[6:27 len=4] leading=[] Ident("name") trailing=[]
+[6:31 len=1] leading=[] Colon trailing=[]
+[6:33 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
+[6:34 len=5] leading=[] StringChunk("point") trailing=[]
+[6:39 len=1] leading=[] StringEnd trailing=[]
+[6:41 len=1] leading=[] RBrace trailing=[]
+[6:42 len=5] leading=[] Newline("\n    ") trailing=[]
+[7:5 len=3] leading=[] KwLet trailing=[]
+[7:9 len=5] leading=[] Ident("multi") trailing=[]
+[7:15 len=1] leading=[] Eq trailing=[]
+[7:17 len=10] leading=[] LBrace trailing=[]
+[8:9 len=1] leading=[] Ident("x") trailing=[]
+[8:10 len=1] leading=[] Colon trailing=[]
+[8:12 len=1] leading=[] IntLit("1") trailing=[]
+[8:13 len=10] leading=[] Comma trailing=[]
+[9:9 len=1] leading=[] Ident("y") trailing=[]
+[9:10 len=1] leading=[] Colon trailing=[]
+[9:12 len=1] leading=[] IntLit("2") trailing=[]
+[9:13 len=6] leading=[] Comma trailing=[]
+[10:5 len=1] leading=[] RBrace trailing=[]
+[10:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[11:5 len=3] leading=[] KwLet trailing=[]
+[11:9 len=6] leading=[] Ident("update") trailing=[]
+[11:16 len=1] leading=[] Eq trailing=[]
+[11:18 len=1] leading=[] LBrace trailing=[]
+[11:19 len=4] leading=[] Ident("base") trailing=[]
+[11:24 len=1] leading=[] Pipe trailing=[]
+[11:26 len=1] leading=[] Ident("y") trailing=[]
+[11:27 len=1] leading=[] Colon trailing=[]
+[11:29 len=1] leading=[] IntLit("3") trailing=[]
+[11:30 len=1] leading=[] Comma trailing=[]
+[11:32 len=1] leading=[] Ident("z") trailing=[]
+[11:33 len=1] leading=[] Colon trailing=[]
+[11:35 len=1] leading=[] IntLit("4") trailing=[]
+[11:36 len=1] leading=[] RBrace trailing=[]
+[11:37 len=5] leading=[] Newline("\n    ") trailing=[]
+[12:5 len=3] leading=[] KwLet trailing=[]
+[12:9 len=12] leading=[] Ident("update_multi") trailing=[]
+[12:22 len=1] leading=[] Eq trailing=[]
+[12:24 len=1] leading=[] LBrace trailing=[]
+[12:25 len=4] leading=[] Ident("base") trailing=[]
+[12:30 len=1] leading=[] Pipe trailing=[]
+[12:31 len=9] leading=[] Newline("\n        ") trailing=[]
+[13:9 len=1] leading=[] Ident("x") trailing=[]
+[13:10 len=1] leading=[] Colon trailing=[]
+[13:12 len=7] leading=[] Ident("literal") trailing=[]
+[13:19 len=1] leading=[] Dot trailing=[]
+[13:20 len=1] leading=[] Ident("x") trailing=[]
+[13:21 len=10] leading=[] Comma trailing=[]
+[14:9 len=1] leading=[] Ident("y") trailing=[]
+[14:10 len=1] leading=[] Colon trailing=[]
+[14:12 len=5] leading=[] Ident("multi") trailing=[]
+[14:17 len=14] leading=[] Dot trailing=[]
+[15:13 len=1] leading=[] Ident("y") trailing=[]
+[15:14 len=6] leading=[] Comma trailing=[]
+[16:5 len=1] leading=[] RBrace trailing=[]
+[16:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[17:5 len=6] leading=[] KwReturn trailing=[]
+[17:12 len=6] leading=[] Ident("update") trailing=[]
+[17:18 len=2] leading=[] RBrace trailing=[]
+[18:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0

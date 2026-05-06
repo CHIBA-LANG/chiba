@@ -1,5 +1,6 @@
 OK(
   SourceFile(
+    Attr_End,
     Namespace(
       Path_Cons(
         "lexer",
@@ -264,3 +265,4 @@ OK(
     )
   )
 )
+0

@@ -1,5 +1,14 @@
 OK(
   SourceFile(
+    Attr_Cons(
+      FileAttr(
+        Attr(
+          "CBI",
+          AttrArg_End
+        )
+      ),
+      Attr_End
+    ),
     Namespace(
       Path_Cons(
         "lexer",
@@ -16,112 +25,154 @@ OK(
       )
     ),
     Item_Cons(
-      Item_Def(
-        DefItem2(
-          "main",
-          DefFun(
-            Generic_End,
-            Param_End,
-            Type_Path(
-              "i32",
-              Type_Tail_End
-            ),
-            Expr_Block(
-              Stmt_Cons(
-                Stmt_LetPatternTyped(
-                  Pattern_IdentStart(
-                    "value",
-                    PatternAfterIdent_Atom(
-                      PatternIdent_Name
-                    )
-                  ),
-                  Type_Path(
-                    "",
-                    Type_Tail_End
-                  ),
-                  Expr_Int(
-                    "1"
-                  )
-                ),
+      Item_WithAttrs(
+        Attr_Cons(
+          ItemAttr(
+            Attr(
+              "entry",
+              AttrArg_End
+            )
+          ),
+          Attr_End
+        ),
+        Item_Def(
+          DefItem2(
+            "main",
+            DefFun(
+              Generic_End,
+              Param_End,
+              Type_Path(
+                "i32",
+                Type_Tail_End
+              ),
+              Expr_Block(
                 Stmt_Cons(
-                  Stmt_Expr(
-                    Expr_Unsafe(
-                      Expr_Block(
-                        Stmt_Cons(
-                          Stmt_Expr(
-                            Expr_IdentTail(
-                              "use_low_level",
-                              IdentTail_Call(
-                                Arg_End,
-                                IdentCallClosure_None
-                              )
-                            )
-                          ),
-                          Stmt_End
-                        ),
-                        TailExpr_None
+                  Stmt_WithAttrs(
+                    Attr_Cons(
+                      ItemAttr(
+                        Attr(
+                          "trace",
+                          AttrArg_End
+                        )
+                      ),
+                      Attr_End
+                    ),
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "value",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_Int(
+                        "1"
                       )
                     )
                   ),
                   Stmt_Cons(
-                    Stmt_Expr(
-                      Expr_IdentTail(
-                        "call",
-                        IdentTail_Call(
-                          Arg_Cons(
-                            Expr_IdentTail(
-                              "value",
-                              IdentTail_None
-                            ),
-                            Arg_End
-                          ),
-                          IdentCallClosure_Some(
-                            Expr_Closure(
-                              Param_Cons(
-                                Param(
-                                  "x",
-                                  Type_Path(
-                                    "",
-                                    Type_Tail_End
+                    Stmt_WithAttrs(
+                      Attr_Cons(
+                        ItemAttr(
+                          Attr(
+                            "inline",
+                            AttrArg_End
+                          )
+                        ),
+                        Attr_End
+                      ),
+                      Stmt_Expr(
+                        Expr_Unsafe(
+                          Expr_Block(
+                            Stmt_Cons(
+                              Stmt_Expr(
+                                Expr_IdentTail(
+                                  "use_low_level",
+                                  IdentTail_Call(
+                                    Arg_End,
+                                    IdentCallClosure_None
                                   )
-                                ),
-                                Param_End
+                                )
                               ),
-                              Expr_Block(
-                                Stmt_Cons(
-                                  Stmt_Expr(
-                                    Expr_Binary(
-                                      OpAdd,
-                                      Expr_IdentTail(
-                                        "x",
-                                        IdentTail_None
-                                      ),
-                                      Expr_Int(
-                                        "1"
-                                      )
-                                    )
-                                  ),
-                                  Stmt_End
-                                ),
-                                TailExpr_None
-                              )
-                            )
+                              Stmt_End
+                            ),
+                            TailExpr_None
                           )
                         )
                       )
                     ),
                     Stmt_Cons(
-                      Stmt_Return(
-                        Expr_Int(
-                          "0"
+                      Stmt_Expr(
+                        Expr_IdentTail(
+                          "call",
+                          IdentTail_Call(
+                            Arg_Cons(
+                              Expr_IdentTail(
+                                "value",
+                                IdentTail_None
+                              ),
+                              Arg_End
+                            ),
+                            IdentCallClosure_Some(
+                              Attr_Cons(
+                                ItemAttr(
+                                  Attr(
+                                    "tail",
+                                    AttrArg_End
+                                  )
+                                ),
+                                Attr_End
+                              ),
+                              Expr_Closure(
+                                Param_Cons(
+                                  Param(
+                                    "x",
+                                    Type_Path(
+                                      "",
+                                      Type_Tail_End
+                                    )
+                                  ),
+                                  Param_End
+                                ),
+                                Expr_Block(
+                                  Stmt_Cons(
+                                    Stmt_Expr(
+                                      Expr_Binary(
+                                        OpAdd,
+                                        Expr_IdentTail(
+                                          "x",
+                                          IdentTail_None
+                                        ),
+                                        Expr_Int(
+                                          "1"
+                                        )
+                                      )
+                                    ),
+                                    Stmt_End
+                                  ),
+                                  TailExpr_None
+                                )
+                              )
+                            )
+                          )
                         )
                       ),
-                      Stmt_End
+                      Stmt_Cons(
+                        Stmt_Return(
+                          Expr_Int(
+                            "0"
+                          )
+                        ),
+                        Stmt_End
+                      )
                     )
                   )
-                )
-              ),
-              TailExpr_None
+                ),
+                TailExpr_None
+              )
             )
           )
         )
@@ -130,3 +181,4 @@ OK(
     )
   )
 )
+0

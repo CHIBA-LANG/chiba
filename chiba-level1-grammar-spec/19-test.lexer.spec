@@ -1,97 +1,98 @@
-[1:1 len=9] KwNamespace
-[1:11 len=5] Ident("lexer")
-[1:16 len=1] Dot
-[1:17 len=4] Ident("spec")
-[1:21 len=1] Dot
-[1:22 len=9] Ident("externasm")
-[1:31 len=2] Newline("\n\n")
-[3:1 len=3] KwDef
-[3:5 len=4] Ident("puts")
-[3:9 len=1] LParen
-[3:10 len=3] Ident("msg")
-[3:13 len=1] Colon
-[3:15 len=4] Ident("cstr")
-[3:19 len=1] RParen
-[3:20 len=1] Colon
-[3:22 len=3] Ident("i32")
-[3:26 len=1] Eq
-[3:28 len=6] KwExtern
-[3:35 len=1] StringStart("", raw=0, hashes=0)
-[3:36 len=1] StringChunk("c")
-[3:37 len=1] StringEnd
-[3:38 len=1] Newline("\n")
-[4:1 len=3] KwDef
-[4:5 len=9] Ident("cbx_entry")
-[4:14 len=1] LParen
-[4:15 len=1] Ident("x")
-[4:16 len=1] Colon
-[4:18 len=3] Ident("i64")
-[4:21 len=1] RParen
-[4:22 len=1] Colon
-[4:24 len=3] Ident("i64")
-[4:28 len=1] Eq
-[4:30 len=6] KwExtern
-[4:37 len=1] StringStart("", raw=0, hashes=0)
-[4:38 len=3] StringChunk("cbx")
-[4:41 len=1] StringEnd
-[4:42 len=2] Newline("\n\n")
-[6:1 len=3] KwDef
-[6:5 len=9] Ident("low_level")
-[6:14 len=1] LParen
-[6:15 len=3] Ident("ptr")
-[6:18 len=1] Colon
-[6:20 len=3] Ident("Ptr")
-[6:23 len=1] LBracket
-[6:24 len=2] Ident("u8")
-[6:26 len=1] RBracket
-[6:27 len=1] Comma
-[6:29 len=3] Ident("idx")
-[6:32 len=1] Colon
-[6:34 len=3] Ident("i64")
-[6:37 len=1] RParen
-[6:38 len=1] Colon
-[6:40 len=3] Ident("i64")
-[6:44 len=1] Eq
-[6:46 len=6] KwUnsafe
-[6:53 len=6] LBrace
-[7:5 len=3] KwLet
-[7:9 len=6] Ident("loaded")
-[7:16 len=1] Colon
-[7:18 len=2] Ident("u8")
-[7:21 len=1] Eq
-[7:23 len=3] Ident("ptr")
-[7:26 len=2] DotStar
-[7:28 len=5] Newline("\n    ")
-[8:5 len=3] KwLet
-[8:9 len=1] Ident("v")
-[8:11 len=1] Eq
-[8:13 len=3] KwAsm
-[8:17 len=1] LParen
-[8:18 len=3] Ident("ptr")
-[8:21 len=1] Colon
-[8:23 len=3] Ident("rdi")
-[8:26 len=1] Comma
-[8:28 len=3] Ident("idx")
-[8:31 len=1] Colon
-[8:33 len=3] Ident("rsi")
-[8:36 len=1] RParen
-[8:38 len=1] Colon
-[8:40 len=1] LParen
-[8:41 len=3] Ident("rax")
-[8:44 len=1] RParen
-[8:46 len=2] FatArrow
-[8:49 len=10] LBrace
-[9:9 len=1] StringStart("", raw=0, hashes=0)
-[9:10 len=22] StringChunk("mov rax, [rdi + rsi*8]")
-[9:32 len=1] StringEnd
-[9:33 len=9] Newline("\n        ")
-[10:9 len=1] StringStart("", raw=0, hashes=0)
-[10:10 len=12] StringChunk("xor rax, rax")
-[10:22 len=1] StringEnd
-[10:23 len=6] RBrace
-[11:6 len=5] Newline("\n    ")
-[12:5 len=6] KwReturn
-[12:12 len=1] Ident("v")
-[12:13 len=2] RBrace
-[13:2 len=1] Newline("\n")
-[0:0 len=0] Eof
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=5] leading=[] Ident("lexer") trailing=[]
+[1:16 len=1] leading=[] Dot trailing=[]
+[1:17 len=4] leading=[] Ident("spec") trailing=[]
+[1:21 len=1] leading=[] Dot trailing=[]
+[1:22 len=9] leading=[] Ident("externasm") trailing=[]
+[1:31 len=2] leading=[] Newline("\n\n") trailing=[]
+[3:1 len=3] leading=[] KwDef trailing=[]
+[3:5 len=4] leading=[] Ident("puts") trailing=[]
+[3:9 len=1] leading=[] LParen trailing=[]
+[3:10 len=3] leading=[] Ident("msg") trailing=[]
+[3:13 len=1] leading=[] Colon trailing=[]
+[3:15 len=4] leading=[] Ident("cstr") trailing=[]
+[3:19 len=1] leading=[] RParen trailing=[]
+[3:20 len=1] leading=[] Colon trailing=[]
+[3:22 len=3] leading=[] Ident("i32") trailing=[]
+[3:26 len=1] leading=[] Eq trailing=[]
+[3:28 len=6] leading=[] KwExtern trailing=[]
+[3:35 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
+[3:36 len=1] leading=[] StringChunk("c") trailing=[]
+[3:37 len=1] leading=[] StringEnd trailing=[]
+[3:38 len=1] leading=[] Newline("\n") trailing=[]
+[4:1 len=3] leading=[] KwDef trailing=[]
+[4:5 len=9] leading=[] Ident("cbx_entry") trailing=[]
+[4:14 len=1] leading=[] LParen trailing=[]
+[4:15 len=1] leading=[] Ident("x") trailing=[]
+[4:16 len=1] leading=[] Colon trailing=[]
+[4:18 len=3] leading=[] Ident("i64") trailing=[]
+[4:21 len=1] leading=[] RParen trailing=[]
+[4:22 len=1] leading=[] Colon trailing=[]
+[4:24 len=3] leading=[] Ident("i64") trailing=[]
+[4:28 len=1] leading=[] Eq trailing=[]
+[4:30 len=6] leading=[] KwExtern trailing=[]
+[4:37 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
+[4:38 len=3] leading=[] StringChunk("cbx") trailing=[]
+[4:41 len=1] leading=[] StringEnd trailing=[]
+[4:42 len=2] leading=[] Newline("\n\n") trailing=[]
+[6:1 len=3] leading=[] KwDef trailing=[]
+[6:5 len=9] leading=[] Ident("low_level") trailing=[]
+[6:14 len=1] leading=[] LParen trailing=[]
+[6:15 len=3] leading=[] Ident("ptr") trailing=[]
+[6:18 len=1] leading=[] Colon trailing=[]
+[6:20 len=3] leading=[] Ident("Ptr") trailing=[]
+[6:23 len=1] leading=[] LBracket trailing=[]
+[6:24 len=2] leading=[] Ident("u8") trailing=[]
+[6:26 len=1] leading=[] RBracket trailing=[]
+[6:27 len=1] leading=[] Comma trailing=[]
+[6:29 len=3] leading=[] Ident("idx") trailing=[]
+[6:32 len=1] leading=[] Colon trailing=[]
+[6:34 len=3] leading=[] Ident("i64") trailing=[]
+[6:37 len=1] leading=[] RParen trailing=[]
+[6:38 len=1] leading=[] Colon trailing=[]
+[6:40 len=3] leading=[] Ident("i64") trailing=[]
+[6:44 len=1] leading=[] Eq trailing=[]
+[6:46 len=6] leading=[] KwUnsafe trailing=[]
+[6:53 len=6] leading=[] LBrace trailing=[]
+[7:5 len=3] leading=[] KwLet trailing=[]
+[7:9 len=6] leading=[] Ident("loaded") trailing=[]
+[7:16 len=1] leading=[] Colon trailing=[]
+[7:18 len=2] leading=[] Ident("u8") trailing=[]
+[7:21 len=1] leading=[] Eq trailing=[]
+[7:23 len=3] leading=[] Ident("ptr") trailing=[]
+[7:26 len=2] leading=[] DotStar trailing=[]
+[7:28 len=5] leading=[] Newline("\n    ") trailing=[]
+[8:5 len=3] leading=[] KwLet trailing=[]
+[8:9 len=1] leading=[] Ident("v") trailing=[]
+[8:11 len=1] leading=[] Eq trailing=[]
+[8:13 len=3] leading=[] KwAsm trailing=[]
+[8:17 len=1] leading=[] LParen trailing=[]
+[8:18 len=3] leading=[] Ident("ptr") trailing=[]
+[8:21 len=1] leading=[] Colon trailing=[]
+[8:23 len=3] leading=[] Ident("rdi") trailing=[]
+[8:26 len=1] leading=[] Comma trailing=[]
+[8:28 len=3] leading=[] Ident("idx") trailing=[]
+[8:31 len=1] leading=[] Colon trailing=[]
+[8:33 len=3] leading=[] Ident("rsi") trailing=[]
+[8:36 len=1] leading=[] RParen trailing=[]
+[8:38 len=1] leading=[] Colon trailing=[]
+[8:40 len=1] leading=[] LParen trailing=[]
+[8:41 len=3] leading=[] Ident("rax") trailing=[]
+[8:44 len=1] leading=[] RParen trailing=[]
+[8:46 len=2] leading=[] FatArrow trailing=[]
+[8:49 len=10] leading=[] LBrace trailing=[]
+[9:9 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
+[9:10 len=22] leading=[] StringChunk("mov rax, [rdi + rsi*8]") trailing=[]
+[9:32 len=1] leading=[] StringEnd trailing=[]
+[9:33 len=9] leading=[] Newline("\n        ") trailing=[]
+[10:9 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
+[10:10 len=12] leading=[] StringChunk("xor rax, rax") trailing=[]
+[10:22 len=1] leading=[] StringEnd trailing=[]
+[10:23 len=6] leading=[] RBrace trailing=[]
+[11:6 len=5] leading=[] Newline("\n    ") trailing=[]
+[12:5 len=6] leading=[] KwReturn trailing=[]
+[12:12 len=1] leading=[] Ident("v") trailing=[]
+[12:13 len=2] leading=[] RBrace trailing=[]
+[13:2 len=1] leading=[] Newline("\n") trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
+0
