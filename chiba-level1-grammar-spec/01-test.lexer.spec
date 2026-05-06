@@ -32,4 +32,3 @@
 [14:17 len=2] leading=[] RBrace trailing=[]
 [15:2 len=1] leading=[] Newline("\n") trailing=[]
 [0:0 len=0] leading=[] Eof trailing=[]
-0
