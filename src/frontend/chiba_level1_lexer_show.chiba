@@ -1,6 +1,7 @@
 namespace frontend.lexer_spec
 use metalstd.mem.*
 use metalstd.str.*
+use metalstd.vec.*
 use lexer.chiba_level1.*
 
 def append_escaped_char(out: Str, ch: i64): i64 =
@@ -165,12 +166,37 @@ def token_to_str(out: Str, tok: Token): i64 =
 
 def tokenspan_to_str(out: Str, ts: TokenSpan): i64 = {
     let _ = span_to_str(out, ts.span)
+    let _ = str_push_cstr(out, " leading=")
+    let _ = tokenspan_trivia_list_to_str(out, ts.leading)
     let _ = str_push_sp(out)
-    token_to_str(out, ts.token)
+    let _ = token_to_str(out, ts.token)
+    let _ = str_push_cstr(out, " trailing=")
+    tokenspan_trivia_list_to_str(out, ts.trailing)
 }
 
 def tokenspan_to_string(ts: TokenSpan): Str = {
     let out = str_new()
     let _ = tokenspan_to_str(out, ts)
     out
+}
+
+def tokenspan_trivia_to_str(out: Str, ts: TokenSpan): i64 = {
+    let _ = span_to_str(out, ts.span)
+    let _ = str_push_sp(out)
+    token_to_str(out, ts.token)
+}
+
+def tokenspan_trivia_list_to_str_loop(out: Str, xs: Vec, i: i64): i64 =
+    if i >= vec_len(xs) { 0 }
+    else {
+        let _ = if i > 0 { str_push_cstr(out, ", ") } else { 0 }
+        let ts = vec_get(xs, i) as TokenSpan
+        let _ = tokenspan_trivia_to_str(out, ts)
+        tokenspan_trivia_list_to_str_loop(out, xs, i + 1)
+    }
+
+def tokenspan_trivia_list_to_str(out: Str, xs: Vec): i64 = {
+    let _ = str_push(out, 91)
+    let _ = tokenspan_trivia_list_to_str_loop(out, xs, 0)
+    str_push(out, 93)
 }

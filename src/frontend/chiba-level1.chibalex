@@ -346,7 +346,7 @@ tokens STRING :-
         let emit = vec_new()
         let _ = vec_push(emit, StringStart(prefix, raw, hashes) as i64)
         let next = lex_ctx_advance(ctx, open_len)
-        let next = lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None)
+        let next = lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None, next.pending_trivia, next.last_real, next.line_has_real)
         let next = push_string_state(next, hashes, raw)
         lex_push_mode(next, LEX_MODE_STRING())
     }
@@ -403,7 +403,7 @@ tokens STRING :-
             let emit = vec_new()
             let _ = vec_push(emit, StringEnd as i64)
             let next = lex_ctx_advance(ctx, matched.len + after)
-            let next = lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None)
+            let next = lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None, next.pending_trivia, next.last_real, next.line_has_real)
             let next = pop_string_state(next)
             lex_pop_mode(next)
         } else {
@@ -421,7 +421,7 @@ tokens STRING :-
             let emit = vec_new()
             let _ = vec_push(emit, StringExprStart as i64)
             let next = lex_ctx_advance(ctx, matched.len)
-            let next = lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None)
+            let next = lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None, next.pending_trivia, next.last_real, next.line_has_real)
             lex_push_mode(next, LEX_MODE_CODE())
         }
     }
@@ -430,7 +430,7 @@ tokens STRING :-
         let emit = vec_new()
         let _ = vec_push(emit, LBrace as i64)
         let next = lex_ctx_advance(ctx, matched.len)
-        let next = lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None)
+        let next = lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None, next.pending_trivia, next.last_real, next.line_has_real)
         lex_push_mode(next, LEX_MODE_CODE())
     }
 
@@ -443,11 +443,31 @@ tokens STRING :-
             vec_push(emit, RBrace as i64)
         }
         let next = lex_ctx_advance(ctx, matched.len)
-        let next = lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None)
+        let next = lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None, next.pending_trivia, next.last_real, next.line_has_real)
         if vec_len(next.mode_stack) > 0 {
             lex_pop_mode(next)
         } else {
             next
         }
     }
+
+    def strhasnewlineloop(s: Str, i: i64): i64 =
+        if i >= s.len { 0 }
+        else if load8(s.ptr, i) == 10 { 1 }
+        else { strhasnewlineloop(s, i + 1) }
+
+    def strhasnewline(s: Str): i64 = strhasnewlineloop(s, 0)
+
+    def token_is_trivia(tok: Token): i64 =
+        match tok {
+            LineComment(_) => 1
+            _ => 0
+        }
+
+    def token_ends_line(tok: Token): i64 =
+        match tok {
+            Newline(_) => 1
+            LineComment(text) => strhasnewline(text)
+            _ => 0
+        }
 }

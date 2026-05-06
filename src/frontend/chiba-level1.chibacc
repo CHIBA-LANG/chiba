@@ -19,46 +19,50 @@ rule trivia_list ::=
     ;
 
 rule source_file ::= 
-    _:trivia_list _:file_attr_list ns:namespace_decl _:trivia_list items:item_list _:trivia_list => SourceFile(ns, items)
-    | _:trivia_list _:file_attr_list items:item_list _:trivia_list => SourceFile(NamespaceNone, items)
+    _:trivia_list attrs:file_attr_list ns:namespace_decl _:trivia_list items:item_list _:trivia_list => SourceFile(attrs, ns, items)
+    | _:trivia_list attrs:file_attr_list items:item_list _:trivia_list => SourceFile(attrs, NamespaceNone, items)
     ;
 
 rule file_attr_list ::= 
-    _:file_attr _:trivia_list rest:file_attr_list => 0
-    | => 0
+    head:file_attr _:trivia_list rest:file_attr_list => Attr_Cons(head, rest)
+    | => Attr_End
     ;
 
 rule file_attr ::= 
-    FileAttrStart _:attr_body RBracket => 0
-    | ItemAttrStart _:attr_body RBracket => 0
+    FileAttrStart body:attr_body RBracket => FileAttr(body)
+    | ItemAttrStart body:attr_body RBracket => ItemAttr(body)
     ;
 
 rule item_attr_list ::= 
-    _:item_attr _:trivia_list rest:item_attr_list => 0
-    | => 0
+    head:item_attr _:trivia_list rest:item_attr_list => Attr_Cons(head, rest)
+    | => Attr_End
+    ;
+
+rule item_attr_nonempty_list ::= 
+    head:item_attr _:trivia_list rest:item_attr_list => Attr_Cons(head, rest)
     ;
 
 rule item_attr ::= 
-    ItemAttrStart _:attr_body RBracket => 0
+    ItemAttrStart body:attr_body RBracket => ItemAttr(body)
     ;
 
 rule attr_body ::= 
-    name:Ident rest:attr_body_after_ident => 0
+    name:Ident rest:attr_body_after_ident => Attr(name, rest)
     ;
 
 rule attr_body_after_ident ::= 
-    LParen _:trivia_list args:attr_arg_list_opt _:trivia_list RParen => 0
-    | => 0
+    LParen _:trivia_list args:attr_arg_list_opt _:trivia_list RParen => args
+    | => AttrArg_End
     ;
 
 rule attr_arg_list_opt ::= 
-    name:Ident _:trivia_list tail:attr_arg_tail => 0
-    | => 0
+    name:Ident _:trivia_list tail:attr_arg_tail => AttrArg_Cons(name, tail)
+    | => AttrArg_End
     ;
 
 rule attr_arg_tail ::= 
-    Comma _:trivia_list name:Ident _:trivia_list tail:attr_arg_tail => 0
-    | => 0
+    Comma _:trivia_list name:Ident _:trivia_list tail:attr_arg_tail => AttrArg_Cons(name, tail)
+    | => AttrArg_End
     ;
 
 rule namespace_decl ::= 
@@ -85,7 +89,8 @@ rule item_list ::=
     ;
 
 rule item ::= 
-    _:item_attr_list _:private_opt core:item_core => core
+    attrs:item_attr_nonempty_list _:private_opt core:item_core => Item_WithAttrs(attrs, core)
+    | _:private_opt core:item_core => core
     ;
 
 rule item_core ::= 
@@ -294,7 +299,8 @@ rule tail_expr ::=
     ;
 
 rule stmt ::= 
-    _:item_attr_list core:stmt_core => core
+    attrs:item_attr_nonempty_list core:stmt_core => Stmt_WithAttrs(attrs, core)
+    | core:stmt_core => core
     ;
 
 rule stmt_core ::= 
@@ -670,7 +676,8 @@ rule ident_tail ::=
     ;
 
 rule ident_call_closure ::= 
-    _:item_attr_list c:closure_expr => IdentCallClosure_Some(c)
+    c:closure_expr => IdentCallClosure_Some(Attr_End, c)
+    | attrs:item_attr_nonempty_list c:closure_expr => IdentCallClosure_Some(attrs, c)
     | => IdentCallClosure_None
     ;
 
@@ -780,15 +787,24 @@ rule arg_tail ::=
 
 {
     data AST {
-        SourceFile(AST, AST),
+        SourceFile(AST, AST, AST),
         Namespace(Str),
         NamespaceNone,
+
+        Attr_Cons(AST, AST),
+        Attr_End,
+        FileAttr(AST),
+        ItemAttr(AST),
+        Attr(Str, AST),
+        AttrArg_Cons(Str, AST),
+        AttrArg_End,
 
         Path_Cons(Str, AST),
         Path_End,
 
         Item_Cons(AST, AST),
         Item_End,
+        Item_WithAttrs(AST, AST),
         Item_Def(AST),
         Item_Type(AST),
         Item_Adt(AST),
@@ -898,6 +914,7 @@ rule arg_tail ::=
 
         Stmt_Cons(AST, AST),
         Stmt_End,
+        Stmt_WithAttrs(AST, AST),
         Stmt_Empty,
         Stmt_Let(Str, AST),
         Stmt_LetPattern(AST, AST),
@@ -923,7 +940,7 @@ rule arg_tail ::=
         Expr_IdentTail(Str, AST),
         IdentTail_Call(AST, AST),
         IdentTail_None,
-        IdentCallClosure_Some(AST),
+        IdentCallClosure_Some(AST, AST),
         IdentCallClosure_None,
         Expr_Prefix(AST, AST),
         Expr_Binary(AST, AST, AST),

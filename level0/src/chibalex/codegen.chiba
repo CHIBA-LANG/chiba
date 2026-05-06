@@ -156,7 +156,7 @@ def emit_mode_expr(out: Str, mode_name: Str): i64 = {
 
 def emit_ctx_forward_type(out: Str): i64 = {
     let _ = str_push_cstr(out, "\n// ── generated ctx predecl ──\n")
-    let _ = str_push_cstr(out, "type LexerCtx { src: i64  src_len: i64  pos: i64  line: i64  col: i64  mode: i64  mode_stack: Vec  user_stack: Vec  emit: Vec  error: Option[i64] }\n")
+    let _ = str_push_cstr(out, "type LexerCtx { src: i64  src_len: i64  pos: i64  line: i64  col: i64  mode: i64  mode_stack: Vec  user_stack: Vec  emit: Vec  error: Option[i64]  pending_trivia: Vec  last_real: i64  line_has_real: i64 }\n")
     0
 }
 
@@ -166,9 +166,12 @@ def emit_span_types(out: Str, file: ChibaLexFile): i64 = {
     let _ = str_push_cstr(out, "\n// ── generated types ──\n")
     let _ = emit_default_user_stack(out, file)
     let _ = str_push_cstr(out, "type Span { file: i64  line: i64  col: i64  len: i64 }\n")
-    let _ = str_push_cstr(out, "type TokenSpan { token: Token  span: Span }\n")
+    let _ = str_push_cstr(out, "type TokenSpan { token: Token  span: Span  leading: Vec  trailing: Vec }\n")
     let _ = str_push_cstr(out, "type LexPosInfo { line: i64  col: i64 }\n")
     let _ = str_push_cstr(out, "type LexBest { rule: i64  end: i64 }\n")
+    let _ = str_push_cstr(out, "\ndef tokenspan_make(tok: Token, span: Span, leading: Vec, trailing: Vec): TokenSpan =\n")
+    let _ = str_push_cstr(out, "    TokenSpan { token: tok, span: span, leading: leading, trailing: trailing }\n")
+    let _ = emit_default_trivia_hooks(out, file)
     0
 }
 
@@ -182,6 +185,22 @@ def emit_default_user_stack(out: Str, file: ChibaLexFile): i64 =
 def file_defines_user_stack(file: ChibaLexFile): i64 =
     if str_contains_cstr(file.header, "data UserStack", 14) != 0 { 1 }
     else { str_contains_cstr(file.footer, "data UserStack", 14) }
+
+def emit_default_trivia_hooks(out: Str, file: ChibaLexFile): i64 = {
+    let _ = if file_defines_token_is_trivia(file) != 0 { 0 }
+    else { str_push_cstr(out, "\ndef token_is_trivia(tok: Token): i64 = 0\n") }
+    let _ = if file_defines_token_ends_line(file) != 0 { 0 }
+    else { str_push_cstr(out, "\ndef token_ends_line(tok: Token): i64 = 0\n") }
+    0
+}
+
+def file_defines_token_is_trivia(file: ChibaLexFile): i64 =
+    if str_contains_cstr(file.header, "def token_is_trivia", 19) != 0 { 1 }
+    else { str_contains_cstr(file.footer, "def token_is_trivia", 19) }
+
+def file_defines_token_ends_line(file: ChibaLexFile): i64 =
+    if str_contains_cstr(file.header, "def token_ends_line", 19) != 0 { 1 }
+    else { str_contains_cstr(file.footer, "def token_ends_line", 19) }
 
 def str_contains_cstr(s: Str, needle: i64, needle_len: i64): i64 =
     str_contains_cstr_at(s, needle, needle_len, 0)
@@ -266,15 +285,15 @@ def emit_ctx_helpers(out: Str, modes: Vec): i64 = {
     let _ = str_push_cstr(out, "\ndef lex_new_ctx(src: i64, src_len: i64): LexerCtx =\n")
     let _ = str_push_cstr(out, "    LexerCtx { src: src, src_len: src_len, pos: 0, line: 1, col: 1, mode: ")
     let _ = emit_mode_expr(out, first_mode)
-    let _ = str_push_cstr(out, ", mode_stack: vec_new(), user_stack: vec_new(), emit: vec_new(), error: None }\n")
+    let _ = str_push_cstr(out, ", mode_stack: vec_new(), user_stack: vec_new(), emit: vec_new(), error: None, pending_trivia: vec_new(), last_real: 0 - 1, line_has_real: 0 }\n")
 
-    let _ = str_push_cstr(out, "\ndef lex_ctx_make(src: i64, src_len: i64, pos: i64, line: i64, col: i64, mode: i64, mode_stack: Vec, user_stack: Vec[UserStack], emit: Vec, error: Option[i64]): LexerCtx =\n")
-    let _ = str_push_cstr(out, "    LexerCtx { src: src, src_len: src_len, pos: pos, line: line, col: col, mode: mode, mode_stack: mode_stack, user_stack: user_stack, emit: emit, error: error }\n")
+    let _ = str_push_cstr(out, "\ndef lex_ctx_make(src: i64, src_len: i64, pos: i64, line: i64, col: i64, mode: i64, mode_stack: Vec, user_stack: Vec[UserStack], emit: Vec, error: Option[i64], pending_trivia: Vec, last_real: i64, line_has_real: i64): LexerCtx =\n")
+    let _ = str_push_cstr(out, "    LexerCtx { src: src, src_len: src_len, pos: pos, line: line, col: col, mode: mode, mode_stack: mode_stack, user_stack: user_stack, emit: emit, error: error, pending_trivia: pending_trivia, last_real: last_real, line_has_real: line_has_real }\n")
 
     let _ = str_push_cstr(out, "\ndef lex_push_mode(ctx: LexerCtx, mode: i64): LexerCtx = {\n")
     let _ = str_push_cstr(out, "    let stack = ctx.mode_stack\n")
     let _ = str_push_cstr(out, "    let _ = vec_push(stack, ctx.mode)\n")
-    let _ = str_push_cstr(out, "    lex_ctx_make(ctx.src, ctx.src_len, ctx.pos, ctx.line, ctx.col, mode, stack, ctx.user_stack, ctx.emit, ctx.error)\n")
+    let _ = str_push_cstr(out, "    lex_ctx_make(ctx.src, ctx.src_len, ctx.pos, ctx.line, ctx.col, mode, stack, ctx.user_stack, ctx.emit, ctx.error, ctx.pending_trivia, ctx.last_real, ctx.line_has_real)\n")
     let _ = str_push_cstr(out, "}\n")
 
     let _ = str_push_cstr(out, "\ndef lex_pop_mode(ctx: LexerCtx): LexerCtx =\n")
@@ -282,11 +301,11 @@ def emit_ctx_helpers(out: Str, modes: Vec): i64 = {
     let _ = str_push_cstr(out, "    else {\n")
     let _ = str_push_cstr(out, "        let stack = ctx.mode_stack\n")
     let _ = str_push_cstr(out, "        let mode = vec_pop(stack)\n")
-    let _ = str_push_cstr(out, "        lex_ctx_make(ctx.src, ctx.src_len, ctx.pos, ctx.line, ctx.col, mode, stack, ctx.user_stack, ctx.emit, ctx.error)\n")
+    let _ = str_push_cstr(out, "        lex_ctx_make(ctx.src, ctx.src_len, ctx.pos, ctx.line, ctx.col, mode, stack, ctx.user_stack, ctx.emit, ctx.error, ctx.pending_trivia, ctx.last_real, ctx.line_has_real)\n")
     let _ = str_push_cstr(out, "    }\n")
 
     let _ = str_push_cstr(out, "\ndef lex_clear_emit(ctx: LexerCtx): LexerCtx =\n")
-    let _ = str_push_cstr(out, "    lex_ctx_make(ctx.src, ctx.src_len, ctx.pos, ctx.line, ctx.col, ctx.mode, ctx.mode_stack, ctx.user_stack, vec_new(), ctx.error)\n")
+    let _ = str_push_cstr(out, "    lex_ctx_make(ctx.src, ctx.src_len, ctx.pos, ctx.line, ctx.col, ctx.mode, ctx.mode_stack, ctx.user_stack, vec_new(), ctx.error, ctx.pending_trivia, ctx.last_real, ctx.line_has_real)\n")
 
     let _ = str_push_cstr(out, "\ndef lex_update_pos(src: i64, from: i64, to: i64, line: i64, col: i64): LexPosInfo =\n")
     let _ = str_push_cstr(out, "    if from >= to { LexPosInfo { line: line, col: col } }\n")
@@ -299,27 +318,58 @@ def emit_ctx_helpers(out: Str, modes: Vec): i64 = {
     let _ = str_push_cstr(out, "\ndef lex_ctx_advance(ctx: LexerCtx, by: i64): LexerCtx = {\n")
     let _ = str_push_cstr(out, "    let next = ctx.pos + by\n")
     let _ = str_push_cstr(out, "    let info = lex_update_pos(ctx.src, ctx.pos, next, ctx.line, ctx.col)\n")
-    let _ = str_push_cstr(out, "    lex_ctx_make(ctx.src, ctx.src_len, next, info.line, info.col, ctx.mode, ctx.mode_stack, ctx.user_stack, ctx.emit, ctx.error)\n")
+    let _ = str_push_cstr(out, "    lex_ctx_make(ctx.src, ctx.src_len, next, info.line, info.col, ctx.mode, ctx.mode_stack, ctx.user_stack, ctx.emit, ctx.error, ctx.pending_trivia, ctx.last_real, ctx.line_has_real)\n")
     let _ = str_push_cstr(out, "}\n")
 
     let _ = str_push_cstr(out, "\ndef lex_ctx_skip(ctx: LexerCtx, by: i64): LexerCtx = {\n")
     let _ = str_push_cstr(out, "    let next = lex_ctx_advance(ctx, by)\n")
-    let _ = str_push_cstr(out, "    lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, vec_new(), None)\n")
+    let _ = str_push_cstr(out, "    lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, vec_new(), None, next.pending_trivia, next.last_real, next.line_has_real)\n")
     let _ = str_push_cstr(out, "}\n")
 
     let _ = str_push_cstr(out, "\ndef lex_ctx_emit(ctx: LexerCtx, by: i64, tok: Token): LexerCtx = {\n")
     let _ = str_push_cstr(out, "    let next = lex_ctx_advance(ctx, by)\n")
     let _ = str_push_cstr(out, "    let emit = vec_new()\n")
     let _ = str_push_cstr(out, "    let _ = vec_push(emit, tok as i64)\n")
-    let _ = str_push_cstr(out, "    lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None)\n")
+    let _ = str_push_cstr(out, "    lex_ctx_make(next.src, next.src_len, next.pos, next.line, next.col, next.mode, next.mode_stack, next.user_stack, emit, None, next.pending_trivia, next.last_real, next.line_has_real)\n")
     let _ = str_push_cstr(out, "}\n")
 
-    let _ = str_push_cstr(out, "\ndef lex_flush_emit(out: Vec, emit: Vec, span: Span, i: i64): i64 =\n")
-    let _ = str_push_cstr(out, "    if i >= vec_len(emit) { 0 }\n")
+    let _ = str_push_cstr(out, "\ndef lex_emit_token(ctx: LexerCtx, out: Vec, tok: Token, span: Span): LexerCtx = {\n")
+    let _ = str_push_cstr(out, "    let trailing = vec_new()\n")
+    let _ = str_push_cstr(out, "    let ends = token_ends_line(tok)\n")
+    let _ = str_push_cstr(out, "    if token_is_trivia(tok) != 0 {\n")
+    let _ = str_push_cstr(out, "        let ts = tokenspan_make(tok, span, vec_new(), trailing)\n")
+    let _ = str_push_cstr(out, "        let _ = vec_push(out, ts as i64)\n")
+    let _ = str_push_cstr(out, "        if ctx.line_has_real != 0 && ctx.last_real >= 0 {\n")
+    let _ = str_push_cstr(out, "            let prev = vec_get(out, ctx.last_real) as TokenSpan\n")
+    let _ = str_push_cstr(out, "            let _ = vec_push(prev.trailing, ts as i64)\n")
+    let _ = str_push_cstr(out, "            let next_line_has_real = if ends != 0 { 0 } else { ctx.line_has_real }\n")
+    let _ = str_push_cstr(out, "            lex_ctx_make(ctx.src, ctx.src_len, ctx.pos, ctx.line, ctx.col, ctx.mode, ctx.mode_stack, ctx.user_stack, ctx.emit, ctx.error, ctx.pending_trivia, ctx.last_real, next_line_has_real)\n")
+    let _ = str_push_cstr(out, "        } else {\n")
+    let _ = str_push_cstr(out, "            let pending = ctx.pending_trivia\n")
+    let _ = str_push_cstr(out, "            let _ = vec_push(pending, ts as i64)\n")
+    let _ = str_push_cstr(out, "            let next_line_has_real = if ends != 0 { 0 } else { ctx.line_has_real }\n")
+    let _ = str_push_cstr(out, "            lex_ctx_make(ctx.src, ctx.src_len, ctx.pos, ctx.line, ctx.col, ctx.mode, ctx.mode_stack, ctx.user_stack, ctx.emit, ctx.error, pending, ctx.last_real, next_line_has_real)\n")
+    let _ = str_push_cstr(out, "        }\n")
+    let _ = str_push_cstr(out, "    } else {\n")
+    let _ = str_push_cstr(out, "        if ends != 0 && ctx.line_has_real == 0 {\n")
+    let _ = str_push_cstr(out, "            let ts = tokenspan_make(tok, span, vec_new(), trailing)\n")
+    let _ = str_push_cstr(out, "            let _ = vec_push(out, ts as i64)\n")
+    let _ = str_push_cstr(out, "            lex_ctx_make(ctx.src, ctx.src_len, ctx.pos, ctx.line, ctx.col, ctx.mode, ctx.mode_stack, ctx.user_stack, ctx.emit, ctx.error, ctx.pending_trivia, vec_len(out) - 1, 0)\n")
+    let _ = str_push_cstr(out, "        } else {\n")
+    let _ = str_push_cstr(out, "            let ts = tokenspan_make(tok, span, ctx.pending_trivia, trailing)\n")
+    let _ = str_push_cstr(out, "            let _ = vec_push(out, ts as i64)\n")
+    let _ = str_push_cstr(out, "            let next_line_has_real = if ends != 0 { 0 } else { 1 }\n")
+    let _ = str_push_cstr(out, "            lex_ctx_make(ctx.src, ctx.src_len, ctx.pos, ctx.line, ctx.col, ctx.mode, ctx.mode_stack, ctx.user_stack, ctx.emit, ctx.error, vec_new(), vec_len(out) - 1, next_line_has_real)\n")
+    let _ = str_push_cstr(out, "        }\n")
+    let _ = str_push_cstr(out, "    }\n")
+    let _ = str_push_cstr(out, "}\n")
+
+    let _ = str_push_cstr(out, "\ndef lex_flush_emit(ctx: LexerCtx, out: Vec, emit: Vec, span: Span, i: i64): LexerCtx =\n")
+    let _ = str_push_cstr(out, "    if i >= vec_len(emit) { ctx }\n")
     let _ = str_push_cstr(out, "    else {\n")
     let _ = str_push_cstr(out, "        let tok = vec_get(emit, i) as Token\n")
-    let _ = str_push_cstr(out, "        let _ = vec_push(out, TokenSpan { token: tok, span: span } as i64)\n")
-    let _ = str_push_cstr(out, "        lex_flush_emit(out, emit, span, i + 1)\n")
+    let _ = str_push_cstr(out, "        let next = lex_emit_token(ctx, out, tok, span)\n")
+    let _ = str_push_cstr(out, "        lex_flush_emit(next, out, emit, span, i + 1)\n")
     let _ = str_push_cstr(out, "    }\n")
     0
 }
@@ -480,17 +530,17 @@ def lex_loop(pats: Vec, src: i64, sl: i64, file: i64, out: Vec, ctx: LexerCtx): 
             let cp = utf8_decode_char(src, ctx.pos)
             let next = utf8_next_offset(src, ctx.pos)
             let span = Span { file: file, line: ctx.line, col: ctx.col, len: next - ctx.pos }
-            let _ = vec_push(out, TokenSpan { token: LexError(cp), span: span } as i64)
+                let _ = vec_push(out, tokenspan_make(LexError(cp), span, vec_new(), vec_new()) as i64)
             let info = lex_update_pos(src, ctx.pos, next, ctx.line, ctx.col)
-            let next_ctx = lex_ctx_make(ctx.src, ctx.src_len, next, info.line, info.col, ctx.mode, ctx.mode_stack, ctx.user_stack, vec_new(), Some(cp))
+            let next_ctx = lex_ctx_make(ctx.src, ctx.src_len, next, info.line, info.col, ctx.mode, ctx.mode_stack, ctx.user_stack, vec_new(), Some(cp), ctx.pending_trivia, ctx.last_real, ctx.line_has_real)
             lex_loop(pats, src, sl, file, out, next_ctx)
         } else {
             let mlen = best.end - ctx.pos
             let s = mk_str(src + ctx.pos, mlen)
             let span = Span { file: file, line: ctx.line, col: ctx.col, len: mlen }
             let next_ctx = lex_action(best.rule, ctx, s, span)
-            let _ = lex_flush_emit(out, next_ctx.emit, span, 0)
-            let clear_ctx = lex_clear_emit(next_ctx)
+            let flushed_ctx = lex_flush_emit(next_ctx, out, next_ctx.emit, span, 0)
+            let clear_ctx = lex_clear_emit(flushed_ctx)
             lex_loop(pats, src, sl, file, out, clear_ctx)
         }
     }
@@ -507,7 +557,7 @@ def lex_all(src: i64, src_len: i64, file: i64): Vec = {
     let out = vec_new()
     let ctx = lex_new_ctx(src, src_len)
     let _ = lex_loop(pats, src, src_len, file, out, ctx)
-    let _ = vec_push(out, TokenSpan { token: Eof, span: Span { file: file, line: 0, col: 0, len: 0 } } as i64)
+        let _ = vec_push(out, tokenspan_make(Eof, Span { file: file, line: 0, col: 0, len: 0 }, vec_new(), vec_new()) as i64)
     out
 }
 ")
