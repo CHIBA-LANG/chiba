@@ -53,6 +53,7 @@ def token_to_str(out: Str, tok: Token): i64 =
         KwTrue => str_push_cstr(out, "KwTrue")
         KwFalse => str_push_cstr(out, "KwFalse")
         KwAs => str_push_cstr(out, "KwAs")
+        KwVia => str_push_cstr(out, "KwVia")
         KwUse => str_push_cstr(out, "KwUse")
         KwPrivate => str_push_cstr(out, "KwPrivate")
         KwAsm => str_push_cstr(out, "KwAsm")

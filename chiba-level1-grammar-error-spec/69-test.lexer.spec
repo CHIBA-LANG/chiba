@@ -1,27 +1,60 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=6] leading=[] Ident("kwdata") trailing=[]
-[1:30 len=1] leading=[] Dot trailing=[]
-[1:31 len=7] leading=[] Ident("generic") trailing=[]
-[1:38 len=1] leading=[] Dot trailing=[]
-[1:39 len=7] leading=[] Ident("missing") trailing=[]
-[1:46 len=1] leading=[] Dot trailing=[]
-[1:47 len=8] leading=[] Ident("rbracket") trailing=[]
-[1:55 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=4] leading=[] KwData trailing=[]
-[3:6 len=6] leading=[] Ident("Option") trailing=[]
-[3:12 len=1] leading=[] LBracket trailing=[]
-[3:13 len=1] leading=[] Ident("T") trailing=[]
-[3:15 len=6] leading=[] LBrace trailing=[]
-[4:5 len=4] leading=[] Ident("Some") trailing=[]
-[4:9 len=1] leading=[] LParen trailing=[]
-[4:10 len=1] leading=[] Ident("T") trailing=[]
-[4:11 len=1] leading=[] RParen trailing=[]
-[4:12 len=5] leading=[] Newline("\n    ") trailing=[]
-[5:5 len=4] leading=[] Ident("None") trailing=[]
-[5:9 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=25,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[5:9 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwdata",
+            Path_Cons(
+              "generic",
+              Path_Cons(
+                "missing",
+                Path_Cons(
+                  "rbracket",
+                  Path_End
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Adt(
+        AdtItem(
+          "Option",
+          Null,
+          AdtVariant_Cons(
+            AdtVariant(
+              "Some",
+              AdtVariantArg_Ident(
+                "T",
+                AdtVariantArg_Type(
+                  Type_Tail_End,
+                  TypeArg_End
+                )
+              )
+            ),
+            AdtVariant_Cons(
+              AdtVariant(
+                "None",
+                TypeArg_End
+              ),
+              AdtVariant_End
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

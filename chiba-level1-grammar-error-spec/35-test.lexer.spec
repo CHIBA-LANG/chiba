@@ -1,24 +1,8 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=9] leading=[] Ident("duplicate") trailing=[]
-[1:33 len=1] leading=[] Dot trailing=[]
-[1:34 len=9] leading=[] Ident("kwprivate") trailing=[]
-[1:43 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=7] leading=[] KwPrivate trailing=[]
-[3:9 len=7] leading=[] KwPrivate trailing=[]
-[3:17 len=3] leading=[] KwDef trailing=[]
-[3:21 len=17] leading=[] Ident("duplicate_private") trailing=[]
-[3:38 len=1] leading=[] LParen trailing=[]
-[3:39 len=1] leading=[] RParen trailing=[]
-[3:40 len=1] leading=[] Colon trailing=[]
-[3:42 len=3] leading=[] Ident("i64") trailing=[]
-[3:46 len=1] leading=[] Eq trailing=[]
-[3:48 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=1] leading=[] IntLit("0") trailing=[]
-[4:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=10,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[3:1 len=7] Token,
+    next_token=[3:9 len=7] Token
+)
 0

@@ -220,17 +220,58 @@ rule union_field ::=
     ;
 
 rule opt_generics ::= 
-    LBracket names:generic_name_list RBracket => names
+    LBracket names:generic_param_list RBracket => names
     | => Generic_End
     ;
 
-rule generic_name_list ::= 
-    head:Ident tail:generic_name_tail => Generic_Cons(head, tail)
+rule generic_param_list ::= 
+    head:generic_param tail:generic_param_tail => Generic_Cons(head, tail)
     ;
 
-rule generic_name_tail ::= 
-    Comma rest:generic_name_list => rest
+rule generic_param_tail ::= 
+    Comma rest:generic_param_list => rest
     | => Generic_End
+    ;
+
+rule generic_param ::= 
+    name:Ident bound:generic_bound_opt => GenericParam(name, bound)
+    ;
+
+rule generic_bound_opt ::= 
+    Colon bound:generic_bound_list => bound
+    | => GenericBound_End
+    ;
+
+rule generic_bound_list ::= 
+    head:generic_bound tail:generic_bound_tail => GenericBound_Cons(head, tail)
+    ;
+
+rule generic_bound_tail ::= 
+    Plus rest:generic_bound_list => rest
+    | => GenericBound_End
+    ;
+
+rule generic_bound ::= 
+    name:Ident => GenericBound_Nominal(name)
+    | LBrace row:generic_row_type RBrace => GenericBound_Row(row)
+    ;
+
+rule generic_row_type ::= 
+    var:Ident Pipe fields:generic_row_field_list_opt => GenericRow(var, fields)
+    ;
+
+rule generic_row_field_list_opt ::= 
+    _:trivia_list head:generic_row_field tail:generic_row_field_tail => GenericRowField_Cons(head, tail)
+    | => GenericRowField_End
+    ;
+
+rule generic_row_field_tail ::= 
+    _:trivia_list Comma rest:generic_row_field_list_opt => rest
+    | => GenericRowField_End
+    ;
+
+rule generic_row_field ::= 
+    name:Ident Colon _:trivia_list ty:type_expr => GenericRowField(name, ty)
     ;
 
 rule param_list ::= 
@@ -715,6 +756,7 @@ rule expr ::= pratt {
         LtLt rhs:expr => Expr_Binary(OpShl, $lhs, rhs) ;
         GtGt rhs:expr => Expr_Binary(OpShr, $lhs, rhs) ;
         KwAs ty:type_expr => Expr_Cast($lhs, ty) ;
+        KwVia ns:path => Expr_Via($lhs, ns) ;
     }
 
     infix(90, 91) {
@@ -828,8 +870,17 @@ rule arg_tail ::=
         UnionField_Cons(AST, AST),
         UnionField_End,
         UnionField(Str, AST),
-        Generic_Cons(Str, AST),
+        Generic_Cons(AST, AST),
         Generic_End,
+        GenericParam(Str, AST),
+        GenericBound_Cons(AST, AST),
+        GenericBound_End,
+        GenericBound_Nominal(Str),
+        GenericBound_Row(AST),
+        GenericRow(Str, AST),
+        GenericRowField_Cons(AST, AST),
+        GenericRowField_End,
+        GenericRowField(Str, AST),
         Param(Str, AST),
         Param_Cons(AST, AST),
         Param_End,
@@ -947,6 +998,7 @@ rule arg_tail ::=
         Expr_Field(AST, Str),
         Expr_Deref(AST),
         Expr_Cast(AST, AST),
+        Expr_Via(AST, AST),
         Expr_Assign(AST, AST),
         Expr_Call(AST, AST),
         Expr_CallBlock(AST, AST),

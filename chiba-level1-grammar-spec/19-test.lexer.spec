@@ -1,98 +1,188 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=9] leading=[] Ident("externasm") trailing=[]
-[1:31 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=4] leading=[] Ident("puts") trailing=[]
-[3:9 len=1] leading=[] LParen trailing=[]
-[3:10 len=3] leading=[] Ident("msg") trailing=[]
-[3:13 len=1] leading=[] Colon trailing=[]
-[3:15 len=4] leading=[] Ident("cstr") trailing=[]
-[3:19 len=1] leading=[] RParen trailing=[]
-[3:20 len=1] leading=[] Colon trailing=[]
-[3:22 len=3] leading=[] Ident("i32") trailing=[]
-[3:26 len=1] leading=[] Eq trailing=[]
-[3:28 len=6] leading=[] KwExtern trailing=[]
-[3:35 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[3:36 len=1] leading=[] StringChunk("c") trailing=[]
-[3:37 len=1] leading=[] StringEnd trailing=[]
-[3:38 len=1] leading=[] Newline("\n") trailing=[]
-[4:1 len=3] leading=[] KwDef trailing=[]
-[4:5 len=9] leading=[] Ident("cbx_entry") trailing=[]
-[4:14 len=1] leading=[] LParen trailing=[]
-[4:15 len=1] leading=[] Ident("x") trailing=[]
-[4:16 len=1] leading=[] Colon trailing=[]
-[4:18 len=3] leading=[] Ident("i64") trailing=[]
-[4:21 len=1] leading=[] RParen trailing=[]
-[4:22 len=1] leading=[] Colon trailing=[]
-[4:24 len=3] leading=[] Ident("i64") trailing=[]
-[4:28 len=1] leading=[] Eq trailing=[]
-[4:30 len=6] leading=[] KwExtern trailing=[]
-[4:37 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[4:38 len=3] leading=[] StringChunk("cbx") trailing=[]
-[4:41 len=1] leading=[] StringEnd trailing=[]
-[4:42 len=2] leading=[] Newline("\n\n") trailing=[]
-[6:1 len=3] leading=[] KwDef trailing=[]
-[6:5 len=9] leading=[] Ident("low_level") trailing=[]
-[6:14 len=1] leading=[] LParen trailing=[]
-[6:15 len=3] leading=[] Ident("ptr") trailing=[]
-[6:18 len=1] leading=[] Colon trailing=[]
-[6:20 len=3] leading=[] Ident("Ptr") trailing=[]
-[6:23 len=1] leading=[] LBracket trailing=[]
-[6:24 len=2] leading=[] Ident("u8") trailing=[]
-[6:26 len=1] leading=[] RBracket trailing=[]
-[6:27 len=1] leading=[] Comma trailing=[]
-[6:29 len=3] leading=[] Ident("idx") trailing=[]
-[6:32 len=1] leading=[] Colon trailing=[]
-[6:34 len=3] leading=[] Ident("i64") trailing=[]
-[6:37 len=1] leading=[] RParen trailing=[]
-[6:38 len=1] leading=[] Colon trailing=[]
-[6:40 len=3] leading=[] Ident("i64") trailing=[]
-[6:44 len=1] leading=[] Eq trailing=[]
-[6:46 len=6] leading=[] KwUnsafe trailing=[]
-[6:53 len=6] leading=[] LBrace trailing=[]
-[7:5 len=3] leading=[] KwLet trailing=[]
-[7:9 len=6] leading=[] Ident("loaded") trailing=[]
-[7:16 len=1] leading=[] Colon trailing=[]
-[7:18 len=2] leading=[] Ident("u8") trailing=[]
-[7:21 len=1] leading=[] Eq trailing=[]
-[7:23 len=3] leading=[] Ident("ptr") trailing=[]
-[7:26 len=2] leading=[] DotStar trailing=[]
-[7:28 len=5] leading=[] Newline("\n    ") trailing=[]
-[8:5 len=3] leading=[] KwLet trailing=[]
-[8:9 len=1] leading=[] Ident("v") trailing=[]
-[8:11 len=1] leading=[] Eq trailing=[]
-[8:13 len=3] leading=[] KwAsm trailing=[]
-[8:17 len=1] leading=[] LParen trailing=[]
-[8:18 len=3] leading=[] Ident("ptr") trailing=[]
-[8:21 len=1] leading=[] Colon trailing=[]
-[8:23 len=3] leading=[] Ident("rdi") trailing=[]
-[8:26 len=1] leading=[] Comma trailing=[]
-[8:28 len=3] leading=[] Ident("idx") trailing=[]
-[8:31 len=1] leading=[] Colon trailing=[]
-[8:33 len=3] leading=[] Ident("rsi") trailing=[]
-[8:36 len=1] leading=[] RParen trailing=[]
-[8:38 len=1] leading=[] Colon trailing=[]
-[8:40 len=1] leading=[] LParen trailing=[]
-[8:41 len=3] leading=[] Ident("rax") trailing=[]
-[8:44 len=1] leading=[] RParen trailing=[]
-[8:46 len=2] leading=[] FatArrow trailing=[]
-[8:49 len=10] leading=[] LBrace trailing=[]
-[9:9 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[9:10 len=22] leading=[] StringChunk("mov rax, [rdi + rsi*8]") trailing=[]
-[9:32 len=1] leading=[] StringEnd trailing=[]
-[9:33 len=9] leading=[] Newline("\n        ") trailing=[]
-[10:9 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[10:10 len=12] leading=[] StringChunk("xor rax, rax") trailing=[]
-[10:22 len=1] leading=[] StringEnd trailing=[]
-[10:23 len=6] leading=[] RBrace trailing=[]
-[11:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[12:5 len=6] leading=[] KwReturn trailing=[]
-[12:12 len=1] leading=[] Ident("v") trailing=[]
-[12:13 len=2] leading=[] RBrace trailing=[]
-[13:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "externasm",
+            Path_End
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "puts",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "msg",
+                Type_Path(
+                  "cstr",
+                  Type_Tail_End
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i32",
+              Type_Tail_End
+            ),
+            Expr_Extern(
+              Expr_String
+            )
+          )
+        )
+      ),
+      Item_Cons(
+        Item_Def(
+          DefItem2(
+            "cbx_entry",
+            DefFun(
+              Generic_End,
+              Param_Cons(
+                Param(
+                  "x",
+                  Type_Path(
+                    "i64",
+                    Type_Tail_End
+                  )
+                ),
+                Param_End
+              ),
+              Type_Path(
+                "i64",
+                Type_Tail_End
+              ),
+              Expr_Extern(
+                Expr_String
+              )
+            )
+          )
+        ),
+        Item_Cons(
+          Item_Def(
+            DefItem2(
+              "low_level",
+              DefFun(
+                Generic_End,
+                Param_Cons(
+                  Param(
+                    "ptr",
+                    Type_Path(
+                      "Ptr",
+                      Type_Tail_Generic(
+                        TypeArg_Cons(
+                          Type_Path(
+                            "u8",
+                            Type_Tail_End
+                          ),
+                          TypeArg_End
+                        )
+                      )
+                    )
+                  ),
+                  Param_Cons(
+                    Param(
+                      "idx",
+                      Type_Path(
+                        "i64",
+                        Type_Tail_End
+                      )
+                    ),
+                    Param_End
+                  )
+                ),
+                Type_Path(
+                  "i64",
+                  Type_Tail_End
+                ),
+                Expr_Unsafe(
+                  Expr_Block(
+                    Stmt_Cons(
+                      Stmt_LetPatternTyped(
+                        Pattern_IdentStart(
+                          "loaded",
+                          PatternAfterIdent_Atom(
+                            PatternIdent_Name
+                          )
+                        ),
+                        Type_Path(
+                          "u8",
+                          Type_Tail_End
+                        ),
+                        Expr_Deref(
+                          Expr_IdentTail(
+                            "ptr",
+                            IdentTail_None
+                          )
+                        )
+                      ),
+                      Stmt_Cons(
+                        Stmt_LetPatternTyped(
+                          Pattern_IdentStart(
+                            "v",
+                            PatternAfterIdent_Atom(
+                              PatternIdent_Name
+                            )
+                          ),
+                          Type_Path(
+                            "",
+                            Type_Tail_End
+                          ),
+                          Expr_Asm(
+                            AsmBind_Cons(
+                              AsmBind(
+                                "ptr",
+                                "rdi"
+                              ),
+                              AsmBind_Cons(
+                                AsmBind(
+                                  "idx",
+                                  "rsi"
+                                ),
+                                AsmBind_End
+                              )
+                            ),
+                            AsmOutput_Cons(
+                              "rax",
+                              AsmOutput_End
+                            ),
+                            AsmString_Cons(
+                              Expr_String,
+                              AsmString_Cons(
+                                Expr_String,
+                                AsmString_End
+                              )
+                            )
+                          )
+                        ),
+                        Stmt_Cons(
+                          Stmt_Return(
+                            Expr_IdentTail(
+                              "v",
+                              IdentTail_None
+                            )
+                          ),
+                          Stmt_End
+                        )
+                      )
+                    ),
+                    TailExpr_None
+                  )
+                )
+              )
+            )
+          ),
+          Item_End
+        )
+      )
+    )
+  )
+)
 0

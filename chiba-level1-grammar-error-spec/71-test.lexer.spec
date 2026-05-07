@@ -1,22 +1,41 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=7] leading=[] Ident("kwunion") trailing=[]
-[1:31 len=1] leading=[] Dot trailing=[]
-[1:32 len=5] leading=[] Ident("field") trailing=[]
-[1:37 len=1] leading=[] Dot trailing=[]
-[1:38 len=7] leading=[] Ident("missing") trailing=[]
-[1:45 len=1] leading=[] Dot trailing=[]
-[1:46 len=6] leading=[] Ident("kwtype") trailing=[]
-[1:52 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=5] leading=[] KwUnion trailing=[]
-[3:7 len=4] leading=[] Ident("Bits") trailing=[]
-[3:12 len=6] leading=[] LBrace trailing=[]
-[4:5 len=4] leading=[] Ident("word") trailing=[]
-[4:9 len=1] leading=[] Colon trailing=[]
-[4:10 len=2] leading=[] Comma trailing=[]
-[5:1 len=1] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=20,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[5:1 len=1] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwunion",
+            Path_Cons(
+              "field",
+              Path_Cons(
+                "missing",
+                Path_Cons(
+                  "kwtype",
+                  Path_End
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Union(
+        UnionItem(
+          "Bits",
+          Null
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

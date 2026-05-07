@@ -1,45 +1,125 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=7] leading=[] Ident("unicode") trailing=[]
-[1:29 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=14] leading=[] Ident("unicode_idents") trailing=[]
-[3:19 len=1] leading=[] LParen trailing=[]
-[3:20 len=4] leading=[] Ident("🍋") trailing=[]
-[3:24 len=1] leading=[] Colon trailing=[]
-[3:26 len=3] leading=[] Ident("i64") trailing=[]
-[3:29 len=1] leading=[] Comma trailing=[]
-[3:31 len=3] leading=[] Ident("火") trailing=[]
-[3:34 len=1] leading=[] Colon trailing=[]
-[3:36 len=3] leading=[] Ident("i64") trailing=[]
-[3:39 len=1] leading=[] RParen trailing=[]
-[3:40 len=1] leading=[] Colon trailing=[]
-[3:42 len=3] leading=[] Ident("i64") trailing=[]
-[3:46 len=1] leading=[] Eq trailing=[]
-[3:48 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=27] leading=[] Ident("测试一下语法容忍度") trailing=[]
-[4:37 len=1] leading=[] Eq trailing=[]
-[4:39 len=4] leading=[] Ident("🍋") trailing=[]
-[4:44 len=1] leading=[] Plus trailing=[]
-[4:46 len=3] leading=[] Ident("火") trailing=[]
-[4:49 len=5] leading=[] Newline("\n    ") trailing=[]
-[5:5 len=3] leading=[] KwLet trailing=[]
-[5:9 len=8] leading=[] Ident("_🥲123") trailing=[]
-[5:18 len=1] leading=[] Eq trailing=[]
-[5:20 len=27] leading=[] Ident("测试一下语法容忍度") trailing=[]
-[5:47 len=5] leading=[] Newline("\n    ") trailing=[]
-[6:5 len=3] leading=[] KwLet trailing=[]
-[6:9 len=5] leading=[] Ident("café") trailing=[]
-[6:15 len=1] leading=[] Eq trailing=[]
-[6:17 len=8] leading=[] Ident("_🥲123") trailing=[]
-[6:25 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=6] leading=[] KwReturn trailing=[]
-[7:12 len=5] leading=[] Ident("café") trailing=[]
-[7:17 len=2] leading=[] RBrace trailing=[]
-[8:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "unicode",
+            Path_End
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "unicode_idents",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "🍋",
+                Type_Path(
+                  "i64",
+                  Type_Tail_End
+                )
+              ),
+              Param_Cons(
+                Param(
+                  "火",
+                  Type_Path(
+                    "i64",
+                    Type_Tail_End
+                  )
+                ),
+                Param_End
+              )
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "测试一下语法容忍度",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Binary(
+                    OpAdd,
+                    Expr_IdentTail(
+                      "🍋",
+                      IdentTail_None
+                    ),
+                    Expr_IdentTail(
+                      "火",
+                      IdentTail_None
+                    )
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_IdentStart(
+                      "_🥲123",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_IdentTail(
+                      "测试一下语法容忍度",
+                      IdentTail_None
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "café",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_IdentTail(
+                        "_🥲123",
+                        IdentTail_None
+                      )
+                    ),
+                    Stmt_Cons(
+                      Stmt_Return(
+                        Expr_IdentTail(
+                          "café",
+                          IdentTail_None
+                        )
+                      ),
+                      Stmt_End
+                    )
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

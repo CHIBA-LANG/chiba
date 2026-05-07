@@ -1,36 +1,73 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=6] leading=[] Ident("record") trailing=[]
-[1:30 len=1] leading=[] Dot trailing=[]
-[1:31 len=7] leading=[] Ident("missing") trailing=[]
-[1:38 len=1] leading=[] Dot trailing=[]
-[1:39 len=5] leading=[] Ident("value") trailing=[]
-[1:44 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=20] leading=[] Ident("record_missing_value") trailing=[]
-[3:25 len=1] leading=[] LParen trailing=[]
-[3:26 len=1] leading=[] RParen trailing=[]
-[3:27 len=1] leading=[] Colon trailing=[]
-[3:29 len=3] leading=[] Ident("i64") trailing=[]
-[3:33 len=1] leading=[] Eq trailing=[]
-[3:35 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=5] leading=[] Ident("point") trailing=[]
-[4:15 len=1] leading=[] Eq trailing=[]
-[4:17 len=1] leading=[] LBrace trailing=[]
-[4:19 len=1] leading=[] Ident("x") trailing=[]
-[4:20 len=1] leading=[] Colon trailing=[]
-[4:21 len=1] leading=[] Comma trailing=[]
-[4:23 len=1] leading=[] Ident("y") trailing=[]
-[4:24 len=1] leading=[] Colon trailing=[]
-[4:26 len=1] leading=[] IntLit("2") trailing=[]
-[4:28 len=1] leading=[] RBrace trailing=[]
-[4:29 len=5] leading=[] Newline("\n    ") trailing=[]
-[5:5 len=6] leading=[] KwReturn trailing=[]
-[5:12 len=1] leading=[] IntLit("0") trailing=[]
-[5:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=34,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[5:13 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "record",
+            Path_Cons(
+              "missing",
+              Path_Cons(
+                "value",
+                Path_End
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "record_missing_value",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "point",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Record(
+                    Null
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_Return(
+                    Expr_Int(
+                      "0"
+                    )
+                  ),
+                  Stmt_End
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

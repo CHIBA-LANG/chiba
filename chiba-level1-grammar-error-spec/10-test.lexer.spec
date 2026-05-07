@@ -1,35 +1,8 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=8] leading=[] Ident("unclosed") trailing=[]
-[1:32 len=1] leading=[] Dot trailing=[]
-[1:33 len=5] leading=[] Ident("block") trailing=[]
-[1:38 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=14] leading=[] Ident("unclosed_block") trailing=[]
-[3:19 len=1] leading=[] LParen trailing=[]
-[3:20 len=1] leading=[] RParen trailing=[]
-[3:21 len=1] leading=[] Colon trailing=[]
-[3:23 len=3] leading=[] Ident("i64") trailing=[]
-[3:27 len=1] leading=[] Eq trailing=[]
-[3:29 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=1] leading=[] Ident("x") trailing=[]
-[4:11 len=1] leading=[] Eq trailing=[]
-[4:13 len=1] leading=[] IntLit("1") trailing=[]
-[4:14 len=2] leading=[] Newline("\n\n") trailing=[]
-[6:1 len=3] leading=[] KwDef trailing=[]
-[6:5 len=20] leading=[] Ident("after_unclosed_block") trailing=[]
-[6:25 len=1] leading=[] LParen trailing=[]
-[6:26 len=1] leading=[] RParen trailing=[]
-[6:27 len=1] leading=[] Colon trailing=[]
-[6:29 len=3] leading=[] Ident("i64") trailing=[]
-[6:33 len=1] leading=[] Eq trailing=[]
-[6:35 len=6] leading=[] LBrace trailing=[]
-[7:5 len=6] leading=[] KwReturn trailing=[]
-[7:12 len=1] leading=[] IntLit("0") trailing=[]
-[7:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=22,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[4:14 len=2] Token,
+    next_token=[6:1 len=3] Token
+)
 0

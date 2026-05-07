@@ -1,33 +1,59 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=6] leading=[] Ident("kwtype") trailing=[]
-[1:30 len=1] leading=[] Dot trailing=[]
-[1:31 len=10] leading=[] Ident("annotation") trailing=[]
-[1:41 len=1] leading=[] Dot trailing=[]
-[1:42 len=7] leading=[] Ident("missing") trailing=[]
-[1:49 len=1] leading=[] Dot trailing=[]
-[1:50 len=8] leading=[] Ident("rbracket") trailing=[]
-[1:58 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=32] leading=[] Ident("type_annotation_missing_rbracket") trailing=[]
-[3:37 len=1] leading=[] LParen trailing=[]
-[3:38 len=2] leading=[] Ident("xs") trailing=[]
-[3:40 len=1] leading=[] Colon trailing=[]
-[3:42 len=3] leading=[] Ident("Vec") trailing=[]
-[3:45 len=1] leading=[] LBracket trailing=[]
-[3:46 len=6] leading=[] Ident("Option") trailing=[]
-[3:52 len=1] leading=[] LBracket trailing=[]
-[3:53 len=3] leading=[] Ident("i64") trailing=[]
-[3:56 len=1] leading=[] RParen trailing=[]
-[3:57 len=1] leading=[] Colon trailing=[]
-[3:59 len=3] leading=[] Ident("i64") trailing=[]
-[3:63 len=1] leading=[] Eq trailing=[]
-[3:65 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=1] leading=[] IntLit("0") trailing=[]
-[4:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=31,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[4:13 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwtype",
+            Path_Cons(
+              "annotation",
+              Path_Cons(
+                "missing",
+                Path_Cons(
+                  "rbracket",
+                  Path_End
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "type_annotation_missing_rbracket",
+          DefFun(
+            Generic_End,
+            Null,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_Return(
+                  Expr_Int(
+                    "0"
+                  )
+                ),
+                Stmt_End
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

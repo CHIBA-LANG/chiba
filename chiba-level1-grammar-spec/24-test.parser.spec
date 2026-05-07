@@ -37,7 +37,10 @@ OK(
           AdtItem(
             "Smoke",
             Generic_Cons(
-              "T",
+              GenericParam(
+                "T",
+                GenericBound_End
+              ),
               Generic_End
             ),
             AdtVariant_Cons(
@@ -71,7 +74,10 @@ OK(
             "smoke",
             DefFun(
               Generic_Cons(
-                "T",
+                GenericParam(
+                  "T",
+                  GenericBound_End
+                ),
                 Generic_End
               ),
               Param_Cons(
@@ -319,3 +325,4 @@ OK(
     )
   )
 )
+0

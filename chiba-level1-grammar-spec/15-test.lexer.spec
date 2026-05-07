@@ -1,85 +1,222 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=7] leading=[] Ident("control") trailing=[]
-[1:29 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=7] leading=[] Ident("control") trailing=[]
-[3:12 len=1] leading=[] LParen trailing=[]
-[3:13 len=1] leading=[] Ident("n") trailing=[]
-[3:14 len=1] leading=[] Colon trailing=[]
-[3:16 len=3] leading=[] Ident("i64") trailing=[]
-[3:19 len=1] leading=[] RParen trailing=[]
-[3:20 len=1] leading=[] Colon trailing=[]
-[3:22 len=3] leading=[] Ident("i64") trailing=[]
-[3:26 len=1] leading=[] Eq trailing=[]
-[3:28 len=6] leading=[] LBrace trailing=[]
-[4:5 len=2] leading=[] KwIf trailing=[]
-[4:8 len=1] leading=[] Ident("n") trailing=[]
-[4:10 len=2] leading=[] EqEq trailing=[]
-[4:13 len=1] leading=[] IntLit("0") trailing=[]
-[4:15 len=10] leading=[] LBrace trailing=[]
-[5:9 len=6] leading=[] KwReturn trailing=[]
-[5:16 len=1] leading=[] IntLit("0") trailing=[]
-[5:17 len=6] leading=[] RBrace trailing=[]
-[6:7 len=4] leading=[] KwElse trailing=[]
-[6:12 len=2] leading=[] KwIf trailing=[]
-[6:15 len=3] leading=[] KwLet trailing=[]
-[6:19 len=4] leading=[] Ident("Some") trailing=[]
-[6:23 len=1] leading=[] LParen trailing=[]
-[6:24 len=1] leading=[] Ident("x") trailing=[]
-[6:25 len=1] leading=[] RParen trailing=[]
-[6:27 len=1] leading=[] Eq trailing=[]
-[6:29 len=4] leading=[] Ident("next") trailing=[]
-[6:33 len=1] leading=[] LParen trailing=[]
-[6:34 len=1] leading=[] Ident("n") trailing=[]
-[6:35 len=1] leading=[] RParen trailing=[]
-[6:37 len=10] leading=[] LBrace trailing=[]
-[7:9 len=6] leading=[] KwReturn trailing=[]
-[7:16 len=1] leading=[] Ident("x") trailing=[]
-[7:17 len=6] leading=[] RBrace trailing=[]
-[8:7 len=4] leading=[] KwElse trailing=[]
-[8:12 len=2] leading=[] KwIf trailing=[]
-[8:15 len=1] leading=[] Ident("n") trailing=[]
-[8:17 len=1] leading=[] Lt trailing=[]
-[8:19 len=1] leading=[] IntLit("0") trailing=[]
-[8:21 len=10] leading=[] LBrace trailing=[]
-[9:9 len=6] leading=[] KwReturn trailing=[]
-[9:16 len=1] leading=[] Minus trailing=[]
-[9:17 len=1] leading=[] Ident("n") trailing=[]
-[9:18 len=6] leading=[] RBrace trailing=[]
-[10:7 len=4] leading=[] KwElse trailing=[]
-[10:12 len=10] leading=[] LBrace trailing=[]
-[11:9 len=3] leading=[] KwFor trailing=[]
-[11:13 len=6] leading=[] Atom("outer") trailing=[]
-[11:20 len=1] leading=[] Ident("n") trailing=[]
-[11:22 len=1] leading=[] Gt trailing=[]
-[11:24 len=1] leading=[] IntLit("0") trailing=[]
-[11:26 len=14] leading=[] LBrace trailing=[]
-[12:13 len=3] leading=[] KwFor trailing=[]
-[12:17 len=18] leading=[] LBrace trailing=[]
-[13:17 len=2] leading=[] KwIf trailing=[]
-[13:20 len=4] leading=[] Ident("done") trailing=[]
-[13:24 len=1] leading=[] LParen trailing=[]
-[13:25 len=1] leading=[] RParen trailing=[]
-[13:27 len=22] leading=[] LBrace trailing=[]
-[14:21 len=5] leading=[] KwBreak trailing=[]
-[14:27 len=6] leading=[] Atom("outer") trailing=[]
-[14:33 len=18] leading=[] RBrace trailing=[]
-[15:19 len=4] leading=[] KwElse trailing=[]
-[15:24 len=22] leading=[] LBrace trailing=[]
-[16:21 len=8] leading=[] KwContinue trailing=[]
-[16:30 len=6] leading=[] Atom("outer") trailing=[]
-[16:36 len=18] leading=[] RBrace trailing=[]
-[17:18 len=14] leading=[] RBrace trailing=[]
-[18:14 len=10] leading=[] RBrace trailing=[]
-[19:10 len=6] leading=[] RBrace trailing=[]
-[20:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[21:5 len=6] leading=[] KwReturn trailing=[]
-[21:12 len=1] leading=[] Ident("n") trailing=[]
-[21:13 len=2] leading=[] RBrace trailing=[]
-[22:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "control",
+            Path_End
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "control",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "n",
+                Type_Path(
+                  "i64",
+                  Type_Tail_End
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_Expr(
+                  Expr_If(
+                    IfCond_Expr(
+                      Expr_IfCondIdent(
+                        "n",
+                        IfCondIdent_Binary(
+                          OpEqEq,
+                          Expr_Int(
+                            "0"
+                          )
+                        )
+                      )
+                    ),
+                    Expr_Block(
+                      Stmt_Cons(
+                        Stmt_Return(
+                          Expr_Int(
+                            "0"
+                          )
+                        ),
+                        Stmt_End
+                      ),
+                      TailExpr_None
+                    ),
+                    Expr_If(
+                      IfCond_Let(
+                        Pattern_IdentStart(
+                          "Some",
+                          PatternAfterIdent_Atom(
+                            PatternIdent_Call(
+                              PatternList_Cons(
+                                Pattern_IdentStart(
+                                  "x",
+                                  PatternAfterIdent_Atom(
+                                    PatternIdent_Name
+                                  )
+                                ),
+                                PatternList_End
+                              )
+                            )
+                          )
+                        ),
+                        Expr_Call(
+                          Expr_Name(
+                            "next"
+                          ),
+                          Arg_Cons(
+                            Expr_IdentTail(
+                              "n",
+                              IdentTail_None
+                            ),
+                            Arg_End
+                          )
+                        )
+                      ),
+                      Expr_Block(
+                        Stmt_Cons(
+                          Stmt_Return(
+                            Expr_IdentTail(
+                              "x",
+                              IdentTail_None
+                            )
+                          ),
+                          Stmt_End
+                        ),
+                        TailExpr_None
+                      ),
+                      Expr_If(
+                        IfCond_Expr(
+                          Expr_IfCondIdent(
+                            "n",
+                            IfCondIdent_Binary(
+                              OpLt,
+                              Expr_Int(
+                                "0"
+                              )
+                            )
+                          )
+                        ),
+                        Expr_Block(
+                          Stmt_Cons(
+                            Stmt_Return(
+                              Expr_Prefix(
+                                Prefix_Neg,
+                                Expr_IdentTail(
+                                  "n",
+                                  IdentTail_None
+                                )
+                              )
+                            ),
+                            Stmt_End
+                          ),
+                          TailExpr_None
+                        ),
+                        Expr_Block(
+                          Stmt_Cons(
+                            Stmt_For(
+                              LoopLabel_Some,
+                              Expr_Binary(
+                                OpGt,
+                                Expr_IdentTail(
+                                  "n",
+                                  IdentTail_None
+                                ),
+                                Expr_Int(
+                                  "0"
+                                )
+                              ),
+                              Expr_Block(
+                                Stmt_Cons(
+                                  Stmt_For(
+                                    LoopLabel_None,
+                                    Expr_Bool(
+                                      1
+                                    ),
+                                    Expr_Block(
+                                      Stmt_Cons(
+                                        Stmt_Expr(
+                                          Expr_If(
+                                            IfCond_Expr(
+                                              Expr_IfCondIdent(
+                                                "done",
+                                                IfCondIdent_Call(
+                                                  Arg_End
+                                                )
+                                              )
+                                            ),
+                                            Expr_Block(
+                                              Stmt_Cons(
+                                                Stmt_Break(
+                                                  LoopLabel_Some
+                                                ),
+                                                Stmt_End
+                                              ),
+                                              TailExpr_None
+                                            ),
+                                            Expr_Block(
+                                              Stmt_Cons(
+                                                Stmt_Continue(
+                                                  LoopLabel_Some
+                                                ),
+                                                Stmt_End
+                                              ),
+                                              TailExpr_None
+                                            )
+                                          )
+                                        ),
+                                        Stmt_End
+                                      ),
+                                      TailExpr_None
+                                    )
+                                  ),
+                                  Stmt_End
+                                ),
+                                TailExpr_None
+                              )
+                            ),
+                            Stmt_End
+                          ),
+                          TailExpr_None
+                        )
+                      )
+                    )
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_Return(
+                    Expr_IdentTail(
+                      "n",
+                      IdentTail_None
+                    )
+                  ),
+                  Stmt_End
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

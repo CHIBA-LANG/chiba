@@ -1,29 +1,8 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=5] leading=[] Ident("extra") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=8] leading=[] Ident("rbracket") trailing=[]
-[1:38 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=14] leading=[] Ident("extra_rbracket") trailing=[]
-[3:19 len=1] leading=[] LParen trailing=[]
-[3:20 len=4] leading=[] Ident("text") trailing=[]
-[3:24 len=1] leading=[] Colon trailing=[]
-[3:26 len=6] leading=[] Ident("String") trailing=[]
-[3:32 len=1] leading=[] RParen trailing=[]
-[3:33 len=1] leading=[] Colon trailing=[]
-[3:35 len=3] leading=[] Ident("i64") trailing=[]
-[3:39 len=1] leading=[] Eq trailing=[]
-[3:41 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=4] leading=[] Ident("text") trailing=[]
-[4:16 len=1] leading=[] LBracket trailing=[]
-[4:17 len=1] leading=[] IntLit("0") trailing=[]
-[4:18 len=1] leading=[] RBracket trailing=[]
-[4:19 len=1] leading=[] RBracket trailing=[]
-[4:20 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=25,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[4:18 len=1] Token,
+    next_token=[4:19 len=1] Token
+)
 0

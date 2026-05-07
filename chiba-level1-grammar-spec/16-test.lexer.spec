@@ -1,57 +1,154 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=7] leading=[] Ident("control") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=10] leading=[] Ident("resetshift") trailing=[]
-[1:40 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=11] leading=[] Ident("reset_shift") trailing=[]
-[3:16 len=1] leading=[] LParen trailing=[]
-[3:17 len=1] leading=[] RParen trailing=[]
-[3:18 len=1] leading=[] Colon trailing=[]
-[3:20 len=3] leading=[] Ident("i64") trailing=[]
-[3:24 len=1] leading=[] Eq trailing=[]
-[3:26 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=5] leading=[] Ident("value") trailing=[]
-[4:15 len=1] leading=[] Eq trailing=[]
-[4:17 len=5] leading=[] KwReset trailing=[]
-[4:23 len=6] leading=[] Atom("parse") trailing=[]
-[4:30 len=10] leading=[] LBrace trailing=[]
-[5:9 len=1] leading=[] IntLit("1") trailing=[]
-[5:11 len=1] leading=[] Plus trailing=[]
-[5:13 len=5] leading=[] KwShift trailing=[]
-[5:19 len=6] leading=[] Atom("parse") trailing=[]
-[5:26 len=1] leading=[] Ident("k") trailing=[]
-[5:28 len=14] leading=[] LBrace trailing=[]
-[6:13 len=1] leading=[] Ident("k") trailing=[]
-[6:14 len=1] leading=[] LParen trailing=[]
-[6:15 len=2] leading=[] IntLit("41") trailing=[]
-[6:17 len=1] leading=[] RParen trailing=[]
-[6:18 len=10] leading=[] RBrace trailing=[]
-[7:10 len=6] leading=[] RBrace trailing=[]
-[8:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[9:5 len=3] leading=[] KwLet trailing=[]
-[9:9 len=5] leading=[] Ident("plain") trailing=[]
-[9:15 len=1] leading=[] Eq trailing=[]
-[9:17 len=5] leading=[] KwReset trailing=[]
-[9:23 len=10] leading=[] LBrace trailing=[]
-[10:9 len=5] leading=[] KwShift trailing=[]
-[10:15 len=4] leading=[] Ident("cont") trailing=[]
-[10:20 len=14] leading=[] LBrace trailing=[]
-[11:13 len=4] leading=[] Ident("cont") trailing=[]
-[11:17 len=1] leading=[] LParen trailing=[]
-[11:18 len=5] leading=[] Ident("value") trailing=[]
-[11:23 len=1] leading=[] RParen trailing=[]
-[11:24 len=10] leading=[] RBrace trailing=[]
-[12:10 len=6] leading=[] RBrace trailing=[]
-[13:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[14:5 len=6] leading=[] KwReturn trailing=[]
-[14:12 len=5] leading=[] Ident("plain") trailing=[]
-[14:17 len=2] leading=[] RBrace trailing=[]
-[15:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "control",
+            Path_Cons(
+              "resetshift",
+              Path_End
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "reset_shift",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "value",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Reset(
+                    ControlLabel_Some,
+                    Expr_Block(
+                      Stmt_Cons(
+                        Stmt_Expr(
+                          Expr_Binary(
+                            OpAdd,
+                            Expr_Int(
+                              "1"
+                            ),
+                            Expr_Shift(
+                              ControlLabel_Some,
+                              "k",
+                              Expr_Block(
+                                Stmt_Cons(
+                                  Stmt_Expr(
+                                    Expr_IdentTail(
+                                      "k",
+                                      IdentTail_Call(
+                                        Arg_Cons(
+                                          Expr_Int(
+                                            "41"
+                                          ),
+                                          Arg_End
+                                        ),
+                                        IdentCallClosure_None
+                                      )
+                                    )
+                                  ),
+                                  Stmt_End
+                                ),
+                                TailExpr_None
+                              )
+                            )
+                          )
+                        ),
+                        Stmt_End
+                      ),
+                      TailExpr_None
+                    )
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_IdentStart(
+                      "plain",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_Reset(
+                      ControlLabel_None,
+                      Expr_Block(
+                        Stmt_Cons(
+                          Stmt_Expr(
+                            Expr_Shift(
+                              ControlLabel_None,
+                              "cont",
+                              Expr_Block(
+                                Stmt_Cons(
+                                  Stmt_Expr(
+                                    Expr_IdentTail(
+                                      "cont",
+                                      IdentTail_Call(
+                                        Arg_Cons(
+                                          Expr_IdentTail(
+                                            "value",
+                                            IdentTail_None
+                                          ),
+                                          Arg_End
+                                        ),
+                                        IdentCallClosure_None
+                                      )
+                                    )
+                                  ),
+                                  Stmt_End
+                                ),
+                                TailExpr_None
+                              )
+                            )
+                          ),
+                          Stmt_End
+                        ),
+                        TailExpr_None
+                      )
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_Return(
+                      Expr_IdentTail(
+                        "plain",
+                        IdentTail_None
+                      )
+                    ),
+                    Stmt_End
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

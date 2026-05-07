@@ -51,6 +51,7 @@ mode STRING
 @kw_true = "true"
 @kw_false = "false"
 @kw_as = "as" @wsnl?
+@kw_via = "via" @wsnl?
 @kw_use = "use" @wsnl?
 @kw_private = "private" @wsnl?
 @kw_asm = "asm" @wsnl?
@@ -133,6 +134,7 @@ tokens CODE :-
     @kw_true                { KwTrue }
     @kw_false               { KwFalse }
     @kw_as                  { KwAs }
+    @kw_via                 { KwVia }
     @kw_use                 { KwUse }
     @kw_private             { KwPrivate }
     @kw_asm                 { KwAsm }
@@ -225,6 +227,7 @@ tokens STRING :-
         KwTrue,
         KwFalse,
         KwAs,
+        KwVia,
         KwUse,
         KwPrivate,
         KwAsm,

@@ -1,34 +1,66 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=5] leading=[] Ident("index") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=5] leading=[] Ident("extra") trailing=[]
-[1:35 len=1] leading=[] Dot trailing=[]
-[1:36 len=8] leading=[] Ident("lbracket") trailing=[]
-[1:44 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=20] leading=[] Ident("index_extra_lbracket") trailing=[]
-[3:25 len=1] leading=[] LParen trailing=[]
-[3:26 len=2] leading=[] Ident("xs") trailing=[]
-[3:28 len=1] leading=[] Colon trailing=[]
-[3:30 len=3] leading=[] Ident("Vec") trailing=[]
-[3:33 len=1] leading=[] LBracket trailing=[]
-[3:34 len=3] leading=[] Ident("i64") trailing=[]
-[3:37 len=1] leading=[] RBracket trailing=[]
-[3:38 len=1] leading=[] RParen trailing=[]
-[3:39 len=1] leading=[] Colon trailing=[]
-[3:41 len=3] leading=[] Ident("i64") trailing=[]
-[3:45 len=1] leading=[] Eq trailing=[]
-[3:47 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=2] leading=[] Ident("xs") trailing=[]
-[4:14 len=1] leading=[] LBracket trailing=[]
-[4:15 len=1] leading=[] LBracket trailing=[]
-[4:16 len=1] leading=[] IntLit("0") trailing=[]
-[4:17 len=1] leading=[] RBracket trailing=[]
-[4:18 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=32,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[4:18 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "index",
+            Path_Cons(
+              "extra",
+              Path_Cons(
+                "lbracket",
+                Path_End
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "index_extra_lbracket",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "xs",
+                Type_Path(
+                  "Vec",
+                  Type_Tail_Generic(
+                    TypeArg_Cons(
+                      Type_Path(
+                        "i64",
+                        Type_Tail_End
+                      ),
+                      TypeArg_End
+                    )
+                  )
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Null,
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

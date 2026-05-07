@@ -28,7 +28,10 @@ OK(
           AdtItem(
             "Option",
             Generic_Cons(
-              "T",
+              GenericParam(
+                "T",
+                GenericBound_End
+              ),
               Generic_End
             ),
             AdtVariant_Cons(
@@ -219,3 +222,4 @@ OK(
     )
   )
 )
+0

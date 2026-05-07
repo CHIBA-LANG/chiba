@@ -1,62 +1,167 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=10] leading=[] Ident("delimiters") trailing=[]
-[1:32 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=18] leading=[] Ident("delimiter_newlines") trailing=[]
-[3:23 len=1] leading=[] LParen trailing=[]
-[3:24 len=1] leading=[] RParen trailing=[]
-[3:25 len=1] leading=[] Colon trailing=[]
-[3:27 len=3] leading=[] Ident("i32") trailing=[]
-[3:31 len=1] leading=[] Eq trailing=[]
-[3:33 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=7] leading=[] Ident("grouped") trailing=[]
-[4:17 len=1] leading=[] Eq trailing=[]
-[4:19 len=10] leading=[] LParen trailing=[]
-[5:9 len=1] leading=[] IntLit("1") trailing=[]
-[5:11 len=10] leading=[] Plus trailing=[]
-[6:9 len=1] leading=[] IntLit("2") trailing=[]
-[6:10 len=6] leading=[] RParen trailing=[]
-[7:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[8:5 len=3] leading=[] KwLet trailing=[]
-[8:9 len=5] leading=[] Ident("tuple") trailing=[]
-[8:15 len=1] leading=[] Eq trailing=[]
-[8:17 len=10] leading=[] LParen trailing=[]
-[9:9 len=7] leading=[] Ident("grouped") trailing=[]
-[9:16 len=10] leading=[] Comma trailing=[]
-[10:9 len=7] leading=[] Ident("grouped") trailing=[]
-[10:17 len=1] leading=[] Plus trailing=[]
-[10:19 len=1] leading=[] IntLit("1") trailing=[]
-[10:20 len=6] leading=[] Comma trailing=[]
-[11:5 len=1] leading=[] RParen trailing=[]
-[11:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[12:5 len=3] leading=[] KwLet trailing=[]
-[12:9 len=5] leading=[] Ident("slice") trailing=[]
-[12:15 len=1] leading=[] Eq trailing=[]
-[12:17 len=10] leading=[] LBracket trailing=[]
-[13:9 len=7] leading=[] Ident("grouped") trailing=[]
-[13:16 len=10] leading=[] Comma trailing=[]
-[14:9 len=7] leading=[] Ident("grouped") trailing=[]
-[14:17 len=1] leading=[] Plus trailing=[]
-[14:19 len=1] leading=[] IntLit("1") trailing=[]
-[14:20 len=6] leading=[] Comma trailing=[]
-[15:5 len=1] leading=[] RBracket trailing=[]
-[15:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[16:5 len=3] leading=[] KwLet trailing=[]
-[16:9 len=7] leading=[] Ident("indexed") trailing=[]
-[16:17 len=1] leading=[] Eq trailing=[]
-[16:19 len=5] leading=[] Ident("slice") trailing=[]
-[16:24 len=10] leading=[] LBracket trailing=[]
-[17:9 len=1] leading=[] IntLit("0") trailing=[]
-[17:10 len=6] leading=[] RBracket trailing=[]
-[18:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[19:5 len=6] leading=[] KwReturn trailing=[]
-[19:12 len=7] leading=[] Ident("indexed") trailing=[]
-[19:19 len=2] leading=[] RBrace trailing=[]
-[20:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "delimiters",
+            Path_End
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "delimiter_newlines",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i32",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "grouped",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Paren(
+                    ExprList_Cons(
+                      Expr_Binary(
+                        OpAdd,
+                        Expr_Int(
+                          "1"
+                        ),
+                        Expr_Int(
+                          "2"
+                        )
+                      ),
+                      ExprList_End
+                    )
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_IdentStart(
+                      "tuple",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_ParenIdent(
+                      "grouped",
+                      ParenIdent_Tuple(
+                        ExprList_Cons(
+                          Expr_Binary(
+                            OpAdd,
+                            Expr_IdentTail(
+                              "grouped",
+                              IdentTail_None
+                            ),
+                            Expr_Int(
+                              "1"
+                            )
+                          ),
+                          ExprList_End
+                        )
+                      )
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "slice",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_List(
+                        ExprList_Cons(
+                          Expr_IdentTail(
+                            "grouped",
+                            IdentTail_None
+                          ),
+                          ExprList_Cons(
+                            Expr_Binary(
+                              OpAdd,
+                              Expr_IdentTail(
+                                "grouped",
+                                IdentTail_None
+                              ),
+                              Expr_Int(
+                                "1"
+                              )
+                            ),
+                            ExprList_End
+                          )
+                        )
+                      )
+                    ),
+                    Stmt_Cons(
+                      Stmt_LetPatternTyped(
+                        Pattern_IdentStart(
+                          "indexed",
+                          PatternAfterIdent_Atom(
+                            PatternIdent_Name
+                          )
+                        ),
+                        Type_Path(
+                          "",
+                          Type_Tail_End
+                        ),
+                        Expr_Index(
+                          Expr_IdentTail(
+                            "slice",
+                            IdentTail_None
+                          ),
+                          ExprList_Cons(
+                            Expr_Int(
+                              "0"
+                            ),
+                            ExprList_End
+                          )
+                        )
+                      ),
+                      Stmt_Cons(
+                        Stmt_Return(
+                          Expr_IdentTail(
+                            "indexed",
+                            IdentTail_None
+                          )
+                        ),
+                        Stmt_End
+                      )
+                    )
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

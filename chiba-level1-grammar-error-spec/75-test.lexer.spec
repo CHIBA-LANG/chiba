@@ -1,30 +1,57 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=8] leading=[] Ident("kwextern") trailing=[]
-[1:32 len=1] leading=[] Dot trailing=[]
-[1:33 len=5] leading=[] Ident("extra") trailing=[]
-[1:38 len=1] leading=[] Dot trailing=[]
-[1:39 len=6] leading=[] Ident("string") trailing=[]
-[1:45 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=4] leading=[] Ident("puts") trailing=[]
-[3:9 len=1] leading=[] LParen trailing=[]
-[3:10 len=3] leading=[] Ident("msg") trailing=[]
-[3:13 len=1] leading=[] Colon trailing=[]
-[3:15 len=4] leading=[] Ident("cstr") trailing=[]
-[3:19 len=1] leading=[] RParen trailing=[]
-[3:20 len=1] leading=[] Colon trailing=[]
-[3:22 len=3] leading=[] Ident("i32") trailing=[]
-[3:26 len=1] leading=[] Eq trailing=[]
-[3:28 len=6] leading=[] KwExtern trailing=[]
-[3:35 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[3:36 len=1] leading=[] StringChunk("c") trailing=[]
-[3:37 len=1] leading=[] StringEnd trailing=[]
-[3:39 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[3:40 len=5] leading=[] StringChunk("extra") trailing=[]
-[3:45 len=1] leading=[] StringEnd trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=25,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[3:37 len=1] Token,
+    next_token=[3:39 len=1] Token,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwextern",
+            Path_Cons(
+              "extra",
+              Path_Cons(
+                "string",
+                Path_End
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "puts",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "msg",
+                Type_Path(
+                  "cstr",
+                  Type_Tail_End
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i32",
+              Type_Tail_End
+            ),
+            Expr_Extern(
+              Expr_String
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

@@ -1,33 +1,70 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=6] leading=[] Ident("kwtype") trailing=[]
-[1:30 len=1] leading=[] Dot trailing=[]
-[1:31 len=4] leading=[] Ident("args") trailing=[]
-[1:35 len=1] leading=[] Dot trailing=[]
-[1:36 len=7] leading=[] Ident("leading") trailing=[]
-[1:43 len=1] leading=[] Dot trailing=[]
-[1:44 len=5] leading=[] Ident("comma") trailing=[]
-[1:49 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=23] leading=[] Ident("type_args_leading_comma") trailing=[]
-[3:28 len=1] leading=[] LParen trailing=[]
-[3:29 len=2] leading=[] Ident("xs") trailing=[]
-[3:31 len=1] leading=[] Colon trailing=[]
-[3:33 len=6] leading=[] Ident("Result") trailing=[]
-[3:39 len=1] leading=[] LBracket trailing=[]
-[3:40 len=1] leading=[] Comma trailing=[]
-[3:42 len=3] leading=[] Ident("i64") trailing=[]
-[3:45 len=1] leading=[] RBracket trailing=[]
-[3:46 len=1] leading=[] RParen trailing=[]
-[3:47 len=1] leading=[] Colon trailing=[]
-[3:49 len=3] leading=[] Ident("i64") trailing=[]
-[3:53 len=1] leading=[] Eq trailing=[]
-[3:55 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=1] leading=[] IntLit("0") trailing=[]
-[4:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=31,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[4:13 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwtype",
+            Path_Cons(
+              "args",
+              Path_Cons(
+                "leading",
+                Path_Cons(
+                  "comma",
+                  Path_End
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "type_args_leading_comma",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "xs",
+                Type_Path(
+                  "Result",
+                  Type_Tail_Generic(
+                    Null
+                  )
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_Return(
+                  Expr_Int(
+                    "0"
+                  )
+                ),
+                Stmt_End
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

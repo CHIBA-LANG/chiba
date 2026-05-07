@@ -29,7 +29,10 @@ Err(
         AdtItem(
           "Pair",
           Generic_Cons(
-            "T",
+            GenericParam(
+              "T",
+              GenericBound_End
+            ),
             Generic_End
           ),
           Null

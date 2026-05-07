@@ -1,69 +1,184 @@
-[1:1 len=3] leading=[] FileAttrStart trailing=[]
-[1:4 len=3] leading=[] Ident("CBI") trailing=[]
-[1:7 len=1] leading=[] RBracket trailing=[]
-[1:8 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=9] leading=[] KwNamespace trailing=[]
-[3:11 len=5] leading=[] Ident("lexer") trailing=[]
-[3:16 len=1] leading=[] Dot trailing=[]
-[3:17 len=4] leading=[] Ident("spec") trailing=[]
-[3:21 len=1] leading=[] Dot trailing=[]
-[3:22 len=9] leading=[] Ident("attribute") trailing=[]
-[3:31 len=1] leading=[] Dot trailing=[]
-[3:32 len=7] leading=[] Ident("targets") trailing=[]
-[3:39 len=2] leading=[] Newline("\n\n") trailing=[]
-[5:1 len=2] leading=[] ItemAttrStart trailing=[]
-[5:3 len=5] leading=[] Ident("entry") trailing=[]
-[5:8 len=1] leading=[] RBracket trailing=[]
-[5:9 len=1] leading=[] Newline("\n") trailing=[]
-[6:1 len=3] leading=[] KwDef trailing=[]
-[6:5 len=4] leading=[] Ident("main") trailing=[]
-[6:9 len=1] leading=[] LParen trailing=[]
-[6:10 len=1] leading=[] RParen trailing=[]
-[6:11 len=1] leading=[] Colon trailing=[]
-[6:13 len=3] leading=[] Ident("i32") trailing=[]
-[6:17 len=1] leading=[] Eq trailing=[]
-[6:19 len=6] leading=[] LBrace trailing=[]
-[7:5 len=2] leading=[] ItemAttrStart trailing=[]
-[7:7 len=5] leading=[] Ident("trace") trailing=[]
-[7:12 len=1] leading=[] RBracket trailing=[]
-[7:13 len=5] leading=[] Newline("\n    ") trailing=[]
-[8:5 len=3] leading=[] KwLet trailing=[]
-[8:9 len=5] leading=[] Ident("value") trailing=[]
-[8:15 len=1] leading=[] Eq trailing=[]
-[8:17 len=1] leading=[] IntLit("1") trailing=[]
-[8:18 len=6] leading=[] Newline("\n\n    ") trailing=[]
-[10:5 len=2] leading=[] ItemAttrStart trailing=[]
-[10:7 len=6] leading=[] Ident("inline") trailing=[]
-[10:13 len=1] leading=[] RBracket trailing=[]
-[10:14 len=5] leading=[] Newline("\n    ") trailing=[]
-[11:5 len=6] leading=[] KwUnsafe trailing=[]
-[11:12 len=10] leading=[] LBrace trailing=[]
-[12:9 len=13] leading=[] Ident("use_low_level") trailing=[]
-[12:22 len=1] leading=[] LParen trailing=[]
-[12:23 len=1] leading=[] RParen trailing=[]
-[12:24 len=6] leading=[] RBrace trailing=[]
-[13:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[14:5 len=4] leading=[] Ident("call") trailing=[]
-[14:9 len=1] leading=[] LParen trailing=[]
-[14:10 len=5] leading=[] Ident("value") trailing=[]
-[14:15 len=1] leading=[] RParen trailing=[]
-[14:17 len=2] leading=[] ItemAttrStart trailing=[]
-[14:19 len=4] leading=[] Ident("tail") trailing=[]
-[14:23 len=1] leading=[] RBracket trailing=[]
-[14:24 len=5] leading=[] Newline("\n    ") trailing=[]
-[15:5 len=1] leading=[] LBrace trailing=[]
-[15:6 len=1] leading=[] Pipe trailing=[]
-[15:7 len=1] leading=[] Ident("x") trailing=[]
-[15:8 len=1] leading=[] Pipe trailing=[]
-[15:9 len=9] leading=[] Newline("\n        ") trailing=[]
-[16:9 len=1] leading=[] Ident("x") trailing=[]
-[16:11 len=1] leading=[] Plus trailing=[]
-[16:13 len=1] leading=[] IntLit("1") trailing=[]
-[16:14 len=6] leading=[] RBrace trailing=[]
-[17:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[18:5 len=6] leading=[] KwReturn trailing=[]
-[18:12 len=1] leading=[] IntLit("0") trailing=[]
-[18:13 len=2] leading=[] RBrace trailing=[]
-[19:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_Cons(
+      FileAttr(
+        Attr(
+          "CBI",
+          AttrArg_End
+        )
+      ),
+      Attr_End
+    ),
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "attribute",
+            Path_Cons(
+              "targets",
+              Path_End
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_WithAttrs(
+        Attr_Cons(
+          ItemAttr(
+            Attr(
+              "entry",
+              AttrArg_End
+            )
+          ),
+          Attr_End
+        ),
+        Item_Def(
+          DefItem2(
+            "main",
+            DefFun(
+              Generic_End,
+              Param_End,
+              Type_Path(
+                "i32",
+                Type_Tail_End
+              ),
+              Expr_Block(
+                Stmt_Cons(
+                  Stmt_WithAttrs(
+                    Attr_Cons(
+                      ItemAttr(
+                        Attr(
+                          "trace",
+                          AttrArg_End
+                        )
+                      ),
+                      Attr_End
+                    ),
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "value",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_Int(
+                        "1"
+                      )
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_WithAttrs(
+                      Attr_Cons(
+                        ItemAttr(
+                          Attr(
+                            "inline",
+                            AttrArg_End
+                          )
+                        ),
+                        Attr_End
+                      ),
+                      Stmt_Expr(
+                        Expr_Unsafe(
+                          Expr_Block(
+                            Stmt_Cons(
+                              Stmt_Expr(
+                                Expr_IdentTail(
+                                  "use_low_level",
+                                  IdentTail_Call(
+                                    Arg_End,
+                                    IdentCallClosure_None
+                                  )
+                                )
+                              ),
+                              Stmt_End
+                            ),
+                            TailExpr_None
+                          )
+                        )
+                      )
+                    ),
+                    Stmt_Cons(
+                      Stmt_Expr(
+                        Expr_IdentTail(
+                          "call",
+                          IdentTail_Call(
+                            Arg_Cons(
+                              Expr_IdentTail(
+                                "value",
+                                IdentTail_None
+                              ),
+                              Arg_End
+                            ),
+                            IdentCallClosure_Some(
+                              Attr_Cons(
+                                ItemAttr(
+                                  Attr(
+                                    "tail",
+                                    AttrArg_End
+                                  )
+                                ),
+                                Attr_End
+                              ),
+                              Expr_Closure(
+                                Param_Cons(
+                                  Param(
+                                    "x",
+                                    Type_Path(
+                                      "",
+                                      Type_Tail_End
+                                    )
+                                  ),
+                                  Param_End
+                                ),
+                                Expr_Block(
+                                  Stmt_Cons(
+                                    Stmt_Expr(
+                                      Expr_Binary(
+                                        OpAdd,
+                                        Expr_IdentTail(
+                                          "x",
+                                          IdentTail_None
+                                        ),
+                                        Expr_Int(
+                                          "1"
+                                        )
+                                      )
+                                    ),
+                                    Stmt_End
+                                  ),
+                                  TailExpr_None
+                                )
+                              )
+                            )
+                          )
+                        )
+                      ),
+                      Stmt_Cons(
+                        Stmt_Return(
+                          Expr_Int(
+                            "0"
+                          )
+                        ),
+                        Stmt_End
+                      )
+                    )
+                  )
+                ),
+                TailExpr_None
+              )
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

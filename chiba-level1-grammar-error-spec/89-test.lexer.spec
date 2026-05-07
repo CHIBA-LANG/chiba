@@ -1,34 +1,36 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=5] leading=[] Ident("kwuse") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=5] leading=[] Ident("extra") trailing=[]
-[1:35 len=1] leading=[] Dot trailing=[]
-[1:36 len=3] leading=[] Ident("dot") trailing=[]
-[1:39 len=1] leading=[] Dot trailing=[]
-[1:40 len=6] leading=[] Ident("before") trailing=[]
-[1:46 len=1] leading=[] Dot trailing=[]
-[1:47 len=4] leading=[] Ident("star") trailing=[]
-[1:51 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwUse trailing=[]
-[3:5 len=4] leading=[] Ident("demo") trailing=[]
-[3:9 len=1] leading=[] Dot trailing=[]
-[3:10 len=7] leading=[] Ident("prelude") trailing=[]
-[3:17 len=2] leading=[] DotDot trailing=[]
-[3:19 len=3] leading=[] Star trailing=[]
-[5:1 len=3] leading=[] KwDef trailing=[]
-[5:5 len=18] leading=[] Ident("after_bad_star_use") trailing=[]
-[5:23 len=1] leading=[] LParen trailing=[]
-[5:24 len=1] leading=[] RParen trailing=[]
-[5:25 len=1] leading=[] Colon trailing=[]
-[5:27 len=3] leading=[] Ident("i64") trailing=[]
-[5:31 len=1] leading=[] Eq trailing=[]
-[5:33 len=6] leading=[] LBrace trailing=[]
-[6:5 len=6] leading=[] KwReturn trailing=[]
-[6:12 len=1] leading=[] IntLit("0") trailing=[]
-[6:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=19,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[3:10 len=7] Token,
+    next_token=[3:17 len=2] Token,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwuse",
+            Path_Cons(
+              "extra",
+              Path_Cons(
+                "dot",
+                Path_Cons(
+                  "before",
+                  Path_Cons(
+                    "star",
+                    Path_End
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_End
+  )
+)
 0

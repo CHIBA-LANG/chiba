@@ -1,45 +1,101 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=7] leading=[] Ident("pattern") trailing=[]
-[1:31 len=1] leading=[] Dot trailing=[]
-[1:32 len=6] leading=[] Ident("double") trailing=[]
-[1:38 len=1] leading=[] Dot trailing=[]
-[1:39 len=4] leading=[] Ident("bind") trailing=[]
-[1:43 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=19] leading=[] Ident("pattern_double_bind") trailing=[]
-[3:24 len=1] leading=[] LParen trailing=[]
-[3:25 len=5] leading=[] Ident("value") trailing=[]
-[3:30 len=1] leading=[] Colon trailing=[]
-[3:32 len=6] leading=[] Ident("Option") trailing=[]
-[3:38 len=1] leading=[] LBracket trailing=[]
-[3:39 len=3] leading=[] Ident("i64") trailing=[]
-[3:42 len=1] leading=[] RBracket trailing=[]
-[3:43 len=1] leading=[] RParen trailing=[]
-[3:44 len=1] leading=[] Colon trailing=[]
-[3:46 len=3] leading=[] Ident("i64") trailing=[]
-[3:50 len=1] leading=[] Eq trailing=[]
-[3:52 len=6] leading=[] LBrace trailing=[]
-[4:5 len=5] leading=[] KwMatch trailing=[]
-[4:11 len=5] leading=[] Ident("value") trailing=[]
-[4:17 len=10] leading=[] LBrace trailing=[]
-[5:9 len=5] leading=[] Ident("whole") trailing=[]
-[5:15 len=1] leading=[] At trailing=[]
-[5:17 len=1] leading=[] At trailing=[]
-[5:19 len=4] leading=[] Ident("Some") trailing=[]
-[5:23 len=1] leading=[] LParen trailing=[]
-[5:24 len=1] leading=[] Ident("x") trailing=[]
-[5:25 len=1] leading=[] RParen trailing=[]
-[5:27 len=2] leading=[] FatArrow trailing=[]
-[5:30 len=1] leading=[] Ident("x") trailing=[]
-[5:31 len=9] leading=[] Newline("\n        ") trailing=[]
-[6:9 len=1] leading=[] Ident("_") trailing=[]
-[6:11 len=2] leading=[] FatArrow trailing=[]
-[6:14 len=1] leading=[] IntLit("0") trailing=[]
-[6:15 len=6] leading=[] RBrace trailing=[]
-[7:6 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=43,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[7:6 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "pattern",
+            Path_Cons(
+              "double",
+              Path_Cons(
+                "bind",
+                Path_End
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "pattern_double_bind",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "value",
+                Type_Path(
+                  "Option",
+                  Type_Tail_Generic(
+                    TypeArg_Cons(
+                      Type_Path(
+                        "i64",
+                        Type_Tail_End
+                      ),
+                      TypeArg_End
+                    )
+                  )
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_Expr(
+                  Expr_Match(
+                    Expr_MatchIdent(
+                      "value",
+                      MatchIdent_Name
+                    ),
+                    MatchArm_Cons(
+                      MatchArm(
+                        Null,
+                        MatchGuard_None,
+                        Expr_IdentTail(
+                          "x",
+                          IdentTail_None
+                        )
+                      ),
+                      MatchArm_Cons(
+                        MatchArm(
+                          Pattern_IdentStart(
+                            "_",
+                            PatternAfterIdent_Atom(
+                              PatternIdent_Name
+                            )
+                          ),
+                          MatchGuard_None,
+                          Expr_Int(
+                            "0"
+                          )
+                        ),
+                        MatchArm_End
+                      )
+                    )
+                  )
+                ),
+                Stmt_End
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

@@ -1,126 +1,328 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=10] leading=[] Ident("everything") trailing=[]
-[1:32 len=1] leading=[] Dot trailing=[]
-[1:33 len=5] leading=[] Ident("smoke") trailing=[]
-[1:38 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=2] leading=[] ItemAttrStart trailing=[]
-[3:3 len=6] leading=[] Ident("derive") trailing=[]
-[3:9 len=6] leading=[] LParen trailing=[]
-[4:5 len=5] leading=[] Ident("Debug") trailing=[]
-[4:10 len=7] leading=[] Comma trailing=[]
-[5:5 len=5] leading=[] Ident("Clone") trailing=[]
-[5:10 len=6] leading=[] RParen trailing=[]
-[6:6 len=6] leading=[] RBracket trailing=[]
-[7:6 len=1] leading=[] Newline("\n") trailing=[]
-[8:1 len=4] leading=[] KwData trailing=[]
-[8:6 len=5] leading=[] Ident("Smoke") trailing=[]
-[8:11 len=1] leading=[] LBracket trailing=[]
-[8:12 len=1] leading=[] Ident("T") trailing=[]
-[8:13 len=1] leading=[] RBracket trailing=[]
-[8:15 len=6] leading=[] LBrace trailing=[]
-[9:5 len=5] leading=[] Ident("Smoke") trailing=[]
-[9:10 len=1] leading=[] LParen trailing=[]
-[9:11 len=5] leading=[] Ident("value") trailing=[]
-[9:16 len=1] leading=[] Colon trailing=[]
-[9:18 len=1] leading=[] Ident("T") trailing=[]
-[9:19 len=1] leading=[] Comma trailing=[]
-[9:21 len=3] leading=[] Ident("tag") trailing=[]
-[9:24 len=7] leading=[] Colon trailing=[]
-[10:5 len=3] leading=[] Atom("ok") trailing=[]
-[10:8 len=1] leading=[] RParen trailing=[]
-[10:9 len=2] leading=[] RBrace trailing=[]
-[11:2 len=2] leading=[] Newline("\n\n") trailing=[]
-[13:1 len=3] leading=[] KwDef trailing=[]
-[13:5 len=5] leading=[] Ident("smoke") trailing=[]
-[13:10 len=1] leading=[] LBracket trailing=[]
-[13:11 len=1] leading=[] Ident("T") trailing=[]
-[13:12 len=1] leading=[] RBracket trailing=[]
-[13:13 len=1] leading=[] LParen trailing=[]
-[13:14 len=5] leading=[] Ident("input") trailing=[]
-[13:19 len=1] leading=[] Colon trailing=[]
-[13:21 len=1] leading=[] Ident("T") trailing=[]
-[13:22 len=1] leading=[] RParen trailing=[]
-[13:23 len=1] leading=[] Colon trailing=[]
-[13:25 len=3] leading=[] Ident("i64") trailing=[]
-[13:29 len=1] leading=[] Eq trailing=[]
-[13:31 len=6] leading=[] LBrace trailing=[]
-[14:5 len=3] leading=[] KwLet trailing=[]
-[14:9 len=6] leading=[] Ident("record") trailing=[]
-[14:16 len=1] leading=[] Eq trailing=[]
-[14:18 len=1] leading=[] LBrace trailing=[]
-[14:20 len=5] leading=[] Ident("input") trailing=[]
-[14:25 len=1] leading=[] Comma trailing=[]
-[14:27 len=6] leading=[] Ident("status") trailing=[]
-[14:33 len=1] leading=[] Colon trailing=[]
-[14:35 len=3] leading=[] Atom("ok") trailing=[]
-[14:39 len=1] leading=[] RBrace trailing=[]
-[14:40 len=5] leading=[] Newline("\n    ") trailing=[]
-[15:5 len=3] leading=[] KwLet trailing=[]
-[15:9 len=7] leading=[] Ident("updated") trailing=[]
-[15:17 len=1] leading=[] Eq trailing=[]
-[15:19 len=1] leading=[] LBrace trailing=[]
-[15:20 len=6] leading=[] Ident("record") trailing=[]
-[15:27 len=1] leading=[] Pipe trailing=[]
-[15:29 len=6] leading=[] Ident("status") trailing=[]
-[15:35 len=1] leading=[] Colon trailing=[]
-[15:37 len=5] leading=[] Atom("done") trailing=[]
-[15:42 len=1] leading=[] RBrace trailing=[]
-[15:43 len=5] leading=[] Newline("\n    ") trailing=[]
-[16:5 len=3] leading=[] KwLet trailing=[]
-[16:9 len=6] leading=[] Ident("answer") trailing=[]
-[16:16 len=1] leading=[] Eq trailing=[]
-[16:18 len=5] leading=[] KwReset trailing=[]
-[16:24 len=10] leading=[] LBrace trailing=[]
-[17:9 len=5] leading=[] KwMatch trailing=[]
-[17:15 len=4] leading=[] Ident("Some") trailing=[]
-[17:19 len=1] leading=[] LParen trailing=[]
-[17:20 len=7] leading=[] Ident("updated") trailing=[]
-[17:27 len=1] leading=[] RParen trailing=[]
-[17:29 len=14] leading=[] LBrace trailing=[]
-[18:13 len=5] leading=[] Ident("whole") trailing=[]
-[18:19 len=1] leading=[] At trailing=[]
-[18:21 len=4] leading=[] Ident("Some") trailing=[]
-[18:25 len=1] leading=[] LParen trailing=[]
-[18:26 len=1] leading=[] Ident("v") trailing=[]
-[18:27 len=1] leading=[] RParen trailing=[]
-[18:29 len=2] leading=[] KwIf trailing=[]
-[18:32 len=1] leading=[] Ident("v") trailing=[]
-[18:33 len=1] leading=[] Dot trailing=[]
-[18:34 len=6] leading=[] Ident("status") trailing=[]
-[18:41 len=2] leading=[] EqEq trailing=[]
-[18:44 len=5] leading=[] Atom("done") trailing=[]
-[18:50 len=2] leading=[] FatArrow trailing=[]
-[18:53 len=5] leading=[] KwShift trailing=[]
-[18:59 len=1] leading=[] Ident("k") trailing=[]
-[18:61 len=1] leading=[] LBrace trailing=[]
-[18:63 len=1] leading=[] Ident("k") trailing=[]
-[18:64 len=1] leading=[] LParen trailing=[]
-[18:65 len=2] leading=[] IntLit("42") trailing=[]
-[18:67 len=1] leading=[] RParen trailing=[]
-[18:69 len=1] leading=[] RBrace trailing=[]
-[18:70 len=13] leading=[] Newline("\n            ") trailing=[]
-[19:13 len=4] leading=[] Ident("None") trailing=[]
-[19:18 len=2] leading=[] FatArrow trailing=[]
-[19:21 len=1] leading=[] IntLit("0") trailing=[]
-[19:22 len=13] leading=[] Newline("\n            ") trailing=[]
-[20:13 len=1] leading=[] Ident("_") trailing=[]
-[20:15 len=2] leading=[] FatArrow trailing=[]
-[20:18 len=1] leading=[] IntLit("1") trailing=[]
-[20:19 len=10] leading=[] RBrace trailing=[]
-[21:10 len=6] leading=[] RBrace trailing=[]
-[22:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[23:5 len=6] leading=[] KwReturn trailing=[]
-[23:12 len=6] leading=[] Ident("answer") trailing=[]
-[23:19 len=2] leading=[] PipeGt trailing=[]
-[23:22 len=6] leading=[] Ident("finish") trailing=[]
-[23:28 len=1] leading=[] LParen trailing=[]
-[23:29 len=1] leading=[] Ident("_") trailing=[]
-[23:30 len=1] leading=[] RParen trailing=[]
-[23:31 len=2] leading=[] RBrace trailing=[]
-[24:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "everything",
+            Path_Cons(
+              "smoke",
+              Path_End
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_WithAttrs(
+        Attr_Cons(
+          ItemAttr(
+            Attr(
+              "derive",
+              AttrArg_Cons(
+                "Debug",
+                AttrArg_Cons(
+                  "Clone",
+                  AttrArg_End
+                )
+              )
+            )
+          ),
+          Attr_End
+        ),
+        Item_Adt(
+          AdtItem(
+            "Smoke",
+            Generic_Cons(
+              GenericParam(
+                "T",
+                GenericBound_End
+              ),
+              Generic_End
+            ),
+            AdtVariant_Cons(
+              AdtVariant(
+                "Smoke",
+                AdtVariantArg_Ident(
+                  "value",
+                  AdtVariantArg_Field(
+                    Type_Path(
+                      "T",
+                      Type_Tail_End
+                    ),
+                    AdtVariantField_Cons(
+                      "tag",
+                      Type_Atom(
+                        "ok"
+                      ),
+                      AdtVariantField_End
+                    )
+                  )
+                )
+              ),
+              AdtVariant_End
+            )
+          )
+        )
+      ),
+      Item_Cons(
+        Item_Def(
+          DefItem2(
+            "smoke",
+            DefFun(
+              Generic_Cons(
+                GenericParam(
+                  "T",
+                  GenericBound_End
+                ),
+                Generic_End
+              ),
+              Param_Cons(
+                Param(
+                  "input",
+                  Type_Path(
+                    "T",
+                    Type_Tail_End
+                  )
+                ),
+                Param_End
+              ),
+              Type_Path(
+                "i64",
+                Type_Tail_End
+              ),
+              Expr_Block(
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_IdentStart(
+                      "record",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_Record(
+                      Record_First(
+                        "input",
+                        RecordTail_Shorthand(
+                          RecordField_Cons(
+                            RecordField(
+                              "status",
+                              Expr_Atom(
+                                "ok"
+                              )
+                            ),
+                            RecordField_End
+                          )
+                        )
+                      )
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "updated",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_Record(
+                        Record_First(
+                          "record",
+                          Record_Update(
+                            Expr_Name(
+                              ""
+                            ),
+                            RecordField_Cons(
+                              RecordField(
+                                "status",
+                                Expr_Atom(
+                                  "done"
+                                )
+                              ),
+                              RecordField_End
+                            )
+                          )
+                        )
+                      )
+                    ),
+                    Stmt_Cons(
+                      Stmt_LetPatternTyped(
+                        Pattern_IdentStart(
+                          "answer",
+                          PatternAfterIdent_Atom(
+                            PatternIdent_Name
+                          )
+                        ),
+                        Type_Path(
+                          "",
+                          Type_Tail_End
+                        ),
+                        Expr_Reset(
+                          ControlLabel_None,
+                          Expr_Block(
+                            Stmt_Cons(
+                              Stmt_Expr(
+                                Expr_Match(
+                                  Expr_MatchIdent(
+                                    "Some",
+                                    MatchIdent_Call(
+                                      Arg_Cons(
+                                        Expr_IdentTail(
+                                          "updated",
+                                          IdentTail_None
+                                        ),
+                                        Arg_End
+                                      )
+                                    )
+                                  ),
+                                  MatchArm_Cons(
+                                    MatchArm(
+                                      Pattern_IdentStart(
+                                        "whole",
+                                        PatternAfterIdent_Bind(
+                                          Pattern_IdentStart(
+                                            "Some",
+                                            PatternAfterIdent_Atom(
+                                              PatternIdent_Call(
+                                                PatternList_Cons(
+                                                  Pattern_IdentStart(
+                                                    "v",
+                                                    PatternAfterIdent_Atom(
+                                                      PatternIdent_Name
+                                                    )
+                                                  ),
+                                                  PatternList_End
+                                                )
+                                              )
+                                            )
+                                          )
+                                        )
+                                      ),
+                                      MatchGuard_Some(
+                                        Expr_Binary(
+                                          OpEqEq,
+                                          Expr_Field(
+                                            Expr_IdentTail(
+                                              "v",
+                                              IdentTail_None
+                                            ),
+                                            "status"
+                                          ),
+                                          Expr_Atom(
+                                            "done"
+                                          )
+                                        )
+                                      ),
+                                      Expr_Shift(
+                                        ControlLabel_None,
+                                        "k",
+                                        Expr_Block(
+                                          Stmt_Cons(
+                                            Stmt_Expr(
+                                              Expr_IdentTail(
+                                                "k",
+                                                IdentTail_Call(
+                                                  Arg_Cons(
+                                                    Expr_Int(
+                                                      "42"
+                                                    ),
+                                                    Arg_End
+                                                  ),
+                                                  IdentCallClosure_None
+                                                )
+                                              )
+                                            ),
+                                            Stmt_End
+                                          ),
+                                          TailExpr_None
+                                        )
+                                      )
+                                    ),
+                                    MatchArm_Cons(
+                                      MatchArm(
+                                        Pattern_IdentStart(
+                                          "None",
+                                          PatternAfterIdent_Atom(
+                                            PatternIdent_Name
+                                          )
+                                        ),
+                                        MatchGuard_None,
+                                        Expr_Int(
+                                          "0"
+                                        )
+                                      ),
+                                      MatchArm_Cons(
+                                        MatchArm(
+                                          Pattern_IdentStart(
+                                            "_",
+                                            PatternAfterIdent_Atom(
+                                              PatternIdent_Name
+                                            )
+                                          ),
+                                          MatchGuard_None,
+                                          Expr_Int(
+                                            "1"
+                                          )
+                                        ),
+                                        MatchArm_End
+                                      )
+                                    )
+                                  )
+                                )
+                              ),
+                              Stmt_End
+                            ),
+                            TailExpr_None
+                          )
+                        )
+                      ),
+                      Stmt_Cons(
+                        Stmt_Return(
+                          Expr_Binary(
+                            OpPipeGt,
+                            Expr_IdentTail(
+                              "answer",
+                              IdentTail_None
+                            ),
+                            Expr_IdentTail(
+                              "finish",
+                              IdentTail_Call(
+                                Arg_Cons(
+                                  Expr_IdentTail(
+                                    "_",
+                                    IdentTail_None
+                                  ),
+                                  Arg_End
+                                ),
+                                IdentCallClosure_None
+                              )
+                            )
+                          )
+                        ),
+                        Stmt_End
+                      )
+                    )
+                  )
+                ),
+                TailExpr_None
+              )
+            )
+          )
+        ),
+        Item_End
+      )
+    )
+  )
+)
 0

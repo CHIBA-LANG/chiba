@@ -1,79 +1,136 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=5] leading=[] Ident("paths") trailing=[]
-[1:27 len=1] leading=[] Dot trailing=[]
-[1:28 len=8] leading=[] Ident("generics") trailing=[]
-[1:36 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwUse trailing=[]
-[3:5 len=4] leading=[] Ident("demo") trailing=[]
-[3:9 len=2] leading=[] Dot trailing=[]
-[4:1 len=4] leading=[] Ident("math") trailing=[]
-[4:5 len=2] leading=[] Dot trailing=[]
-[5:1 len=3] leading=[] Ident("add") trailing=[]
-[5:4 len=1] leading=[] Newline("\n") trailing=[]
-[6:1 len=3] leading=[] KwUse trailing=[]
-[6:5 len=4] leading=[] Ident("demo") trailing=[]
-[6:9 len=1] leading=[] Dot trailing=[]
-[6:10 len=2] leading=[] Ident("io") trailing=[]
-[6:12 len=1] leading=[] Dot trailing=[]
-[6:13 len=1] leading=[] LBrace trailing=[]
-[6:14 len=5] leading=[] Ident("print") trailing=[]
-[6:19 len=1] leading=[] Comma trailing=[]
-[6:21 len=7] leading=[] Ident("println") trailing=[]
-[6:28 len=1] leading=[] RBrace trailing=[]
-[6:29 len=1] leading=[] Newline("\n") trailing=[]
-[7:1 len=3] leading=[] KwUse trailing=[]
-[7:5 len=4] leading=[] Ident("demo") trailing=[]
-[7:9 len=2] leading=[] Dot trailing=[]
-[8:1 len=7] leading=[] Ident("prelude") trailing=[]
-[8:8 len=2] leading=[] DotStar trailing=[]
-[8:10 len=2] leading=[] Newline("\n\n") trailing=[]
-[10:1 len=3] leading=[] KwDef trailing=[]
-[10:5 len=13] leading=[] Ident("generic_paths") trailing=[]
-[10:18 len=1] leading=[] LParen trailing=[]
-[10:19 len=2] leading=[] Ident("xs") trailing=[]
-[10:21 len=1] leading=[] Colon trailing=[]
-[10:23 len=3] leading=[] Ident("Vec") trailing=[]
-[10:26 len=1] leading=[] LBracket trailing=[]
-[10:27 len=6] leading=[] Ident("Option") trailing=[]
-[10:33 len=1] leading=[] LBracket trailing=[]
-[10:34 len=6] leading=[] Ident("Result") trailing=[]
-[10:40 len=1] leading=[] LBracket trailing=[]
-[10:41 len=3] leading=[] Ident("i64") trailing=[]
-[10:44 len=1] leading=[] Comma trailing=[]
-[10:46 len=6] leading=[] Atom("error") trailing=[]
-[10:52 len=1] leading=[] RBracket trailing=[]
-[10:53 len=1] leading=[] RBracket trailing=[]
-[10:54 len=1] leading=[] RBracket trailing=[]
-[10:55 len=1] leading=[] RParen trailing=[]
-[10:56 len=1] leading=[] Colon trailing=[]
-[10:58 len=6] leading=[] Ident("Option") trailing=[]
-[10:64 len=1] leading=[] LBracket trailing=[]
-[10:65 len=3] leading=[] Ident("i64") trailing=[]
-[10:68 len=1] leading=[] RBracket trailing=[]
-[10:70 len=1] leading=[] Eq trailing=[]
-[10:72 len=6] leading=[] LBrace trailing=[]
-[11:5 len=3] leading=[] KwLet trailing=[]
-[11:9 len=5] leading=[] Ident("value") trailing=[]
-[11:15 len=1] leading=[] Eq trailing=[]
-[11:17 len=6] leading=[] Ident("Option") trailing=[]
-[11:23 len=1] leading=[] Dot trailing=[]
-[11:24 len=4] leading=[] Ident("Some") trailing=[]
-[11:28 len=1] leading=[] LParen trailing=[]
-[11:29 len=6] leading=[] Ident("Result") trailing=[]
-[11:35 len=1] leading=[] Dot trailing=[]
-[11:36 len=2] leading=[] Ident("Ok") trailing=[]
-[11:38 len=1] leading=[] LParen trailing=[]
-[11:39 len=1] leading=[] IntLit("1") trailing=[]
-[11:40 len=1] leading=[] RParen trailing=[]
-[11:41 len=1] leading=[] RParen trailing=[]
-[11:42 len=5] leading=[] Newline("\n    ") trailing=[]
-[12:5 len=6] leading=[] KwReturn trailing=[]
-[12:12 len=5] leading=[] Ident("value") trailing=[]
-[12:17 len=2] leading=[] RBrace trailing=[]
-[13:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "paths",
+            Path_Cons(
+              "generics",
+              Path_End
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "generic_paths",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "xs",
+                Type_Path(
+                  "Vec",
+                  Type_Tail_Generic(
+                    TypeArg_Cons(
+                      Type_Path(
+                        "Option",
+                        Type_Tail_Generic(
+                          TypeArg_Cons(
+                            Type_Path(
+                              "Result",
+                              Type_Tail_Generic(
+                                TypeArg_Cons(
+                                  Type_Path(
+                                    "i64",
+                                    Type_Tail_End
+                                  ),
+                                  TypeArg_Cons(
+                                    Type_Atom(
+                                      "error"
+                                    ),
+                                    TypeArg_End
+                                  )
+                                )
+                              )
+                            ),
+                            TypeArg_End
+                          )
+                        )
+                      ),
+                      TypeArg_End
+                    )
+                  )
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "Option",
+              Type_Tail_Generic(
+                TypeArg_Cons(
+                  Type_Path(
+                    "i64",
+                    Type_Tail_End
+                  ),
+                  TypeArg_End
+                )
+              )
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "value",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Call(
+                    Expr_Field(
+                      Expr_IdentTail(
+                        "Option",
+                        IdentTail_None
+                      ),
+                      "Some"
+                    ),
+                    Arg_Cons(
+                      Expr_Call(
+                        Expr_Field(
+                          Expr_IdentTail(
+                            "Result",
+                            IdentTail_None
+                          ),
+                          "Ok"
+                        ),
+                        Arg_Cons(
+                          Expr_Int(
+                            "1"
+                          ),
+                          Arg_End
+                        )
+                      ),
+                      Arg_End
+                    )
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_Return(
+                    Expr_IdentTail(
+                      "value",
+                      IdentTail_None
+                    )
+                  ),
+                  Stmt_End
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

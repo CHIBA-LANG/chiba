@@ -1,26 +1,8 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=8] leading=[] Ident("kwunsafe") trailing=[]
-[1:32 len=1] leading=[] Dot trailing=[]
-[1:33 len=5] leading=[] Ident("extra") trailing=[]
-[1:38 len=1] leading=[] Dot trailing=[]
-[1:39 len=4] leading=[] Ident("head") trailing=[]
-[1:43 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=17] leading=[] Ident("unsafe_extra_head") trailing=[]
-[3:22 len=1] leading=[] LParen trailing=[]
-[3:23 len=1] leading=[] RParen trailing=[]
-[3:24 len=1] leading=[] Colon trailing=[]
-[3:26 len=3] leading=[] Ident("i64") trailing=[]
-[3:30 len=1] leading=[] Eq trailing=[]
-[3:32 len=6] leading=[] KwUnsafe trailing=[]
-[3:39 len=5] leading=[] Ident("value") trailing=[]
-[3:45 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=1] leading=[] IntLit("0") trailing=[]
-[4:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=19,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[3:32 len=6] Token,
+    next_token=[3:39 len=5] Token
+)
 0

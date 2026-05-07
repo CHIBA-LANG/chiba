@@ -1,38 +1,59 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=5] leading=[] Ident("kwuse") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=5] leading=[] Ident("group") trailing=[]
-[1:35 len=1] leading=[] Dot trailing=[]
-[1:36 len=6] leading=[] Ident("double") trailing=[]
-[1:42 len=1] leading=[] Dot trailing=[]
-[1:43 len=5] leading=[] Ident("comma") trailing=[]
-[1:48 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwUse trailing=[]
-[3:5 len=4] leading=[] Ident("demo") trailing=[]
-[3:9 len=1] leading=[] Dot trailing=[]
-[3:10 len=2] leading=[] Ident("io") trailing=[]
-[3:12 len=1] leading=[] Dot trailing=[]
-[3:13 len=1] leading=[] LBrace trailing=[]
-[3:14 len=5] leading=[] Ident("print") trailing=[]
-[3:19 len=1] leading=[] Comma trailing=[]
-[3:20 len=1] leading=[] Comma trailing=[]
-[3:22 len=7] leading=[] Ident("println") trailing=[]
-[3:29 len=1] leading=[] RBrace trailing=[]
-[3:30 len=2] leading=[] Newline("\n\n") trailing=[]
-[5:1 len=3] leading=[] KwDef trailing=[]
-[5:5 len=20] leading=[] Ident("after_bad_group_use2") trailing=[]
-[5:25 len=1] leading=[] LParen trailing=[]
-[5:26 len=1] leading=[] RParen trailing=[]
-[5:27 len=1] leading=[] Colon trailing=[]
-[5:29 len=3] leading=[] Ident("i64") trailing=[]
-[5:33 len=1] leading=[] Eq trailing=[]
-[5:35 len=6] leading=[] LBrace trailing=[]
-[6:5 len=6] leading=[] KwReturn trailing=[]
-[6:12 len=1] leading=[] IntLit("0") trailing=[]
-[6:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=36,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[6:13 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwuse",
+            Path_Cons(
+              "group",
+              Path_Cons(
+                "double",
+                Path_Cons(
+                  "comma",
+                  Path_End
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "after_bad_group_use2",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_Return(
+                  Expr_Int(
+                    "0"
+                  )
+                ),
+                Stmt_End
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

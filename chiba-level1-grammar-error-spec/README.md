@@ -118,3 +118,6 @@
 - `98-test.chiba`：tuple 尾部出现双逗号。应报错。
 - `99-test.chiba`：slice 范围双 `..` 连写。应报错。
 - `100-test.chiba`：调用后 trailing closure 前多一个属性头。应报错。
+- `101-test.chiba`：`via` 后缺 namespace 路径。应报错。
+- `102-test.chiba`：泛型 row bound 字段缺类型。应报错。
+- `103-test.chiba`：泛型调用类型参数列表缺逗号。应报错。

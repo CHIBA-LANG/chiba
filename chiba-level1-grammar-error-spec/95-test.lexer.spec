@@ -1,26 +1,56 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=5] leading=[] Ident("param") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=6] leading=[] Ident("kwtype") trailing=[]
-[1:36 len=1] leading=[] Dot trailing=[]
-[1:37 len=7] leading=[] Ident("missing") trailing=[]
-[1:44 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=18] leading=[] Ident("param_type_missing") trailing=[]
-[3:23 len=1] leading=[] LParen trailing=[]
-[3:24 len=1] leading=[] Ident("x") trailing=[]
-[3:25 len=1] leading=[] Colon trailing=[]
-[3:27 len=1] leading=[] RParen trailing=[]
-[3:28 len=1] leading=[] Colon trailing=[]
-[3:30 len=3] leading=[] Ident("i64") trailing=[]
-[3:34 len=1] leading=[] Eq trailing=[]
-[3:36 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=1] leading=[] IntLit("0") trailing=[]
-[4:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=24,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[4:13 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "param",
+            Path_Cons(
+              "kwtype",
+              Path_Cons(
+                "missing",
+                Path_End
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "param_type_missing",
+          DefFun(
+            Generic_End,
+            Null,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_Return(
+                  Expr_Int(
+                    "0"
+                  )
+                ),
+                Stmt_End
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

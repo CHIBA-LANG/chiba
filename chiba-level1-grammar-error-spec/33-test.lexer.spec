@@ -1,29 +1,68 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=5] leading=[] Ident("kwlet") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=4] leading=[] Ident("kwif") trailing=[]
-[1:34 len=1] leading=[] Dot trailing=[]
-[1:35 len=4] leading=[] Ident("name") trailing=[]
-[1:39 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=11] leading=[] Ident("let_if_name") trailing=[]
-[3:16 len=1] leading=[] LParen trailing=[]
-[3:17 len=1] leading=[] RParen trailing=[]
-[3:18 len=1] leading=[] Colon trailing=[]
-[3:20 len=3] leading=[] Ident("i64") trailing=[]
-[3:24 len=1] leading=[] Eq trailing=[]
-[3:26 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=2] leading=[] KwIf trailing=[]
-[4:12 len=1] leading=[] Eq trailing=[]
-[4:14 len=1] leading=[] IntLit("1") trailing=[]
-[4:15 len=5] leading=[] Newline("\n    ") trailing=[]
-[5:5 len=6] leading=[] KwReturn trailing=[]
-[5:12 len=1] leading=[] IntLit("0") trailing=[]
-[5:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=27,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[5:13 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwlet",
+            Path_Cons(
+              "kwif",
+              Path_Cons(
+                "name",
+                Path_End
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "let_if_name",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Null,
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Int(
+                    "1"
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_Return(
+                    Expr_Int(
+                      "0"
+                    )
+                  ),
+                  Stmt_End
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

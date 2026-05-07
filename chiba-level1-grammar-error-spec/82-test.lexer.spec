@@ -1,38 +1,63 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=7] leading=[] Ident("kwshift") trailing=[]
-[1:31 len=1] leading=[] Dot trailing=[]
-[1:32 len=3] leading=[] Ident("bad") trailing=[]
-[1:35 len=1] leading=[] Dot trailing=[]
-[1:36 len=5] leading=[] Ident("label") trailing=[]
-[1:41 len=1] leading=[] Dot trailing=[]
-[1:42 len=5] leading=[] Ident("order") trailing=[]
-[1:47 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=21] leading=[] Ident("shift_bad_label_order") trailing=[]
-[3:26 len=1] leading=[] LParen trailing=[]
-[3:27 len=1] leading=[] RParen trailing=[]
-[3:28 len=1] leading=[] Colon trailing=[]
-[3:30 len=3] leading=[] Ident("i64") trailing=[]
-[3:34 len=1] leading=[] Eq trailing=[]
-[3:36 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=5] leading=[] KwReset trailing=[]
-[4:18 len=6] leading=[] Atom("parse") trailing=[]
-[4:25 len=10] leading=[] LBrace trailing=[]
-[5:9 len=5] leading=[] KwShift trailing=[]
-[5:15 len=1] leading=[] Ident("k") trailing=[]
-[5:17 len=6] leading=[] Atom("parse") trailing=[]
-[5:24 len=14] leading=[] LBrace trailing=[]
-[6:13 len=1] leading=[] Ident("k") trailing=[]
-[6:14 len=1] leading=[] LParen trailing=[]
-[6:15 len=1] leading=[] IntLit("1") trailing=[]
-[6:16 len=1] leading=[] RParen trailing=[]
-[6:17 len=10] leading=[] RBrace trailing=[]
-[7:10 len=6] leading=[] RBrace trailing=[]
-[8:6 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=35,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[7:10 len=6] Token,
+    next_token=[8:6 len=2] Token,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwshift",
+            Path_Cons(
+              "bad",
+              Path_Cons(
+                "label",
+                Path_Cons(
+                  "order",
+                  Path_End
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "shift_bad_label_order",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_Return(
+                  Expr_Reset(
+                    ControlLabel_Some,
+                    Expr_Block(
+                      Null,
+                      TailExpr_None
+                    )
+                  )
+                ),
+                Stmt_End
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

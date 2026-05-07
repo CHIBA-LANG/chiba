@@ -1,68 +1,196 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=6] leading=[] Ident("layout") trailing=[]
-[1:28 len=1] leading=[] Dot trailing=[]
-[1:29 len=12] leading=[] Ident("continuation") trailing=[]
-[1:41 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=19] leading=[] Ident("continuation_layout") trailing=[]
-[3:24 len=1] leading=[] LParen trailing=[]
-[3:25 len=5] leading=[] Ident("value") trailing=[]
-[3:30 len=1] leading=[] Colon trailing=[]
-[3:32 len=3] leading=[] Ident("i64") trailing=[]
-[3:35 len=1] leading=[] RParen trailing=[]
-[3:36 len=1] leading=[] Colon trailing=[]
-[3:38 len=3] leading=[] Ident("i64") trailing=[]
-[3:42 len=1] leading=[] Eq trailing=[]
-[3:44 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=1] leading=[] Ident("x") trailing=[]
-[4:11 len=1] leading=[] Eq trailing=[]
-[4:13 len=5] leading=[] Ident("value") trailing=[]
-[4:19 len=10] leading=[] Plus trailing=[]
-[5:9 len=1] leading=[] IntLit("1") trailing=[]
-[5:11 len=10] leading=[] Star trailing=[]
-[6:9 len=1] leading=[] IntLit("2") trailing=[]
-[6:10 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=3] leading=[] KwLet trailing=[]
-[7:9 len=1] leading=[] Ident("y") trailing=[]
-[7:11 len=1] leading=[] Eq trailing=[]
-[7:13 len=5] leading=[] Ident("value") trailing=[]
-[7:19 len=11] leading=[] PipeGt trailing=[]
-[8:9 len=5] leading=[] Ident("step1") trailing=[]
-[8:14 len=1] leading=[] LParen trailing=[]
-[8:15 len=1] leading=[] RParen trailing=[]
-[8:17 len=11] leading=[] PipeGt trailing=[]
-[9:9 len=5] leading=[] Ident("step2") trailing=[]
-[9:14 len=1] leading=[] LParen trailing=[]
-[9:15 len=1] leading=[] Ident("_") trailing=[]
-[9:16 len=1] leading=[] RParen trailing=[]
-[9:17 len=5] leading=[] Newline("\n    ") trailing=[]
-[10:5 len=3] leading=[] KwLet trailing=[]
-[10:9 len=1] leading=[] Ident("z") trailing=[]
-[10:11 len=1] leading=[] Eq trailing=[]
-[10:13 len=11] leading=[] KwIf trailing=[]
-[11:9 len=5] leading=[] Ident("value") trailing=[]
-[11:15 len=1] leading=[] Gt trailing=[]
-[11:17 len=1] leading=[] IntLit("0") trailing=[]
-[11:19 len=10] leading=[] LBrace trailing=[]
-[12:9 len=5] leading=[] Ident("value") trailing=[]
-[12:14 len=6] leading=[] RBrace trailing=[]
-[13:7 len=4] leading=[] KwElse trailing=[]
-[13:12 len=10] leading=[] LBrace trailing=[]
-[14:9 len=1] leading=[] IntLit("0") trailing=[]
-[14:10 len=6] leading=[] RBrace trailing=[]
-[15:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[16:5 len=6] leading=[] KwReturn trailing=[]
-[16:12 len=1] leading=[] Ident("x") trailing=[]
-[16:14 len=1] leading=[] Plus trailing=[]
-[16:16 len=1] leading=[] Ident("y") trailing=[]
-[16:18 len=1] leading=[] Plus trailing=[]
-[16:20 len=1] leading=[] Ident("z") trailing=[]
-[16:21 len=2] leading=[] RBrace trailing=[]
-[17:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "layout",
+            Path_Cons(
+              "continuation",
+              Path_End
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "continuation_layout",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "value",
+                Type_Path(
+                  "i64",
+                  Type_Tail_End
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "x",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Binary(
+                    OpAdd,
+                    Expr_IdentTail(
+                      "value",
+                      IdentTail_None
+                    ),
+                    Expr_Binary(
+                      OpMul,
+                      Expr_Int(
+                        "1"
+                      ),
+                      Expr_Int(
+                        "2"
+                      )
+                    )
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_IdentStart(
+                      "y",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_Binary(
+                      OpPipeGt,
+                      Expr_Binary(
+                        OpPipeGt,
+                        Expr_IdentTail(
+                          "value",
+                          IdentTail_None
+                        ),
+                        Expr_IdentTail(
+                          "step1",
+                          IdentTail_Call(
+                            Arg_End,
+                            IdentCallClosure_None
+                          )
+                        )
+                      ),
+                      Expr_IdentTail(
+                        "step2",
+                        IdentTail_Call(
+                          Arg_Cons(
+                            Expr_IdentTail(
+                              "_",
+                              IdentTail_None
+                            ),
+                            Arg_End
+                          ),
+                          IdentCallClosure_None
+                        )
+                      )
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "z",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_If(
+                        IfCond_Expr(
+                          Expr_IfCondIdent(
+                            "value",
+                            IfCondIdent_Binary(
+                              OpGt,
+                              Expr_Int(
+                                "0"
+                              )
+                            )
+                          )
+                        ),
+                        Expr_Block(
+                          Stmt_Cons(
+                            Stmt_Expr(
+                              Expr_IdentTail(
+                                "value",
+                                IdentTail_None
+                              )
+                            ),
+                            Stmt_End
+                          ),
+                          TailExpr_None
+                        ),
+                        Expr_Block(
+                          Stmt_Cons(
+                            Stmt_Expr(
+                              Expr_Int(
+                                "0"
+                              )
+                            ),
+                            Stmt_End
+                          ),
+                          TailExpr_None
+                        )
+                      )
+                    ),
+                    Stmt_Cons(
+                      Stmt_Return(
+                        Expr_Binary(
+                          OpAdd,
+                          Expr_Binary(
+                            OpAdd,
+                            Expr_IdentTail(
+                              "x",
+                              IdentTail_None
+                            ),
+                            Expr_IdentTail(
+                              "y",
+                              IdentTail_None
+                            )
+                          ),
+                          Expr_IdentTail(
+                            "z",
+                            IdentTail_None
+                          )
+                        )
+                      ),
+                      Stmt_End
+                    )
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

@@ -1,0 +1,6 @@
+namespace parser.error.route.missing.ns
+
+def missing_via_namespace(value: i64): i64 = {
+    let routed = (value via)
+    routed
+}

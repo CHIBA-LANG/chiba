@@ -1,62 +1,112 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=7] leading=[] Ident("strings") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=9] leading=[] Ident("multiline") trailing=[]
-[1:39 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=9] leading=[] Ident("multiline") trailing=[]
-[3:14 len=1] leading=[] LParen trailing=[]
-[3:15 len=4] leading=[] Ident("name") trailing=[]
-[3:19 len=1] leading=[] Colon trailing=[]
-[3:21 len=6] leading=[] Ident("String") trailing=[]
-[3:27 len=1] leading=[] Comma trailing=[]
-[3:29 len=2] leading=[] Ident("id") trailing=[]
-[3:31 len=1] leading=[] Colon trailing=[]
-[3:33 len=3] leading=[] Ident("i64") trailing=[]
-[3:36 len=1] leading=[] RParen trailing=[]
-[3:37 len=1] leading=[] Colon trailing=[]
-[3:39 len=6] leading=[] Ident("String") trailing=[]
-[3:46 len=1] leading=[] Eq trailing=[]
-[3:48 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=6] leading=[] Ident("normal") trailing=[]
-[4:16 len=1] leading=[] Eq trailing=[]
-[4:18 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[4:19 len=13] leading=[] StringChunk("hello\nworld\n$") trailing=[]
-[6:2 len=1] leading=[] StringExprStart trailing=[]
-[6:3 len=4] leading=[] Ident("name") trailing=[]
-[6:7 len=1] leading=[] StringExprEnd trailing=[]
-[6:8 len=1] leading=[] StringEnd trailing=[]
-[6:9 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=3] leading=[] KwLet trailing=[]
-[7:9 len=9] leading=[] Ident("delimited") trailing=[]
-[7:19 len=1] leading=[] Eq trailing=[]
-[7:21 len=3] leading=[] StringStart("", raw=0, hashes=2) trailing=[]
-[7:24 len=13] leading=[] StringChunk("\nfirst line\n$") trailing=[]
-[9:2 len=1] leading=[] StringExprStart trailing=[]
-[9:3 len=2] leading=[] Ident("id") trailing=[]
-[9:5 len=1] leading=[] StringExprEnd trailing=[]
-[9:6 len=1] leading=[] StringChunk("\n") trailing=[]
-[10:1 len=1] leading=[] StringEnd trailing=[]
-[10:4 len=5] leading=[] Newline("\n    ") trailing=[]
-[11:5 len=3] leading=[] KwLet trailing=[]
-[11:9 len=9] leading=[] Ident("raw_multi") trailing=[]
-[11:19 len=1] leading=[] Eq trailing=[]
-[11:21 len=1] leading=[] StringStart("", raw=1, hashes=2) trailing=[]
-[11:25 len=2] leading=[] StringChunk("\n$") trailing=[]
-[12:2 len=1] leading=[] StringChunk("{") trailing=[]
-[12:3 len=4] leading=[] StringChunk("name") trailing=[]
-[12:7 len=1] leading=[] StringChunk("}") trailing=[]
-[12:8 len=24] leading=[] StringChunk(" stays text in raw mode\n") trailing=[]
-[13:1 len=1] leading=[] StringEnd trailing=[]
-[13:4 len=5] leading=[] Newline("\n    ") trailing=[]
-[14:5 len=6] leading=[] KwReturn trailing=[]
-[14:12 len=6] leading=[] Ident("normal") trailing=[]
-[14:18 len=2] leading=[] RBrace trailing=[]
-[15:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "strings",
+            Path_Cons(
+              "multiline",
+              Path_End
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "multiline",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "name",
+                Type_Path(
+                  "String",
+                  Type_Tail_End
+                )
+              ),
+              Param_Cons(
+                Param(
+                  "id",
+                  Type_Path(
+                    "i64",
+                    Type_Tail_End
+                  )
+                ),
+                Param_End
+              )
+            ),
+            Type_Path(
+              "String",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "normal",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_String
+                ),
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_IdentStart(
+                      "delimited",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_String
+                  ),
+                  Stmt_Cons(
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "raw_multi",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_String
+                    ),
+                    Stmt_Cons(
+                      Stmt_Return(
+                        Expr_IdentTail(
+                          "normal",
+                          IdentTail_None
+                        )
+                      ),
+                      Stmt_End
+                    )
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

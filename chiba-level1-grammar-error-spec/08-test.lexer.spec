@@ -1,23 +1,46 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=8] leading=[] Ident("trailing") trailing=[]
-[1:32 len=1] leading=[] Dot trailing=[]
-[1:33 len=8] leading=[] Ident("operator") trailing=[]
-[1:41 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=17] leading=[] Ident("trailing_operator") trailing=[]
-[3:22 len=1] leading=[] LParen trailing=[]
-[3:23 len=1] leading=[] RParen trailing=[]
-[3:24 len=1] leading=[] Colon trailing=[]
-[3:26 len=3] leading=[] Ident("i64") trailing=[]
-[3:30 len=1] leading=[] Eq trailing=[]
-[3:32 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=1] leading=[] IntLit("1") trailing=[]
-[4:14 len=2] leading=[] Plus trailing=[]
-[5:1 len=1] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=21,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[5:1 len=1] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "trailing",
+            Path_Cons(
+              "operator",
+              Path_End
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "trailing_operator",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Null,
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

@@ -1,44 +1,69 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=4] leading=[] Ident("kwif") trailing=[]
-[1:28 len=1] leading=[] Dot trailing=[]
-[1:29 len=5] leading=[] Ident("kwlet") trailing=[]
-[1:34 len=1] leading=[] Dot trailing=[]
-[1:35 len=7] leading=[] Ident("missing") trailing=[]
-[1:42 len=1] leading=[] Dot trailing=[]
-[1:43 len=2] leading=[] Ident("eq") trailing=[]
-[1:45 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=17] leading=[] Ident("if_let_missing_eq") trailing=[]
-[3:22 len=1] leading=[] LParen trailing=[]
-[3:23 len=5] leading=[] Ident("value") trailing=[]
-[3:28 len=1] leading=[] Colon trailing=[]
-[3:30 len=6] leading=[] Ident("Option") trailing=[]
-[3:36 len=1] leading=[] LBracket trailing=[]
-[3:37 len=3] leading=[] Ident("i64") trailing=[]
-[3:40 len=1] leading=[] RBracket trailing=[]
-[3:41 len=1] leading=[] RParen trailing=[]
-[3:42 len=1] leading=[] Colon trailing=[]
-[3:44 len=3] leading=[] Ident("i64") trailing=[]
-[3:48 len=1] leading=[] Eq trailing=[]
-[3:50 len=6] leading=[] LBrace trailing=[]
-[4:5 len=2] leading=[] KwIf trailing=[]
-[4:8 len=3] leading=[] KwLet trailing=[]
-[4:12 len=4] leading=[] Ident("Some") trailing=[]
-[4:16 len=1] leading=[] LParen trailing=[]
-[4:17 len=1] leading=[] Ident("x") trailing=[]
-[4:18 len=1] leading=[] RParen trailing=[]
-[4:20 len=5] leading=[] Ident("value") trailing=[]
-[4:26 len=10] leading=[] LBrace trailing=[]
-[5:9 len=6] leading=[] KwReturn trailing=[]
-[5:16 len=1] leading=[] Ident("x") trailing=[]
-[5:17 len=6] leading=[] RBrace trailing=[]
-[6:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=6] leading=[] KwReturn trailing=[]
-[7:12 len=1] leading=[] IntLit("0") trailing=[]
-[7:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=39,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[6:6 len=5] Token,
+    next_token=[7:5 len=6] Token,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwif",
+            Path_Cons(
+              "kwlet",
+              Path_Cons(
+                "missing",
+                Path_Cons(
+                  "eq",
+                  Path_End
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "if_let_missing_eq",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "value",
+                Type_Path(
+                  "Option",
+                  Type_Tail_Generic(
+                    TypeArg_Cons(
+                      Type_Path(
+                        "i64",
+                        Type_Tail_End
+                      ),
+                      TypeArg_End
+                    )
+                  )
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Null,
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

@@ -1,36 +1,52 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=5] leading=[] Ident("kwfor") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=3] leading=[] Ident("bad") trailing=[]
-[1:33 len=1] leading=[] Dot trailing=[]
-[1:34 len=5] leading=[] Ident("label") trailing=[]
-[1:39 len=1] leading=[] Dot trailing=[]
-[1:40 len=8] leading=[] Ident("position") trailing=[]
-[1:48 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=22] leading=[] Ident("for_bad_label_position") trailing=[]
-[3:27 len=1] leading=[] LParen trailing=[]
-[3:28 len=1] leading=[] RParen trailing=[]
-[3:29 len=1] leading=[] Colon trailing=[]
-[3:31 len=3] leading=[] Ident("i64") trailing=[]
-[3:35 len=1] leading=[] Eq trailing=[]
-[3:37 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwFor trailing=[]
-[4:9 len=4] leading=[] Ident("done") trailing=[]
-[4:13 len=1] leading=[] LParen trailing=[]
-[4:14 len=1] leading=[] RParen trailing=[]
-[4:16 len=6] leading=[] Atom("outer") trailing=[]
-[4:23 len=10] leading=[] LBrace trailing=[]
-[5:9 len=5] leading=[] KwBreak trailing=[]
-[5:15 len=6] leading=[] Atom("outer") trailing=[]
-[5:21 len=6] leading=[] RBrace trailing=[]
-[6:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=6] leading=[] KwReturn trailing=[]
-[7:12 len=1] leading=[] IntLit("0") trailing=[]
-[7:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=31,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[6:6 len=5] Token,
+    next_token=[7:5 len=6] Token,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwfor",
+            Path_Cons(
+              "bad",
+              Path_Cons(
+                "label",
+                Path_Cons(
+                  "position",
+                  Path_End
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "for_bad_label_position",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Null,
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

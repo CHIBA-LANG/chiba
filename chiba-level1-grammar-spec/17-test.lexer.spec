@@ -1,98 +1,225 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=4] leading=[] Ident("defs") trailing=[]
-[1:26 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=4] leading=[] KwType trailing=[]
-[3:6 len=6] leading=[] Ident("UserId") trailing=[]
-[3:13 len=1] leading=[] Eq trailing=[]
-[3:15 len=3] leading=[] Ident("i64") trailing=[]
-[3:18 len=2] leading=[] Newline("\n\n") trailing=[]
-[5:1 len=4] leading=[] KwData trailing=[]
-[5:6 len=6] leading=[] Ident("Option") trailing=[]
-[5:12 len=1] leading=[] LBracket trailing=[]
-[5:13 len=1] leading=[] Ident("T") trailing=[]
-[5:14 len=1] leading=[] RBracket trailing=[]
-[5:16 len=6] leading=[] LBrace trailing=[]
-[6:5 len=4] leading=[] Ident("Some") trailing=[]
-[6:9 len=1] leading=[] LParen trailing=[]
-[6:10 len=1] leading=[] Ident("T") trailing=[]
-[6:11 len=1] leading=[] RParen trailing=[]
-[6:12 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=4] leading=[] Ident("None") trailing=[]
-[7:9 len=2] leading=[] RBrace trailing=[]
-[8:2 len=2] leading=[] Newline("\n\n") trailing=[]
-[10:1 len=5] leading=[] KwUnion trailing=[]
-[10:7 len=4] leading=[] Ident("Bits") trailing=[]
-[10:12 len=6] leading=[] LBrace trailing=[]
-[11:5 len=4] leading=[] Ident("u32v") trailing=[]
-[11:9 len=1] leading=[] Colon trailing=[]
-[11:11 len=3] leading=[] Ident("u32") trailing=[]
-[11:14 len=6] leading=[] Comma trailing=[]
-[12:5 len=4] leading=[] Ident("f32v") trailing=[]
-[12:9 len=1] leading=[] Colon trailing=[]
-[12:11 len=3] leading=[] Ident("f32") trailing=[]
-[12:14 len=2] leading=[] Comma trailing=[]
-[13:1 len=1] leading=[] RBrace trailing=[]
-[13:2 len=2] leading=[] Newline("\n\n") trailing=[]
-[15:1 len=3] leading=[] KwDef trailing=[]
-[15:5 len=2] leading=[] Ident("pi") trailing=[]
-[15:7 len=1] leading=[] Colon trailing=[]
-[15:9 len=3] leading=[] Ident("f32") trailing=[]
-[15:13 len=1] leading=[] Eq trailing=[]
-[15:15 len=9] leading=[] FloatLit("3.1415926") trailing=[]
-[15:24 len=2] leading=[] Newline("\n\n") trailing=[]
-[17:1 len=9] leading=[] KwPrivate trailing=[]
-[18:1 len=5] leading=[] KwDef trailing=[]
-[19:1 len=6] leading=[] Ident("helper") trailing=[]
-[19:7 len=6] leading=[] LParen trailing=[]
-[20:5 len=1] leading=[] Ident("x") trailing=[]
-[20:6 len=1] leading=[] Colon trailing=[]
-[20:8 len=3] leading=[] Ident("i64") trailing=[]
-[20:11 len=2] leading=[] RParen trailing=[]
-[21:2 len=3] leading=[] Colon trailing=[]
-[22:1 len=3] leading=[] Ident("i64") trailing=[]
-[22:5 len=1] leading=[] Eq trailing=[]
-[22:7 len=6] leading=[] LBrace trailing=[]
-[23:5 len=6] leading=[] KwReturn trailing=[]
-[23:12 len=1] leading=[] Ident("x") trailing=[]
-[23:14 len=7] leading=[] Plus trailing=[]
-[24:6 len=1] leading=[] IntLit("1") trailing=[]
-[24:7 len=2] leading=[] RBrace trailing=[]
-[25:2 len=2] leading=[] Newline("\n\n") trailing=[]
-[27:1 len=3] leading=[] KwDef trailing=[]
-[27:5 len=4] leading=[] Ident("Vec2") trailing=[]
-[27:9 len=1] leading=[] Dot trailing=[]
-[27:10 len=4] leading=[] Ident("norm") trailing=[]
-[27:14 len=1] leading=[] LParen trailing=[]
-[27:15 len=4] leading=[] Ident("self") trailing=[]
-[27:19 len=1] leading=[] RParen trailing=[]
-[27:20 len=1] leading=[] Colon trailing=[]
-[27:22 len=3] leading=[] Ident("f32") trailing=[]
-[27:26 len=1] leading=[] Eq trailing=[]
-[27:28 len=6] leading=[] LBrace trailing=[]
-[28:5 len=6] leading=[] KwReturn trailing=[]
-[28:12 len=4] leading=[] Ident("sqrt") trailing=[]
-[28:16 len=1] leading=[] LParen trailing=[]
-[28:17 len=4] leading=[] Ident("self") trailing=[]
-[28:21 len=1] leading=[] Dot trailing=[]
-[28:22 len=1] leading=[] Ident("x") trailing=[]
-[28:24 len=1] leading=[] Star trailing=[]
-[28:26 len=4] leading=[] Ident("self") trailing=[]
-[28:30 len=1] leading=[] Dot trailing=[]
-[28:31 len=1] leading=[] Ident("x") trailing=[]
-[28:33 len=1] leading=[] Plus trailing=[]
-[28:35 len=4] leading=[] Ident("self") trailing=[]
-[28:39 len=1] leading=[] Dot trailing=[]
-[28:40 len=1] leading=[] Ident("y") trailing=[]
-[28:42 len=1] leading=[] Star trailing=[]
-[28:44 len=4] leading=[] Ident("self") trailing=[]
-[28:48 len=1] leading=[] Dot trailing=[]
-[28:49 len=1] leading=[] Ident("y") trailing=[]
-[28:50 len=1] leading=[] RParen trailing=[]
-[28:51 len=2] leading=[] RBrace trailing=[]
-[29:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "defs",
+            Path_End
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Type(
+        TypeItem(
+          "UserId",
+          Type_Path(
+            "i64",
+            Type_Tail_End
+          )
+        )
+      ),
+      Item_Cons(
+        Item_Adt(
+          AdtItem(
+            "Option",
+            Generic_Cons(
+              GenericParam(
+                "T",
+                GenericBound_End
+              ),
+              Generic_End
+            ),
+            AdtVariant_Cons(
+              AdtVariant(
+                "Some",
+                AdtVariantArg_Ident(
+                  "T",
+                  AdtVariantArg_Type(
+                    Type_Tail_End,
+                    TypeArg_End
+                  )
+                )
+              ),
+              AdtVariant_Cons(
+                AdtVariant(
+                  "None",
+                  TypeArg_End
+                ),
+                AdtVariant_End
+              )
+            )
+          )
+        ),
+        Item_Cons(
+          Item_Union(
+            UnionItem(
+              "Bits",
+              UnionField_Cons(
+                UnionField(
+                  "u32v",
+                  Type_Path(
+                    "u32",
+                    Type_Tail_End
+                  )
+                ),
+                UnionField_Cons(
+                  UnionField(
+                    "f32v",
+                    Type_Path(
+                      "f32",
+                      Type_Tail_End
+                    )
+                  ),
+                  UnionField_End
+                )
+              )
+            )
+          ),
+          Item_Cons(
+            Item_Def(
+              DefItem2(
+                "pi",
+                DefConst(
+                  Type_Path(
+                    "f32",
+                    Type_Tail_End
+                  ),
+                  Expr_Float(
+                    "3.1415926"
+                  )
+                )
+              )
+            ),
+            Item_Cons(
+              Item_Def(
+                DefItem2(
+                  "helper",
+                  DefFun(
+                    Generic_End,
+                    Param_Cons(
+                      Param(
+                        "x",
+                        Type_Path(
+                          "i64",
+                          Type_Tail_End
+                        )
+                      ),
+                      Param_End
+                    ),
+                    Type_Path(
+                      "i64",
+                      Type_Tail_End
+                    ),
+                    Expr_Block(
+                      Stmt_Cons(
+                        Stmt_Return(
+                          Expr_Binary(
+                            OpAdd,
+                            Expr_IdentTail(
+                              "x",
+                              IdentTail_None
+                            ),
+                            Expr_Int(
+                              "1"
+                            )
+                          )
+                        ),
+                        Stmt_End
+                      ),
+                      TailExpr_None
+                    )
+                  )
+                )
+              ),
+              Item_Cons(
+                Item_Def(
+                  DefItem2(
+                    "Vec2",
+                    DefFun(
+                      Generic_End,
+                      Param_Cons(
+                        Param(
+                          "self",
+                          Type_Path(
+                            "",
+                            Type_Tail_End
+                          )
+                        ),
+                        Param_End
+                      ),
+                      Type_Path(
+                        "f32",
+                        Type_Tail_End
+                      ),
+                      Expr_Block(
+                        Stmt_Cons(
+                          Stmt_Return(
+                            Expr_IdentTail(
+                              "sqrt",
+                              IdentTail_Call(
+                                Arg_Cons(
+                                  Expr_Binary(
+                                    OpAdd,
+                                    Expr_Binary(
+                                      OpMul,
+                                      Expr_Field(
+                                        Expr_IdentTail(
+                                          "self",
+                                          IdentTail_None
+                                        ),
+                                        "x"
+                                      ),
+                                      Expr_Field(
+                                        Expr_IdentTail(
+                                          "self",
+                                          IdentTail_None
+                                        ),
+                                        "x"
+                                      )
+                                    ),
+                                    Expr_Binary(
+                                      OpMul,
+                                      Expr_Field(
+                                        Expr_IdentTail(
+                                          "self",
+                                          IdentTail_None
+                                        ),
+                                        "y"
+                                      ),
+                                      Expr_Field(
+                                        Expr_IdentTail(
+                                          "self",
+                                          IdentTail_None
+                                        ),
+                                        "y"
+                                      )
+                                    )
+                                  ),
+                                  Arg_End
+                                ),
+                                IdentCallClosure_None
+                              )
+                            )
+                          ),
+                          Stmt_End
+                        ),
+                        TailExpr_None
+                      )
+                    )
+                  )
+                ),
+                Item_End
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
 0

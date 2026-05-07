@@ -1,61 +1,142 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=6] leading=[] Ident("memory") trailing=[]
-[1:28 len=1] leading=[] Dot trailing=[]
-[1:29 len=5] leading=[] Ident("types") trailing=[]
-[1:34 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=12] leading=[] Ident("capabilities") trailing=[]
-[3:17 len=1] leading=[] LParen trailing=[]
-[3:18 len=1] leading=[] Ident("p") trailing=[]
-[3:19 len=1] leading=[] Colon trailing=[]
-[3:21 len=3] leading=[] Ident("Ptr") trailing=[]
-[3:24 len=1] leading=[] LBracket trailing=[]
-[3:25 len=2] leading=[] Ident("u8") trailing=[]
-[3:27 len=1] leading=[] RBracket trailing=[]
-[3:28 len=1] leading=[] Comma trailing=[]
-[3:30 len=1] leading=[] Ident("r") trailing=[]
-[3:31 len=1] leading=[] Colon trailing=[]
-[3:33 len=3] leading=[] Ident("Ref") trailing=[]
-[3:36 len=1] leading=[] LBracket trailing=[]
-[3:37 len=3] leading=[] Ident("i64") trailing=[]
-[3:40 len=1] leading=[] RBracket trailing=[]
-[3:41 len=1] leading=[] Comma trailing=[]
-[3:43 len=1] leading=[] Ident("u") trailing=[]
-[3:44 len=1] leading=[] Colon trailing=[]
-[3:46 len=9] leading=[] Ident("UnsafeRef") trailing=[]
-[3:55 len=1] leading=[] LBracket trailing=[]
-[3:56 len=4] leading=[] Ident("File") trailing=[]
-[3:60 len=1] leading=[] RBracket trailing=[]
-[3:61 len=1] leading=[] RParen trailing=[]
-[3:62 len=1] leading=[] Colon trailing=[]
-[3:64 len=1] leading=[] LParen trailing=[]
-[3:65 len=1] leading=[] RParen trailing=[]
-[3:67 len=1] leading=[] Eq trailing=[]
-[3:69 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=1] leading=[] Ident("x") trailing=[]
-[4:11 len=1] leading=[] Eq trailing=[]
-[4:13 len=1] leading=[] Ident("p") trailing=[]
-[4:14 len=2] leading=[] DotStar trailing=[]
-[4:16 len=5] leading=[] Newline("\n    ") trailing=[]
-[5:5 len=1] leading=[] Ident("r") trailing=[]
-[5:7 len=8] leading=[] ColonEq trailing=[]
-[6:5 len=1] leading=[] Ident("r") trailing=[]
-[6:6 len=6] leading=[] Dot trailing=[]
-[7:5 len=4] leading=[] Ident("read") trailing=[]
-[7:9 len=7] leading=[] LParen trailing=[]
-[9:5 len=1] leading=[] RParen trailing=[]
-[9:7 len=7] leading=[] Plus trailing=[]
-[10:5 len=1] leading=[] IntLit("1") trailing=[]
-[10:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[11:5 len=6] leading=[] KwReturn trailing=[]
-[11:12 len=1] leading=[] LParen trailing=[]
-[11:13 len=1] leading=[] RParen trailing=[]
-[11:14 len=2] leading=[] RBrace trailing=[]
-[12:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "memory",
+            Path_Cons(
+              "types",
+              Path_End
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "capabilities",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "p",
+                Type_Path(
+                  "Ptr",
+                  Type_Tail_Generic(
+                    TypeArg_Cons(
+                      Type_Path(
+                        "u8",
+                        Type_Tail_End
+                      ),
+                      TypeArg_End
+                    )
+                  )
+                )
+              ),
+              Param_Cons(
+                Param(
+                  "r",
+                  Type_Path(
+                    "Ref",
+                    Type_Tail_Generic(
+                      TypeArg_Cons(
+                        Type_Path(
+                          "i64",
+                          Type_Tail_End
+                        ),
+                        TypeArg_End
+                      )
+                    )
+                  )
+                ),
+                Param_Cons(
+                  Param(
+                    "u",
+                    Type_Path(
+                      "UnsafeRef",
+                      Type_Tail_Generic(
+                        TypeArg_Cons(
+                          Type_Path(
+                            "File",
+                            Type_Tail_End
+                          ),
+                          TypeArg_End
+                        )
+                      )
+                    )
+                  ),
+                  Param_End
+                )
+              )
+            ),
+            Type_Unit,
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "x",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Deref(
+                    Expr_IdentTail(
+                      "p",
+                      IdentTail_None
+                    )
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_Expr(
+                    Expr_Assign(
+                      Expr_IdentTail(
+                        "r",
+                        IdentTail_None
+                      ),
+                      Expr_Binary(
+                        OpAdd,
+                        Expr_Call(
+                          Expr_Field(
+                            Expr_IdentTail(
+                              "r",
+                              IdentTail_None
+                            ),
+                            "read"
+                          ),
+                          Arg_End
+                        ),
+                        Expr_Int(
+                          "1"
+                        )
+                      )
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_Return(
+                      Expr_Paren(
+                        ExprList_End
+                      )
+                    ),
+                    Stmt_End
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

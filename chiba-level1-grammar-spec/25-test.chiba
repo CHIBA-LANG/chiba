@@ -1,0 +1,7 @@
+namespace parser.spec.cast.route.generic
+
+def route[T: Nominal + N2 + {x| id: i64, name: String}, F](value: T, mapper: F): i64 = {
+    let casted = value as primitive
+    let routed = f[T, F](casted, mapper) via runtime.dispatch
+    routed
+}

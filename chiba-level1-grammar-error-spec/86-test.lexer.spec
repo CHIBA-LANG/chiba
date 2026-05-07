@@ -1,18 +1,18 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("broken") trailing=[]
-[1:17 len=2] leading=[] DotDot trailing=[]
-[1:19 len=4] leading=[] Ident("path") trailing=[]
-[1:23 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=20] leading=[] Ident("after_bad_namespace2") trailing=[]
-[3:25 len=1] leading=[] LParen trailing=[]
-[3:26 len=1] leading=[] RParen trailing=[]
-[3:27 len=1] leading=[] Colon trailing=[]
-[3:29 len=3] leading=[] Ident("i64") trailing=[]
-[3:33 len=1] leading=[] Eq trailing=[]
-[3:35 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=1] leading=[] IntLit("0") trailing=[]
-[4:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=2,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[1:11 len=6] Token,
+    next_token=[1:17 len=2] Token,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "broken",
+        Path_End
+      )
+    ),
+    Item_End
+  )
+)
 0

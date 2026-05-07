@@ -1,37 +1,45 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=6] leading=[] Ident("kwdata") trailing=[]
-[1:30 len=1] leading=[] Dot trailing=[]
-[1:31 len=7] leading=[] Ident("missing") trailing=[]
-[1:38 len=1] leading=[] Dot trailing=[]
-[1:39 len=6] leading=[] Ident("rbrace") trailing=[]
-[1:45 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=4] leading=[] KwData trailing=[]
-[3:6 len=4] leading=[] Ident("Pair") trailing=[]
-[3:10 len=1] leading=[] LBracket trailing=[]
-[3:11 len=1] leading=[] Ident("T") trailing=[]
-[3:12 len=1] leading=[] RBracket trailing=[]
-[3:14 len=6] leading=[] LBrace trailing=[]
-[4:5 len=4] leading=[] Ident("Pair") trailing=[]
-[4:9 len=1] leading=[] LParen trailing=[]
-[4:10 len=1] leading=[] Ident("T") trailing=[]
-[4:11 len=1] leading=[] Comma trailing=[]
-[4:13 len=1] leading=[] Ident("T") trailing=[]
-[4:14 len=1] leading=[] RParen trailing=[]
-[4:15 len=2] leading=[] Newline("\n\n") trailing=[]
-[6:1 len=3] leading=[] KwDef trailing=[]
-[6:5 len=14] leading=[] Ident("after_bad_data") trailing=[]
-[6:19 len=1] leading=[] LParen trailing=[]
-[6:20 len=1] leading=[] RParen trailing=[]
-[6:21 len=1] leading=[] Colon trailing=[]
-[6:23 len=3] leading=[] Ident("i64") trailing=[]
-[6:27 len=1] leading=[] Eq trailing=[]
-[6:29 len=6] leading=[] LBrace trailing=[]
-[7:5 len=6] leading=[] KwReturn trailing=[]
-[7:12 len=1] leading=[] IntLit("0") trailing=[]
-[7:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=35,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[7:13 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwdata",
+            Path_Cons(
+              "missing",
+              Path_Cons(
+                "rbrace",
+                Path_End
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Adt(
+        AdtItem(
+          "Pair",
+          Generic_Cons(
+            GenericParam(
+              "T",
+              GenericBound_End
+            ),
+            Generic_End
+          ),
+          Null
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

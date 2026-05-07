@@ -1,28 +1,8 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=7] leading=[] Ident("leading") trailing=[]
-[1:31 len=1] leading=[] Dot trailing=[]
-[1:32 len=5] leading=[] Ident("param") trailing=[]
-[1:37 len=1] leading=[] Dot trailing=[]
-[1:38 len=5] leading=[] Ident("comma") trailing=[]
-[1:43 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=19] leading=[] Ident("leading_param_comma") trailing=[]
-[3:24 len=1] leading=[] LParen trailing=[]
-[3:25 len=1] leading=[] Comma trailing=[]
-[3:27 len=1] leading=[] Ident("x") trailing=[]
-[3:28 len=1] leading=[] Colon trailing=[]
-[3:30 len=3] leading=[] Ident("i64") trailing=[]
-[3:33 len=1] leading=[] RParen trailing=[]
-[3:34 len=1] leading=[] Colon trailing=[]
-[3:36 len=3] leading=[] Ident("i64") trailing=[]
-[3:40 len=1] leading=[] Eq trailing=[]
-[3:42 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=1] leading=[] Ident("x") trailing=[]
-[4:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=14,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[3:24 len=1] Token,
+    next_token=[3:25 len=1] Token
+)
 0

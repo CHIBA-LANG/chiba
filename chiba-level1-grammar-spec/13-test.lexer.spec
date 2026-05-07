@@ -1,83 +1,238 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=8] leading=[] Ident("patterns") trailing=[]
-[1:30 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=8] leading=[] Ident("patterns") trailing=[]
-[3:13 len=1] leading=[] LParen trailing=[]
-[3:14 len=5] leading=[] Ident("value") trailing=[]
-[3:19 len=1] leading=[] Colon trailing=[]
-[3:21 len=6] leading=[] Ident("Option") trailing=[]
-[3:27 len=1] leading=[] LBracket trailing=[]
-[3:28 len=5] leading=[] Ident("Point") trailing=[]
-[3:33 len=1] leading=[] RBracket trailing=[]
-[3:34 len=1] leading=[] RParen trailing=[]
-[3:35 len=1] leading=[] Colon trailing=[]
-[3:37 len=3] leading=[] Ident("i64") trailing=[]
-[3:41 len=1] leading=[] Eq trailing=[]
-[3:43 len=6] leading=[] LBrace trailing=[]
-[4:5 len=5] leading=[] KwMatch trailing=[]
-[4:11 len=5] leading=[] Ident("value") trailing=[]
-[4:17 len=10] leading=[] LBrace trailing=[]
-[5:9 len=5] leading=[] Ident("whole") trailing=[]
-[5:15 len=1] leading=[] At trailing=[]
-[5:17 len=4] leading=[] Ident("Some") trailing=[]
-[5:21 len=1] leading=[] LParen trailing=[]
-[5:22 len=1] leading=[] LBrace trailing=[]
-[5:24 len=1] leading=[] Ident("x") trailing=[]
-[5:25 len=1] leading=[] Comma trailing=[]
-[5:27 len=1] leading=[] Ident("y") trailing=[]
-[5:28 len=1] leading=[] Colon trailing=[]
-[5:30 len=5] leading=[] Ident("inner") trailing=[]
-[5:36 len=1] leading=[] At trailing=[]
-[5:38 len=4] leading=[] Ident("Some") trailing=[]
-[5:42 len=1] leading=[] LParen trailing=[]
-[5:43 len=1] leading=[] Ident("z") trailing=[]
-[5:44 len=1] leading=[] RParen trailing=[]
-[5:46 len=1] leading=[] RBrace trailing=[]
-[5:47 len=1] leading=[] RParen trailing=[]
-[5:49 len=2] leading=[] KwIf trailing=[]
-[5:52 len=1] leading=[] Ident("z") trailing=[]
-[5:54 len=1] leading=[] Gt trailing=[]
-[5:56 len=1] leading=[] IntLit("0") trailing=[]
-[5:58 len=2] leading=[] FatArrow trailing=[]
-[5:61 len=1] leading=[] Ident("z") trailing=[]
-[5:62 len=9] leading=[] Newline("\n        ") trailing=[]
-[6:9 len=4] leading=[] Ident("Some") trailing=[]
-[6:13 len=1] leading=[] LParen trailing=[]
-[6:14 len=1] leading=[] LParen trailing=[]
-[6:15 len=1] leading=[] Ident("a") trailing=[]
-[6:16 len=1] leading=[] Comma trailing=[]
-[6:18 len=1] leading=[] Ident("_") trailing=[]
-[6:19 len=1] leading=[] RParen trailing=[]
-[6:20 len=1] leading=[] RParen trailing=[]
-[6:22 len=2] leading=[] FatArrow trailing=[]
-[6:25 len=1] leading=[] Ident("a") trailing=[]
-[6:26 len=9] leading=[] Newline("\n        ") trailing=[]
-[7:9 len=4] leading=[] Ident("None") trailing=[]
-[7:14 len=2] leading=[] FatArrow trailing=[]
-[7:17 len=1] leading=[] IntLit("0") trailing=[]
-[7:18 len=9] leading=[] Newline("\n        ") trailing=[]
-[8:9 len=3] leading=[] Atom("ok") trailing=[]
-[8:13 len=2] leading=[] FatArrow trailing=[]
-[8:16 len=1] leading=[] IntLit("1") trailing=[]
-[8:17 len=9] leading=[] Newline("\n        ") trailing=[]
-[9:9 len=1] leading=[] IntLit("0") trailing=[]
-[9:11 len=2] leading=[] FatArrow trailing=[]
-[9:14 len=1] leading=[] IntLit("2") trailing=[]
-[9:15 len=9] leading=[] Newline("\n        ") trailing=[]
-[10:9 len=4] leading=[] KwTrue trailing=[]
-[10:14 len=2] leading=[] FatArrow trailing=[]
-[10:17 len=1] leading=[] IntLit("3") trailing=[]
-[10:18 len=9] leading=[] Newline("\n        ") trailing=[]
-[11:9 len=1] leading=[] Ident("_") trailing=[]
-[11:11 len=2] leading=[] FatArrow trailing=[]
-[11:14 len=1] leading=[] IntLit("4") trailing=[]
-[11:15 len=6] leading=[] RBrace trailing=[]
-[12:6 len=2] leading=[] RBrace trailing=[]
-[13:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "patterns",
+            Path_End
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "patterns",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "value",
+                Type_Path(
+                  "Option",
+                  Type_Tail_Generic(
+                    TypeArg_Cons(
+                      Type_Path(
+                        "Point",
+                        Type_Tail_End
+                      ),
+                      TypeArg_End
+                    )
+                  )
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_Expr(
+                  Expr_Match(
+                    Expr_MatchIdent(
+                      "value",
+                      MatchIdent_Name
+                    ),
+                    MatchArm_Cons(
+                      MatchArm(
+                        Pattern_IdentStart(
+                          "whole",
+                          PatternAfterIdent_Bind(
+                            Pattern_IdentStart(
+                              "Some",
+                              PatternAfterIdent_Atom(
+                                PatternIdent_Call(
+                                  PatternList_Cons(
+                                    Pattern_Record(
+                                      PatternRecord_Cons(
+                                        PatternRecordField(
+                                          "x",
+                                          Pattern_IdentStart(
+                                            "",
+                                            PatternAfterIdent_Atom(
+                                              PatternIdent_Name
+                                            )
+                                          )
+                                        ),
+                                        PatternRecord_Cons(
+                                          PatternRecordField(
+                                            "y",
+                                            Pattern_IdentStart(
+                                              "inner",
+                                              PatternAfterIdent_Bind(
+                                                Pattern_IdentStart(
+                                                  "Some",
+                                                  PatternAfterIdent_Atom(
+                                                    PatternIdent_Call(
+                                                      PatternList_Cons(
+                                                        Pattern_IdentStart(
+                                                          "z",
+                                                          PatternAfterIdent_Atom(
+                                                            PatternIdent_Name
+                                                          )
+                                                        ),
+                                                        PatternList_End
+                                                      )
+                                                    )
+                                                  )
+                                                )
+                                              )
+                                            )
+                                          ),
+                                          PatternRecord_End
+                                        )
+                                      )
+                                    ),
+                                    PatternList_End
+                                  )
+                                )
+                              )
+                            )
+                          )
+                        ),
+                        MatchGuard_Some(
+                          Expr_Binary(
+                            OpGt,
+                            Expr_IdentTail(
+                              "z",
+                              IdentTail_None
+                            ),
+                            Expr_Int(
+                              "0"
+                            )
+                          )
+                        ),
+                        Expr_IdentTail(
+                          "z",
+                          IdentTail_None
+                        )
+                      ),
+                      MatchArm_Cons(
+                        MatchArm(
+                          Pattern_IdentStart(
+                            "Some",
+                            PatternAfterIdent_Atom(
+                              PatternIdent_Call(
+                                PatternList_Cons(
+                                  Pattern_Paren(
+                                    Pattern_IdentStart(
+                                      "a",
+                                      PatternAfterIdent_Atom(
+                                        PatternIdent_Name
+                                      )
+                                    ),
+                                    PatternList_Cons(
+                                      Pattern_IdentStart(
+                                        "_",
+                                        PatternAfterIdent_Atom(
+                                          PatternIdent_Name
+                                        )
+                                      ),
+                                      PatternList_End
+                                    )
+                                  ),
+                                  PatternList_End
+                                )
+                              )
+                            )
+                          ),
+                          MatchGuard_None,
+                          Expr_IdentTail(
+                            "a",
+                            IdentTail_None
+                          )
+                        ),
+                        MatchArm_Cons(
+                          MatchArm(
+                            Pattern_IdentStart(
+                              "None",
+                              PatternAfterIdent_Atom(
+                                PatternIdent_Name
+                              )
+                            ),
+                            MatchGuard_None,
+                            Expr_Int(
+                              "0"
+                            )
+                          ),
+                          MatchArm_Cons(
+                            MatchArm(
+                              Pattern_Atom(
+                                "ok"
+                              ),
+                              MatchGuard_None,
+                              Expr_Int(
+                                "1"
+                              )
+                            ),
+                            MatchArm_Cons(
+                              MatchArm(
+                                Pattern_Int(
+                                  "0"
+                                ),
+                                MatchGuard_None,
+                                Expr_Int(
+                                  "2"
+                                )
+                              ),
+                              MatchArm_Cons(
+                                MatchArm(
+                                  Pattern_Bool(
+                                    1
+                                  ),
+                                  MatchGuard_None,
+                                  Expr_Int(
+                                    "3"
+                                  )
+                                ),
+                                MatchArm_Cons(
+                                  MatchArm(
+                                    Pattern_IdentStart(
+                                      "_",
+                                      PatternAfterIdent_Atom(
+                                        PatternIdent_Name
+                                      )
+                                    ),
+                                    MatchGuard_None,
+                                    Expr_Int(
+                                      "4"
+                                    )
+                                  ),
+                                  MatchArm_End
+                                )
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                ),
+                Stmt_End
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

@@ -1,91 +1,168 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=7] leading=[] Ident("strings") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=5] leading=[] Ident("basic") trailing=[]
-[1:35 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=7] leading=[] Ident("strings") trailing=[]
-[3:12 len=1] leading=[] LParen trailing=[]
-[3:13 len=1] leading=[] RParen trailing=[]
-[3:14 len=1] leading=[] Colon trailing=[]
-[3:16 len=3] leading=[] Ident("i32") trailing=[]
-[3:20 len=1] leading=[] Eq trailing=[]
-[3:22 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=5] leading=[] Ident("plain") trailing=[]
-[4:15 len=1] leading=[] Eq trailing=[]
-[4:17 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[4:18 len=11] leading=[] StringChunk("hello world") trailing=[]
-[4:29 len=1] leading=[] StringEnd trailing=[]
-[4:30 len=5] leading=[] Newline("\n    ") trailing=[]
-[5:5 len=3] leading=[] KwLet trailing=[]
-[5:9 len=7] leading=[] Ident("escaped") trailing=[]
-[5:17 len=1] leading=[] Eq trailing=[]
-[5:19 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[5:20 len=20] leading=[] StringChunk("line1\\nline2\\tindent") trailing=[]
-[5:40 len=1] leading=[] StringEnd trailing=[]
-[5:41 len=5] leading=[] Newline("\n    ") trailing=[]
-[6:5 len=3] leading=[] KwLet trailing=[]
-[6:9 len=6] leading=[] Ident("c_text") trailing=[]
-[6:16 len=1] leading=[] Eq trailing=[]
-[6:18 len=1] leading=[] StringStart("c", raw=0, hashes=0) trailing=[]
-[6:20 len=16] leading=[] StringChunk("hello from c abi") trailing=[]
-[6:36 len=1] leading=[] StringEnd trailing=[]
-[6:37 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=3] leading=[] KwLet trailing=[]
-[7:9 len=7] leading=[] Ident("raw_one") trailing=[]
-[7:17 len=1] leading=[] Eq trailing=[]
-[7:19 len=1] leading=[] StringStart("", raw=1, hashes=0) trailing=[]
-[7:21 len=18] leading=[] StringChunk("raw keeps \\\\n text") trailing=[]
-[7:39 len=1] leading=[] StringEnd trailing=[]
-[7:40 len=5] leading=[] Newline("\n    ") trailing=[]
-[8:5 len=3] leading=[] KwLet trailing=[]
-[8:9 len=8] leading=[] Ident("raw_hash") trailing=[]
-[8:18 len=1] leading=[] Eq trailing=[]
-[8:20 len=1] leading=[] StringStart("", raw=1, hashes=1) trailing=[]
-[8:23 len=16] leading=[] StringChunk("raw can contain ") trailing=[]
-[8:39 len=1] leading=[] StringChunk("\"") trailing=[]
-[8:40 len=6] leading=[] StringChunk("quotes") trailing=[]
-[8:46 len=1] leading=[] StringChunk("\"") trailing=[]
-[8:47 len=1] leading=[] StringEnd trailing=[]
-[8:49 len=5] leading=[] Newline("\n    ") trailing=[]
-[9:5 len=3] leading=[] KwLet trailing=[]
-[9:9 len=5] leading=[] Ident("trick") trailing=[]
-[9:15 len=1] leading=[] Eq trailing=[]
-[9:17 len=4] leading=[] StringStart("", raw=0, hashes=3) trailing=[]
-[9:21 len=2] leading=[] StringChunk("##") trailing=[]
-[9:23 len=1] leading=[] StringChunk("\"") trailing=[]
-[9:24 len=2] leading=[] StringChunk("##") trailing=[]
-[9:26 len=1] leading=[] StringChunk("\"") trailing=[]
-[9:27 len=8] leading=[] StringChunk(" \n    ;;") trailing=[]
-[10:7 len=1] leading=[] StringEnd trailing=[]
-[10:11 len=1] leading=[] Semicolon trailing=[]
-[10:12 len=6] leading=[] Semicolon trailing=[]
-[11:5 len=3] leading=[] KwLet trailing=[]
-[11:9 len=8] leading=[] Ident("prefixed") trailing=[]
-[11:18 len=1] leading=[] Eq trailing=[]
-[11:20 len=3] leading=[] StringStart("sql", raw=0, hashes=0) trailing=[]
-[11:24 len=32] leading=[] StringChunk("select * from users where id = 1") trailing=[]
-[11:56 len=1] leading=[] StringEnd trailing=[]
-[11:57 len=5] leading=[] Newline("\n    ") trailing=[]
-[12:5 len=3] leading=[] KwLet trailing=[]
-[12:9 len=12] leading=[] Ident("prefixed_raw") trailing=[]
-[12:22 len=1] leading=[] Eq trailing=[]
-[12:24 len=4] leading=[] StringStart("sql", raw=1, hashes=1) trailing=[]
-[12:30 len=7] leading=[] StringChunk("select ") trailing=[]
-[12:37 len=1] leading=[] StringChunk("\"") trailing=[]
-[12:38 len=4] leading=[] StringChunk("name") trailing=[]
-[12:42 len=1] leading=[] StringChunk("\"") trailing=[]
-[12:43 len=11] leading=[] StringChunk(" from users") trailing=[]
-[12:54 len=1] leading=[] StringEnd trailing=[]
-[12:56 len=5] leading=[] Newline("\n    ") trailing=[]
-[13:5 len=6] leading=[] KwReturn trailing=[]
-[13:12 len=1] leading=[] IntLit("0") trailing=[]
-[13:13 len=2] leading=[] RBrace trailing=[]
-[14:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "strings",
+            Path_Cons(
+              "basic",
+              Path_End
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "strings",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i32",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "plain",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_String
+                ),
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_IdentStart(
+                      "escaped",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_String
+                  ),
+                  Stmt_Cons(
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "c_text",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_String
+                    ),
+                    Stmt_Cons(
+                      Stmt_LetPatternTyped(
+                        Pattern_IdentStart(
+                          "raw_one",
+                          PatternAfterIdent_Atom(
+                            PatternIdent_Name
+                          )
+                        ),
+                        Type_Path(
+                          "",
+                          Type_Tail_End
+                        ),
+                        Expr_String
+                      ),
+                      Stmt_Cons(
+                        Stmt_LetPatternTyped(
+                          Pattern_IdentStart(
+                            "raw_hash",
+                            PatternAfterIdent_Atom(
+                              PatternIdent_Name
+                            )
+                          ),
+                          Type_Path(
+                            "",
+                            Type_Tail_End
+                          ),
+                          Expr_String
+                        ),
+                        Stmt_Cons(
+                          Stmt_LetPatternTyped(
+                            Pattern_IdentStart(
+                              "trick",
+                              PatternAfterIdent_Atom(
+                                PatternIdent_Name
+                              )
+                            ),
+                            Type_Path(
+                              "",
+                              Type_Tail_End
+                            ),
+                            Expr_String
+                          ),
+                          Stmt_Cons(
+                            Stmt_LetPatternTyped(
+                              Pattern_IdentStart(
+                                "prefixed",
+                                PatternAfterIdent_Atom(
+                                  PatternIdent_Name
+                                )
+                              ),
+                              Type_Path(
+                                "",
+                                Type_Tail_End
+                              ),
+                              Expr_String
+                            ),
+                            Stmt_Cons(
+                              Stmt_LetPatternTyped(
+                                Pattern_IdentStart(
+                                  "prefixed_raw",
+                                  PatternAfterIdent_Atom(
+                                    PatternIdent_Name
+                                  )
+                                ),
+                                Type_Path(
+                                  "",
+                                  Type_Tail_End
+                                ),
+                                Expr_String
+                              ),
+                              Stmt_Cons(
+                                Stmt_Return(
+                                  Expr_Int(
+                                    "0"
+                                  )
+                                ),
+                                Stmt_End
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

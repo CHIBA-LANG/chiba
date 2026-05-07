@@ -1,47 +1,61 @@
-[1:1 len=8] leading=[] FileAttrStart trailing=[]
-[2:5 len=5] leading=[] Ident("Metal") trailing=[]
-[2:10 len=2] leading=[] RBracket trailing=[]
-[3:2 len=2] leading=[] Newline("\n\n") trailing=[]
-[5:1 len=7] leading=[] ItemAttrStart trailing=[]
-[6:5 len=5] leading=[] Ident("entry") trailing=[]
-[6:10 len=2] leading=[] RBracket trailing=[]
-[7:2 len=1] leading=[] Newline("\n") trailing=[]
-[8:1 len=14] leading=[] KwNamespace trailing=[]
-[9:5 len=5] leading=[] Ident("lexer") trailing=[]
-[9:10 len=1] leading=[] Dot trailing=[]
-[9:11 len=4] leading=[] Ident("spec") trailing=[]
-[9:15 len=1] leading=[] Dot trailing=[]
-[9:16 len=5] leading=[] Ident("attrs") trailing=[]
-[9:21 len=2] leading=[] Newline("\n\n") trailing=[]
-[11:1 len=8] leading=[] KwUse trailing=[]
-[12:5 len=4] leading=[] Ident("demo") trailing=[]
-[12:9 len=1] leading=[] Dot trailing=[]
-[12:10 len=4] leading=[] Ident("math") trailing=[]
-[12:14 len=1] leading=[] Dot trailing=[]
-[12:15 len=1] leading=[] LBrace trailing=[]
-[12:16 len=3] leading=[] Ident("add") trailing=[]
-[12:19 len=1] leading=[] Comma trailing=[]
-[12:21 len=3] leading=[] Ident("sub") trailing=[]
-[12:24 len=1] leading=[] RBrace trailing=[]
-[12:25 len=1] leading=[] Newline("\n") trailing=[]
-[13:1 len=3] leading=[] KwUse trailing=[]
-[13:5 len=4] leading=[] Ident("demo") trailing=[]
-[13:9 len=1] leading=[] Dot trailing=[]
-[13:10 len=7] leading=[] Ident("prelude") trailing=[]
-[13:17 len=2] leading=[] DotStar trailing=[]
-[13:19 len=2] leading=[] Newline("\n\n") trailing=[]
-[15:1 len=8] leading=[] KwPrivate trailing=[]
-[16:1 len=8] leading=[] KwDef trailing=[]
-[17:5 len=5] leading=[] Ident("entry") trailing=[]
-[17:10 len=1] leading=[] LParen trailing=[]
-[17:11 len=1] leading=[] RParen trailing=[]
-[17:12 len=1] leading=[] Colon trailing=[]
-[17:14 len=3] leading=[] Ident("i32") trailing=[]
-[17:18 len=1] leading=[] Eq trailing=[]
-[17:20 len=6] leading=[] LBrace trailing=[]
-[18:5 len=6] leading=[] KwReturn trailing=[]
-[18:12 len=1] leading=[] IntLit("0") trailing=[]
-[18:13 len=2] leading=[] RBrace trailing=[]
-[19:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_Cons(
+      FileAttr(
+        Attr(
+          "Metal",
+          AttrArg_End
+        )
+      ),
+      Attr_Cons(
+        ItemAttr(
+          Attr(
+            "entry",
+            AttrArg_End
+          )
+        ),
+        Attr_End
+      )
+    ),
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "attrs",
+            Path_End
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "entry",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i32",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_Return(
+                  Expr_Int(
+                    "0"
+                  )
+                ),
+                Stmt_End
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

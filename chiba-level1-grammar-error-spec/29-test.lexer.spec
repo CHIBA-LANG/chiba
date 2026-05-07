@@ -1,25 +1,8 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=2] leading=[] Ident("de") trailing=[]
-[1:26 len=1] leading=[] Dot trailing=[]
-[1:27 len=7] leading=[] Ident("instead") trailing=[]
-[1:34 len=1] leading=[] Dot trailing=[]
-[1:35 len=2] leading=[] Ident("of") trailing=[]
-[1:37 len=1] leading=[] Dot trailing=[]
-[1:38 len=5] leading=[] KwDef trailing=[]
-[3:1 len=2] leading=[] Ident("de") trailing=[]
-[3:4 len=14] leading=[] Ident("misspelled_def") trailing=[]
-[3:18 len=1] leading=[] LParen trailing=[]
-[3:19 len=1] leading=[] RParen trailing=[]
-[3:20 len=1] leading=[] Colon trailing=[]
-[3:22 len=3] leading=[] Ident("i64") trailing=[]
-[3:26 len=1] leading=[] Eq trailing=[]
-[3:28 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=1] leading=[] IntLit("0") trailing=[]
-[4:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=11,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[1:37 len=1] Token,
+    next_token=[1:38 len=5] Token
+)
 0

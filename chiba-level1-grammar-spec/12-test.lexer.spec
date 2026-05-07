@@ -1,92 +1,249 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=6] leading=[] Ident("tuples") trailing=[]
-[1:28 len=1] leading=[] Dot trailing=[]
-[1:29 len=6] leading=[] Ident("slices") trailing=[]
-[1:35 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=17] leading=[] Ident("tuple_slice_index") trailing=[]
-[3:22 len=1] leading=[] LParen trailing=[]
-[3:23 len=4] leading=[] Ident("text") trailing=[]
-[3:27 len=1] leading=[] Colon trailing=[]
-[3:29 len=6] leading=[] Ident("String") trailing=[]
-[3:35 len=1] leading=[] RParen trailing=[]
-[3:36 len=1] leading=[] Colon trailing=[]
-[3:38 len=3] leading=[] Ident("i64") trailing=[]
-[3:42 len=1] leading=[] Eq trailing=[]
-[3:44 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=4] leading=[] Ident("unit") trailing=[]
-[4:14 len=1] leading=[] Eq trailing=[]
-[4:16 len=1] leading=[] LParen trailing=[]
-[4:17 len=1] leading=[] RParen trailing=[]
-[4:18 len=5] leading=[] Newline("\n    ") trailing=[]
-[5:5 len=3] leading=[] KwLet trailing=[]
-[5:9 len=7] leading=[] Ident("grouped") trailing=[]
-[5:17 len=1] leading=[] Eq trailing=[]
-[5:19 len=1] leading=[] LParen trailing=[]
-[5:20 len=1] leading=[] IntLit("1") trailing=[]
-[5:21 len=1] leading=[] RParen trailing=[]
-[5:22 len=5] leading=[] Newline("\n    ") trailing=[]
-[6:5 len=3] leading=[] KwLet trailing=[]
-[6:9 len=9] leading=[] Ident("one_tuple") trailing=[]
-[6:19 len=1] leading=[] Eq trailing=[]
-[6:21 len=1] leading=[] LParen trailing=[]
-[6:22 len=1] leading=[] IntLit("1") trailing=[]
-[6:23 len=1] leading=[] Comma trailing=[]
-[6:24 len=1] leading=[] RParen trailing=[]
-[6:25 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=3] leading=[] KwLet trailing=[]
-[7:9 len=4] leading=[] Ident("pair") trailing=[]
-[7:14 len=1] leading=[] Eq trailing=[]
-[7:16 len=1] leading=[] LParen trailing=[]
-[7:17 len=1] leading=[] IntLit("1") trailing=[]
-[7:18 len=1] leading=[] Comma trailing=[]
-[7:20 len=1] leading=[] IntLit("2") trailing=[]
-[7:21 len=1] leading=[] RParen trailing=[]
-[7:22 len=5] leading=[] Newline("\n    ") trailing=[]
-[8:5 len=3] leading=[] KwLet trailing=[]
-[8:9 len=6] leading=[] Ident("nested") trailing=[]
-[8:16 len=1] leading=[] Eq trailing=[]
-[8:18 len=1] leading=[] LParen trailing=[]
-[8:19 len=1] leading=[] LParen trailing=[]
-[8:20 len=1] leading=[] IntLit("1") trailing=[]
-[8:21 len=1] leading=[] Comma trailing=[]
-[8:22 len=1] leading=[] RParen trailing=[]
-[8:23 len=1] leading=[] Comma trailing=[]
-[8:25 len=1] leading=[] LParen trailing=[]
-[8:26 len=1] leading=[] IntLit("2") trailing=[]
-[8:27 len=1] leading=[] Comma trailing=[]
-[8:29 len=1] leading=[] IntLit("3") trailing=[]
-[8:30 len=1] leading=[] RParen trailing=[]
-[8:31 len=1] leading=[] RParen trailing=[]
-[8:32 len=5] leading=[] Newline("\n    ") trailing=[]
-[9:5 len=3] leading=[] KwLet trailing=[]
-[9:9 len=5] leading=[] Ident("bytes") trailing=[]
-[9:15 len=1] leading=[] Eq trailing=[]
-[9:17 len=4] leading=[] Ident("text") trailing=[]
-[9:21 len=1] leading=[] LBracket trailing=[]
-[9:22 len=1] leading=[] IntLit("0") trailing=[]
-[9:23 len=2] leading=[] DotDot trailing=[]
-[9:25 len=1] leading=[] IntLit("4") trailing=[]
-[9:26 len=1] leading=[] RBracket trailing=[]
-[9:27 len=5] leading=[] Newline("\n    ") trailing=[]
-[10:5 len=3] leading=[] KwLet trailing=[]
-[10:9 len=2] leading=[] Ident("cp") trailing=[]
-[10:12 len=1] leading=[] Eq trailing=[]
-[10:14 len=4] leading=[] Ident("text") trailing=[]
-[10:18 len=1] leading=[] Dot trailing=[]
-[10:19 len=12] leading=[] Ident("codepoint_at") trailing=[]
-[10:31 len=1] leading=[] LParen trailing=[]
-[10:32 len=1] leading=[] IntLit("0") trailing=[]
-[10:33 len=1] leading=[] RParen trailing=[]
-[10:34 len=5] leading=[] Newline("\n    ") trailing=[]
-[11:5 len=6] leading=[] KwReturn trailing=[]
-[11:12 len=2] leading=[] Ident("cp") trailing=[]
-[11:14 len=2] leading=[] RBrace trailing=[]
-[12:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "tuples",
+            Path_Cons(
+              "slices",
+              Path_End
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "tuple_slice_index",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "text",
+                Type_Path(
+                  "String",
+                  Type_Tail_End
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "unit",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Paren(
+                    ExprList_End
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_IdentStart(
+                      "grouped",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_Paren(
+                      ExprList_Cons(
+                        Expr_Int(
+                          "1"
+                        ),
+                        ExprList_End
+                      )
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "one_tuple",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_Paren(
+                        ExprList_Cons(
+                          Expr_Int(
+                            "1"
+                          ),
+                          ExprList_End
+                        )
+                      )
+                    ),
+                    Stmt_Cons(
+                      Stmt_LetPatternTyped(
+                        Pattern_IdentStart(
+                          "pair",
+                          PatternAfterIdent_Atom(
+                            PatternIdent_Name
+                          )
+                        ),
+                        Type_Path(
+                          "",
+                          Type_Tail_End
+                        ),
+                        Expr_Paren(
+                          ExprList_Cons(
+                            Expr_Int(
+                              "1"
+                            ),
+                            ExprList_Cons(
+                              Expr_Int(
+                                "2"
+                              ),
+                              ExprList_End
+                            )
+                          )
+                        )
+                      ),
+                      Stmt_Cons(
+                        Stmt_LetPatternTyped(
+                          Pattern_IdentStart(
+                            "nested",
+                            PatternAfterIdent_Atom(
+                              PatternIdent_Name
+                            )
+                          ),
+                          Type_Path(
+                            "",
+                            Type_Tail_End
+                          ),
+                          Expr_Paren(
+                            ExprList_Cons(
+                              Expr_Paren(
+                                ExprList_Cons(
+                                  Expr_Int(
+                                    "1"
+                                  ),
+                                  ExprList_End
+                                )
+                              ),
+                              ExprList_Cons(
+                                Expr_Paren(
+                                  ExprList_Cons(
+                                    Expr_Int(
+                                      "2"
+                                    ),
+                                    ExprList_Cons(
+                                      Expr_Int(
+                                        "3"
+                                      ),
+                                      ExprList_End
+                                    )
+                                  )
+                                ),
+                                ExprList_End
+                              )
+                            )
+                          )
+                        ),
+                        Stmt_Cons(
+                          Stmt_LetPatternTyped(
+                            Pattern_IdentStart(
+                              "bytes",
+                              PatternAfterIdent_Atom(
+                                PatternIdent_Name
+                              )
+                            ),
+                            Type_Path(
+                              "",
+                              Type_Tail_End
+                            ),
+                            Expr_Index(
+                              Expr_IdentTail(
+                                "text",
+                                IdentTail_None
+                              ),
+                              ExprList_Cons(
+                                Expr_Binary(
+                                  OpRange,
+                                  Expr_Int(
+                                    "0"
+                                  ),
+                                  Expr_Int(
+                                    "4"
+                                  )
+                                ),
+                                ExprList_End
+                              )
+                            )
+                          ),
+                          Stmt_Cons(
+                            Stmt_LetPatternTyped(
+                              Pattern_IdentStart(
+                                "cp",
+                                PatternAfterIdent_Atom(
+                                  PatternIdent_Name
+                                )
+                              ),
+                              Type_Path(
+                                "",
+                                Type_Tail_End
+                              ),
+                              Expr_Call(
+                                Expr_Field(
+                                  Expr_IdentTail(
+                                    "text",
+                                    IdentTail_None
+                                  ),
+                                  "codepoint_at"
+                                ),
+                                Arg_Cons(
+                                  Expr_Int(
+                                    "0"
+                                  ),
+                                  Arg_End
+                                )
+                              )
+                            ),
+                            Stmt_Cons(
+                              Stmt_Return(
+                                Expr_IdentTail(
+                                  "cp",
+                                  IdentTail_None
+                                )
+                              ),
+                              Stmt_End
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

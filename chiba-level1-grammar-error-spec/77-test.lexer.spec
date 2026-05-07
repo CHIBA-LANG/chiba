@@ -1,50 +1,68 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=5] leading=[] Ident("kwasm") trailing=[]
-[1:29 len=1] leading=[] Dot trailing=[]
-[1:30 len=7] leading=[] Ident("missing") trailing=[]
-[1:37 len=1] leading=[] Dot trailing=[]
-[1:38 len=6] leading=[] Ident("rparen") trailing=[]
-[1:44 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=7] leading=[] Ident("bad_asm") trailing=[]
-[3:12 len=1] leading=[] LParen trailing=[]
-[3:13 len=3] leading=[] Ident("ptr") trailing=[]
-[3:16 len=1] leading=[] Colon trailing=[]
-[3:18 len=3] leading=[] Ident("Ptr") trailing=[]
-[3:21 len=1] leading=[] LBracket trailing=[]
-[3:22 len=2] leading=[] Ident("u8") trailing=[]
-[3:24 len=1] leading=[] RBracket trailing=[]
-[3:25 len=1] leading=[] RParen trailing=[]
-[3:26 len=1] leading=[] Colon trailing=[]
-[3:28 len=3] leading=[] Ident("i64") trailing=[]
-[3:32 len=1] leading=[] Eq trailing=[]
-[3:34 len=6] leading=[] KwUnsafe trailing=[]
-[3:41 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=1] leading=[] Ident("v") trailing=[]
-[4:11 len=1] leading=[] Eq trailing=[]
-[4:13 len=3] leading=[] KwAsm trailing=[]
-[4:17 len=1] leading=[] LParen trailing=[]
-[4:18 len=3] leading=[] Ident("ptr") trailing=[]
-[4:21 len=1] leading=[] Colon trailing=[]
-[4:23 len=3] leading=[] Ident("rdi") trailing=[]
-[4:27 len=1] leading=[] Colon trailing=[]
-[4:29 len=1] leading=[] LParen trailing=[]
-[4:30 len=3] leading=[] Ident("rax") trailing=[]
-[4:33 len=1] leading=[] RParen trailing=[]
-[4:35 len=2] leading=[] FatArrow trailing=[]
-[4:38 len=10] leading=[] LBrace trailing=[]
-[5:9 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[5:10 len=12] leading=[] StringChunk("xor rax, rax") trailing=[]
-[5:22 len=1] leading=[] StringEnd trailing=[]
-[5:23 len=6] leading=[] RBrace trailing=[]
-[6:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=6] leading=[] KwReturn trailing=[]
-[7:12 len=1] leading=[] Ident("v") trailing=[]
-[7:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=45,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[6:6 len=5] Token,
+    next_token=[7:5 len=6] Token,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwasm",
+            Path_Cons(
+              "missing",
+              Path_Cons(
+                "rparen",
+                Path_End
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "bad_asm",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "ptr",
+                Type_Path(
+                  "Ptr",
+                  Type_Tail_Generic(
+                    TypeArg_Cons(
+                      Type_Path(
+                        "u8",
+                        Type_Tail_End
+                      ),
+                      TypeArg_End
+                    )
+                  )
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Unsafe(
+              Expr_Block(
+                Null,
+                TailExpr_None
+              )
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

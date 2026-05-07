@@ -1,38 +1,61 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=6] leading=[] Ident("record") trailing=[]
-[1:30 len=1] leading=[] Dot trailing=[]
-[1:31 len=6] leading=[] Ident("update") trailing=[]
-[1:37 len=1] leading=[] Dot trailing=[]
-[1:38 len=7] leading=[] Ident("missing") trailing=[]
-[1:45 len=1] leading=[] Dot trailing=[]
-[1:46 len=4] leading=[] Ident("pipe") trailing=[]
-[1:50 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=26] leading=[] Ident("record_update_missing_pipe") trailing=[]
-[3:31 len=1] leading=[] LParen trailing=[]
-[3:32 len=4] leading=[] Ident("base") trailing=[]
-[3:36 len=1] leading=[] Colon trailing=[]
-[3:38 len=5] leading=[] Ident("Point") trailing=[]
-[3:43 len=1] leading=[] RParen trailing=[]
-[3:44 len=1] leading=[] Colon trailing=[]
-[3:46 len=5] leading=[] Ident("Point") trailing=[]
-[3:52 len=1] leading=[] Eq trailing=[]
-[3:54 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=1] leading=[] LBrace trailing=[]
-[4:13 len=4] leading=[] Ident("base") trailing=[]
-[4:18 len=1] leading=[] Ident("x") trailing=[]
-[4:19 len=1] leading=[] Colon trailing=[]
-[4:21 len=1] leading=[] IntLit("1") trailing=[]
-[4:22 len=1] leading=[] Comma trailing=[]
-[4:24 len=1] leading=[] Ident("y") trailing=[]
-[4:25 len=1] leading=[] Colon trailing=[]
-[4:27 len=1] leading=[] IntLit("2") trailing=[]
-[4:28 len=1] leading=[] RBrace trailing=[]
-[4:29 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=35,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[4:28 len=1] Token,
+    next_token=[4:29 len=2] Token,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "record",
+            Path_Cons(
+              "update",
+              Path_Cons(
+                "missing",
+                Path_Cons(
+                  "pipe",
+                  Path_End
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "record_update_missing_pipe",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "base",
+                Type_Path(
+                  "Point",
+                  Type_Tail_End
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "Point",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Null,
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

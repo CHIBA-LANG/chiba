@@ -1,28 +1,8 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=4] leading=[] Ident("attr") trailing=[]
-[1:28 len=1] leading=[] Dot trailing=[]
-[1:29 len=7] leading=[] Ident("missing") trailing=[]
-[1:36 len=1] leading=[] Dot trailing=[]
-[1:37 len=6] leading=[] Ident("target") trailing=[]
-[1:43 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=2] leading=[] ItemAttrStart trailing=[]
-[3:3 len=6] leading=[] Ident("inline") trailing=[]
-[3:9 len=1] leading=[] RBracket trailing=[]
-[3:10 len=2] leading=[] Newline("\n\n") trailing=[]
-[5:1 len=3] leading=[] KwDef trailing=[]
-[5:5 len=17] leading=[] Ident("after_lonely_attr") trailing=[]
-[5:22 len=1] leading=[] LParen trailing=[]
-[5:23 len=1] leading=[] RParen trailing=[]
-[5:24 len=1] leading=[] Colon trailing=[]
-[5:26 len=3] leading=[] Ident("i64") trailing=[]
-[5:30 len=1] leading=[] Eq trailing=[]
-[5:32 len=6] leading=[] LBrace trailing=[]
-[6:5 len=6] leading=[] KwReturn trailing=[]
-[6:12 len=1] leading=[] IntLit("0") trailing=[]
-[6:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=0,
+    reason="parse failed before consuming any token",
+    final_reason="final failure at next unconsumed token",
+    prev_token=<none>,
+    next_token=[1:1 len=9] Token
+)
 0

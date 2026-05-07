@@ -1,35 +1,8 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=4] leading=[] Ident("same") trailing=[]
-[1:28 len=1] leading=[] Dot trailing=[]
-[1:29 len=4] leading=[] Ident("line") trailing=[]
-[1:33 len=1] leading=[] Dot trailing=[]
-[1:34 len=6] leading=[] Ident("double") trailing=[]
-[1:40 len=1] leading=[] Dot trailing=[]
-[1:41 len=5] leading=[] Ident("kwlet") trailing=[]
-[1:46 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=20] leading=[] Ident("same_line_double_let") trailing=[]
-[3:25 len=1] leading=[] LParen trailing=[]
-[3:26 len=1] leading=[] RParen trailing=[]
-[3:27 len=1] leading=[] Colon trailing=[]
-[3:29 len=3] leading=[] Ident("i64") trailing=[]
-[3:33 len=1] leading=[] Eq trailing=[]
-[3:35 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=1] leading=[] Ident("a") trailing=[]
-[4:11 len=1] leading=[] Eq trailing=[]
-[4:13 len=1] leading=[] IntLit("1") trailing=[]
-[4:15 len=3] leading=[] KwLet trailing=[]
-[4:19 len=1] leading=[] Ident("b") trailing=[]
-[4:21 len=1] leading=[] Eq trailing=[]
-[4:23 len=1] leading=[] IntLit("2") trailing=[]
-[4:24 len=5] leading=[] Newline("\n    ") trailing=[]
-[5:5 len=6] leading=[] KwReturn trailing=[]
-[5:12 len=1] leading=[] Ident("a") trailing=[]
-[5:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=25,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[4:13 len=1] Token,
+    next_token=[4:15 len=3] Token
+)
 0

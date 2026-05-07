@@ -1,31 +1,49 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=7] leading=[] Ident("kwbreak") trailing=[]
-[1:31 len=1] leading=[] Dot trailing=[]
-[1:32 len=5] leading=[] Ident("extra") trailing=[]
-[1:37 len=1] leading=[] Dot trailing=[]
-[1:38 len=4] leading=[] Ident("expr") trailing=[]
-[1:42 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=11] leading=[] Ident("break_extra") trailing=[]
-[3:16 len=1] leading=[] LParen trailing=[]
-[3:17 len=1] leading=[] RParen trailing=[]
-[3:18 len=1] leading=[] Colon trailing=[]
-[3:20 len=3] leading=[] Ident("i64") trailing=[]
-[3:24 len=1] leading=[] Eq trailing=[]
-[3:26 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwFor trailing=[]
-[4:9 len=10] leading=[] LBrace trailing=[]
-[5:9 len=5] leading=[] KwBreak trailing=[]
-[5:15 len=1] leading=[] IntLit("1") trailing=[]
-[5:17 len=1] leading=[] IntLit("2") trailing=[]
-[5:18 len=6] leading=[] RBrace trailing=[]
-[6:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=6] leading=[] KwReturn trailing=[]
-[7:12 len=1] leading=[] IntLit("0") trailing=[]
-[7:13 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=26,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[6:6 len=5] Token,
+    next_token=[7:5 len=6] Token,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "kwbreak",
+            Path_Cons(
+              "extra",
+              Path_Cons(
+                "expr",
+                Path_End
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "break_extra",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Null,
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

@@ -1,99 +1,248 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=7] leading=[] Ident("records") trailing=[]
-[1:29 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=7] leading=[] Ident("records") trailing=[]
-[3:12 len=1] leading=[] LParen trailing=[]
-[3:13 len=4] leading=[] Ident("base") trailing=[]
-[3:17 len=1] leading=[] Colon trailing=[]
-[3:19 len=5] leading=[] Ident("Point") trailing=[]
-[3:24 len=1] leading=[] RParen trailing=[]
-[3:25 len=1] leading=[] Colon trailing=[]
-[3:27 len=5] leading=[] Ident("Point") trailing=[]
-[3:33 len=1] leading=[] Eq trailing=[]
-[3:35 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=1] leading=[] Ident("x") trailing=[]
-[4:11 len=1] leading=[] Eq trailing=[]
-[4:13 len=1] leading=[] IntLit("1") trailing=[]
-[4:14 len=5] leading=[] Newline("\n    ") trailing=[]
-[5:5 len=3] leading=[] KwLet trailing=[]
-[5:9 len=1] leading=[] Ident("y") trailing=[]
-[5:11 len=1] leading=[] Eq trailing=[]
-[5:13 len=1] leading=[] IntLit("2") trailing=[]
-[5:14 len=5] leading=[] Newline("\n    ") trailing=[]
-[6:5 len=3] leading=[] KwLet trailing=[]
-[6:9 len=7] leading=[] Ident("literal") trailing=[]
-[6:17 len=1] leading=[] Eq trailing=[]
-[6:19 len=1] leading=[] LBrace trailing=[]
-[6:21 len=1] leading=[] Ident("x") trailing=[]
-[6:22 len=1] leading=[] Comma trailing=[]
-[6:24 len=1] leading=[] Ident("y") trailing=[]
-[6:25 len=1] leading=[] Comma trailing=[]
-[6:27 len=4] leading=[] Ident("name") trailing=[]
-[6:31 len=1] leading=[] Colon trailing=[]
-[6:33 len=1] leading=[] StringStart("", raw=0, hashes=0) trailing=[]
-[6:34 len=5] leading=[] StringChunk("point") trailing=[]
-[6:39 len=1] leading=[] StringEnd trailing=[]
-[6:41 len=1] leading=[] RBrace trailing=[]
-[6:42 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=3] leading=[] KwLet trailing=[]
-[7:9 len=5] leading=[] Ident("multi") trailing=[]
-[7:15 len=1] leading=[] Eq trailing=[]
-[7:17 len=10] leading=[] LBrace trailing=[]
-[8:9 len=1] leading=[] Ident("x") trailing=[]
-[8:10 len=1] leading=[] Colon trailing=[]
-[8:12 len=1] leading=[] IntLit("1") trailing=[]
-[8:13 len=10] leading=[] Comma trailing=[]
-[9:9 len=1] leading=[] Ident("y") trailing=[]
-[9:10 len=1] leading=[] Colon trailing=[]
-[9:12 len=1] leading=[] IntLit("2") trailing=[]
-[9:13 len=6] leading=[] Comma trailing=[]
-[10:5 len=1] leading=[] RBrace trailing=[]
-[10:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[11:5 len=3] leading=[] KwLet trailing=[]
-[11:9 len=6] leading=[] Ident("update") trailing=[]
-[11:16 len=1] leading=[] Eq trailing=[]
-[11:18 len=1] leading=[] LBrace trailing=[]
-[11:19 len=4] leading=[] Ident("base") trailing=[]
-[11:24 len=1] leading=[] Pipe trailing=[]
-[11:26 len=1] leading=[] Ident("y") trailing=[]
-[11:27 len=1] leading=[] Colon trailing=[]
-[11:29 len=1] leading=[] IntLit("3") trailing=[]
-[11:30 len=1] leading=[] Comma trailing=[]
-[11:32 len=1] leading=[] Ident("z") trailing=[]
-[11:33 len=1] leading=[] Colon trailing=[]
-[11:35 len=1] leading=[] IntLit("4") trailing=[]
-[11:36 len=1] leading=[] RBrace trailing=[]
-[11:37 len=5] leading=[] Newline("\n    ") trailing=[]
-[12:5 len=3] leading=[] KwLet trailing=[]
-[12:9 len=12] leading=[] Ident("update_multi") trailing=[]
-[12:22 len=1] leading=[] Eq trailing=[]
-[12:24 len=1] leading=[] LBrace trailing=[]
-[12:25 len=4] leading=[] Ident("base") trailing=[]
-[12:30 len=1] leading=[] Pipe trailing=[]
-[12:31 len=9] leading=[] Newline("\n        ") trailing=[]
-[13:9 len=1] leading=[] Ident("x") trailing=[]
-[13:10 len=1] leading=[] Colon trailing=[]
-[13:12 len=7] leading=[] Ident("literal") trailing=[]
-[13:19 len=1] leading=[] Dot trailing=[]
-[13:20 len=1] leading=[] Ident("x") trailing=[]
-[13:21 len=10] leading=[] Comma trailing=[]
-[14:9 len=1] leading=[] Ident("y") trailing=[]
-[14:10 len=1] leading=[] Colon trailing=[]
-[14:12 len=5] leading=[] Ident("multi") trailing=[]
-[14:17 len=14] leading=[] Dot trailing=[]
-[15:13 len=1] leading=[] Ident("y") trailing=[]
-[15:14 len=6] leading=[] Comma trailing=[]
-[16:5 len=1] leading=[] RBrace trailing=[]
-[16:6 len=5] leading=[] Newline("\n    ") trailing=[]
-[17:5 len=6] leading=[] KwReturn trailing=[]
-[17:12 len=6] leading=[] Ident("update") trailing=[]
-[17:18 len=2] leading=[] RBrace trailing=[]
-[18:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "records",
+            Path_End
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "records",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "base",
+                Type_Path(
+                  "Point",
+                  Type_Tail_End
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "Point",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "x",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Int(
+                    "1"
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_IdentStart(
+                      "y",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_Int(
+                      "2"
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "literal",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_Record(
+                        Record_First(
+                          "x",
+                          RecordTail_Shorthand(
+                            RecordField_Cons(
+                              RecordField(
+                                "y",
+                                Expr_Name(
+                                  ""
+                                )
+                              ),
+                              RecordField_Cons(
+                                RecordField(
+                                  "name",
+                                  Expr_String
+                                ),
+                                RecordField_End
+                              )
+                            )
+                          )
+                        )
+                      )
+                    ),
+                    Stmt_Cons(
+                      Stmt_LetPatternTyped(
+                        Pattern_IdentStart(
+                          "multi",
+                          PatternAfterIdent_Atom(
+                            PatternIdent_Name
+                          )
+                        ),
+                        Type_Path(
+                          "",
+                          Type_Tail_End
+                        ),
+                        Expr_Record(
+                          Record_First(
+                            "x",
+                            RecordTail_Field(
+                              Expr_Int(
+                                "1"
+                              ),
+                              RecordField_Cons(
+                                RecordField(
+                                  "y",
+                                  Expr_Int(
+                                    "2"
+                                  )
+                                ),
+                                RecordField_End
+                              )
+                            )
+                          )
+                        )
+                      ),
+                      Stmt_Cons(
+                        Stmt_LetPatternTyped(
+                          Pattern_IdentStart(
+                            "update",
+                            PatternAfterIdent_Atom(
+                              PatternIdent_Name
+                            )
+                          ),
+                          Type_Path(
+                            "",
+                            Type_Tail_End
+                          ),
+                          Expr_Record(
+                            Record_First(
+                              "base",
+                              Record_Update(
+                                Expr_Name(
+                                  ""
+                                ),
+                                RecordField_Cons(
+                                  RecordField(
+                                    "y",
+                                    Expr_Int(
+                                      "3"
+                                    )
+                                  ),
+                                  RecordField_Cons(
+                                    RecordField(
+                                      "z",
+                                      Expr_Int(
+                                        "4"
+                                      )
+                                    ),
+                                    RecordField_End
+                                  )
+                                )
+                              )
+                            )
+                          )
+                        ),
+                        Stmt_Cons(
+                          Stmt_LetPatternTyped(
+                            Pattern_IdentStart(
+                              "update_multi",
+                              PatternAfterIdent_Atom(
+                                PatternIdent_Name
+                              )
+                            ),
+                            Type_Path(
+                              "",
+                              Type_Tail_End
+                            ),
+                            Expr_Record(
+                              Record_First(
+                                "base",
+                                Record_Update(
+                                  Expr_Name(
+                                    ""
+                                  ),
+                                  RecordField_Cons(
+                                    RecordField(
+                                      "x",
+                                      Expr_Field(
+                                        Expr_IdentTail(
+                                          "literal",
+                                          IdentTail_None
+                                        ),
+                                        "x"
+                                      )
+                                    ),
+                                    RecordField_Cons(
+                                      RecordField(
+                                        "y",
+                                        Expr_Field(
+                                          Expr_IdentTail(
+                                            "multi",
+                                            IdentTail_None
+                                          ),
+                                          "y"
+                                        )
+                                      ),
+                                      RecordField_End
+                                    )
+                                  )
+                                )
+                              )
+                            )
+                          ),
+                          Stmt_Cons(
+                            Stmt_Return(
+                              Expr_IdentTail(
+                                "update",
+                                IdentTail_None
+                              )
+                            ),
+                            Stmt_End
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

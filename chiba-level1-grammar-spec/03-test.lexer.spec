@@ -1,86 +1,269 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=8] leading=[] Ident("literals") trailing=[]
-[1:30 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=17] leading=[] Ident("numbers_and_names") trailing=[]
-[3:22 len=1] leading=[] LParen trailing=[]
-[3:23 len=1] leading=[] RParen trailing=[]
-[3:24 len=1] leading=[] Colon trailing=[]
-[3:26 len=3] leading=[] Ident("i64") trailing=[]
-[3:30 len=1] leading=[] Eq trailing=[]
-[3:32 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=3] leading=[] Ident("dec") trailing=[]
-[4:13 len=1] leading=[] Eq trailing=[]
-[4:15 len=7] leading=[] IntLit("123_456") trailing=[]
-[4:22 len=5] leading=[] Newline("\n    ") trailing=[]
-[5:5 len=3] leading=[] KwLet trailing=[]
-[5:9 len=3] leading=[] Ident("hex") trailing=[]
-[5:13 len=1] leading=[] Eq trailing=[]
-[5:15 len=11] leading=[] IntLit("0xCAFE_babe") trailing=[]
-[5:26 len=5] leading=[] Newline("\n    ") trailing=[]
-[6:5 len=3] leading=[] KwLet trailing=[]
-[6:9 len=3] leading=[] Ident("oct") trailing=[]
-[6:13 len=1] leading=[] Eq trailing=[]
-[6:15 len=5] leading=[] IntLit("0o755") trailing=[]
-[6:20 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=3] leading=[] KwLet trailing=[]
-[7:9 len=3] leading=[] Ident("bin") trailing=[]
-[7:13 len=1] leading=[] Eq trailing=[]
-[7:15 len=11] leading=[] IntLit("0b1010_0101") trailing=[]
-[7:26 len=5] leading=[] Newline("\n    ") trailing=[]
-[8:5 len=3] leading=[] KwLet trailing=[]
-[8:9 len=7] leading=[] Ident("float_a") trailing=[]
-[8:17 len=1] leading=[] Eq trailing=[]
-[8:19 len=4] leading=[] FloatLit("1.25") trailing=[]
-[8:23 len=5] leading=[] Newline("\n    ") trailing=[]
-[9:5 len=3] leading=[] KwLet trailing=[]
-[9:9 len=7] leading=[] Ident("float_b") trailing=[]
-[9:17 len=1] leading=[] Eq trailing=[]
-[9:19 len=7] leading=[] FloatLit("6.02e23") trailing=[]
-[9:26 len=5] leading=[] Newline("\n    ") trailing=[]
-[10:5 len=3] leading=[] KwLet trailing=[]
-[10:9 len=7] leading=[] Ident("float_c") trailing=[]
-[10:17 len=1] leading=[] Eq trailing=[]
-[10:19 len=7] leading=[] FloatLit("3.14f32") trailing=[]
-[10:26 len=5] leading=[] Newline("\n    ") trailing=[]
-[11:5 len=3] leading=[] KwLet trailing=[]
-[11:9 len=10] leading=[] Ident("int_suffix") trailing=[]
-[11:20 len=1] leading=[] Eq trailing=[]
-[11:22 len=7] leading=[] IntLit("99usize") trailing=[]
-[11:29 len=5] leading=[] Newline("\n    ") trailing=[]
-[12:5 len=3] leading=[] KwLet trailing=[]
-[12:9 len=2] leading=[] Ident("ok") trailing=[]
-[12:12 len=1] leading=[] Eq trailing=[]
-[12:14 len=4] leading=[] KwTrue trailing=[]
-[12:18 len=5] leading=[] Newline("\n    ") trailing=[]
-[13:5 len=3] leading=[] KwLet trailing=[]
-[13:9 len=2] leading=[] Ident("no") trailing=[]
-[13:12 len=1] leading=[] Eq trailing=[]
-[13:14 len=5] leading=[] KwFalse trailing=[]
-[13:19 len=5] leading=[] Newline("\n    ") trailing=[]
-[14:5 len=3] leading=[] KwLet trailing=[]
-[14:9 len=4] leading=[] Ident("atom") trailing=[]
-[14:14 len=1] leading=[] Eq trailing=[]
-[14:16 len=3] leading=[] Atom("ok") trailing=[]
-[14:19 len=5] leading=[] Newline("\n    ") trailing=[]
-[15:5 len=3] leading=[] KwLet trailing=[]
-[15:9 len=7] leading=[] Ident("unicode") trailing=[]
-[15:17 len=1] leading=[] Eq trailing=[]
-[15:19 len=27] leading=[] Ident("测试一下语法容忍度") trailing=[]
-[15:46 len=5] leading=[] Newline("\n    ") trailing=[]
-[16:5 len=3] leading=[] KwLet trailing=[]
-[16:9 len=5] leading=[] Ident("emoji") trailing=[]
-[16:15 len=1] leading=[] Eq trailing=[]
-[16:17 len=4] leading=[] Ident("🍋") trailing=[]
-[16:21 len=5] leading=[] Newline("\n    ") trailing=[]
-[17:5 len=6] leading=[] KwReturn trailing=[]
-[17:12 len=3] leading=[] Ident("dec") trailing=[]
-[17:15 len=2] leading=[] RBrace trailing=[]
-[18:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "literals",
+            Path_End
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "numbers_and_names",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_IdentStart(
+                    "dec",
+                    PatternAfterIdent_Atom(
+                      PatternIdent_Name
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Int(
+                    "123_456"
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_IdentStart(
+                      "hex",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_Int(
+                      "0xCAFE_babe"
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "oct",
+                        PatternAfterIdent_Atom(
+                          PatternIdent_Name
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_Int(
+                        "0o755"
+                      )
+                    ),
+                    Stmt_Cons(
+                      Stmt_LetPatternTyped(
+                        Pattern_IdentStart(
+                          "bin",
+                          PatternAfterIdent_Atom(
+                            PatternIdent_Name
+                          )
+                        ),
+                        Type_Path(
+                          "",
+                          Type_Tail_End
+                        ),
+                        Expr_Int(
+                          "0b1010_0101"
+                        )
+                      ),
+                      Stmt_Cons(
+                        Stmt_LetPatternTyped(
+                          Pattern_IdentStart(
+                            "float_a",
+                            PatternAfterIdent_Atom(
+                              PatternIdent_Name
+                            )
+                          ),
+                          Type_Path(
+                            "",
+                            Type_Tail_End
+                          ),
+                          Expr_Float(
+                            "1.25"
+                          )
+                        ),
+                        Stmt_Cons(
+                          Stmt_LetPatternTyped(
+                            Pattern_IdentStart(
+                              "float_b",
+                              PatternAfterIdent_Atom(
+                                PatternIdent_Name
+                              )
+                            ),
+                            Type_Path(
+                              "",
+                              Type_Tail_End
+                            ),
+                            Expr_Float(
+                              "6.02e23"
+                            )
+                          ),
+                          Stmt_Cons(
+                            Stmt_LetPatternTyped(
+                              Pattern_IdentStart(
+                                "float_c",
+                                PatternAfterIdent_Atom(
+                                  PatternIdent_Name
+                                )
+                              ),
+                              Type_Path(
+                                "",
+                                Type_Tail_End
+                              ),
+                              Expr_Float(
+                                "3.14f32"
+                              )
+                            ),
+                            Stmt_Cons(
+                              Stmt_LetPatternTyped(
+                                Pattern_IdentStart(
+                                  "int_suffix",
+                                  PatternAfterIdent_Atom(
+                                    PatternIdent_Name
+                                  )
+                                ),
+                                Type_Path(
+                                  "",
+                                  Type_Tail_End
+                                ),
+                                Expr_Int(
+                                  "99usize"
+                                )
+                              ),
+                              Stmt_Cons(
+                                Stmt_LetPatternTyped(
+                                  Pattern_IdentStart(
+                                    "ok",
+                                    PatternAfterIdent_Atom(
+                                      PatternIdent_Name
+                                    )
+                                  ),
+                                  Type_Path(
+                                    "",
+                                    Type_Tail_End
+                                  ),
+                                  Expr_Bool(
+                                    1
+                                  )
+                                ),
+                                Stmt_Cons(
+                                  Stmt_LetPatternTyped(
+                                    Pattern_IdentStart(
+                                      "no",
+                                      PatternAfterIdent_Atom(
+                                        PatternIdent_Name
+                                      )
+                                    ),
+                                    Type_Path(
+                                      "",
+                                      Type_Tail_End
+                                    ),
+                                    Expr_Bool(
+                                      0
+                                    )
+                                  ),
+                                  Stmt_Cons(
+                                    Stmt_LetPatternTyped(
+                                      Pattern_IdentStart(
+                                        "atom",
+                                        PatternAfterIdent_Atom(
+                                          PatternIdent_Name
+                                        )
+                                      ),
+                                      Type_Path(
+                                        "",
+                                        Type_Tail_End
+                                      ),
+                                      Expr_Atom(
+                                        "ok"
+                                      )
+                                    ),
+                                    Stmt_Cons(
+                                      Stmt_LetPatternTyped(
+                                        Pattern_IdentStart(
+                                          "unicode",
+                                          PatternAfterIdent_Atom(
+                                            PatternIdent_Name
+                                          )
+                                        ),
+                                        Type_Path(
+                                          "",
+                                          Type_Tail_End
+                                        ),
+                                        Expr_IdentTail(
+                                          "测试一下语法容忍度",
+                                          IdentTail_None
+                                        )
+                                      ),
+                                      Stmt_Cons(
+                                        Stmt_LetPatternTyped(
+                                          Pattern_IdentStart(
+                                            "emoji",
+                                            PatternAfterIdent_Atom(
+                                              PatternIdent_Name
+                                            )
+                                          ),
+                                          Type_Path(
+                                            "",
+                                            Type_Tail_End
+                                          ),
+                                          Expr_IdentTail(
+                                            "🍋",
+                                            IdentTail_None
+                                          )
+                                        ),
+                                        Stmt_Cons(
+                                          Stmt_Return(
+                                            Expr_IdentTail(
+                                              "dec",
+                                              IdentTail_None
+                                            )
+                                          ),
+                                          Stmt_End
+                                        )
+                                      )
+                                    )
+                                  )
+                                )
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

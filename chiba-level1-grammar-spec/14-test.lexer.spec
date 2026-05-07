@@ -1,90 +1,268 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=5] leading=[] Ident("lexer") trailing=[]
-[1:16 len=1] leading=[] Dot trailing=[]
-[1:17 len=4] leading=[] Ident("spec") trailing=[]
-[1:21 len=1] leading=[] Dot trailing=[]
-[1:22 len=11] leading=[] Ident("letdestruct") trailing=[]
-[1:33 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=8] leading=[] Ident("destruct") trailing=[]
-[3:13 len=1] leading=[] LParen trailing=[]
-[3:14 len=5] leading=[] Ident("point") trailing=[]
-[3:19 len=1] leading=[] Colon trailing=[]
-[3:21 len=5] leading=[] Ident("Shape") trailing=[]
-[3:26 len=1] leading=[] RParen trailing=[]
-[3:27 len=1] leading=[] Colon trailing=[]
-[3:29 len=3] leading=[] Ident("i64") trailing=[]
-[3:33 len=1] leading=[] Eq trailing=[]
-[3:35 len=6] leading=[] LBrace trailing=[]
-[4:5 len=3] leading=[] KwLet trailing=[]
-[4:9 len=1] leading=[] LParen trailing=[]
-[4:10 len=1] leading=[] Ident("x") trailing=[]
-[4:11 len=7] leading=[] Comma trailing=[]
-[5:5 len=1] leading=[] LParen trailing=[]
-[5:6 len=1] leading=[] Ident("y") trailing=[]
-[5:7 len=1] leading=[] Comma trailing=[]
-[5:9 len=1] leading=[] Ident("z") trailing=[]
-[5:10 len=1] leading=[] RParen trailing=[]
-[5:11 len=1] leading=[] RParen trailing=[]
-[5:13 len=1] leading=[] Eq trailing=[]
-[5:15 len=5] leading=[] Ident("point") trailing=[]
-[5:20 len=1] leading=[] Dot trailing=[]
-[5:21 len=6] leading=[] Ident("coords") trailing=[]
-[5:27 len=5] leading=[] Newline("\n    ") trailing=[]
-[6:5 len=3] leading=[] KwLet trailing=[]
-[6:9 len=1] leading=[] LBrace trailing=[]
-[6:11 len=4] leading=[] Ident("name") trailing=[]
-[6:15 len=1] leading=[] Comma trailing=[]
-[6:17 len=4] leading=[] Ident("meta") trailing=[]
-[6:21 len=1] leading=[] Colon trailing=[]
-[6:23 len=1] leading=[] LBrace trailing=[]
-[6:25 len=3] leading=[] Ident("age") trailing=[]
-[6:28 len=1] leading=[] Comma trailing=[]
-[6:30 len=6] leading=[] Ident("active") trailing=[]
-[6:37 len=1] leading=[] RBrace trailing=[]
-[6:39 len=1] leading=[] RBrace trailing=[]
-[6:41 len=1] leading=[] Eq trailing=[]
-[6:43 len=5] leading=[] Ident("point") trailing=[]
-[6:48 len=5] leading=[] Newline("\n    ") trailing=[]
-[7:5 len=3] leading=[] KwLet trailing=[]
-[7:9 len=5] leading=[] Ident("whole") trailing=[]
-[7:15 len=1] leading=[] At trailing=[]
-[7:17 len=1] leading=[] LBrace trailing=[]
-[7:19 len=6] leading=[] Ident("center") trailing=[]
-[7:25 len=1] leading=[] Colon trailing=[]
-[7:27 len=1] leading=[] LBrace trailing=[]
-[7:29 len=1] leading=[] Ident("x") trailing=[]
-[7:30 len=1] leading=[] Colon trailing=[]
-[7:32 len=2] leading=[] Ident("cx") trailing=[]
-[7:34 len=1] leading=[] Comma trailing=[]
-[7:36 len=1] leading=[] Ident("y") trailing=[]
-[7:37 len=7] leading=[] Colon trailing=[]
-[8:5 len=2] leading=[] Ident("cy") trailing=[]
-[8:8 len=1] leading=[] RBrace trailing=[]
-[8:9 len=1] leading=[] Comma trailing=[]
-[8:11 len=5] leading=[] Ident("color") trailing=[]
-[8:17 len=1] leading=[] RBrace trailing=[]
-[8:19 len=1] leading=[] Eq trailing=[]
-[8:21 len=5] leading=[] Ident("point") trailing=[]
-[8:26 len=5] leading=[] Newline("\n    ") trailing=[]
-[9:5 len=3] leading=[] KwLet trailing=[]
-[9:9 len=1] leading=[] Ident("_") trailing=[]
-[9:11 len=1] leading=[] Eq trailing=[]
-[9:13 len=6] leading=[] Ident("active") trailing=[]
-[9:19 len=5] leading=[] Newline("\n    ") trailing=[]
-[10:5 len=6] leading=[] KwReturn trailing=[]
-[10:12 len=1] leading=[] Ident("x") trailing=[]
-[10:14 len=1] leading=[] Plus trailing=[]
-[10:16 len=1] leading=[] Ident("y") trailing=[]
-[10:18 len=1] leading=[] Plus trailing=[]
-[10:20 len=1] leading=[] Ident("z") trailing=[]
-[10:22 len=1] leading=[] Plus trailing=[]
-[10:24 len=3] leading=[] Ident("age") trailing=[]
-[10:28 len=1] leading=[] Plus trailing=[]
-[10:30 len=2] leading=[] Ident("cx") trailing=[]
-[10:33 len=1] leading=[] Plus trailing=[]
-[10:35 len=2] leading=[] Ident("cy") trailing=[]
-[10:37 len=2] leading=[] RBrace trailing=[]
-[11:2 len=1] leading=[] Newline("\n") trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+OK(
+  SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "lexer",
+        Path_Cons(
+          "spec",
+          Path_Cons(
+            "letdestruct",
+            Path_End
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "destruct",
+          DefFun(
+            Generic_End,
+            Param_Cons(
+              Param(
+                "point",
+                Type_Path(
+                  "Shape",
+                  Type_Tail_End
+                )
+              ),
+              Param_End
+            ),
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Stmt_Cons(
+                Stmt_LetPatternTyped(
+                  Pattern_Paren(
+                    Pattern_IdentStart(
+                      "x",
+                      PatternAfterIdent_Atom(
+                        PatternIdent_Name
+                      )
+                    ),
+                    PatternList_Cons(
+                      Pattern_Paren(
+                        Pattern_IdentStart(
+                          "y",
+                          PatternAfterIdent_Atom(
+                            PatternIdent_Name
+                          )
+                        ),
+                        PatternList_Cons(
+                          Pattern_IdentStart(
+                            "z",
+                            PatternAfterIdent_Atom(
+                              PatternIdent_Name
+                            )
+                          ),
+                          PatternList_End
+                        )
+                      ),
+                      PatternList_End
+                    )
+                  ),
+                  Type_Path(
+                    "",
+                    Type_Tail_End
+                  ),
+                  Expr_Field(
+                    Expr_IdentTail(
+                      "point",
+                      IdentTail_None
+                    ),
+                    "coords"
+                  )
+                ),
+                Stmt_Cons(
+                  Stmt_LetPatternTyped(
+                    Pattern_Record(
+                      PatternRecord_Cons(
+                        PatternRecordField(
+                          "name",
+                          Pattern_IdentStart(
+                            "",
+                            PatternAfterIdent_Atom(
+                              PatternIdent_Name
+                            )
+                          )
+                        ),
+                        PatternRecord_Cons(
+                          PatternRecordField(
+                            "meta",
+                            Pattern_Record(
+                              PatternRecord_Cons(
+                                PatternRecordField(
+                                  "age",
+                                  Pattern_IdentStart(
+                                    "",
+                                    PatternAfterIdent_Atom(
+                                      PatternIdent_Name
+                                    )
+                                  )
+                                ),
+                                PatternRecord_Cons(
+                                  PatternRecordField(
+                                    "active",
+                                    Pattern_IdentStart(
+                                      "",
+                                      PatternAfterIdent_Atom(
+                                        PatternIdent_Name
+                                      )
+                                    )
+                                  ),
+                                  PatternRecord_End
+                                )
+                              )
+                            )
+                          ),
+                          PatternRecord_End
+                        )
+                      )
+                    ),
+                    Type_Path(
+                      "",
+                      Type_Tail_End
+                    ),
+                    Expr_IdentTail(
+                      "point",
+                      IdentTail_None
+                    )
+                  ),
+                  Stmt_Cons(
+                    Stmt_LetPatternTyped(
+                      Pattern_IdentStart(
+                        "whole",
+                        PatternAfterIdent_Bind(
+                          Pattern_Record(
+                            PatternRecord_Cons(
+                              PatternRecordField(
+                                "center",
+                                Pattern_Record(
+                                  PatternRecord_Cons(
+                                    PatternRecordField(
+                                      "x",
+                                      Pattern_IdentStart(
+                                        "cx",
+                                        PatternAfterIdent_Atom(
+                                          PatternIdent_Name
+                                        )
+                                      )
+                                    ),
+                                    PatternRecord_Cons(
+                                      PatternRecordField(
+                                        "y",
+                                        Pattern_IdentStart(
+                                          "cy",
+                                          PatternAfterIdent_Atom(
+                                            PatternIdent_Name
+                                          )
+                                        )
+                                      ),
+                                      PatternRecord_End
+                                    )
+                                  )
+                                )
+                              ),
+                              PatternRecord_Cons(
+                                PatternRecordField(
+                                  "color",
+                                  Pattern_IdentStart(
+                                    "",
+                                    PatternAfterIdent_Atom(
+                                      PatternIdent_Name
+                                    )
+                                  )
+                                ),
+                                PatternRecord_End
+                              )
+                            )
+                          )
+                        )
+                      ),
+                      Type_Path(
+                        "",
+                        Type_Tail_End
+                      ),
+                      Expr_IdentTail(
+                        "point",
+                        IdentTail_None
+                      )
+                    ),
+                    Stmt_Cons(
+                      Stmt_LetPatternTyped(
+                        Pattern_IdentStart(
+                          "_",
+                          PatternAfterIdent_Atom(
+                            PatternIdent_Name
+                          )
+                        ),
+                        Type_Path(
+                          "",
+                          Type_Tail_End
+                        ),
+                        Expr_IdentTail(
+                          "active",
+                          IdentTail_None
+                        )
+                      ),
+                      Stmt_Cons(
+                        Stmt_Return(
+                          Expr_Binary(
+                            OpAdd,
+                            Expr_Binary(
+                              OpAdd,
+                              Expr_Binary(
+                                OpAdd,
+                                Expr_Binary(
+                                  OpAdd,
+                                  Expr_Binary(
+                                    OpAdd,
+                                    Expr_IdentTail(
+                                      "x",
+                                      IdentTail_None
+                                    ),
+                                    Expr_IdentTail(
+                                      "y",
+                                      IdentTail_None
+                                    )
+                                  ),
+                                  Expr_IdentTail(
+                                    "z",
+                                    IdentTail_None
+                                  )
+                                ),
+                                Expr_IdentTail(
+                                  "age",
+                                  IdentTail_None
+                                )
+                              ),
+                              Expr_IdentTail(
+                                "cx",
+                                IdentTail_None
+                              )
+                            ),
+                            Expr_IdentTail(
+                              "cy",
+                              IdentTail_None
+                            )
+                          )
+                        ),
+                        Stmt_End
+                      )
+                    )
+                  )
+                )
+              ),
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0

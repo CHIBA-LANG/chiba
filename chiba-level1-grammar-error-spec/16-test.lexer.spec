@@ -1,30 +1,49 @@
-[1:1 len=9] leading=[] KwNamespace trailing=[]
-[1:11 len=6] leading=[] Ident("parser") trailing=[]
-[1:17 len=1] leading=[] Dot trailing=[]
-[1:18 len=5] leading=[] Ident("error") trailing=[]
-[1:23 len=1] leading=[] Dot trailing=[]
-[1:24 len=4] leading=[] Ident("call") trailing=[]
-[1:28 len=1] leading=[] Dot trailing=[]
-[1:29 len=7] leading=[] Ident("missing") trailing=[]
-[1:36 len=1] leading=[] Dot trailing=[]
-[1:37 len=5] leading=[] Ident("comma") trailing=[]
-[1:42 len=2] leading=[] Newline("\n\n") trailing=[]
-[3:1 len=3] leading=[] KwDef trailing=[]
-[3:5 len=18] leading=[] Ident("call_missing_comma") trailing=[]
-[3:23 len=1] leading=[] LParen trailing=[]
-[3:24 len=1] leading=[] RParen trailing=[]
-[3:25 len=1] leading=[] Colon trailing=[]
-[3:27 len=3] leading=[] Ident("i64") trailing=[]
-[3:31 len=1] leading=[] Eq trailing=[]
-[3:33 len=6] leading=[] LBrace trailing=[]
-[4:5 len=6] leading=[] KwReturn trailing=[]
-[4:12 len=3] leading=[] Ident("sum") trailing=[]
-[4:15 len=1] leading=[] LParen trailing=[]
-[4:16 len=1] leading=[] IntLit("1") trailing=[]
-[4:18 len=1] leading=[] IntLit("2") trailing=[]
-[4:19 len=1] leading=[] Comma trailing=[]
-[4:21 len=1] leading=[] IntLit("3") trailing=[]
-[4:22 len=1] leading=[] RParen trailing=[]
-[4:23 len=2] leading=[] RBrace trailing=[]
-[0:0 len=0] leading=[] Eof trailing=[]
+Err(
+    consumed=28,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[4:23 len=2] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "call",
+            Path_Cons(
+              "missing",
+              Path_Cons(
+                "comma",
+                Path_End
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Def(
+        DefItem2(
+          "call_missing_comma",
+          DefFun(
+            Generic_End,
+            Param_End,
+            Type_Path(
+              "i64",
+              Type_Tail_End
+            ),
+            Expr_Block(
+              Null,
+              TailExpr_None
+            )
+          )
+        )
+      ),
+      Item_End
+    )
+  )
+)
 0
