@@ -98,6 +98,7 @@ rule item_core ::=
     | ty:type_item => Item_Type(ty)
     | dat:data_item => Item_Adt(dat)
     | un:union_item => Item_Union(un)
+    | iface:interface_item => Item_Interface(iface)
     ;
 
 rule private_opt ::= 
@@ -135,12 +136,12 @@ rule def_item ::=
     ;
 
 rule def_name ::= 
-    name:Ident tail:def_name_tail => name
+    name:Ident receiver_generics:opt_generics tail:def_name_tail => DefName(name, receiver_generics, tail)
     ;
 
 rule def_name_tail ::= 
-    Dot method:Ident => 0
-    | => 0
+    Dot method:Ident => DefNameMethod(method)
+    | => DefNamePlain
     ;
 
 rule def_after_name ::= 
@@ -154,11 +155,26 @@ rule def_body ::=
     ;
 
 rule type_item ::= 
-    KwType name:Ident Eq ty:type_expr => TypeItem(name, ty)
+    KwType name:Ident generics:opt_generics LBrace fields:nominal_field_list RBrace => TypeItem(name, generics, fields)
     ;
 
 rule data_item ::= 
-    KwData name:Ident generics:opt_generics LBrace variants:data_variant_list RBrace => AdtItem(name, generics, variants)
+    KwData name:Ident generics:opt_generics LBrace _:trivia_list first:Ident Colon _:trivia_list ty:type_expr tail:nominal_field_tail _:trivia_list RBrace => AdtRecordItem(name, generics, NominalField_Cons(NominalField(first, ty), tail))
+    | KwData name:Ident generics:opt_generics LBrace variants:data_variant_list RBrace => AdtItem(name, generics, variants)
+    ;
+
+rule nominal_field_list ::= 
+    _:trivia_list head:nominal_field tail:nominal_field_tail => NominalField_Cons(head, tail)
+    | => NominalField_End
+    ;
+
+rule nominal_field_tail ::= 
+    _:trivia_list Comma rest:nominal_field_list => rest
+    | => NominalField_End
+    ;
+
+rule nominal_field ::= 
+    name:Ident Colon _:trivia_list ty:type_expr => NominalField(name, ty)
     ;
 
 rule data_variant_list ::= 
@@ -217,6 +233,19 @@ rule union_field_after_comma ::=
 
 rule union_field ::= 
     name:Ident Colon _:trivia_list ty:type_expr => UnionField(name, ty)
+    ;
+
+rule interface_item ::= 
+    KwInterface name:Ident LBrace methods:interface_method_list RBrace => InterfaceItem(name, methods)
+    ;
+
+rule interface_method_list ::= 
+    _:trivia_list head:interface_method tail:interface_method_list => InterfaceMethod_Cons(head, tail)
+    | => InterfaceMethod_End
+    ;
+
+rule interface_method ::= 
+    name:Ident LParen params:param_list RParen Colon ret:type_expr => InterfaceMethod(name, params, ret)
     ;
 
 rule opt_generics ::= 
@@ -285,7 +314,12 @@ rule param_tail ::=
     ;
 
 rule param ::= 
-    name:Ident ty:param_type_opt => Param(name, ty)
+    name:param_name ty:param_type_opt => Param(name, ty)
+    ;
+
+rule param_name ::= 
+    name:Ident => name
+    | KwSelf => mk_str("self", 4)
     ;
 
 rule param_type_opt ::= 
@@ -295,8 +329,41 @@ rule param_type_opt ::=
 
 rule type_expr ::= 
     head:Ident tail:type_expr_tail => Type_Path(head, tail)
+    | KwDyn contract:dyn_type_contract_list => Type_Dyn(contract)
     | LParen RParen => Type_Unit
     | atom:Atom => Type_Atom(atom)
+    ;
+
+rule dyn_type_contract_list ::= 
+    head:dyn_type_contract tail:dyn_type_contract_tail => DynType_Cons(head, tail)
+    ;
+
+rule dyn_type_contract_tail ::= 
+    Plus rest:dyn_type_contract_list => rest
+    | => DynType_End
+    ;
+
+rule dyn_type_contract ::= 
+    name:Ident => DynType_Nominal(name)
+    | LBrace row:dyn_row_type RBrace => DynType_Row(row)
+    ;
+
+rule dyn_row_type ::= 
+    var:Ident Pipe fields:dyn_row_field_list_opt => DynRow(var, fields)
+    ;
+
+rule dyn_row_field_list_opt ::= 
+    _:trivia_list head:dyn_row_field tail:dyn_row_field_tail => DynRowField_Cons(head, tail)
+    | => DynRowField_End
+    ;
+
+rule dyn_row_field_tail ::= 
+    _:trivia_list Comma rest:dyn_row_field_list_opt => rest
+    | => DynRowField_End
+    ;
+
+rule dyn_row_field ::= 
+    name:Ident Colon _:trivia_list ty:type_expr => DynRowField(name, ty)
     ;
 
 rule type_expr_tail ::= 
@@ -403,7 +470,7 @@ rule closure_param_list ::=
     ;
 
 rule closure_param ::= 
-    name:Ident ty:closure_param_type => Param(name, ty)
+    name:param_name ty:closure_param_type => Param(name, ty)
     ;
 
 rule closure_param_type ::= 
@@ -730,6 +797,7 @@ rule expr ::= pratt {
         a:Atom => Expr_Atom(a) ;
         KwTrue => Expr_Bool(1) ;
         KwFalse => Expr_Bool(0) ;
+        KwSelf => Expr_Name(mk_str("self", 4)) ;
         p:paren_expr => p ;
         l:list_expr => l ;
         r:record_expr => r ;
@@ -851,13 +919,18 @@ rule arg_tail ::=
         Item_Type(AST),
         Item_Adt(AST),
         Item_Union(AST),
+        Item_Interface(AST),
 
         DefItem(Str, AST, AST, AST, AST),
-        DefItem2(Str, AST),
+        DefItem2(AST, AST),
+        DefName(Str, AST, AST),
+        DefNameMethod(Str),
+        DefNamePlain,
         DefFun(AST, AST, AST, AST),
         DefConst(AST, AST),
-        TypeItem(Str, AST),
+        TypeItem(Str, AST, AST),
         AdtItem(Str, AST, AST),
+        AdtRecordItem(Str, AST, AST),
         AdtVariant_Cons(AST, AST),
         AdtVariant_End,
         AdtVariant(Str, AST),
@@ -870,6 +943,13 @@ rule arg_tail ::=
         UnionField_Cons(AST, AST),
         UnionField_End,
         UnionField(Str, AST),
+        NominalField_Cons(AST, AST),
+        NominalField_End,
+        NominalField(Str, AST),
+        InterfaceItem(Str, AST),
+        InterfaceMethod_Cons(AST, AST),
+        InterfaceMethod_End,
+        InterfaceMethod(Str, AST, AST),
         Generic_Cons(AST, AST),
         Generic_End,
         GenericParam(Str, AST),
@@ -886,11 +966,20 @@ rule arg_tail ::=
         Param_End,
 
         Type_Path(Str, AST),
+        Type_Dyn(AST),
         Type_Tail_Dot(AST),
         Type_Tail_Generic(AST),
         Type_Tail_End,
         Type_Unit,
         Type_Atom(Str),
+        DynType_Cons(AST, AST),
+        DynType_End,
+        DynType_Nominal(Str),
+        DynType_Row(AST),
+        DynRow(Str, AST),
+        DynRowField_Cons(AST, AST),
+        DynRowField_End,
+        DynRowField(Str, AST),
         TypeArg_Cons(AST, AST),
         TypeArg_End,
 

@@ -1,0 +1,6 @@
+namespace parser.spec.nominal.generic.record
+
+type ABC[T: X + Y + {z| row: Type}, F] {
+    a: T,
+    b: F,
+}

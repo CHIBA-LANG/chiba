@@ -1,8 +1,20 @@
-Err(
-    consumed=14,
-    reason="unexpected token or incomplete construct",
-    final_reason="final failure at next unconsumed token",
-    prev_token=[3:13 len=1] Token,
-    next_token=[0:0 len=0] Eof
-)
+[1:1 len=9] leading=[] KwNamespace trailing=[]
+[1:11 len=6] leading=[] Ident("parser") trailing=[]
+[1:17 len=1] leading=[] Dot trailing=[]
+[1:18 len=5] leading=[] Ident("error") trailing=[]
+[1:23 len=1] leading=[] Dot trailing=[]
+[1:24 len=6] leading=[] Ident("kwtype") trailing=[]
+[1:30 len=1] leading=[] Dot trailing=[]
+[1:31 len=5] leading=[] Ident("field") trailing=[]
+[1:36 len=1] leading=[] Dot trailing=[]
+[1:37 len=7] leading=[] Ident("missing") trailing=[]
+[1:44 len=1] leading=[] Dot trailing=[]
+[1:45 len=6] leading=[] KwType trailing=[]
+[3:1 len=4] leading=[] KwType trailing=[]
+[3:6 len=6] leading=[] Ident("UserId") trailing=[]
+[3:13 len=3] leading=[] LBrace trailing=[]
+[4:2 len=5] leading=[] Ident("value") trailing=[]
+[4:7 len=2] leading=[] Colon trailing=[]
+[5:1 len=1] leading=[] RBrace trailing=[]
+[0:0 len=0] leading=[] Eof trailing=[]
 0

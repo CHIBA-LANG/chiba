@@ -1,0 +1,6 @@
+namespace parser.spec.adt.generic.record
+
+data Boxed[T: X + Y + {z| row: Type}, F] {
+    value: T,
+    meta: F,
+}

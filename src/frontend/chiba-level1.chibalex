@@ -50,6 +50,8 @@ mode STRING
 @kw_shift = "shift" @wsnl?
 @kw_true = "true"
 @kw_false = "false"
+@kw_dyn = "dyn" @wsnl?
+@kw_interface = "interface" @wsnl?
 @kw_as = "as" @wsnl?
 @kw_via = "via" @wsnl?
 @kw_use = "use" @wsnl?
@@ -61,6 +63,7 @@ mode STRING
 @kw_return = "return" @wsnl?
 @kw_unique = "unique" @wsnl?
 @kw_send = "send" @wsnl?
+@kw_self = "self"
 
 @op_pipe_gt = "|>" @wsnl?
 @op_colon_eq = ":=" @wsnl?
@@ -133,6 +136,8 @@ tokens CODE :-
     @kw_shift               { KwShift }
     @kw_true                { KwTrue }
     @kw_false               { KwFalse }
+    @kw_dyn                 { KwDyn }
+    @kw_interface           { KwInterface }
     @kw_as                  { KwAs }
     @kw_via                 { KwVia }
     @kw_use                 { KwUse }
@@ -144,6 +149,7 @@ tokens CODE :-
     @kw_return              { KwReturn }
     @kw_unique              { KwUnique }
     @kw_send                { KwSend }
+    @kw_self                { KwSelf }
 
     @ident                  => ident_or_string_open
 
@@ -226,6 +232,8 @@ tokens STRING :-
         KwShift,
         KwTrue,
         KwFalse,
+        KwDyn,
+        KwInterface,
         KwAs,
         KwVia,
         KwUse,
@@ -237,6 +245,7 @@ tokens STRING :-
         KwReturn,
         KwUnique,
         KwSend,
+        KwSelf,
 
         LineComment(Str),
         Newline(Str),

@@ -1,3 +1,5 @@
-namespace parser.error.kwtype.missing.rhs
+namespace parser.error.kwtype.field.missing.type
 
-type UserId =
+type UserId {
+	value:
+}

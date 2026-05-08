@@ -1,0 +1,8 @@
+namespace parser.spec.iface.dynamic.contract
+
+interface NominalInterface {
+    render(): String
+    map(value: i64): i64
+}
+
+def use_dyn(value: dyn NominalInterface + Nominal2 + {row| poly: String}): dyn NominalInterface + Nominal2 + {row| poly: String} = value

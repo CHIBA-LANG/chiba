@@ -1,0 +1,81 @@
+Err(
+    consumed=40,
+    reason="unexpected token or incomplete construct",
+    final_reason="final failure at next unconsumed token",
+    prev_token=[6:1 len=1] Token,
+    next_token=[0:0 len=0] Eof,
+    partial_ast=SourceFile(
+    Attr_End,
+    Namespace(
+      Path_Cons(
+        "parser",
+        Path_Cons(
+          "error",
+          Path_Cons(
+            "nominal",
+            Path_Cons(
+              "field",
+              Path_Cons(
+                "missing",
+                Path_Cons(
+                  "ty",
+                  Path_End
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    Item_Cons(
+      Item_Type(
+        TypeItem(
+          "Broken",
+          Generic_Cons(
+            GenericParam(
+              "T",
+              GenericBound_Cons(
+                GenericBound_Nominal(
+                  "X"
+                ),
+                GenericBound_Cons(
+                  GenericBound_Nominal(
+                    "Y"
+                  ),
+                  GenericBound_Cons(
+                    GenericBound_Row(
+                      GenericRow(
+                        "z",
+                        GenericRowField_Cons(
+                          GenericRowField(
+                            "row",
+                            Type_Path(
+                              "Type",
+                              Type_Tail_End
+                            )
+                          ),
+                          GenericRowField_End
+                        )
+                      )
+                    ),
+                    GenericBound_End
+                  )
+                )
+              )
+            ),
+            Generic_Cons(
+              GenericParam(
+                "F",
+                GenericBound_End
+              ),
+              Generic_End
+            )
+          ),
+          Null
+        )
+      ),
+      Item_End
+    )
+  )
+)
+0

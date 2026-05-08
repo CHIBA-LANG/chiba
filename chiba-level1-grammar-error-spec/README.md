@@ -84,7 +84,7 @@
 - `64-test.chiba`：闭包参数列表多一个逗号。应报错。
 - `65-test.chiba`：泛型调用缺右方括号后直接开始调用。应报错。
 - `66-test.chiba`：`type` 声明缺名字。应报错。
-- `67-test.chiba`：`type` 别名缺右侧类型。应报错。
+- `67-test.chiba`：`type` 记录字段缺类型。应报错。
 - `68-test.chiba`：`data` 声明缺名字。应报错。
 - `69-test.chiba`：`data` 泛型头缺右方括号。应报错。
 - `70-test.chiba`：`data` 构造器列表缺右花括号。应报错。
@@ -121,3 +121,8 @@
 - `101-test.chiba`：`via` 后缺 namespace 路径。应报错。
 - `102-test.chiba`：泛型 row bound 字段缺类型。应报错。
 - `103-test.chiba`：泛型调用类型参数列表缺逗号。应报错。
+- `104-test.chiba`：`dyn` 合同列表的 `+` 后缺约束。应报错。
+- `105-test.chiba`：`interface` 方法签名缺返回类型冒号。应报错。
+- `106-test.chiba`：带泛型和 row bound 的 `type` 记录字段缺类型。应报错。
+- `107-test.chiba`：带泛型和 row bound 的 `data` 记录字段缺类型。应报错。
+- `108-test.chiba`：receiver generics 后的方法 generics 缺逗号。应报错。
