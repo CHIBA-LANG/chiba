@@ -62,6 +62,11 @@ const WAT_CASES = [
     file: "supports/bootstrap/wat-wasi-import-smoke.wat",
     expect: ["B04 wasi smoke ok", "0"],
   },
+  {
+    name: "default _start",
+    file: "supports/bootstrap/wat-start-smoke.wat",
+    expect: ["12"],
+  },
 ];
 
 const LEVEL1C_CASES = [

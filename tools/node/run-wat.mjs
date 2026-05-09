@@ -20,8 +20,27 @@ const WABT_PORTABLE_FEATURES = {
   extended_const: true,
 };
 
+function parseArgs() {
+  let path = null;
+  let invoke = null;
+  let i = 2;
+  while (i < process.argv.length) {
+    const arg = process.argv[i];
+    if (arg === "--invoke") {
+      invoke = process.argv[i + 1] || null;
+      i += 2;
+    } else if (!path) {
+      path = arg;
+      i += 1;
+    } else {
+      i += 1;
+    }
+  }
+  return { path, invoke };
+}
+
 async function readInput() {
-  const path = process.argv[2];
+  const { path } = parseArgs();
   if (path && path !== "-") {
     return fs.readFile(path, "utf8");
   }
@@ -66,7 +85,18 @@ async function makeImports(wat) {
   return { imports, wasi: null };
 }
 
+function selectExport(exports, invoke) {
+  if (invoke) {
+    return invoke;
+  }
+  if (typeof exports.main === "function") {
+    return "main";
+  }
+  return "_start";
+}
+
 try {
+  const { invoke } = parseArgs();
   const raw = await readInput();
   const wat = extractModule(raw);
   const wabt = await wabtInit();
@@ -76,19 +106,27 @@ try {
   const { buffer } = parsed.toBinary({ write_debug_names: true });
   const { imports, wasi } = await makeImports(wat);
   const instance = await WebAssembly.instantiate(buffer, imports);
+  const exports = instance.instance.exports;
+  const exportName = selectExport(exports, invoke);
 
-  if (wasi && typeof instance.instance.exports._initialize === "function") {
+  if (wasi && exportName === "_start") {
+    const status = wasi.start(instance.instance);
+    console.log(String(status || 0));
+    process.exit(0);
+  }
+
+  if (wasi && typeof exports._initialize === "function") {
     wasi.initialize(instance.instance);
   }
 
-  const main = instance.instance.exports.main;
+  const main = exports[exportName];
 
   if (typeof main !== "function") {
-    throw new Error("wat module does not export main");
+    throw new Error(`wat module does not export ${exportName}`);
   }
 
   const result = main();
-  console.log(String(result));
+  console.log(String(result || 0));
 } catch (error) {
   const message = error && error.message ? error.message : String(error);
   console.error(message.split("\n").slice(0, 12).join("\n"));
