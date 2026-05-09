@@ -132,6 +132,11 @@ data CirExpr {
     L0OpAssign(CirExpr, CirExpr),
     L1OpAssign(CirExpr, CirExpr),
 
+    L0OpPrefix(Str, CirExpr),
+    L1OpPrefix(Str, CirExpr),
+    L0OpBinary(Str, CirExpr, CirExpr),
+    L1OpBinary(Str, CirExpr, CirExpr),
+
     L0OpName(Str),
     L1OpRef(CirRef),
 

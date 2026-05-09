@@ -174,6 +174,10 @@ def alpha_expr(expr: CirExpr, ctx: AlphaCtx): CirExpr =
             L1OpField(alpha_expr(value, ctx), field)
         L0OpAssign(lhs, rhs) =>
             L1OpAssign(alpha_expr(lhs, ctx), alpha_expr(rhs, ctx))
+        L0OpPrefix(op, value) =>
+            L1OpPrefix(op, alpha_expr(value, ctx))
+        L0OpBinary(op, lhs, rhs) =>
+            L1OpBinary(op, alpha_expr(lhs, ctx), alpha_expr(rhs, ctx))
         L0OpName(name) =>
             L1OpRef(alpha_env_lookup(alpha_env_get(ctx), name))
         L0OpInt(n) => L1OpInt(n)

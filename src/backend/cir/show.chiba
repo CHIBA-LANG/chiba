@@ -1,0 +1,373 @@
+namespace backend.cir.show
+use metalstd.str.*
+use backend.cir.ir.*
+
+def cir_show_indent_loop(out: Str, i: i64, depth: i64): i64 =
+    if i >= depth { 0 }
+    else {
+        let _ = str_push_cstr(out, "  ")
+        cir_show_indent_loop(out, i + 1, depth)
+    }
+
+def cir_show_indent(out: Str, depth: i64): i64 =
+    cir_show_indent_loop(out, 0, depth)
+
+def cir_show_line(out: Str, depth: i64, name: i64): i64 = {
+    let _ = cir_show_indent(out, depth)
+    let _ = str_push_cstr(out, name)
+    str_push(out, 10)
+}
+
+def cir_show_str_line(out: Str, depth: i64, name: i64, value: Str): i64 = {
+    let _ = cir_show_indent(out, depth)
+    let _ = str_push_cstr(out, name)
+    let _ = str_push_cstr(out, "(\"")
+    let _ = str_append(out, value)
+    let _ = str_push_cstr(out, "\")")
+    str_push(out, 10)
+}
+
+def cir_show_binder_line(out: Str, depth: i64, name: i64, binder: CirBinder): i64 = {
+    let _ = cir_show_indent(out, depth)
+    let _ = str_push_cstr(out, name)
+    let _ = str_push_cstr(out, "(#")
+    let _ = str_append_i64(out, binder.id)
+    let _ = str_push_cstr(out, " \"")
+    let _ = str_append(out, binder.name)
+    let _ = str_push_cstr(out, "\")")
+    str_push(out, 10)
+}
+
+def cir_show_ref(out: Str, depth: i64, r: CirRef): i64 =
+    match r {
+        L0RefName(name) => cir_show_str_line(out, depth, "L0RefName", name)
+        L1RefLocal(id, name) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "L1RefLocal(#")
+            let _ = str_append_i64(out, id)
+            let _ = str_push_cstr(out, " \"")
+            let _ = str_append(out, name)
+            let _ = str_push_cstr(out, "\")")
+            str_push(out, 10)
+        }
+        L1RefGlobal(name) => cir_show_str_line(out, depth, "L1RefGlobal", name)
+        L1RefUnresolved(name) => cir_show_str_line(out, depth, "L1RefUnresolved", name)
+    }
+
+def cir_show_unsupported(out: Str, depth: i64, reason: CirUnsupported): i64 =
+    match reason {
+        CirUnsupportedAst(text) => cir_show_str_line(out, depth, "unsupported-ast", text)
+        CirUnsupportedPass(text) => cir_show_str_line(out, depth, "unsupported-pass", text)
+    }
+
+def cir_show_params(out: Str, depth: i64, params: CirParamList): i64 =
+    match params {
+        CirParamEnd => cir_show_line(out, depth, "params-end")
+        CirParamCons(param, rest) => {
+            let _ = match param {
+                L0Param(name, _) => cir_show_str_line(out, depth, "L0Param", name)
+                L1Param(binder, _) => cir_show_binder_line(out, depth, "L1Param", binder)
+            }
+            cir_show_params(out, depth, rest)
+        }
+    }
+
+def cir_show_expr_list(out: Str, depth: i64, args: CirExprList): i64 =
+    match args {
+        CirExprEnd => cir_show_line(out, depth, "args-end")
+        CirExprCons(head, tail) => {
+            let _ = cir_show_expr(out, depth, head)
+            cir_show_expr_list(out, depth, tail)
+        }
+    }
+
+def cir_show_stmts(out: Str, depth: i64, stmts: CirStmtList): i64 =
+    match stmts {
+        CirStmtEnd => cir_show_line(out, depth, "stmts-end")
+        CirStmtCons(stmt, rest) => {
+            let _ = cir_show_stmt(out, depth, stmt)
+            cir_show_stmts(out, depth, rest)
+        }
+    }
+
+def cir_show_stmt(out: Str, depth: i64, stmt: CirStmt): i64 =
+    match stmt {
+        L0StmtLet(name, value) => {
+            let _ = cir_show_str_line(out, depth, "L0StmtLet", name)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L1StmtLet(binder, value) => {
+            let _ = cir_show_binder_line(out, depth, "L1StmtLet", binder)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L0StmtLetPattern(_, value) => {
+            let _ = cir_show_line(out, depth, "L0StmtLetPattern")
+            cir_show_expr(out, depth + 1, value)
+        }
+        L1StmtLetPattern(_, value) => {
+            let _ = cir_show_line(out, depth, "L1StmtLetPattern")
+            cir_show_expr(out, depth + 1, value)
+        }
+        L0StmtAssign(lhs, rhs) => {
+            let _ = cir_show_line(out, depth, "L0StmtAssign")
+            let _ = cir_show_expr(out, depth + 1, lhs)
+            cir_show_expr(out, depth + 1, rhs)
+        }
+        L1StmtAssign(lhs, rhs) => {
+            let _ = cir_show_line(out, depth, "L1StmtAssign")
+            let _ = cir_show_expr(out, depth + 1, lhs)
+            cir_show_expr(out, depth + 1, rhs)
+        }
+        L0StmtExpr(value) => {
+            let _ = cir_show_line(out, depth, "L0StmtExpr")
+            cir_show_expr(out, depth + 1, value)
+        }
+        L1StmtExpr(value) => {
+            let _ = cir_show_line(out, depth, "L1StmtExpr")
+            cir_show_expr(out, depth + 1, value)
+        }
+        L0StmtReturn(value) => {
+            let _ = cir_show_line(out, depth, "L0StmtReturn")
+            cir_show_expr(out, depth + 1, value)
+        }
+        L1StmtReturn(value) => {
+            let _ = cir_show_line(out, depth, "L1StmtReturn")
+            cir_show_expr(out, depth + 1, value)
+        }
+        L0StmtFor(_, cond, body) => {
+            let _ = cir_show_line(out, depth, "L0StmtFor")
+            let _ = cir_show_expr(out, depth + 1, cond)
+            cir_show_expr(out, depth + 1, body)
+        }
+        L1StmtFor(_, cond, body) => {
+            let _ = cir_show_line(out, depth, "L1StmtFor")
+            let _ = cir_show_expr(out, depth + 1, cond)
+            cir_show_expr(out, depth + 1, body)
+        }
+        L0StmtUnsupported(_, reason) => {
+            let _ = cir_show_line(out, depth, "L0StmtUnsupported")
+            cir_show_unsupported(out, depth + 1, reason)
+        }
+        L1StmtUnsupported(_, reason) => {
+            let _ = cir_show_line(out, depth, "L1StmtUnsupported")
+            cir_show_unsupported(out, depth + 1, reason)
+        }
+    }
+
+def cir_show_match_arms(out: Str, depth: i64, arms: CirMatchArmList): i64 =
+    match arms {
+        CirMatchArmEnd => cir_show_line(out, depth, "match-arms-end")
+        CirMatchArmCons(arm, rest) => {
+            let _ = match arm {
+                L0MatchArm(_, _, value) => {
+                    let _ = cir_show_line(out, depth, "L0MatchArm")
+                    cir_show_expr(out, depth + 1, value)
+                }
+                L1MatchArm(_, _, value) => {
+                    let _ = cir_show_line(out, depth, "L1MatchArm")
+                    cir_show_expr(out, depth + 1, value)
+                }
+            }
+            cir_show_match_arms(out, depth, rest)
+        }
+    }
+
+def cir_show_label(out: Str, depth: i64, label: CirControlLabel): i64 =
+    match label {
+        CirLabelImplicit => cir_show_line(out, depth, "label implicit")
+        CirLabelNamed(name) => cir_show_str_line(out, depth, "label", name)
+    }
+
+def cir_show_expr(out: Str, depth: i64, expr: CirExpr): i64 =
+    match expr {
+        L0OpBlock(stmts, tail) => {
+            let _ = cir_show_line(out, depth, "L0OpBlock")
+            let _ = cir_show_stmts(out, depth + 1, stmts)
+            cir_show_expr(out, depth + 1, tail)
+        }
+        L1OpBlock(stmts, tail) => {
+            let _ = cir_show_line(out, depth, "L1OpBlock")
+            let _ = cir_show_stmts(out, depth + 1, stmts)
+            cir_show_expr(out, depth + 1, tail)
+        }
+        L0OpIf(cond, then_expr, else_expr) => {
+            let _ = cir_show_line(out, depth, "L0OpIf")
+            let _ = cir_show_expr(out, depth + 1, cond)
+            let _ = cir_show_expr(out, depth + 1, then_expr)
+            cir_show_expr(out, depth + 1, else_expr)
+        }
+        L1OpIf(cond, then_expr, else_expr) => {
+            let _ = cir_show_line(out, depth, "L1OpIf")
+            let _ = cir_show_expr(out, depth + 1, cond)
+            let _ = cir_show_expr(out, depth + 1, then_expr)
+            cir_show_expr(out, depth + 1, else_expr)
+        }
+        L0OpMatch(value, arms) => {
+            let _ = cir_show_line(out, depth, "L0OpMatch")
+            let _ = cir_show_expr(out, depth + 1, value)
+            cir_show_match_arms(out, depth + 1, arms)
+        }
+        L1OpMatch(value, arms) => {
+            let _ = cir_show_line(out, depth, "L1OpMatch")
+            let _ = cir_show_expr(out, depth + 1, value)
+            cir_show_match_arms(out, depth + 1, arms)
+        }
+        L0OpClosure(params, body) => {
+            let _ = cir_show_line(out, depth, "L0OpClosure")
+            let _ = cir_show_params(out, depth + 1, params)
+            cir_show_expr(out, depth + 1, body)
+        }
+        L1OpClosure(params, body) => {
+            let _ = cir_show_line(out, depth, "L1OpClosure")
+            let _ = cir_show_params(out, depth + 1, params)
+            cir_show_expr(out, depth + 1, body)
+        }
+        L0OpReset(label, body) => {
+            let _ = cir_show_line(out, depth, "L0OpReset")
+            let _ = cir_show_label(out, depth + 1, label)
+            cir_show_expr(out, depth + 1, body)
+        }
+        L1OpReset(label, body) => {
+            let _ = cir_show_line(out, depth, "L1OpReset")
+            let _ = cir_show_label(out, depth + 1, label)
+            cir_show_expr(out, depth + 1, body)
+        }
+        L0OpShift(label, name, body) => {
+            let _ = cir_show_str_line(out, depth, "L0OpShift", name)
+            let _ = cir_show_label(out, depth + 1, label)
+            cir_show_expr(out, depth + 1, body)
+        }
+        L1OpShift(label, binder, body) => {
+            let _ = cir_show_binder_line(out, depth, "L1OpShift", binder)
+            let _ = cir_show_label(out, depth + 1, label)
+            cir_show_expr(out, depth + 1, body)
+        }
+        L0OpCall(callee, args) => {
+            let _ = cir_show_line(out, depth, "L0OpCall")
+            let _ = cir_show_expr(out, depth + 1, callee)
+            cir_show_expr_list(out, depth + 1, args)
+        }
+        L1OpCall(callee, args) => {
+            let _ = cir_show_line(out, depth, "L1OpCall")
+            let _ = cir_show_expr(out, depth + 1, callee)
+            cir_show_expr_list(out, depth + 1, args)
+        }
+        L0OpField(value, field) => {
+            let _ = cir_show_str_line(out, depth, "L0OpField", field)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L1OpField(value, field) => {
+            let _ = cir_show_str_line(out, depth, "L1OpField", field)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L0OpAssign(lhs, rhs) => {
+            let _ = cir_show_line(out, depth, "L0OpAssign")
+            let _ = cir_show_expr(out, depth + 1, lhs)
+            cir_show_expr(out, depth + 1, rhs)
+        }
+        L1OpAssign(lhs, rhs) => {
+            let _ = cir_show_line(out, depth, "L1OpAssign")
+            let _ = cir_show_expr(out, depth + 1, lhs)
+            cir_show_expr(out, depth + 1, rhs)
+        }
+        L0OpPrefix(op, value) => {
+            let _ = cir_show_str_line(out, depth, "L0OpPrefix", op)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L1OpPrefix(op, value) => {
+            let _ = cir_show_str_line(out, depth, "L1OpPrefix", op)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L0OpBinary(op, lhs, rhs) => {
+            let _ = cir_show_str_line(out, depth, "L0OpBinary", op)
+            let _ = cir_show_expr(out, depth + 1, lhs)
+            cir_show_expr(out, depth + 1, rhs)
+        }
+        L1OpBinary(op, lhs, rhs) => {
+            let _ = cir_show_str_line(out, depth, "L1OpBinary", op)
+            let _ = cir_show_expr(out, depth + 1, lhs)
+            cir_show_expr(out, depth + 1, rhs)
+        }
+        L0OpName(name) => cir_show_str_line(out, depth, "L0OpName", name)
+        L1OpRef(r) => cir_show_ref(out, depth, r)
+        L0OpInt(n) => cir_show_str_line(out, depth, "L0OpInt", n)
+        L1OpInt(n) => cir_show_str_line(out, depth, "L1OpInt", n)
+        L0OpFloat(n) => cir_show_str_line(out, depth, "L0OpFloat", n)
+        L1OpFloat(n) => cir_show_str_line(out, depth, "L1OpFloat", n)
+        L0OpAtom(atom) => cir_show_str_line(out, depth, "L0OpAtom", atom)
+        L1OpAtom(atom) => cir_show_str_line(out, depth, "L1OpAtom", atom)
+        L0OpBool(v) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "L0OpBool(")
+            let _ = str_append_i64(out, v)
+            let _ = str_push_cstr(out, ")")
+            str_push(out, 10)
+        }
+        L1OpBool(v) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "L1OpBool(")
+            let _ = str_append_i64(out, v)
+            let _ = str_push_cstr(out, ")")
+            str_push(out, 10)
+        }
+        L0OpString => cir_show_line(out, depth, "L0OpString")
+        L1OpString => cir_show_line(out, depth, "L1OpString")
+        L0OpUnit => cir_show_line(out, depth, "L0OpUnit")
+        L1OpUnit => cir_show_line(out, depth, "L1OpUnit")
+        L0OpUnsupported(_, reason) => {
+            let _ = cir_show_line(out, depth, "L0OpUnsupported")
+            cir_show_unsupported(out, depth + 1, reason)
+        }
+        L1OpUnsupported(_, reason) => {
+            let _ = cir_show_line(out, depth, "L1OpUnsupported")
+            cir_show_unsupported(out, depth + 1, reason)
+        }
+    }
+
+def cir_show_items(out: Str, depth: i64, items: CirItemList): i64 =
+    match items {
+        CirItemEnd => cir_show_line(out, depth, "items-end")
+        CirItemCons(item, rest) => {
+            let _ = match item {
+                L0ItemDef(name, params, _, body) => {
+                    let _ = cir_show_str_line(out, depth, "L0ItemDef", name)
+                    let _ = cir_show_params(out, depth + 1, params)
+                    cir_show_expr(out, depth + 1, body)
+                }
+                L1ItemDef(binder, params, _, body) => {
+                    let _ = cir_show_binder_line(out, depth, "L1ItemDef", binder)
+                    let _ = cir_show_params(out, depth + 1, params)
+                    cir_show_expr(out, depth + 1, body)
+                }
+                L0ItemExtern(name, _) => cir_show_str_line(out, depth, "L0ItemExtern", name)
+                L1ItemExtern(binder, _) => cir_show_binder_line(out, depth, "L1ItemExtern", binder)
+                L0ItemUnsupported(_, reason) => {
+                    let _ = cir_show_line(out, depth, "L0ItemUnsupported")
+                    cir_show_unsupported(out, depth + 1, reason)
+                }
+                L1ItemUnsupported(_, reason) => {
+                    let _ = cir_show_line(out, depth, "L1ItemUnsupported")
+                    cir_show_unsupported(out, depth + 1, reason)
+                }
+            }
+            cir_show_items(out, depth, rest)
+        }
+    }
+
+def cir_show_module_into(out: Str, module: CirModule): i64 =
+    match module {
+        L0Module(_, items) => {
+            let _ = cir_show_line(out, 0, "L0Module")
+            cir_show_items(out, 1, items)
+        }
+        L1Module(_, items) => {
+            let _ = cir_show_line(out, 0, "L1Module")
+            cir_show_items(out, 1, items)
+        }
+    }
+
+def cir_show_module(module: CirModule): Str = {
+    let out = str_new()
+    let _ = cir_show_module_into(out, module)
+    out
+}

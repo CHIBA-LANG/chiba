@@ -44,11 +44,18 @@ def cir_lower_tail(ast: AST): CirExpr =
         _ => cir_l0_unsupported(ast, mk_str("tail unsupported", 16))
     }
 
+def cir_lower_pattern_let(pat: AST, value: CirExpr): CirStmt =
+    match pat {
+        Pattern_IdentStart(name, PatternAfterIdent_Atom(PatternIdent_Name)) => L0StmtLet(name, value)
+        Pattern_IdentStart(name, PatternAfterIdent_Bind(PatternIdent_Name)) => L0StmtLet(name, value)
+        _ => L0StmtLetPattern(pat, value)
+    }
+
 def cir_lower_stmt(ast: AST): CirStmt =
     match ast {
         Stmt_Let(name, value) => L0StmtLet(name, cir_lower_expr(value))
-        Stmt_LetPattern(pat, value) => L0StmtLetPattern(pat, cir_lower_expr(value))
-        Stmt_LetPatternTyped(pat, _, value) => L0StmtLetPattern(pat, cir_lower_expr(value))
+        Stmt_LetPattern(pat, value) => cir_lower_pattern_let(pat, cir_lower_expr(value))
+        Stmt_LetPatternTyped(pat, _, value) => cir_lower_pattern_let(pat, cir_lower_expr(value))
         Stmt_Assign(lhs, rhs) => L0StmtAssign(cir_lower_expr(lhs), cir_lower_expr(rhs))
         Stmt_Return(value) => L0StmtReturn(cir_lower_expr(value))
         Stmt_Expr(value) => L0StmtExpr(cir_lower_expr(value))
@@ -70,6 +77,47 @@ def cir_lower_match_arms(ast: AST): CirMatchArmList =
         _ => CirMatchArmEnd
     }
 
+def cir_lower_ident_tail(name: Str, tail: AST): CirExpr =
+    match tail {
+        IdentTail_None => L0OpName(name)
+        IdentTail_Call(args, IdentCallClosure_None) => L0OpCall(L0OpName(name), cir_lower_expr_list(args))
+        IdentTail_Call(args, IdentCallClosure_Some(_, closure)) =>
+            L0OpCall(L0OpName(name), CirExprCons(cir_lower_expr(closure), cir_lower_expr_list(args)))
+        _ => cir_l0_unsupported(tail, mk_str("ident tail unsupported", 22))
+    }
+
+def cir_lower_prefix_op(op: AST): Str =
+    match op {
+        Prefix_Neg => mk_str("-", 1)
+        Prefix_Not => mk_str("!", 1)
+        _ => mk_str("?", 1)
+    }
+
+def cir_lower_binary_op(op: AST): Str =
+    match op {
+        OpMul => mk_str("*", 1)
+        OpDiv => mk_str("/", 1)
+        OpMod => mk_str("%", 1)
+        OpShl => mk_str("<<", 2)
+        OpShr => mk_str(">>", 2)
+        OpAdd => mk_str("+", 1)
+        OpSub => mk_str("-", 1)
+        OpEqEq => mk_str("==", 2)
+        OpBangEq => mk_str("!=", 2)
+        OpLt => mk_str("<", 1)
+        OpGt => mk_str(">", 1)
+        OpLtEq => mk_str("<=", 2)
+        OpGtEq => mk_str(">=", 2)
+        OpRange => mk_str("..", 2)
+        OpBitAnd => mk_str("&", 1)
+        OpBitXor => mk_str("^", 1)
+        OpBitOr => mk_str("|", 1)
+        OpAnd => mk_str("&&", 2)
+        OpOr => mk_str("||", 2)
+        OpPipeGt => mk_str("|>", 2)
+        _ => mk_str("?", 1)
+    }
+
 def cir_lower_expr(ast: AST): CirExpr =
     match ast {
         Expr_Block(stmts, tail) => L0OpBlock(cir_lower_stmts(stmts), cir_lower_tail(tail))
@@ -82,16 +130,39 @@ def cir_lower_expr(ast: AST): CirExpr =
         Expr_Call(callee, args) => L0OpCall(cir_lower_expr(callee), cir_lower_expr_list(args))
         Expr_Field(value, field) => L0OpField(cir_lower_expr(value), field)
         Expr_Assign(lhs, rhs) => L0OpAssign(cir_lower_expr(lhs), cir_lower_expr(rhs))
+        Expr_Prefix(op, value) => L0OpPrefix(cir_lower_prefix_op(op), cir_lower_expr(value))
+        Expr_Binary(op, lhs, rhs) => L0OpBinary(cir_lower_binary_op(op), cir_lower_expr(lhs), cir_lower_expr(rhs))
         Expr_Int(n) => L0OpInt(n)
         Expr_Float(n) => L0OpFloat(n)
         Expr_Atom(atom) => L0OpAtom(atom)
         Expr_Bool(v) => L0OpBool(v)
         Expr_String => L0OpString
         Expr_Name(name) => L0OpName(name)
+        Expr_IdentTail(name, tail) => cir_lower_ident_tail(name, tail)
         Expr_Paren(values) => L0OpCall(L0OpName(mk_str("__tuple", 7)), cir_lower_expr_list(values))
         Expr_List(values) => L0OpCall(L0OpName(mk_str("__list", 6)), cir_lower_expr_list(values))
         Expr_Unsafe(body) => cir_lower_expr(body)
         _ => cir_l0_unsupported(ast, mk_str("expr unsupported", 16))
+    }
+
+def cir_def_name_text(ast: AST): Str =
+    match ast {
+        DefName(name, _, DefNamePlain) => name
+        DefName(name, _, DefNameMethod(method)) => {
+            let out = str_new()
+            let _ = str_append(out, name)
+            let _ = str_push(out, 46)
+            let _ = str_append(out, method)
+            out
+        }
+        _ => mk_str("_unsupported_def_name", 21)
+    }
+
+def cir_lower_def_item(name_ast: AST, rest: AST, source_ast: AST): CirItem =
+    match rest {
+        DefFun(_, params, ret, body) => L0ItemDef(cir_def_name_text(name_ast), cir_lower_params(params), ret, cir_lower_expr(body))
+        DefConst(ret, value) => L0ItemDef(cir_def_name_text(name_ast), CirParamEnd, ret, cir_lower_expr(value))
+        _ => L0ItemUnsupported(source_ast, CirUnsupportedAst(mk_str("def rest unsupported", 20)))
     }
 
 def cir_lower_item(ast: AST): CirItem =
@@ -99,6 +170,7 @@ def cir_lower_item(ast: AST): CirItem =
         Item_Def(defn) =>
             match defn {
                 DefItem(name, _, params, ret, body) => L0ItemDef(name, cir_lower_params(params), ret, cir_lower_expr(body))
+                DefItem2(name_ast, rest) => cir_lower_def_item(name_ast, rest, ast)
                 _ => L0ItemUnsupported(ast, CirUnsupportedAst(mk_str("def unsupported", 15)))
             }
         Item_WithAttrs(_, item) => cir_lower_item(item)
