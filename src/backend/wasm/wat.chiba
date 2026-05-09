@@ -221,7 +221,18 @@ def wat_emit_stmt(out: Str, depth: i64, stmt: CirStmt): i64 =
             wat_line(out, depth, "return")
         }
         L1StmtAssign(_, _) => wat_line(out, depth, "unreachable ;; assign unsupported")
-        L1StmtFor(_, _, _) => wat_line(out, depth, "unreachable ;; for unsupported")
+        L1StmtFor(_, cond, body) => {
+            let _ = wat_line(out, depth, "block")
+            let _ = wat_line(out, depth + 1, "loop")
+            let _ = wat_emit_expr(out, depth + 2, cond)
+            let _ = wat_line(out, depth + 2, "i64.eqz")
+            let _ = wat_line(out, depth + 2, "br_if 1")
+            let _ = wat_emit_expr(out, depth + 2, body)
+            let _ = wat_line(out, depth + 2, "drop")
+            let _ = wat_line(out, depth + 2, "br 0")
+            let _ = wat_line(out, depth + 1, "end")
+            wat_line(out, depth, "end")
+        }
         L1StmtLetPattern(_, _) => wat_line(out, depth, "unreachable ;; let-pattern unsupported")
         L1StmtUnsupported(_, _) => wat_line(out, depth, "unreachable ;; stmt unsupported")
         _ => wat_line(out, depth, "unreachable ;; non-l1 stmt")

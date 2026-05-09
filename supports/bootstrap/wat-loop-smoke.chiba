@@ -1,0 +1,8 @@
+namespace bootstrap.wat.loop
+
+def loop_once(): i64 = {
+    for 1 {
+        return 7
+    }
+    return 0
+}

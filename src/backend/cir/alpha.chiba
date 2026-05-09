@@ -117,6 +117,13 @@ def alpha_stmt_list(stmts: CirStmtList, tail: CirExpr, ctx: AlphaCtx): AlphaStmt
                         AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtAssign(lhs2, rhs2), rest2), tail2)
                     }
                 }
+                L0StmtFor(label, cond, body) => {
+                    let cond2 = alpha_expr(cond, ctx)
+                    let body2 = alpha_expr(body, ctx)
+                    match alpha_stmt_list(rest, tail, ctx) {
+                        AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtFor(label, cond2, body2), rest2), tail2)
+                    }
+                }
                 _ => {
                     match alpha_stmt_list(rest, tail, ctx) {
                         AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtUnsupported(Expr_String, CirUnsupportedPass(mk_str("alpha stmt unsupported", 22))), rest2), tail2)
