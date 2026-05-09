@@ -5,6 +5,7 @@
   "scripts": {
     "run:wat": "node tools/node/run-wat.mjs",
     "smoke:bootstrap": "node tools/node/run-bootstrap-smokes.mjs",
+    "smoke:lexer-compare": "node tools/node/run-lexer-compare.mjs",
     "smoke:parser-compare": "node tools/node/run-parser-compare.mjs",
     "smoke:parser-errors": "node tools/node/run-parser-error-smoke.mjs"
   },

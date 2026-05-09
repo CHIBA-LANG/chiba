@@ -6,6 +6,7 @@ use metalstd.str.*
 use metalstd.vec.*
 use lexer.chiba_level1.*
 use parser.chiba_level1.*
+use frontend.lexer_spec.*
 use frontend.parserspec.*
 use backend.cir.alpha.*
 use backend.cir.continuation_check.*
@@ -19,7 +20,24 @@ def argv_str(argv: i64, i: i64): Str = str_from_cptr(argv_cstr(argv, i))
 
 def level1c_usage(): i64 = {
     let _ = write_fd(1, "Usage: level1c <command> <file>\n", 32)
-    let _ = write_fd(1, "Commands: parse check cir wat\n", 30)
+    let _ = write_fd(1, "Commands: lex parse check cir wat\n", 34)
+    0
+}
+
+def level1c_print_token_spans(tokens: Vec, i: i64): i64 =
+    if i >= vec_len(tokens) { 0 }
+    else {
+        let ts = vec_get(tokens, i) as TokenSpan
+        let line = tokenspan_to_string(ts)
+        let _ = str_write_to(line, 1)
+        let _ = write_fd(1, "\n", 1)
+        level1c_print_token_spans(tokens, i + 1)
+    }
+
+def level1c_run_lex(path: Str): i64 = {
+    let src = file_read_file_all_sized(str_to_cstr(path))
+    let tokens = lex_all(src.ptr, src.len, 0)
+    let _ = level1c_print_token_spans(tokens, 0)
     0
 }
 
@@ -92,7 +110,8 @@ def level1c_run_wat(path: Str): i64 =
     }
 
 def level1c_dispatch(cmd: Str, path: Str): i64 =
-    if streq(cmd, mk_str("parse", 5)) != 0 { level1c_run_parse(path) }
+    if streq(cmd, mk_str("lex", 3)) != 0 { level1c_run_lex(path) }
+    else if streq(cmd, mk_str("parse", 5)) != 0 { level1c_run_parse(path) }
     else if streq(cmd, mk_str("check", 5)) != 0 { level1c_run_check(path) }
     else if streq(cmd, mk_str("cir", 3)) != 0 { level1c_run_cir(path) }
     else if streq(cmd, mk_str("wat", 3)) != 0 { level1c_run_wat(path) }

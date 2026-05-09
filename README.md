@@ -10,8 +10,10 @@
 
 ```sh
 timeout 120 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1c_main.chiba --output level1c.o
+timeout 120 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1_lexer_spec_main.chiba --output lexer_spec_runner.o
 timeout 120 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1_parser_spec_main.chiba --output parser_spec_runner.o
 vp run smoke:bootstrap
+vp run smoke:lexer-compare
 vp run smoke:parser-compare
 vp run smoke:parser-errors
 vp exec node tools/node/run-wat.mjs supports/bootstrap/wat-env-import-smoke.wat
