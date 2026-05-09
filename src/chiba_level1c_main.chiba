@@ -30,8 +30,11 @@ def level1c_parse_file(path: Str): LabeledAST = {
 }
 
 def level1c_run_parse(path: Str): i64 = {
-    let parsed = level1c_parse_file(path)
-    let rendered = parseresulttostring(parsed)
+    let src = file_read_file_all_sized(str_to_cstr(path))
+    let tokens = lex_all(src.ptr, src.len, 0)
+    let filtered = striptrivia(tokens)
+    let parsed = if parserprecheck(tokens) != 0 { Err(None, vec_new()) } else { parse_tokens(filtered) }
+    let rendered = parseresulttostringwithtokens(parsed, filtered)
     let _ = str_write_to(rendered, 1)
     let _ = write_fd(1, "\n", 1)
     0
