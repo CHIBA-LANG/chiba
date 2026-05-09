@@ -8,6 +8,7 @@ use lexer.chiba_level1.*
 use parser.chiba_level1.*
 use frontend.parserspec.*
 use backend.cir.alpha.*
+use backend.cir.continuation_check.*
 use backend.cir.lower_ast.*
 use backend.cir.show.*
 use backend.wasm.wat.*
@@ -43,9 +44,18 @@ def level1c_run_parse(path: Str): i64 = {
 def level1c_run_check(path: Str): i64 =
     match level1c_parse_file(path) {
         OK(ast, _) => {
-            let _ = alpha_module(cir_lower_module(ast as AST))
-            let _ = write_fd(1, "check ok\n", 9)
-            0
+            let l1 = alpha_module(cir_lower_module(ast as AST))
+            match cir_cont_check_module(l1) {
+                CirContCheckOk => {
+                    let _ = write_fd(1, "check ok\n", 9)
+                    0
+                }
+                CirContCheckErr(message) => {
+                    let _ = str_write_to(message, 2)
+                    let _ = write_fd(2, "\n", 1)
+                    3
+                }
+            }
         }
         Err(_, _) => {
             let _ = write_fd(2, "parse failed\n", 13)

@@ -1,0 +1,5 @@
+namespace bootstrap.continuation.invalid
+
+def invalid_shift(): i64 = shift k {
+    k(7)
+}

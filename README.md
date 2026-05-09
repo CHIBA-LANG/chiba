@@ -16,6 +16,8 @@ timeout 120 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_l
 timeout 20 ./target/debug/level1c.o --help
 timeout 20 ./target/debug/level1c.o parse chiba-level1-grammar-spec/01-test.chiba
 timeout 20 ./target/debug/level1c.o check chiba-level1-grammar-spec/01-test.chiba
+timeout 20 ./target/debug/level1c.o check supports/bootstrap/continuation-valid.chiba
+timeout 20 ./target/debug/level1c.o check supports/bootstrap/continuation-invalid.chiba
 timeout 20 ./target/debug/level1c.o wat chiba-level1-grammar-spec/01-test.chiba > .scratch/level1c-01.wat
 vp exec node tools/node/run-wat.mjs .scratch/level1c-01.wat
 ```

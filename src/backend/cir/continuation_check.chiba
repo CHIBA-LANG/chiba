@@ -1,0 +1,78 @@
+namespace backend.cir.continuation_check
+use metalstd.str.*
+use backend.cir.ir.*
+
+data CirContCheck {
+    CirContCheckOk,
+    CirContCheckErr(Str)
+}
+
+def cir_cont_merge(a: CirContCheck, b: CirContCheck): CirContCheck =
+    match a {
+        CirContCheckErr(_) => a
+        CirContCheckOk => b
+    }
+
+def cir_cont_check_expr_list(args: CirExprList, reset_depth: i64): CirContCheck =
+    match args {
+        CirExprEnd => CirContCheckOk
+        CirExprCons(head, tail) =>
+            cir_cont_merge(cir_cont_check_expr(head, reset_depth), cir_cont_check_expr_list(tail, reset_depth))
+    }
+
+def cir_cont_check_stmt_list(stmts: CirStmtList, reset_depth: i64): CirContCheck =
+    match stmts {
+        CirStmtEnd => CirContCheckOk
+        CirStmtCons(stmt, rest) =>
+            cir_cont_merge(cir_cont_check_stmt(stmt, reset_depth), cir_cont_check_stmt_list(rest, reset_depth))
+    }
+
+def cir_cont_check_stmt(stmt: CirStmt, reset_depth: i64): CirContCheck =
+    match stmt {
+        L1StmtLet(_, value) => cir_cont_check_expr(value, reset_depth)
+        L1StmtLetPattern(_, value) => cir_cont_check_expr(value, reset_depth)
+        L1StmtAssign(lhs, rhs) => cir_cont_merge(cir_cont_check_expr(lhs, reset_depth), cir_cont_check_expr(rhs, reset_depth))
+        L1StmtExpr(value) => cir_cont_check_expr(value, reset_depth)
+        L1StmtReturn(value) => cir_cont_check_expr(value, reset_depth)
+        L1StmtFor(_, cond, body) => cir_cont_merge(cir_cont_check_expr(cond, reset_depth), cir_cont_check_expr(body, reset_depth))
+        _ => CirContCheckOk
+    }
+
+def cir_cont_check_expr(expr: CirExpr, reset_depth: i64): CirContCheck =
+    match expr {
+        L1OpBlock(stmts, tail) =>
+            cir_cont_merge(cir_cont_check_stmt_list(stmts, reset_depth), cir_cont_check_expr(tail, reset_depth))
+        L1OpIf(cond, then_expr, else_expr) =>
+            cir_cont_merge(cir_cont_check_expr(cond, reset_depth), cir_cont_merge(cir_cont_check_expr(then_expr, reset_depth), cir_cont_check_expr(else_expr, reset_depth)))
+        L1OpMatch(value, _) => cir_cont_check_expr(value, reset_depth)
+        L1OpClosure(_, body) => cir_cont_check_expr(body, reset_depth)
+        L1OpReset(_, body) => cir_cont_check_expr(body, reset_depth + 1)
+        L1OpShift(_, _, body) =>
+            if reset_depth <= 0 { CirContCheckErr(mk_str("shift outside reset", 19)) }
+            else { cir_cont_check_expr(body, reset_depth) }
+        L1OpCall(callee, args) =>
+            cir_cont_merge(cir_cont_check_expr(callee, reset_depth), cir_cont_check_expr_list(args, reset_depth))
+        L1OpField(value, _) => cir_cont_check_expr(value, reset_depth)
+        L1OpAssign(lhs, rhs) => cir_cont_merge(cir_cont_check_expr(lhs, reset_depth), cir_cont_check_expr(rhs, reset_depth))
+        L1OpPrefix(_, value) => cir_cont_check_expr(value, reset_depth)
+        L1OpBinary(_, lhs, rhs) => cir_cont_merge(cir_cont_check_expr(lhs, reset_depth), cir_cont_check_expr(rhs, reset_depth))
+        _ => CirContCheckOk
+    }
+
+def cir_cont_check_items(items: CirItemList): CirContCheck =
+    match items {
+        CirItemEnd => CirContCheckOk
+        CirItemCons(item, rest) => {
+            let current = match item {
+                L1ItemDef(_, _, _, body) => cir_cont_check_expr(body, 0)
+                _ => CirContCheckOk
+            }
+            cir_cont_merge(current, cir_cont_check_items(rest))
+        }
+    }
+
+def cir_cont_check_module(module: CirModule): CirContCheck =
+    match module {
+        L1Module(_, items) => cir_cont_check_items(items)
+        _ => CirContCheckErr(mk_str("continuation check expects L1 module", 36))
+    }

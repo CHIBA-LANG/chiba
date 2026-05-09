@@ -1,0 +1,7 @@
+namespace bootstrap.continuation.valid
+
+def valid_shift(): i64 = reset {
+    shift k {
+        k(7)
+    }
+}
