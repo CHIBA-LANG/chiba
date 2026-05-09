@@ -33,6 +33,18 @@ data CirUnsupported {
     CirUnsupportedPass(Str)
 }
 
+data CirExternAbi {
+    CirExternAbiWasi,
+    CirExternAbiEnv,
+    CirExternAbiUnsupported(Str)
+}
+
+type CirExternImport {
+    abi: CirExternAbi
+    module_name: Str
+    symbol_name: Str
+}
+
 data CirModule {
     L0Module(AST, CirItemList),
     L1Module(AST, CirItemList)
@@ -46,8 +58,8 @@ data CirItemList {
 data CirItem {
     L0ItemDef(Str, CirParamList, AST, CirExpr),
     L1ItemDef(CirBinder, CirParamList, AST, CirExpr),
-    L0ItemExtern(Str, AST),
-    L1ItemExtern(CirBinder, AST),
+    L0ItemExtern(Str, CirParamList, AST, CirExternImport),
+    L1ItemExtern(CirBinder, CirParamList, AST, CirExternImport),
     L0ItemUnsupported(AST, CirUnsupported),
     L1ItemUnsupported(AST, CirUnsupported)
 }
@@ -159,6 +171,15 @@ data CirExpr {
 
 def cir_binder(id: i64, name: Str): CirBinder =
     CirBinder { id: id, name: name }
+
+def cir_extern_import(abi: CirExternAbi, module_name: Str, symbol_name: Str): CirExternImport =
+    CirExternImport { abi: abi, module_name: module_name, symbol_name: symbol_name }
+
+def cir_extern_wasi(symbol_name: Str): CirExternImport =
+    cir_extern_import(CirExternAbiWasi, mk_str("wasi_snapshot_preview1", 22), symbol_name)
+
+def cir_extern_env(symbol_name: Str): CirExternImport =
+    cir_extern_import(CirExternAbiEnv, mk_str("env", 3), symbol_name)
 
 def cir_l0_unsupported(ast: AST, reason: Str): CirExpr =
     L0OpUnsupported(ast, CirUnsupportedAst(reason))

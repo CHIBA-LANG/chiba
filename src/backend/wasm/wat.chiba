@@ -58,10 +58,44 @@ def wat_emit_params(out: Str, params: CirParamList): i64 =
         }
     }
 
+def wat_emit_import_params(out: Str, params: CirParamList): i64 =
+    match params {
+        CirParamEnd => 0
+        CirParamCons(_, rest) => {
+            let _ = str_push_cstr(out, " (param i64)")
+            wat_emit_import_params(out, rest)
+        }
+    }
+
 def wat_params_empty(params: CirParamList): i64 =
     match params {
         CirParamEnd => 1
         _ => 0
+    }
+
+def wat_emit_import(out: Str, item: CirItem): i64 =
+    match item {
+        L1ItemExtern(binder, params, _, import) => {
+            let _ = str_push_cstr(out, "  (import \"")
+            let _ = str_append(out, import.module_name)
+            let _ = str_push_cstr(out, "\" \"")
+            let _ = str_append(out, import.symbol_name)
+            let _ = str_push_cstr(out, "\" (func ")
+            let _ = wat_func_name(out, binder.name)
+            let _ = wat_emit_import_params(out, params)
+            let _ = str_push_cstr(out, " (result i64)))")
+            str_push(out, 10)
+        }
+        _ => 0
+    }
+
+def wat_emit_imports(out: Str, items: CirItemList): i64 =
+    match items {
+        CirItemEnd => 0
+        CirItemCons(item, rest) => {
+            let _ = wat_emit_import(out, item)
+            wat_emit_imports(out, rest)
+        }
     }
 
 def wat_collect_expr_locals(out: Str, expr: CirExpr): i64 =
@@ -313,7 +347,10 @@ def wat_emit_module(module: CirModule): Str = {
     let out = str_new()
     let _ = str_push_cstr(out, "(module\n")
     let _ = match module {
-        L1Module(_, items) => wat_emit_items(out, items, 0)
+        L1Module(_, items) => {
+            let _ = wat_emit_imports(out, items)
+            wat_emit_items(out, items, 0)
+        }
         _ => 0
     }
     let _ = str_push_cstr(out, ")\n")

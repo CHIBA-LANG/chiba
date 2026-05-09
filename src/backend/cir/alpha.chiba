@@ -202,9 +202,11 @@ def alpha_item(item: CirItem, ctx: AlphaCtx): CirItem =
             let _ = alpha_env_set(ctx, old_env)
             L1ItemDef(binder, params2, ret, body2)
         }
-        L0ItemExtern(name, ast) => {
+        L0ItemExtern(name, params, ret, import) => {
             let id = alpha_fresh(ctx)
-            L1ItemExtern(cir_binder(id, name), ast)
+            let binder = cir_binder(id, name)
+            let params2 = alpha_param_list(params, ctx)
+            L1ItemExtern(binder, params2, ret, import)
         }
         L0ItemUnsupported(ast, reason) => L1ItemUnsupported(ast, reason)
         _ => item

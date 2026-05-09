@@ -339,8 +339,14 @@ def cir_show_items(out: Str, depth: i64, items: CirItemList): i64 =
                     let _ = cir_show_params(out, depth + 1, params)
                     cir_show_expr(out, depth + 1, body)
                 }
-                L0ItemExtern(name, _) => cir_show_str_line(out, depth, "L0ItemExtern", name)
-                L1ItemExtern(binder, _) => cir_show_binder_line(out, depth, "L1ItemExtern", binder)
+                L0ItemExtern(name, params, _, _) => {
+                    let _ = cir_show_str_line(out, depth, "L0ItemExtern", name)
+                    cir_show_params(out, depth + 1, params)
+                }
+                L1ItemExtern(binder, params, _, _) => {
+                    let _ = cir_show_binder_line(out, depth, "L1ItemExtern", binder)
+                    cir_show_params(out, depth + 1, params)
+                }
                 L0ItemUnsupported(_, reason) => {
                     let _ = cir_show_line(out, depth, "L0ItemUnsupported")
                     cir_show_unsupported(out, depth + 1, reason)

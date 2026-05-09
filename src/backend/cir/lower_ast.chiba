@@ -191,8 +191,20 @@ def cir_def_name_text(ast: AST): Str =
 
 def cir_lower_def_item(name_ast: AST, rest: AST, source_ast: AST): CirItem =
     match rest {
-        DefFun(_, params, ret, body) => L0ItemDef(cir_def_name_text(name_ast), cir_lower_params(params), ret, cir_lower_expr(body))
-        DefConst(ret, value) => L0ItemDef(cir_def_name_text(name_ast), CirParamEnd, ret, cir_lower_expr(value))
+        DefFun(_, params, ret, body) => {
+            let name = cir_def_name_text(name_ast)
+            match body {
+                Expr_Extern(_) => L0ItemExtern(name, cir_lower_params(params), ret, cir_extern_wasi(name))
+                _ => L0ItemDef(name, cir_lower_params(params), ret, cir_lower_expr(body))
+            }
+        }
+        DefConst(ret, value) => {
+            let name = cir_def_name_text(name_ast)
+            match value {
+                Expr_Extern(_) => L0ItemExtern(name, CirParamEnd, ret, cir_extern_wasi(name))
+                _ => L0ItemDef(name, CirParamEnd, ret, cir_lower_expr(value))
+            }
+        }
         _ => L0ItemUnsupported(source_ast, CirUnsupportedAst(mk_str("def rest unsupported", 20)))
     }
 
@@ -200,7 +212,11 @@ def cir_lower_item(ast: AST): CirItem =
     match ast {
         Item_Def(defn) =>
             match defn {
-                DefItem(name, _, params, ret, body) => L0ItemDef(name, cir_lower_params(params), ret, cir_lower_expr(body))
+                DefItem(name, _, params, ret, body) =>
+                    match body {
+                        Expr_Extern(_) => L0ItemExtern(name, cir_lower_params(params), ret, cir_extern_wasi(name))
+                        _ => L0ItemDef(name, cir_lower_params(params), ret, cir_lower_expr(body))
+                    }
                 DefItem2(name_ast, rest) => cir_lower_def_item(name_ast, rest, ast)
                 _ => L0ItemUnsupported(ast, CirUnsupportedAst(mk_str("def unsupported", 15)))
             }

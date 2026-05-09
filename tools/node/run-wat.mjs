@@ -42,6 +42,30 @@ function extractModule(text) {
   return text.slice(start, end + 2);
 }
 
+async function makeImports(wat) {
+  const imports = {
+    env: {
+      js_log(value) {
+        console.log(`env.js_log ${String(value)}`);
+        return 0n;
+      },
+    },
+  };
+
+  if (wat.includes('"wasi_snapshot_preview1"')) {
+    const { WASI } = await import("node:wasi");
+    const wasi = new WASI({
+      version: "preview1",
+      args: [],
+      env: {},
+      preopens: {},
+    });
+    return { imports: { ...wasi.getImportObject(), ...imports }, wasi };
+  }
+
+  return { imports, wasi: null };
+}
+
 try {
   const raw = await readInput();
   const wat = extractModule(raw);
@@ -50,7 +74,13 @@ try {
   parsed.resolveNames();
   parsed.validate();
   const { buffer } = parsed.toBinary({ write_debug_names: true });
-  const instance = await WebAssembly.instantiate(buffer, {});
+  const { imports, wasi } = await makeImports(wat);
+  const instance = await WebAssembly.instantiate(buffer, imports);
+
+  if (wasi && typeof instance.instance.exports._initialize === "function") {
+    wasi.initialize(instance.instance);
+  }
+
   const main = instance.instance.exports.main;
 
   if (typeof main !== "function") {
