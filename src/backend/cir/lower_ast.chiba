@@ -1,0 +1,119 @@
+namespace backend.cir.lower_ast
+use metalstd.str.*
+use parser.chiba_level1.*
+use backend.cir.ir.*
+
+def cir_lower_control_label(ast: AST): CirControlLabel =
+    match ast {
+        ControlLabel_Some => CirLabelImplicit
+        ControlLabel_None => CirLabelImplicit
+        _ => CirLabelImplicit
+    }
+
+def cir_lower_expr_list(ast: AST): CirExprList =
+    match ast {
+        ExprList_End => CirExprEnd
+        ExprList_Cons(head, tail) => CirExprCons(cir_lower_expr(head), cir_lower_expr_list(tail))
+        Arg_End => CirExprEnd
+        Arg_Cons(head, tail) => CirExprCons(cir_lower_expr(head), cir_lower_expr_list(tail))
+        _ => CirExprCons(cir_l0_unsupported(ast, mk_str("expr list unsupported", 21)), CirExprEnd)
+    }
+
+def cir_lower_params(ast: AST): CirParamList =
+    match ast {
+        Param_End => CirParamEnd
+        Param_Cons(head, tail) =>
+            match head {
+                Param(name, ty) => CirParamCons(L0Param(name, ty), cir_lower_params(tail))
+                _ => CirParamCons(L0Param(mk_str("_unsupported", 12), head), cir_lower_params(tail))
+            }
+        _ => CirParamEnd
+    }
+
+def cir_lower_stmts(ast: AST): CirStmtList =
+    match ast {
+        Stmt_End => CirStmtEnd
+        Stmt_Cons(head, tail) => CirStmtCons(cir_lower_stmt(head), cir_lower_stmts(tail))
+        _ => CirStmtCons(L0StmtUnsupported(ast, CirUnsupportedAst(mk_str("stmt list unsupported", 21))), CirStmtEnd)
+    }
+
+def cir_lower_tail(ast: AST): CirExpr =
+    match ast {
+        TailExpr_Some(value) => cir_lower_expr(value)
+        TailExpr_None => L0OpUnit
+        _ => cir_l0_unsupported(ast, mk_str("tail unsupported", 16))
+    }
+
+def cir_lower_stmt(ast: AST): CirStmt =
+    match ast {
+        Stmt_Let(name, value) => L0StmtLet(name, cir_lower_expr(value))
+        Stmt_LetPattern(pat, value) => L0StmtLetPattern(pat, cir_lower_expr(value))
+        Stmt_LetPatternTyped(pat, _, value) => L0StmtLetPattern(pat, cir_lower_expr(value))
+        Stmt_Assign(lhs, rhs) => L0StmtAssign(cir_lower_expr(lhs), cir_lower_expr(rhs))
+        Stmt_Return(value) => L0StmtReturn(cir_lower_expr(value))
+        Stmt_Expr(value) => L0StmtExpr(cir_lower_expr(value))
+        Stmt_For(label, cond, body) => L0StmtFor(label, cir_lower_expr(cond), cir_lower_expr(body))
+        Stmt_WithAttrs(_, stmt) => cir_lower_stmt(stmt)
+        Stmt_Empty => L0StmtExpr(L0OpUnit)
+        _ => L0StmtUnsupported(ast, CirUnsupportedAst(mk_str("stmt unsupported", 16)))
+    }
+
+def cir_lower_match_arms(ast: AST): CirMatchArmList =
+    match ast {
+        MatchArm_End => CirMatchArmEnd
+        MatchArm_Cons(head, tail) =>
+            match head {
+                MatchArm(pat, guard, value) =>
+                    CirMatchArmCons(L0MatchArm(pat, guard, cir_lower_expr(value)), cir_lower_match_arms(tail))
+                _ => CirMatchArmCons(L0MatchArm(head, MatchGuard_None, cir_l0_unsupported(head, mk_str("match arm unsupported", 21))), cir_lower_match_arms(tail))
+            }
+        _ => CirMatchArmEnd
+    }
+
+def cir_lower_expr(ast: AST): CirExpr =
+    match ast {
+        Expr_Block(stmts, tail) => L0OpBlock(cir_lower_stmts(stmts), cir_lower_tail(tail))
+        Expr_Closure(params, body) => L0OpClosure(cir_lower_params(params), cir_lower_expr(body))
+        Expr_If(cond, then_block, else_branch) => L0OpIf(cir_lower_expr(cond), cir_lower_expr(then_block), cir_lower_expr(else_branch))
+        IfCond_Expr(value) => cir_lower_expr(value)
+        Expr_Match(value, arms) => L0OpMatch(cir_lower_expr(value), cir_lower_match_arms(arms))
+        Expr_Reset(label, body) => L0OpReset(cir_lower_control_label(label), cir_lower_expr(body))
+        Expr_Shift(label, name, body) => L0OpShift(cir_lower_control_label(label), name, cir_lower_expr(body))
+        Expr_Call(callee, args) => L0OpCall(cir_lower_expr(callee), cir_lower_expr_list(args))
+        Expr_Field(value, field) => L0OpField(cir_lower_expr(value), field)
+        Expr_Assign(lhs, rhs) => L0OpAssign(cir_lower_expr(lhs), cir_lower_expr(rhs))
+        Expr_Int(n) => L0OpInt(n)
+        Expr_Float(n) => L0OpFloat(n)
+        Expr_Atom(atom) => L0OpAtom(atom)
+        Expr_Bool(v) => L0OpBool(v)
+        Expr_String => L0OpString
+        Expr_Name(name) => L0OpName(name)
+        Expr_Paren(values) => L0OpCall(L0OpName(mk_str("__tuple", 7)), cir_lower_expr_list(values))
+        Expr_List(values) => L0OpCall(L0OpName(mk_str("__list", 6)), cir_lower_expr_list(values))
+        Expr_Unsafe(body) => cir_lower_expr(body)
+        _ => cir_l0_unsupported(ast, mk_str("expr unsupported", 16))
+    }
+
+def cir_lower_item(ast: AST): CirItem =
+    match ast {
+        Item_Def(defn) =>
+            match defn {
+                DefItem(name, _, params, ret, body) => L0ItemDef(name, cir_lower_params(params), ret, cir_lower_expr(body))
+                _ => L0ItemUnsupported(ast, CirUnsupportedAst(mk_str("def unsupported", 15)))
+            }
+        Item_WithAttrs(_, item) => cir_lower_item(item)
+        _ => L0ItemUnsupported(ast, CirUnsupportedAst(mk_str("item unsupported", 16)))
+    }
+
+def cir_lower_items(ast: AST): CirItemList =
+    match ast {
+        Item_End => CirItemEnd
+        Item_Cons(head, tail) => CirItemCons(cir_lower_item(head), cir_lower_items(tail))
+        _ => CirItemCons(L0ItemUnsupported(ast, CirUnsupportedAst(mk_str("item list unsupported", 21))), CirItemEnd)
+    }
+
+def cir_lower_module(ast: AST): CirModule =
+    match ast {
+        SourceFile(attrs, ns, items) => L0Module(SourceFile(attrs, ns, Item_End), cir_lower_items(items))
+        _ => L0Module(ast, CirItemEnd)
+    }

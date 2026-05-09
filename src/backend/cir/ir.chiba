@@ -1,0 +1,162 @@
+namespace backend.cir.ir
+use metalstd.str.*
+use parser.chiba_level1.*
+
+// CIR is one large nanopass ADT. Stage prefixes document pass boundaries while
+// keeping shared side data and dumps in one compiler language.
+
+data CirPass {
+    CirPass_L0Surface,
+    CirPass_L1Alpha,
+    CirPass_L2Typed,
+    CirPass_L3Answer,
+    CirPass_L4Usage,
+    CirPass_L5Cps,
+    CirPass_L6Closure,
+    CirPass_L7WasmCore
+}
+
+type CirBinder {
+    id: i64
+    name: Str
+}
+
+data CirRef {
+    L0RefName(Str),
+    L1RefLocal(i64, Str),
+    L1RefGlobal(Str),
+    L1RefUnresolved(Str)
+}
+
+data CirUnsupported {
+    CirUnsupportedAst(Str),
+    CirUnsupportedPass(Str)
+}
+
+data CirModule {
+    L0Module(AST, CirItemList),
+    L1Module(AST, CirItemList)
+}
+
+data CirItemList {
+    CirItemCons(CirItem, CirItemList),
+    CirItemEnd
+}
+
+data CirItem {
+    L0ItemDef(Str, CirParamList, AST, CirExpr),
+    L1ItemDef(CirBinder, CirParamList, AST, CirExpr),
+    L0ItemExtern(Str, AST),
+    L1ItemExtern(CirBinder, AST),
+    L0ItemUnsupported(AST, CirUnsupported),
+    L1ItemUnsupported(AST, CirUnsupported)
+}
+
+data CirParamList {
+    CirParamCons(CirParam, CirParamList),
+    CirParamEnd
+}
+
+data CirParam {
+    L0Param(Str, AST),
+    L1Param(CirBinder, AST)
+}
+
+data CirStmtList {
+    CirStmtCons(CirStmt, CirStmtList),
+    CirStmtEnd
+}
+
+data CirStmt {
+    L0StmtLet(Str, CirExpr),
+    L1StmtLet(CirBinder, CirExpr),
+    L0StmtLetPattern(AST, CirExpr),
+    L1StmtLetPattern(AST, CirExpr),
+    L0StmtAssign(CirExpr, CirExpr),
+    L1StmtAssign(CirExpr, CirExpr),
+    L0StmtExpr(CirExpr),
+    L1StmtExpr(CirExpr),
+    L0StmtReturn(CirExpr),
+    L1StmtReturn(CirExpr),
+    L0StmtFor(AST, CirExpr, CirExpr),
+    L1StmtFor(AST, CirExpr, CirExpr),
+    L0StmtUnsupported(AST, CirUnsupported),
+    L1StmtUnsupported(AST, CirUnsupported)
+}
+
+data CirExprList {
+    CirExprCons(CirExpr, CirExprList),
+    CirExprEnd
+}
+
+data CirMatchArmList {
+    CirMatchArmCons(CirMatchArm, CirMatchArmList),
+    CirMatchArmEnd
+}
+
+data CirMatchArm {
+    L0MatchArm(AST, AST, CirExpr),
+    L1MatchArm(AST, AST, CirExpr)
+}
+
+data CirControlLabel {
+    CirLabelImplicit,
+    CirLabelNamed(Str)
+}
+
+data CirExpr {
+    L0OpBlock(CirStmtList, CirExpr),
+    L1OpBlock(CirStmtList, CirExpr),
+
+    L0OpIf(CirExpr, CirExpr, CirExpr),
+    L1OpIf(CirExpr, CirExpr, CirExpr),
+
+    L0OpMatch(CirExpr, CirMatchArmList),
+    L1OpMatch(CirExpr, CirMatchArmList),
+
+    L0OpClosure(CirParamList, CirExpr),
+    L1OpClosure(CirParamList, CirExpr),
+
+    L0OpReset(CirControlLabel, CirExpr),
+    L1OpReset(CirControlLabel, CirExpr),
+
+    L0OpShift(CirControlLabel, Str, CirExpr),
+    L1OpShift(CirControlLabel, CirBinder, CirExpr),
+
+    L0OpCall(CirExpr, CirExprList),
+    L1OpCall(CirExpr, CirExprList),
+
+    L0OpField(CirExpr, Str),
+    L1OpField(CirExpr, Str),
+
+    L0OpAssign(CirExpr, CirExpr),
+    L1OpAssign(CirExpr, CirExpr),
+
+    L0OpName(Str),
+    L1OpRef(CirRef),
+
+    L0OpInt(Str),
+    L1OpInt(Str),
+    L0OpFloat(Str),
+    L1OpFloat(Str),
+    L0OpAtom(Str),
+    L1OpAtom(Str),
+    L0OpBool(i64),
+    L1OpBool(i64),
+    L0OpString,
+    L1OpString,
+    L0OpUnit,
+    L1OpUnit,
+
+    L0OpUnsupported(AST, CirUnsupported),
+    L1OpUnsupported(AST, CirUnsupported)
+}
+
+def cir_binder(id: i64, name: Str): CirBinder =
+    CirBinder { id: id, name: name }
+
+def cir_l0_unsupported(ast: AST, reason: Str): CirExpr =
+    L0OpUnsupported(ast, CirUnsupportedAst(reason))
+
+def cir_l1_unsupported(ast: AST, reason: Str): CirExpr =
+    L1OpUnsupported(ast, CirUnsupportedAst(reason))

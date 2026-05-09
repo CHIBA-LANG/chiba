@@ -1,0 +1,222 @@
+namespace backend.cir.alpha
+use metalstd.mem.*
+use metalstd.str.*
+use parser.chiba_level1.*
+use backend.cir.ir.*
+
+data AlphaBinding {
+    AlphaBinding(Str, i64)
+}
+
+data AlphaEnv {
+    AlphaEnvCons(AlphaBinding, AlphaEnv),
+    AlphaEnvEnd
+}
+
+type AlphaCtx {
+    next_binder: i64
+    env: i64
+}
+
+def alpha_ctx_new(): AlphaCtx =
+    AlphaCtx { next_binder: heap_alloc(8), env: heap_alloc(8) }
+
+def alpha_ctx_init(ctx: AlphaCtx): AlphaCtx = {
+    let _ = store64(ctx.next_binder, 0, 0)
+    let _ = store64(ctx.env, 0, AlphaEnvEnd as i64)
+    ctx
+}
+
+def alpha_fresh(ctx: AlphaCtx): i64 = {
+    let id = load64(ctx.next_binder, 0)
+    let _ = store64(ctx.next_binder, 0, id + 1)
+    id
+}
+
+def alpha_env_push(env: AlphaEnv, name: Str, id: i64): AlphaEnv =
+    AlphaEnvCons(AlphaBinding(name, id), env)
+
+def alpha_env_get(ctx: AlphaCtx): AlphaEnv =
+    load64(ctx.env, 0) as AlphaEnv
+
+def alpha_env_set(ctx: AlphaCtx, env: AlphaEnv): i64 =
+    store64(ctx.env, 0, env as i64)
+
+def alpha_env_push_ctx(ctx: AlphaCtx, name: Str, id: i64): i64 =
+    alpha_env_set(ctx, alpha_env_push(alpha_env_get(ctx), name, id))
+
+def alpha_env_lookup(env: AlphaEnv, name: Str): CirRef =
+    match env {
+        AlphaEnvEnd => L1RefUnresolved(name)
+        AlphaEnvCons(binding, rest) =>
+            match binding {
+                AlphaBinding(bound_name, id) =>
+                    if streq(bound_name, name) != 0 { L1RefLocal(id, name) }
+                    else { alpha_env_lookup(rest, name) }
+            }
+    }
+
+data AlphaStmtResult {
+    AlphaStmtResult(CirStmtList, CirExpr)
+}
+
+def alpha_param_list(params: CirParamList, ctx: AlphaCtx): CirParamList =
+    match params {
+        CirParamEnd => CirParamEnd
+        CirParamCons(param, rest) =>
+            match param {
+                L0Param(name, ty) => {
+                    let id = alpha_fresh(ctx)
+                    let binder = cir_binder(id, name)
+                    let _ = alpha_env_push_ctx(ctx, name, id)
+                    CirParamCons(L1Param(binder, ty), alpha_param_list(rest, ctx))
+                }
+                L1Param(_, _) => {
+                    CirParamCons(param, alpha_param_list(rest, ctx))
+                }
+            }
+    }
+
+def alpha_expr_list(xs: CirExprList, ctx: AlphaCtx): CirExprList =
+    match xs {
+        CirExprEnd => CirExprEnd
+        CirExprCons(head, tail) =>
+            CirExprCons(alpha_expr(head, ctx), alpha_expr_list(tail, ctx))
+    }
+
+def alpha_stmt_list(stmts: CirStmtList, tail: CirExpr, ctx: AlphaCtx): AlphaStmtResult =
+    match stmts {
+        CirStmtEnd => AlphaStmtResult(CirStmtEnd, alpha_expr(tail, ctx))
+        CirStmtCons(stmt, rest) =>
+            match stmt {
+                L0StmtLet(name, value) => {
+                    let value2 = alpha_expr(value, ctx)
+                    let id = alpha_fresh(ctx)
+                    let binder = cir_binder(id, name)
+                    let _ = alpha_env_push_ctx(ctx, name, id)
+                    match alpha_stmt_list(rest, tail, ctx) {
+                        AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtLet(binder, value2), rest2), tail2)
+                    }
+                }
+                L0StmtExpr(value) => {
+                    let value2 = alpha_expr(value, ctx)
+                    match alpha_stmt_list(rest, tail, ctx) {
+                        AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtExpr(value2), rest2), tail2)
+                    }
+                }
+                L0StmtReturn(value) => {
+                    let value2 = alpha_expr(value, ctx)
+                    match alpha_stmt_list(rest, tail, ctx) {
+                        AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtReturn(value2), rest2), tail2)
+                    }
+                }
+                L0StmtAssign(lhs, rhs) => {
+                    let lhs2 = alpha_expr(lhs, ctx)
+                    let rhs2 = alpha_expr(rhs, ctx)
+                    match alpha_stmt_list(rest, tail, ctx) {
+                        AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtAssign(lhs2, rhs2), rest2), tail2)
+                    }
+                }
+                _ => {
+                    match alpha_stmt_list(rest, tail, ctx) {
+                        AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtUnsupported(Expr_String, CirUnsupportedPass(mk_str("alpha stmt unsupported", 22))), rest2), tail2)
+                    }
+                }
+            }
+    }
+
+def alpha_match_arms(arms: CirMatchArmList, ctx: AlphaCtx): CirMatchArmList =
+    match arms {
+        CirMatchArmEnd => CirMatchArmEnd
+        CirMatchArmCons(arm, rest) =>
+            match arm {
+                L0MatchArm(pat, guard, value) =>
+                    CirMatchArmCons(L1MatchArm(pat, guard, alpha_expr(value, ctx)), alpha_match_arms(rest, ctx))
+                _ => CirMatchArmCons(arm, alpha_match_arms(rest, ctx))
+            }
+    }
+
+def alpha_expr(expr: CirExpr, ctx: AlphaCtx): CirExpr =
+    match expr {
+        L0OpBlock(stmts, tail) => {
+            let old_env = alpha_env_get(ctx)
+            let result = alpha_stmt_list(stmts, tail, ctx)
+            let _ = alpha_env_set(ctx, old_env)
+            match result {
+                AlphaStmtResult(stmts2, tail2) => L1OpBlock(stmts2, tail2)
+            }
+        }
+        L0OpIf(cond, then_expr, else_expr) =>
+            L1OpIf(alpha_expr(cond, ctx), alpha_expr(then_expr, ctx), alpha_expr(else_expr, ctx))
+        L0OpMatch(value, arms) =>
+            L1OpMatch(alpha_expr(value, ctx), alpha_match_arms(arms, ctx))
+        L0OpClosure(params, body) => {
+            let old_env = alpha_env_get(ctx)
+            let params2 = alpha_param_list(params, ctx)
+            let body2 = alpha_expr(body, ctx)
+            let _ = alpha_env_set(ctx, old_env)
+            L1OpClosure(params2, body2)
+        }
+        L0OpReset(label, body) =>
+            L1OpReset(label, alpha_expr(body, ctx))
+        L0OpShift(label, name, body) => {
+            let id = alpha_fresh(ctx)
+            let binder = cir_binder(id, name)
+            let old_env = alpha_env_get(ctx)
+            let _ = alpha_env_push_ctx(ctx, name, id)
+            let body2 = alpha_expr(body, ctx)
+            let _ = alpha_env_set(ctx, old_env)
+            L1OpShift(label, binder, body2)
+        }
+        L0OpCall(callee, args) =>
+            L1OpCall(alpha_expr(callee, ctx), alpha_expr_list(args, ctx))
+        L0OpField(value, field) =>
+            L1OpField(alpha_expr(value, ctx), field)
+        L0OpAssign(lhs, rhs) =>
+            L1OpAssign(alpha_expr(lhs, ctx), alpha_expr(rhs, ctx))
+        L0OpName(name) =>
+            L1OpRef(alpha_env_lookup(alpha_env_get(ctx), name))
+        L0OpInt(n) => L1OpInt(n)
+        L0OpFloat(n) => L1OpFloat(n)
+        L0OpAtom(atom) => L1OpAtom(atom)
+        L0OpBool(v) => L1OpBool(v)
+        L0OpString => L1OpString
+        L0OpUnit => L1OpUnit
+        L0OpUnsupported(ast, reason) => L1OpUnsupported(ast, reason)
+        _ => expr
+    }
+
+def alpha_item(item: CirItem, ctx: AlphaCtx): CirItem =
+    match item {
+        L0ItemDef(name, params, ret, body) => {
+            let old_env = alpha_env_get(ctx)
+            let id = alpha_fresh(ctx)
+            let binder = cir_binder(id, name)
+            let _ = alpha_env_push_ctx(ctx, name, id)
+            let params2 = alpha_param_list(params, ctx)
+            let body2 = alpha_expr(body, ctx)
+            let _ = alpha_env_set(ctx, old_env)
+            L1ItemDef(binder, params2, ret, body2)
+        }
+        L0ItemExtern(name, ast) => {
+            let id = alpha_fresh(ctx)
+            L1ItemExtern(cir_binder(id, name), ast)
+        }
+        L0ItemUnsupported(ast, reason) => L1ItemUnsupported(ast, reason)
+        _ => item
+    }
+
+def alpha_items(items: CirItemList, ctx: AlphaCtx): CirItemList =
+    match items {
+        CirItemEnd => CirItemEnd
+        CirItemCons(head, tail) => CirItemCons(alpha_item(head, ctx), alpha_items(tail, ctx))
+    }
+
+def alpha_module(module: CirModule): CirModule =
+    match module {
+        L0Module(header, items) => {
+            let ctx = alpha_ctx_init(alpha_ctx_new())
+            L1Module(header, alpha_items(items, ctx))
+        }
+        _ => module
+    }
