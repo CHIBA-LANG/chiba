@@ -203,6 +203,7 @@
 - [ ] **Pre-C11: node/browser/WASI execution harness**
 	- **TODO**: 固定 node runner、WASI imports、env imports、wasi-thread 预留、Binaryen opt/validate、all-wat run、artifact/hash 记录。
 	- **DESC**: level-1b 产物必须能由 node 执行 generators，不能只生成静态 `.wat`。
+	- **PROGRESS**: `level1c.wasm` host bridge 已覆盖 help/parse/check/typed/nanopass/cont-usage；first-bootstrap validation 同时跑 typed 和 nanopass wasm bridge，并继续记录 Binaryen/hash。
 	- **验收**: `vp run level1b:*` 能编译、运行、对拍、记录 seed/object/wasm/toolchain hash；所有生成 `.wat` 都 run 或 instantiate；opt 与 non-opt 均通过核心 smoke。
 	- **并行**: runner 可串行；输出必须确定。
 

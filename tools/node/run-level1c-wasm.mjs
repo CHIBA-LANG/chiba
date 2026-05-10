@@ -28,6 +28,8 @@ function runNative(args) {
 function commandExport(command) {
   if (command === "parse") return "level1c_parse";
   if (command === "check") return "level1c_check";
+  if (command === "typed") return "level1c_typed";
+  if (command === "nanopass") return "level1c_nanopass";
   if (command === "cont-usage") return "level1c_cont_usage";
   return "level1c_help";
 }
@@ -49,6 +51,12 @@ const imports = {
     },
     level1c_check() {
       return runNative(["check", file]);
+    },
+    level1c_typed() {
+      return runNative(["typed", file]);
+    },
+    level1c_nanopass() {
+      return runNative(["nanopass", file]);
     },
     level1c_cont_usage() {
       return runNative(["cont-usage", file]);

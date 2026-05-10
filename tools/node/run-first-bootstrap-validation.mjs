@@ -83,6 +83,20 @@ run("level1c.wasm check", process.execPath, [
   "check",
   "supports/bootstrap/continuation-valid.chiba",
 ]);
+run("level1c.wasm typed", process.execPath, [
+  "tools/node/run-level1c-wasm.mjs",
+  "--wasm",
+  artifacts[0].wasmPath,
+  "typed",
+  "chiba-level1-grammar-spec/01-test.chiba",
+]);
+run("level1c.wasm nanopass", process.execPath, [
+  "tools/node/run-level1c-wasm.mjs",
+  "--wasm",
+  artifacts[0].wasmPath,
+  "nanopass",
+  "chiba-level1-grammar-spec/01-test.chiba",
+]);
 run("level1c.wasm cont-usage", process.execPath, [
   "tools/node/run-level1c-wasm.mjs",
   "--wasm",
