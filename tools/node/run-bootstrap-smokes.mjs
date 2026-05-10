@@ -102,6 +102,16 @@ const WAT_CASES = [
 
 const LEVEL1C_CASES = [
   {
+    name: "level1c help",
+    args: ["--help"],
+    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check cir cont-usage wat"],
+  },
+  {
+    name: "level1c parse grammar 01",
+    args: ["parse", "chiba-level1-grammar-spec/01-test.chiba"],
+    expect: ["OK(", "SourceFile("],
+  },
+  {
     name: "level1c check continuation valid",
     args: ["check", "supports/bootstrap/continuation-valid.chiba"],
     expect: ["check ok", "0"],
