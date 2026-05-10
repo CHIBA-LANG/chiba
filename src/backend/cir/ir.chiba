@@ -13,7 +13,8 @@ data CirPass {
     CirPass_L4Usage,
     CirPass_L5Cps,
     CirPass_L6Closure,
-    CirPass_L7WasmCore
+    CirPass_L7WasmCore,
+    CirPass_L8ValidatedCore
 }
 
 type CirBinder {
@@ -38,6 +39,32 @@ data CirType {
     CirTySliceU8
 }
 
+data CirEffect {
+    CirEffPure,
+    CirEffIO,
+    CirEffControl,
+    CirEffUnknown
+}
+
+data CirUsage {
+    CirUseZero,
+    CirUseOne,
+    CirUseMany,
+    CirUseUnknown
+}
+
+data CirCoreOp {
+    L7CoreFunc,
+    L7CoreWasmGcObject,
+    L7CoreStringSlice,
+    L7CoreContinuationPackage
+}
+
+data CirCoreValidation {
+    L8ValidatedCoreOk,
+    L8ValidatedCoreErr(Str)
+}
+
 data CirUnsupported {
     CirUnsupportedAst(Str),
     CirUnsupportedPass(Str)
@@ -58,7 +85,13 @@ type CirExternImport {
 data CirModule {
     L0Module(AST, CirItemList),
     L1Module(AST, CirItemList),
-    L2Module(AST, CirItemList)
+    L2Module(AST, CirItemList),
+    L3Module(AST, CirItemList),
+    L4Module(AST, CirItemList),
+    L5Module(AST, CirItemList),
+    L6Module(AST, CirItemList),
+    L7CoreModule(AST, CirItemList),
+    L8ValidatedCoreModule(AST, CirItemList)
 }
 
 data CirItemList {
@@ -70,12 +103,30 @@ data CirItem {
     L0ItemDef(Str, CirParamList, AST, CirExpr),
     L1ItemDef(CirBinder, CirParamList, AST, CirExpr),
     L2ItemDef(CirBinder, CirParamList, AST, CirExpr),
+    L3ItemDef(CirBinder, CirParamList, AST, CirExpr),
+    L4ItemDef(CirBinder, CirParamList, AST, CirExpr),
+    L5ItemDef(CirBinder, CirParamList, AST, CirExpr),
+    L6ItemDef(CirBinder, CirParamList, AST, CirExpr),
+    L7CoreItemDef(CirBinder, CirParamList, AST, CirExpr),
+    L8ValidatedCoreItemDef(CirBinder, CirParamList, AST, CirExpr),
     L0ItemExtern(Str, CirParamList, AST, CirExternImport),
     L1ItemExtern(CirBinder, CirParamList, AST, CirExternImport),
     L2ItemExtern(CirBinder, CirParamList, AST, CirExternImport),
+    L3ItemExtern(CirBinder, CirParamList, AST, CirExternImport),
+    L4ItemExtern(CirBinder, CirParamList, AST, CirExternImport),
+    L5ItemExtern(CirBinder, CirParamList, AST, CirExternImport),
+    L6ItemExtern(CirBinder, CirParamList, AST, CirExternImport),
+    L7CoreItemExtern(CirBinder, CirParamList, AST, CirExternImport),
+    L8ValidatedCoreItemExtern(CirBinder, CirParamList, AST, CirExternImport),
     L0ItemUnsupported(AST, CirUnsupported),
     L1ItemUnsupported(AST, CirUnsupported),
-    L2ItemUnsupported(AST, CirUnsupported)
+    L2ItemUnsupported(AST, CirUnsupported),
+    L3ItemUnsupported(AST, CirUnsupported),
+    L4ItemUnsupported(AST, CirUnsupported),
+    L5ItemUnsupported(AST, CirUnsupported),
+    L6ItemUnsupported(AST, CirUnsupported),
+    L7CoreItemUnsupported(AST, CirUnsupported),
+    L8ValidatedCoreItemUnsupported(AST, CirUnsupported)
 }
 
 data CirParamList {
@@ -190,6 +241,13 @@ data CirExpr {
     L1OpUnit,
 
     L2OpTyped(CirExpr, CirType),
+    L3OpAnswerEffect(CirExpr, CirType, CirEffect),
+    L4OpUsage(CirExpr, CirUsage),
+    L5OpCps(CirExpr, CirUsage),
+    L5OpContinuationPackage(CirBinder, CirUsage, CirExpr),
+    L6OpClosureEnv(CirExpr, CirUsage),
+    L7CoreOp(CirExpr, CirCoreOp),
+    L8ValidatedCoreOp(CirExpr, CirCoreValidation),
 
     L0OpUnsupported(AST, CirUnsupported),
     L1OpUnsupported(AST, CirUnsupported)

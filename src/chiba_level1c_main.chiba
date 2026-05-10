@@ -13,6 +13,7 @@ use backend.cir.continuation_boundary_check.*
 use backend.cir.continuation_check.*
 use backend.cir.continuation_usage.*
 use backend.cir.lower_ast.*
+use backend.cir.nanopass.*
 use backend.cir.show.*
 use backend.cir.typed.*
 use backend.wasm.wat.*
@@ -23,7 +24,7 @@ def argv_str(argv: i64, i: i64): Str = str_from_cptr(argv_cstr(argv, i))
 
 def level1c_usage(): i64 = {
     let _ = write_fd(1, "Usage: level1c <command> <file>\n", 32)
-    let _ = write_fd(1, "Commands: lex parse check cir typed cont-usage wat\n", 51)
+    let _ = write_fd(1, "Commands: lex parse check cir typed nanopass cont-usage wat\n", 60)
     0
 }
 
@@ -122,6 +123,20 @@ def level1c_run_typed(path: Str): i64 =
         }
     }
 
+def level1c_run_nanopass(path: Str): i64 =
+    match level1c_parse_file(path) {
+        OK(ast, _) => {
+            let l8 = cir_nanopass_l8(ast as AST)
+            let rendered = cir_show_module(l8)
+            let _ = str_write_to(rendered, 1)
+            0
+        }
+        Err(_, _) => {
+            let _ = write_fd(2, "parse failed\n", 13)
+            2
+        }
+    }
+
 def level1c_run_cont_usage(path: Str): i64 =
     match level1c_parse_file(path) {
         OK(ast, _) => {
@@ -161,8 +176,11 @@ def level1c_dispatch_wat(cmd: Str, path: Str): i64 =
 def level1c_dispatch_cont_usage(cmd: Str, path: Str): i64 =
     if streq(cmd, mk_str("cont-usage", 10)) != 0 { level1c_run_cont_usage(path) } else { level1c_dispatch_wat(cmd, path) }
 
+def level1c_dispatch_nanopass(cmd: Str, path: Str): i64 =
+    if streq(cmd, mk_str("nanopass", 8)) != 0 { level1c_run_nanopass(path) } else { level1c_dispatch_cont_usage(cmd, path) }
+
 def level1c_dispatch_typed(cmd: Str, path: Str): i64 =
-    if streq(cmd, mk_str("typed", 5)) != 0 { level1c_run_typed(path) } else { level1c_dispatch_cont_usage(cmd, path) }
+    if streq(cmd, mk_str("typed", 5)) != 0 { level1c_run_typed(path) } else { level1c_dispatch_nanopass(cmd, path) }
 
 def level1c_dispatch_cir(cmd: Str, path: Str): i64 =
     if streq(cmd, mk_str("cir", 3)) != 0 { level1c_run_cir(path) } else { level1c_dispatch_typed(cmd, path) }

@@ -1,0 +1,44 @@
+namespace backend.cir.core
+use backend.cir.ir.*
+
+def cir_l7_core_op(expr: CirExpr): CirCoreOp =
+    match expr {
+        L6OpClosureEnv(value, _) => cir_l7_core_op(value)
+        L5OpContinuationPackage(_, _, _) => L7CoreContinuationPackage
+        L5OpCps(value, _) => cir_l7_core_op(value)
+        L3OpAnswerEffect(value, _, _) => cir_l7_core_op(value)
+        L2OpTyped(value, ty) => match ty {
+            CirTyString => L7CoreStringSlice
+            CirTyStr => L7CoreStringSlice
+            CirTySliceU8 => L7CoreStringSlice
+            _ => cir_l7_core_op(value)
+        }
+        L1OpString => L7CoreStringSlice
+        L1OpIndex(_, _) => L7CoreStringSlice
+        L1OpReset(_, _) => L7CoreContinuationPackage
+        L1OpShift(_, _, _) => L7CoreContinuationPackage
+        _ => L7CoreFunc
+    }
+
+def cir_l7_core_expr(expr: CirExpr): CirExpr =
+    L7CoreOp(expr, cir_l7_core_op(expr))
+
+def cir_l7_items(items: CirItemList): CirItemList =
+    match items {
+        CirItemEnd => CirItemEnd
+        CirItemCons(item, rest) => {
+            let item2 = match item {
+                L6ItemDef(binder, params, ret, body) => L7CoreItemDef(binder, params, ret, cir_l7_core_expr(body))
+                L6ItemExtern(binder, params, ret, import) => L7CoreItemExtern(binder, params, ret, import)
+                L6ItemUnsupported(ast, reason) => L7CoreItemUnsupported(ast, reason)
+                _ => item
+            }
+            CirItemCons(item2, cir_l7_items(rest))
+        }
+    }
+
+def cir_core_module(module: CirModule): CirModule =
+    match module {
+        L6Module(header, items) => L7CoreModule(header, cir_l7_items(items))
+        _ => module
+    }

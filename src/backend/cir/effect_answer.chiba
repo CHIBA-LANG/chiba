@@ -1,0 +1,81 @@
+namespace backend.cir.effect_answer
+use backend.cir.ir.*
+use backend.cir.typed.*
+
+def cir_l3_merge_effect(a: CirEffect, b: CirEffect): CirEffect =
+    match a {
+        CirEffUnknown => CirEffUnknown
+        CirEffControl => CirEffControl
+        CirEffIO => match b {
+            CirEffControl => CirEffControl
+            CirEffUnknown => CirEffUnknown
+            _ => CirEffIO
+        }
+        CirEffPure => b
+    }
+
+def cir_l3_effect_args(args: CirExprList): CirEffect =
+    match args {
+        CirExprEnd => CirEffPure
+        CirExprCons(head, tail) => cir_l3_merge_effect(cir_l3_effect_expr(head), cir_l3_effect_args(tail))
+    }
+
+def cir_l3_effect_stmts(stmts: CirStmtList): CirEffect =
+    match stmts {
+        CirStmtEnd => CirEffPure
+        CirStmtCons(stmt, rest) => cir_l3_merge_effect(cir_l3_effect_stmt(stmt), cir_l3_effect_stmts(rest))
+    }
+
+def cir_l3_effect_stmt(stmt: CirStmt): CirEffect =
+    match stmt {
+        L2StmtLet(_, _, value) => cir_l3_effect_expr(value)
+        L2StmtLetPattern(_, value) => cir_l3_effect_expr(value)
+        L2StmtAssign(lhs, rhs) => cir_l3_merge_effect(cir_l3_effect_expr(lhs), cir_l3_effect_expr(rhs))
+        L2StmtExpr(value) => cir_l3_effect_expr(value)
+        L2StmtReturn(value) => cir_l3_effect_expr(value)
+        L2StmtFor(_, cond, body) => cir_l3_merge_effect(cir_l3_effect_expr(cond), cir_l3_effect_expr(body))
+        _ => CirEffUnknown
+    }
+
+def cir_l3_effect_expr(expr: CirExpr): CirEffect =
+    match expr {
+        L2OpTyped(value, _) => cir_l3_effect_expr(value)
+        L1OpBlock(stmts, tail) => cir_l3_merge_effect(cir_l3_effect_stmts(stmts), cir_l3_effect_expr(tail))
+        L1OpIf(cond, then_expr, else_expr) =>
+            cir_l3_merge_effect(cir_l3_effect_expr(cond), cir_l3_merge_effect(cir_l3_effect_expr(then_expr), cir_l3_effect_expr(else_expr)))
+        L1OpReset(_, body) => cir_l3_merge_effect(CirEffControl, cir_l3_effect_expr(body))
+        L1OpShift(_, _, body) => cir_l3_merge_effect(CirEffControl, cir_l3_effect_expr(body))
+        L1OpCall(callee, args) => cir_l3_merge_effect(CirEffUnknown, cir_l3_merge_effect(cir_l3_effect_expr(callee), cir_l3_effect_args(args)))
+        L1OpField(value, _) => cir_l3_effect_expr(value)
+        L1OpIndex(value, args) => cir_l3_merge_effect(cir_l3_effect_expr(value), cir_l3_effect_args(args))
+        L1OpAssign(lhs, rhs) => cir_l3_merge_effect(CirEffIO, cir_l3_merge_effect(cir_l3_effect_expr(lhs), cir_l3_effect_expr(rhs)))
+        L1OpPrefix(_, value) => cir_l3_effect_expr(value)
+        L1OpBinary(_, lhs, rhs) => cir_l3_merge_effect(cir_l3_effect_expr(lhs), cir_l3_effect_expr(rhs))
+        _ => CirEffPure
+    }
+
+def cir_l3_answer_expr(expr: CirExpr): CirExpr =
+    match expr {
+        L2OpTyped(_, ty) => L3OpAnswerEffect(expr, ty, cir_l3_effect_expr(expr))
+        _ => L3OpAnswerEffect(expr, cir_typed_expr_type(expr), cir_l3_effect_expr(expr))
+    }
+
+def cir_l3_items(items: CirItemList): CirItemList =
+    match items {
+        CirItemEnd => CirItemEnd
+        CirItemCons(item, rest) => {
+            let item2 = match item {
+                L2ItemDef(binder, params, ret, body) => L3ItemDef(binder, params, ret, cir_l3_answer_expr(body))
+                L2ItemExtern(binder, params, ret, import) => L3ItemExtern(binder, params, ret, import)
+                L2ItemUnsupported(ast, reason) => L3ItemUnsupported(ast, reason)
+                _ => item
+            }
+            CirItemCons(item2, cir_l3_items(rest))
+        }
+    }
+
+def cir_effect_answer_module(module: CirModule): CirModule =
+    match module {
+        L2Module(header, items) => L3Module(header, cir_l3_items(items))
+        _ => module
+    }

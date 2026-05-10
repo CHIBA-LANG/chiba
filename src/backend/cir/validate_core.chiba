@@ -1,0 +1,25 @@
+namespace backend.cir.validate_core
+use backend.cir.ir.*
+
+def cir_l8_validate_expr(expr: CirExpr): CirExpr =
+    L8ValidatedCoreOp(expr, L8ValidatedCoreOk)
+
+def cir_l8_items(items: CirItemList): CirItemList =
+    match items {
+        CirItemEnd => CirItemEnd
+        CirItemCons(item, rest) => {
+            let item2 = match item {
+                L7CoreItemDef(binder, params, ret, body) => L8ValidatedCoreItemDef(binder, params, ret, cir_l8_validate_expr(body))
+                L7CoreItemExtern(binder, params, ret, import) => L8ValidatedCoreItemExtern(binder, params, ret, import)
+                L7CoreItemUnsupported(ast, reason) => L8ValidatedCoreItemUnsupported(ast, reason)
+                _ => item
+            }
+            CirItemCons(item2, cir_l8_items(rest))
+        }
+    }
+
+def cir_validate_core_module(module: CirModule): CirModule =
+    match module {
+        L7CoreModule(header, items) => L8ValidatedCoreModule(header, cir_l8_items(items))
+        _ => module
+    }

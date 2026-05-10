@@ -41,7 +41,7 @@ const imports = {
   env: {
     level1c_help() {
       process.stdout.write("Usage: level1c <command> <file>\n");
-      process.stdout.write("Commands: lex parse check cir typed cont-usage wat\n");
+      process.stdout.write("Commands: lex parse check cir typed nanopass cont-usage wat\n");
       return 0n;
     },
     level1c_parse() {

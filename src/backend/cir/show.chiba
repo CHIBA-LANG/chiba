@@ -65,6 +65,36 @@ def cir_show_type(out: Str, depth: i64, ty: CirType): i64 =
         CirTySliceU8 => cir_show_line(out, depth, "type Slice[u8]")
     }
 
+def cir_show_effect(out: Str, depth: i64, eff: CirEffect): i64 =
+    match eff {
+        CirEffPure => cir_show_line(out, depth, "effect pure")
+        CirEffIO => cir_show_line(out, depth, "effect io")
+        CirEffControl => cir_show_line(out, depth, "effect control")
+        CirEffUnknown => cir_show_line(out, depth, "effect unknown")
+    }
+
+def cir_show_usage(out: Str, depth: i64, usage: CirUsage): i64 =
+    match usage {
+        CirUseZero => cir_show_line(out, depth, "usage zero")
+        CirUseOne => cir_show_line(out, depth, "usage one")
+        CirUseMany => cir_show_line(out, depth, "usage many")
+        CirUseUnknown => cir_show_line(out, depth, "usage unknown")
+    }
+
+def cir_show_core_op(out: Str, depth: i64, op: CirCoreOp): i64 =
+    match op {
+        L7CoreFunc => cir_show_line(out, depth, "core-op func")
+        L7CoreWasmGcObject => cir_show_line(out, depth, "core-op wasm-gc-object")
+        L7CoreStringSlice => cir_show_line(out, depth, "core-op string-slice")
+        L7CoreContinuationPackage => cir_show_line(out, depth, "core-op continuation-package")
+    }
+
+def cir_show_core_validation(out: Str, depth: i64, result: CirCoreValidation): i64 =
+    match result {
+        L8ValidatedCoreOk => cir_show_line(out, depth, "validation ok")
+        L8ValidatedCoreErr(text) => cir_show_str_line(out, depth, "validation err", text)
+    }
+
 def cir_show_unsupported(out: Str, depth: i64, reason: CirUnsupported): i64 =
     match reason {
         CirUnsupportedAst(text) => cir_show_str_line(out, depth, "unsupported-ast", text)
@@ -376,6 +406,42 @@ def cir_show_expr(out: Str, depth: i64, expr: CirExpr): i64 =
             let _ = cir_show_type(out, depth + 1, ty)
             cir_show_expr(out, depth + 1, value)
         }
+        L3OpAnswerEffect(value, answer, effect) => {
+            let _ = cir_show_line(out, depth, "L3OpAnswerEffect")
+            let _ = cir_show_type(out, depth + 1, answer)
+            let _ = cir_show_effect(out, depth + 1, effect)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L4OpUsage(value, usage) => {
+            let _ = cir_show_line(out, depth, "L4OpUsage")
+            let _ = cir_show_usage(out, depth + 1, usage)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L5OpCps(value, usage) => {
+            let _ = cir_show_line(out, depth, "L5OpCps")
+            let _ = cir_show_usage(out, depth + 1, usage)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L5OpContinuationPackage(binder, usage, value) => {
+            let _ = cir_show_binder_line(out, depth, "L5OpContinuationPackage", binder)
+            let _ = cir_show_usage(out, depth + 1, usage)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L6OpClosureEnv(value, usage) => {
+            let _ = cir_show_line(out, depth, "L6OpClosureEnv")
+            let _ = cir_show_usage(out, depth + 1, usage)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L7CoreOp(value, op) => {
+            let _ = cir_show_line(out, depth, "L7CoreOp")
+            let _ = cir_show_core_op(out, depth + 1, op)
+            cir_show_expr(out, depth + 1, value)
+        }
+        L8ValidatedCoreOp(value, result) => {
+            let _ = cir_show_line(out, depth, "L8ValidatedCoreOp")
+            let _ = cir_show_core_validation(out, depth + 1, result)
+            cir_show_expr(out, depth + 1, value)
+        }
         L0OpUnsupported(_, reason) => {
             let _ = cir_show_line(out, depth, "L0OpUnsupported")
             cir_show_unsupported(out, depth + 1, reason)
@@ -406,6 +472,36 @@ def cir_show_items(out: Str, depth: i64, items: CirItemList): i64 =
                     let _ = cir_show_params(out, depth + 1, params)
                     cir_show_expr(out, depth + 1, body)
                 }
+                L3ItemDef(binder, params, _, body) => {
+                    let _ = cir_show_binder_line(out, depth, "L3ItemDef", binder)
+                    let _ = cir_show_params(out, depth + 1, params)
+                    cir_show_expr(out, depth + 1, body)
+                }
+                L4ItemDef(binder, params, _, body) => {
+                    let _ = cir_show_binder_line(out, depth, "L4ItemDef", binder)
+                    let _ = cir_show_params(out, depth + 1, params)
+                    cir_show_expr(out, depth + 1, body)
+                }
+                L5ItemDef(binder, params, _, body) => {
+                    let _ = cir_show_binder_line(out, depth, "L5ItemDef", binder)
+                    let _ = cir_show_params(out, depth + 1, params)
+                    cir_show_expr(out, depth + 1, body)
+                }
+                L6ItemDef(binder, params, _, body) => {
+                    let _ = cir_show_binder_line(out, depth, "L6ItemDef", binder)
+                    let _ = cir_show_params(out, depth + 1, params)
+                    cir_show_expr(out, depth + 1, body)
+                }
+                L7CoreItemDef(binder, params, _, body) => {
+                    let _ = cir_show_binder_line(out, depth, "L7CoreItemDef", binder)
+                    let _ = cir_show_params(out, depth + 1, params)
+                    cir_show_expr(out, depth + 1, body)
+                }
+                L8ValidatedCoreItemDef(binder, params, _, body) => {
+                    let _ = cir_show_binder_line(out, depth, "L8ValidatedCoreItemDef", binder)
+                    let _ = cir_show_params(out, depth + 1, params)
+                    cir_show_expr(out, depth + 1, body)
+                }
                 L0ItemExtern(name, params, _, import) => {
                     let _ = cir_show_str_line(out, depth, "L0ItemExtern", name)
                     cir_show_params(out, depth + 1, params)
@@ -421,6 +517,36 @@ def cir_show_items(out: Str, depth: i64, items: CirItemList): i64 =
                     cir_show_params(out, depth + 1, params)
                     cir_show_extern_import(out, depth + 1, import)
                 }
+                L3ItemExtern(binder, params, _, import) => {
+                    let _ = cir_show_binder_line(out, depth, "L3ItemExtern", binder)
+                    cir_show_params(out, depth + 1, params)
+                    cir_show_extern_import(out, depth + 1, import)
+                }
+                L4ItemExtern(binder, params, _, import) => {
+                    let _ = cir_show_binder_line(out, depth, "L4ItemExtern", binder)
+                    cir_show_params(out, depth + 1, params)
+                    cir_show_extern_import(out, depth + 1, import)
+                }
+                L5ItemExtern(binder, params, _, import) => {
+                    let _ = cir_show_binder_line(out, depth, "L5ItemExtern", binder)
+                    cir_show_params(out, depth + 1, params)
+                    cir_show_extern_import(out, depth + 1, import)
+                }
+                L6ItemExtern(binder, params, _, import) => {
+                    let _ = cir_show_binder_line(out, depth, "L6ItemExtern", binder)
+                    cir_show_params(out, depth + 1, params)
+                    cir_show_extern_import(out, depth + 1, import)
+                }
+                L7CoreItemExtern(binder, params, _, import) => {
+                    let _ = cir_show_binder_line(out, depth, "L7CoreItemExtern", binder)
+                    cir_show_params(out, depth + 1, params)
+                    cir_show_extern_import(out, depth + 1, import)
+                }
+                L8ValidatedCoreItemExtern(binder, params, _, import) => {
+                    let _ = cir_show_binder_line(out, depth, "L8ValidatedCoreItemExtern", binder)
+                    cir_show_params(out, depth + 1, params)
+                    cir_show_extern_import(out, depth + 1, import)
+                }
                 L0ItemUnsupported(_, reason) => {
                     let _ = cir_show_line(out, depth, "L0ItemUnsupported")
                     cir_show_unsupported(out, depth + 1, reason)
@@ -431,6 +557,30 @@ def cir_show_items(out: Str, depth: i64, items: CirItemList): i64 =
                 }
                 L2ItemUnsupported(_, reason) => {
                     let _ = cir_show_line(out, depth, "L2ItemUnsupported")
+                    cir_show_unsupported(out, depth + 1, reason)
+                }
+                L3ItemUnsupported(_, reason) => {
+                    let _ = cir_show_line(out, depth, "L3ItemUnsupported")
+                    cir_show_unsupported(out, depth + 1, reason)
+                }
+                L4ItemUnsupported(_, reason) => {
+                    let _ = cir_show_line(out, depth, "L4ItemUnsupported")
+                    cir_show_unsupported(out, depth + 1, reason)
+                }
+                L5ItemUnsupported(_, reason) => {
+                    let _ = cir_show_line(out, depth, "L5ItemUnsupported")
+                    cir_show_unsupported(out, depth + 1, reason)
+                }
+                L6ItemUnsupported(_, reason) => {
+                    let _ = cir_show_line(out, depth, "L6ItemUnsupported")
+                    cir_show_unsupported(out, depth + 1, reason)
+                }
+                L7CoreItemUnsupported(_, reason) => {
+                    let _ = cir_show_line(out, depth, "L7CoreItemUnsupported")
+                    cir_show_unsupported(out, depth + 1, reason)
+                }
+                L8ValidatedCoreItemUnsupported(_, reason) => {
+                    let _ = cir_show_line(out, depth, "L8ValidatedCoreItemUnsupported")
                     cir_show_unsupported(out, depth + 1, reason)
                 }
             }
@@ -450,6 +600,30 @@ def cir_show_module_into(out: Str, module: CirModule): i64 =
         }
         L2Module(_, items) => {
             let _ = cir_show_line(out, 0, "L2Module")
+            cir_show_items(out, 1, items)
+        }
+        L3Module(_, items) => {
+            let _ = cir_show_line(out, 0, "L3Module")
+            cir_show_items(out, 1, items)
+        }
+        L4Module(_, items) => {
+            let _ = cir_show_line(out, 0, "L4Module")
+            cir_show_items(out, 1, items)
+        }
+        L5Module(_, items) => {
+            let _ = cir_show_line(out, 0, "L5Module")
+            cir_show_items(out, 1, items)
+        }
+        L6Module(_, items) => {
+            let _ = cir_show_line(out, 0, "L6Module")
+            cir_show_items(out, 1, items)
+        }
+        L7CoreModule(_, items) => {
+            let _ = cir_show_line(out, 0, "L7CoreModule")
+            cir_show_items(out, 1, items)
+        }
+        L8ValidatedCoreModule(_, items) => {
+            let _ = cir_show_line(out, 0, "L8ValidatedCoreModule")
             cir_show_items(out, 1, items)
         }
     }

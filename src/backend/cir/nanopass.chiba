@@ -1,0 +1,25 @@
+namespace backend.cir.nanopass
+use backend.cir.alpha.*
+use backend.cir.closure.*
+use backend.cir.core.*
+use backend.cir.cps.*
+use backend.cir.effect_answer.*
+use backend.cir.ir.*
+use backend.cir.lower_ast.*
+use backend.cir.typed.*
+use backend.cir.usage.*
+use backend.cir.validate_core.*
+use parser.chiba_level1.*
+
+def cir_nanopass_l2(ast: AST): CirModule =
+    cir_typed_module(alpha_module(cir_lower_module(ast)))
+
+def cir_nanopass_l8(ast: AST): CirModule = {
+    let l2 = cir_nanopass_l2(ast)
+    let l3 = cir_effect_answer_module(l2)
+    let l4 = cir_usage_module(l3)
+    let l5 = cir_cps_module(l4)
+    let l6 = cir_closure_module(l5)
+    let l7 = cir_core_module(l6)
+    cir_validate_core_module(l7)
+}

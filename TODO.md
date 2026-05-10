@@ -146,6 +146,7 @@
 - [ ] **Pre-C02: real typed nanopass spine past L1**
 	- **TODO**: 把当前只到 `L1Alpha` 的 nanopass 继续拆到 `L2Typed`、`L3EffectAnswer`、`L4Usage`、`L5Cps`、`L6Closure`、`L7Core`、`L8ValidatedCore`。
 	- **DESC**: 每个 pass 只做一件事，并且产物进入新的 ADT/节点族，而不是 side script 检查后继续让 WAT emitter 直接吃 L1。
+	- **PROGRESS**: 已建立 L2-L8 ADT 节点族、独立 pass 文件和 `level1c.o nanopass` dump smoke；当前仍是保守骨架，尚未满足真实 type/effect/CPS/Core 语义。
 	- **验收**: CIR/Core 中能 dump `L2*` typed refs、`L3*` answer/effect facts、`L5*` CPS continuation、`L6*` closure/env、`L7Core*` wasm-gc 节点；每层至少有一个 golden smoke。
 	- **并行**: 函数体级并行暂不实现；设计上保留 arena/symbol id 边界。
 
