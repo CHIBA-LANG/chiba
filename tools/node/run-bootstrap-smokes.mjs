@@ -149,6 +149,11 @@ const GENERATED_WAT_CASES = [
     file: "supports/bootstrap/wat-tuple-heap-smoke.chiba",
     expect: ["41"],
   },
+  {
+    name: "generated wat extern env",
+    file: "supports/bootstrap/wat-extern-env-smoke.chiba",
+    expect: ["env.js_log 41", "9"],
+  },
 ];
 
 let failed = 0;

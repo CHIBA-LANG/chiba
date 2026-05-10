@@ -105,6 +105,13 @@ def cir_lower_match_arms(ast: AST): CirMatchArmList =
         _ => CirMatchArmEnd
     }
 
+def cir_lower_extern_import(name: Str, abi: Str): CirExternImport =
+    if streq(abi, mk_str("wasi", 4)) != 0 { cir_extern_wasi(name) }
+    else if streq(abi, mk_str("C", 1)) != 0 { cir_extern_env(name) }
+    else if streq(abi, mk_str("c", 1)) != 0 { cir_extern_env(name) }
+    else if streq(abi, mk_str("env", 3)) != 0 { cir_extern_env(name) }
+    else { cir_extern_import(CirExternAbiUnsupported(abi), mk_str("unsupported", 11), name) }
+
 def cir_lower_ident_tail(name: Str, tail: AST): CirExpr =
     match tail {
         IdentTail_None => L0OpName(name)
@@ -203,6 +210,7 @@ def cir_lower_def_item(name_ast: AST, rest: AST, source_ast: AST): CirItem =
         DefFun(_, params, ret, body) => {
             let name = cir_def_name_text(name_ast)
             match body {
+                Expr_ExternAbi(abi) => L0ItemExtern(name, cir_lower_params(params), ret, cir_lower_extern_import(name, abi))
                 Expr_Extern(_) => L0ItemExtern(name, cir_lower_params(params), ret, cir_extern_wasi(name))
                 _ => L0ItemDef(name, cir_lower_params(params), ret, cir_lower_expr(body))
             }
@@ -210,6 +218,7 @@ def cir_lower_def_item(name_ast: AST, rest: AST, source_ast: AST): CirItem =
         DefConst(ret, value) => {
             let name = cir_def_name_text(name_ast)
             match value {
+                Expr_ExternAbi(abi) => L0ItemExtern(name, CirParamEnd, ret, cir_lower_extern_import(name, abi))
                 Expr_Extern(_) => L0ItemExtern(name, CirParamEnd, ret, cir_extern_wasi(name))
                 _ => L0ItemDef(name, CirParamEnd, ret, cir_lower_expr(value))
             }
@@ -223,6 +232,7 @@ def cir_lower_item(ast: AST): CirItem =
             match defn {
                 DefItem(name, _, params, ret, body) =>
                     match body {
+                        Expr_ExternAbi(abi) => L0ItemExtern(name, cir_lower_params(params), ret, cir_lower_extern_import(name, abi))
                         Expr_Extern(_) => L0ItemExtern(name, cir_lower_params(params), ret, cir_extern_wasi(name))
                         _ => L0ItemDef(name, cir_lower_params(params), ret, cir_lower_expr(body))
                     }

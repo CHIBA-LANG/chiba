@@ -555,7 +555,11 @@ rule match_guard ::=
     ;
 
 rule extern_expr ::= 
-    KwExtern abi:string_lit => Expr_Extern(abi)
+    KwExtern abi:extern_abi_lit => Expr_ExternAbi(abi)
+    ;
+
+rule extern_abi_lit ::=
+    StringStart abi:StringChunk StringEnd => abi
     ;
 
 rule unsafe_expr ::= 
@@ -1006,6 +1010,7 @@ rule arg_tail ::=
         MatchGuard_Some(AST),
         MatchGuard_None,
         Expr_Extern(AST),
+        Expr_ExternAbi(Str),
         Expr_Unsafe(AST),
         Expr_Asm(AST, AST, AST),
         AsmBind_Cons(AST, AST),

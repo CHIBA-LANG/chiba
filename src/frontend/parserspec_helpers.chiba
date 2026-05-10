@@ -56,6 +56,14 @@ def astnode1(out: Str, depth: i64, name: i64, a: AST): i64 = {
     astcloseblock(out, depth)
 }
 
+def astnode_str(out: Str, depth: i64, name: i64, value: Str): i64 = {
+    let _ = astopen(out, name)
+    let child_depth = depth + 1
+    let _ = astnewline(out, child_depth)
+    let _ = aststr(out, value)
+    astcloseblock(out, depth)
+}
+
 def astnode2(out: Str, depth: i64, name: i64, a: AST, b: AST): i64 = {
     let _ = astopen(out, name)
     let child_depth = depth + 1
@@ -300,6 +308,7 @@ def astwriteat(out: Str, ast: AST, depth: i64): i64 =
         MatchGuard_Some(value) => astnode1(out, depth, "MatchGuard_Some", value)
         MatchGuard_None => astleaf(out, "MatchGuard_None")
         Expr_Extern(abi) => astnode1(out, depth, "Expr_Extern", abi)
+        Expr_ExternAbi(abi) => astnode_str(out, depth, "Expr_ExternAbi", abi)
         Expr_Unsafe(body) => astnode1(out, depth, "Expr_Unsafe", body)
         Expr_Asm(inputs, outputs, body) => astnode3(out, depth, "Expr_Asm", inputs, outputs, body)
         AsmBind_Cons(head, tail) => astnode2(out, depth, "AsmBind_Cons", head, tail)

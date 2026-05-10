@@ -1,0 +1,8 @@
+namespace bootstrap.wat.extern_env_smoke
+
+def js_log(value: i64): i64 = extern "C"
+
+def main(): i64 = {
+    let _ = js_log(41)
+    9
+}
