@@ -8,6 +8,7 @@ const WAT_DIR = ".scratch/bootstrap-smokes/wat";
 function run(command, args, options = {}) {
   return spawnSync(command, args, {
     encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
     ...options,
   });
 }
@@ -160,6 +161,11 @@ const LEVEL1C_CASES = [
     args: ["nanopass", "supports/bootstrap/continuation-multi-resume.chiba"],
     expect: ["L8ValidatedCoreModule", "L7CoreOp", "core-op continuation-package", "L5OpContinuationPackage", "validation ok", "0"],
     expectSequence: [[
+      "L6OpClosureEnv",
+      "usage many",
+      "L5OpContinuationPackage",
+      "usage many",
+    ], [
       "L4OpUsage",
       "usage many",
       "L3OpAnswerControl",
@@ -172,6 +178,7 @@ const LEVEL1C_CASES = [
       "control-boundary shift",
       "L1OpShift(#1 \"k\")",
     ]],
+    reject: ["usage unknown"],
   },
   {
     name: "level1c core validator rejects invalid core",

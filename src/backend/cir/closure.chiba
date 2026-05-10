@@ -1,11 +1,64 @@
 namespace backend.cir.closure
 use backend.cir.ir.*
 
-def cir_l6_closure_expr(expr: CirExpr): CirExpr =
+def cir_l6_closure_usage(expr: CirExpr): CirUsage =
     match expr {
-        L5OpCps(value, usage) => L6OpClosureEnv(L5OpCps(value, usage), usage)
-        L5OpContinuationPackage(binder, usage, value) => L6OpClosureEnv(L5OpContinuationPackage(binder, usage, value), usage)
-        _ => L6OpClosureEnv(expr, CirUseUnknown)
+        L6OpClosureEnv(_, usage) => usage
+        L5OpContinuationPackage(_, usage, _) => usage
+        L5OpCps(_, usage) => usage
+        L4OpUsage(_, usage) => usage
+        _ => CirUseOne
+    }
+
+def cir_l6_closure_expr_list(args: CirExprList): CirExprList =
+    match args {
+        CirExprEnd => CirExprEnd
+        CirExprCons(head, tail) => CirExprCons(cir_l6_closure_expr(head), cir_l6_closure_expr_list(tail))
+    }
+
+def cir_l6_closure_stmt(stmt: CirStmt): CirStmt =
+    match stmt {
+        L2StmtLet(binder, ty, value) => L2StmtLet(binder, ty, cir_l6_closure_expr(value))
+        L2StmtLetPattern(pat, value) => L2StmtLetPattern(pat, cir_l6_closure_expr(value))
+        L2StmtAssign(lhs, rhs) => L2StmtAssign(cir_l6_closure_expr(lhs), cir_l6_closure_expr(rhs))
+        L2StmtExpr(value) => L2StmtExpr(cir_l6_closure_expr(value))
+        L2StmtReturn(value) => L2StmtReturn(cir_l6_closure_expr(value))
+        L2StmtFor(label, cond, body) => L2StmtFor(label, cir_l6_closure_expr(cond), cir_l6_closure_expr(body))
+        _ => stmt
+    }
+
+def cir_l6_closure_stmt_list(stmts: CirStmtList): CirStmtList =
+    match stmts {
+        CirStmtEnd => CirStmtEnd
+        CirStmtCons(stmt, rest) => CirStmtCons(cir_l6_closure_stmt(stmt), cir_l6_closure_stmt_list(rest))
+    }
+
+def cir_l6_closure_payload(expr: CirExpr): CirExpr =
+    match expr {
+        L5OpContinuationPackage(binder, usage, value) => L5OpContinuationPackage(binder, usage, cir_l6_closure_expr(value))
+        L5OpCps(value, usage) => L5OpCps(cir_l6_closure_expr(value), usage)
+        L4OpUsage(value, usage) => L4OpUsage(cir_l6_closure_expr(value), usage)
+        L3OpAnswerControl(value, answer, boundary) => L3OpAnswerControl(cir_l6_closure_expr(value), answer, boundary)
+        L2OpTyped(value, ty) => L2OpTyped(cir_l6_closure_expr(value), ty)
+        L1OpBlock(stmts, tail) => L1OpBlock(cir_l6_closure_stmt_list(stmts), cir_l6_closure_expr(tail))
+        L1OpIf(cond, then_expr, else_expr) => L1OpIf(cir_l6_closure_expr(cond), cir_l6_closure_expr(then_expr), cir_l6_closure_expr(else_expr))
+        L1OpMatch(value, arms) => L1OpMatch(cir_l6_closure_expr(value), arms)
+        L1OpClosure(params, body) => L1OpClosure(params, cir_l6_closure_expr(body))
+        L1OpReset(label, body) => L1OpReset(label, cir_l6_closure_expr(body))
+        L1OpShift(label, binder, body) => L1OpShift(label, binder, cir_l6_closure_expr(body))
+        L1OpCall(callee, args) => L1OpCall(cir_l6_closure_expr(callee), cir_l6_closure_expr_list(args))
+        L1OpField(value, field) => L1OpField(cir_l6_closure_expr(value), field)
+        L1OpIndex(value, args) => L1OpIndex(cir_l6_closure_expr(value), cir_l6_closure_expr_list(args))
+        L1OpAssign(lhs, rhs) => L1OpAssign(cir_l6_closure_expr(lhs), cir_l6_closure_expr(rhs))
+        L1OpPrefix(op, value) => L1OpPrefix(op, cir_l6_closure_expr(value))
+        L1OpBinary(op, lhs, rhs) => L1OpBinary(op, cir_l6_closure_expr(lhs), cir_l6_closure_expr(rhs))
+        _ => expr
+    }
+
+def cir_l6_closure_expr(expr: CirExpr): CirExpr =
+    {
+        let payload = cir_l6_closure_payload(expr)
+        L6OpClosureEnv(payload, cir_l6_closure_usage(expr))
     }
 
 def cir_l6_items(items: CirItemList): CirItemList =
