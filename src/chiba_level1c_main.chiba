@@ -15,8 +15,8 @@ use backend.cir.continuation_usage.*
 use backend.cir.lower_ast.*
 use backend.cir.nanopass.*
 use backend.cir.show.*
-use backend.cir.source_semantic_check.*
 use backend.cir.typed.*
+use backend.cir.typed_semantic_check.*
 use backend.cir.validate_core.*
 use backend.wasm.wat.*
 
@@ -68,18 +68,18 @@ def level1c_run_parse(path: Str): i64 = {
 def level1c_run_check(path: Str): i64 =
     match level1c_parse_file(path) {
         OK(ast, _) => {
-            let source = file_read_file_all_sized(str_to_cstr(path))
             let l1 = alpha_module(cir_lower_module(ast as AST))
+            let l2 = cir_typed_module(l1)
             match cir_cont_check_module(l1) {
                 CirContCheckOk => {
                     match cir_cont_boundary_check_module(l1) {
                         CirContBoundaryCheckOk =>
-                            match source_semantic_check(source) {
-                                SourceSemanticCheckOk => {
+                            match cir_typed_semantic_check(ast as AST, l2) {
+                                CirTypedSemanticCheckOk => {
                                     let _ = write_fd(1, "check ok\n", 9)
                                     0
                                 }
-                                SourceSemanticCheckErr(message) => {
+                                CirTypedSemanticCheckErr(message) => {
                                     let _ = str_write_to(message, 2)
                                     let _ = write_fd(2, "\n", 1)
                                     3
