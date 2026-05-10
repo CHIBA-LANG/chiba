@@ -1,0 +1,8 @@
+namespace level1b.std_surface.refs_atomic_invalid
+
+def bad_global_ref: Ref[i64] = Ref.new(0)
+
+def bad_atomic(a: Atomic[String]): i64 = {
+    let _ = Atomic.load(a, Release)
+    0
+}

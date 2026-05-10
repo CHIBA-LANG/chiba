@@ -137,9 +137,10 @@
 	- **验收**: 有固定入口、固定 project layout、固定构建命令；`timeout 10` 能通过 phase1/语法检查，放宽后能编译出 node runner 可加载的 wasm/object。
 	- **并行**: 不并行；先固定目录和构建协议。
 
-- [ ] **Pre-C01: level-1b std surface freeze**
+- [x] **Pre-C01: level-1b std surface freeze**
 	- **TODO**: 定义 level-1b 可用标准库 surface：`Option`、`List`、`Array[T]`、`Slice[T]`、`String == Array[u8]`、`str == Slice[u8]`、`Vec`/builder、`Map`、file/process/print、WASI/env boundary。
 	- **DESC**: 允许实现暂时复用 level-0 stdlib，但 level-1b 代码必须按 level-1 语义写调用面；低层 raw pointer/opaque `i64` 只能出现在 `#![Metal]` 标注模块。
+	- **DONE**: `level-1b/supports/std-surface.md` 固定 surface；`level-1b/supports/pre-c01-smokes/` 覆盖 string/slice、collections、IO/process、Ref/Atomic valid/invalid fixture；`vp run level1b:std-surface` 解析 fixture、检查 string/slice WAT layout，并扫描非 Metal source 的 raw pointer 用法。
 	- **验收**: string/index/slice/`.char_at`、file read/write、stdout/stderr、argv/env、Vec/Map 基础操作都有 level-1b smoke；非 Metal 源码中没有新增裸 pointer 风格 helper。
 	- **并行**: 不并行；先稳定 surface，再迁移实现。
 

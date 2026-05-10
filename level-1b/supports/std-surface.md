@@ -49,6 +49,8 @@ Non-Metal level-1b source may hold `Ref[T]`, `UnsafeRef[T]`, `Ptr[T]`, or
 
 ## Pre-C01 Smoke Matrix
 
+Executable fixtures live under `level-1b/supports/pre-c01-smokes`.
+
 - string literal, interpolation, byte index, range slice, `.char_at`
 - Array/Slice length and indexed access
 - Vec builder append/read/freeze

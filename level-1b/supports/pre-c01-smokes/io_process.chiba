@@ -1,0 +1,11 @@
+namespace level1b.std_surface.io_process
+
+def io_process_smoke(path: str): i64 = {
+    let text = File.read(path)
+    let _ = File.write(path, text)
+    let _ = Print.stdout(text)
+    let _ = Print.stderr(text)
+    let _ = Process.argv(0)
+    let _ = Process.env("HOME")
+    0
+}

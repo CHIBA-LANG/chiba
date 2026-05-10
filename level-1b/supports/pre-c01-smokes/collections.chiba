@@ -1,0 +1,14 @@
+namespace level1b.std_surface.collections
+
+def collection_smoke(xs: Array[i64], view: Slice[i64]): i64 = {
+    let builder = Vec.new()
+    let _ = Vec.push(builder, 1)
+    let frozen = Vec.freeze(builder)
+    let table = Map.new()
+    let _ = Map.insert(table, "answer", 42)
+    let _ = Map.get(table, "answer")
+    xs[0]
+    view[0]
+    frozen[0]
+    0
+}
