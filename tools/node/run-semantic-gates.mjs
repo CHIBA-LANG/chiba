@@ -8,7 +8,9 @@ const WAT_DIR = ".scratch/semantic-gates/wat";
 
 const GATE_FILES = [
   "method_resolution.chiba",
+  "method_resolution_invalid.chiba",
   "row_poly.chiba",
+  "row_poly_invalid.chiba",
   "refs_atomic_valid.chiba",
   "refs_atomic_invalid.chiba",
   "continuation_scheme_multi.chiba",
@@ -134,6 +136,15 @@ function checkMethodResolution() {
   pass(name);
 }
 
+function checkMethodResolutionCompilerGate() {
+  const name = "method resolution compiler gate";
+  const valid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "method_resolution.chiba")]);
+  assert(name, valid.status === 0 && valid.stdout.includes("check ok"), valid.stdout || valid.stderr);
+  const invalid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "method_resolution_invalid.chiba")]);
+  assert(name, invalid.status === 0 && invalid.stderr.includes("unresolved method missing for Widget"), invalid.stdout || invalid.stderr);
+  pass(name);
+}
+
 function rowFields(rowBody) {
   const fields = [];
   for (const field of rowBody.matchAll(/\b([A-Za-z_]\w*)\s*:/g)) fields.push(field[1]);
@@ -160,6 +171,15 @@ function checkRowPoly() {
   }
 
   assert(name, rowKeys[0] === rowKeys[1], `canonical row keys differ: ${rowKeys[0]} vs ${rowKeys[1]}`);
+  pass(name);
+}
+
+function checkRowPolyCompilerGate() {
+  const name = "row polymorphism compiler gate";
+  const valid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "row_poly.chiba")]);
+  assert(name, valid.status === 0 && valid.stdout.includes("check ok"), valid.stdout || valid.stderr);
+  const invalid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "row_poly_invalid.chiba")]);
+  assert(name, invalid.status === 0 && invalid.stderr.includes("row constraint missing field id"), invalid.stdout || invalid.stderr);
   pass(name);
 }
 
@@ -327,7 +347,9 @@ function checkContinuation() {
 parseAll();
 emitWatAll();
 checkMethodResolution();
+checkMethodResolutionCompilerGate();
 checkRowPoly();
+checkRowPolyCompilerGate();
 checkNamespaceMerge();
 checkStringSlice();
 checkMemory();

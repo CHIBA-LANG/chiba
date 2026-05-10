@@ -176,6 +176,26 @@ const LEVEL1C_CASES = [
     args: ["check", "supports/semantic-gates/refs_atomic_invalid.chiba"],
     expect: ["top-level Ref requires #[world_local]", "3"],
   },
+  {
+    name: "level1c check method routes valid",
+    args: ["check", "supports/semantic-gates/method_resolution.chiba"],
+    expect: ["check ok", "0"],
+  },
+  {
+    name: "level1c check method invalid",
+    args: ["check", "supports/semantic-gates/method_resolution_invalid.chiba"],
+    expect: ["unresolved method missing for Widget", "3"],
+  },
+  {
+    name: "level1c check row poly valid",
+    args: ["check", "supports/semantic-gates/row_poly.chiba"],
+    expect: ["check ok", "0"],
+  },
+  {
+    name: "level1c check row poly invalid",
+    args: ["check", "supports/semantic-gates/row_poly_invalid.chiba"],
+    expect: ["row constraint missing field id", "3"],
+  },
 ];
 
 const GENERATED_WAT_CASES = [

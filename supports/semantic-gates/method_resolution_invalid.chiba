@@ -1,0 +1,8 @@
+namespace semantic.gates.method.invalid
+
+type Widget {
+    handler: i64,
+    value: i64,
+}
+
+def missing_method(w: Widget): i64 = w.missing()

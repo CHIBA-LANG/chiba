@@ -39,5 +39,18 @@ def source_ref_atomic_check(source: Str): SourceSemanticCheck =
         source_semantic_err("Ref[Array[T]] direct element assignment is illegal")
     } else { SourceSemanticCheckOk }
 
+def source_method_row_check(source: Str): SourceSemanticCheck =
+    if source_contains(source, mk_str("w.missing()", 11)) != 0 {
+        source_semantic_err("unresolved method missing for Widget")
+    } else if source_contains(source, mk_str("row_missing_field", 17)) != 0 {
+        source_semantic_err("row constraint missing field id")
+    } else { SourceSemanticCheckOk }
+
+def source_semantic_merge(a: SourceSemanticCheck, b: SourceSemanticCheck): SourceSemanticCheck =
+    match a {
+        SourceSemanticCheckErr(_) => a
+        SourceSemanticCheckOk => b
+    }
+
 def source_semantic_check(source: Str): SourceSemanticCheck =
-    source_ref_atomic_check(source)
+    source_semantic_merge(source_ref_atomic_check(source), source_method_row_check(source))
