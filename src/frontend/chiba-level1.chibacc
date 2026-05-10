@@ -484,7 +484,7 @@ rule closure_param_tail ::=
     ;
 
 rule if_expr ::= 
-    KwIf cond:if_cond then_block:block_expr else_branch:if_else_branch => Expr_If(cond, then_block, else_branch)
+    KwIf cond:if_cond then_block:block_expr _:trivia_list else_branch:if_else_branch => Expr_If(cond, then_block, else_branch)
     ;
 
 rule if_cond ::= 
@@ -493,15 +493,30 @@ rule if_cond ::=
     | value:expr => IfCond_Expr(value)
     ;
 
+rule if_cond_binary_op ::=
+    EqEq => OpEqEq
+    | BangEq => OpBangEq
+    | Lt => OpLt
+    | Gt => OpGt
+    | LtEq => OpLtEq
+    | GtEq => OpGtEq
+    ;
+
 rule if_cond_ident_rest ::= 
-    LParen args:arg_list RParen => IfCondIdent_Call(args)
-    | EqEq rhs:expr => IfCondIdent_Binary(OpEqEq, rhs)
-    | BangEq rhs:expr => IfCondIdent_Binary(OpBangEq, rhs)
-    | Lt rhs:expr => IfCondIdent_Binary(OpLt, rhs)
-    | Gt rhs:expr => IfCondIdent_Binary(OpGt, rhs)
-    | LtEq rhs:expr => IfCondIdent_Binary(OpLtEq, rhs)
-    | GtEq rhs:expr => IfCondIdent_Binary(OpGtEq, rhs)
+    LParen args:arg_list RParen op:if_cond_binary_op rhs:if_cond_binary_rhs => IfCondIdent_CallBinary(args, op, rhs)
+    | LParen args:arg_list RParen => IfCondIdent_Call(args)
+    | EqEq rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpEqEq, rhs)
+    | BangEq rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpBangEq, rhs)
+    | Lt rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpLt, rhs)
+    | Gt rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpGt, rhs)
+    | LtEq rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpLtEq, rhs)
+    | GtEq rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpGtEq, rhs)
     | => IfCondIdent_Name
+    ;
+
+rule if_cond_binary_rhs ::=
+    name:Ident LParen args:arg_list RParen => Expr_Call(Expr_Name(name), args)
+    | value:expr => value
     ;
 
 rule if_else_branch ::= 
@@ -546,7 +561,12 @@ rule match_arm_list ::=
     ;
 
 rule match_arm ::= 
-    pat:pattern guard:match_guard FatArrow value:expr => MatchArm(pat, guard, value)
+    pat:pattern guard:match_guard FatArrow value:match_arm_value => MatchArm(pat, guard, value)
+    ;
+
+rule match_arm_value ::=
+    block:block_expr => block
+    | value:expr => value
     ;
 
 rule match_guard ::= 
@@ -994,6 +1014,7 @@ rule arg_tail ::=
         IfCond_Expr(AST),
         Expr_IfCondIdent(Str, AST),
         IfCondIdent_Call(AST),
+        IfCondIdent_CallBinary(AST, AST, AST),
         IfCondIdent_Binary(AST, AST),
         IfCondIdent_Name,
         Expr_Match(AST, AST),

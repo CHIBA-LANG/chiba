@@ -55,9 +55,38 @@ run("parser compare", process.execPath, ["tools/node/run-parser-compare.mjs"]);
 run("parser error smoke", process.execPath, ["tools/node/run-parser-error-smoke.mjs"]);
 
 const artifacts = [
+  compileArtifact("level1c", "supports/bootstrap/level1c-bootstrap-main.chiba"),
   compileArtifact("wat-tuple-heap-smoke", "supports/bootstrap/wat-tuple-heap-smoke.chiba"),
   compileArtifact("wat-extern-env-smoke", "supports/bootstrap/wat-extern-env-smoke.chiba"),
 ];
+
+run("level1c.wasm help", process.execPath, [
+  "tools/node/run-level1c-wasm.mjs",
+  "--wasm",
+  artifacts[0].wasmPath,
+  "--help",
+]);
+run("level1c.wasm parse", process.execPath, [
+  "tools/node/run-level1c-wasm.mjs",
+  "--wasm",
+  artifacts[0].wasmPath,
+  "parse",
+  "chiba-level1-grammar-spec/01-test.chiba",
+]);
+run("level1c.wasm check", process.execPath, [
+  "tools/node/run-level1c-wasm.mjs",
+  "--wasm",
+  artifacts[0].wasmPath,
+  "check",
+  "supports/bootstrap/continuation-valid.chiba",
+]);
+run("level1c.wasm cont-usage", process.execPath, [
+  "tools/node/run-level1c-wasm.mjs",
+  "--wasm",
+  artifacts[0].wasmPath,
+  "cont-usage",
+  "supports/bootstrap/continuation-multi-resume.chiba",
+]);
 
 console.log("[INFO] first bootstrap hashes");
 console.log(`seed ${sha256("chibac_amd64-unknown-linux_chiba_dev.o")}`);

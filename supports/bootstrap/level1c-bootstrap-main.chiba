@@ -1,0 +1,13 @@
+namespace main
+
+def host_help(): i64 = extern "C" "level1c_help"
+def host_parse(): i64 = extern "C" "level1c_parse"
+def host_check(): i64 = extern "C" "level1c_check"
+def host_cont_usage(): i64 = extern "C" "level1c_cont_usage"
+
+def level1c_help(): i64 = host_help()
+def level1c_parse(): i64 = host_parse()
+def level1c_check(): i64 = host_check()
+def level1c_cont_usage(): i64 = host_cont_usage()
+
+def main(): i64 = level1c_help()

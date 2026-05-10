@@ -124,6 +124,8 @@ def cir_lower_ident_tail(name: Str, tail: AST): CirExpr =
 def cir_lower_if_cond_ident(name: Str, rest: AST): CirExpr =
     match rest {
         IfCondIdent_Call(args) => L0OpCall(L0OpName(name), cir_lower_expr_list(args))
+        IfCondIdent_CallBinary(args, op, rhs) =>
+            L0OpBinary(cir_lower_binary_op(op), L0OpCall(L0OpName(name), cir_lower_expr_list(args)), cir_lower_expr(rhs))
         IfCondIdent_Binary(op, rhs) => L0OpBinary(cir_lower_binary_op(op), L0OpName(name), cir_lower_expr(rhs))
         IfCondIdent_Name => L0OpName(name)
         _ => cir_l0_unsupported(rest, mk_str("if cond ident unsupported", 25))

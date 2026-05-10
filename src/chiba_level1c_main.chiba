@@ -134,17 +134,28 @@ def level1c_run_wat(path: Str): i64 =
         }
     }
 
+def level1c_dispatch_unknown(): i64 = {
+    let _ = level1c_usage()
+    1
+}
+
+def level1c_dispatch_wat(cmd: Str, path: Str): i64 =
+    if streq(cmd, mk_str("wat", 3)) != 0 { level1c_run_wat(path) } else { level1c_dispatch_unknown() }
+
+def level1c_dispatch_cont_usage(cmd: Str, path: Str): i64 =
+    if streq(cmd, mk_str("cont-usage", 10)) != 0 { level1c_run_cont_usage(path) } else { level1c_dispatch_wat(cmd, path) }
+
+def level1c_dispatch_cir(cmd: Str, path: Str): i64 =
+    if streq(cmd, mk_str("cir", 3)) != 0 { level1c_run_cir(path) } else { level1c_dispatch_cont_usage(cmd, path) }
+
+def level1c_dispatch_check(cmd: Str, path: Str): i64 =
+    if streq(cmd, mk_str("check", 5)) != 0 { level1c_run_check(path) } else { level1c_dispatch_cir(cmd, path) }
+
+def level1c_dispatch_parse(cmd: Str, path: Str): i64 =
+    if streq(cmd, mk_str("parse", 5)) != 0 { level1c_run_parse(path) } else { level1c_dispatch_check(cmd, path) }
+
 def level1c_dispatch(cmd: Str, path: Str): i64 =
-    if streq(cmd, mk_str("lex", 3)) != 0 { level1c_run_lex(path) }
-    else if streq(cmd, mk_str("parse", 5)) != 0 { level1c_run_parse(path) }
-    else if streq(cmd, mk_str("check", 5)) != 0 { level1c_run_check(path) }
-    else if streq(cmd, mk_str("cir", 3)) != 0 { level1c_run_cir(path) }
-    else if streq(cmd, mk_str("cont-usage", 10)) != 0 { level1c_run_cont_usage(path) }
-    else if streq(cmd, mk_str("wat", 3)) != 0 { level1c_run_wat(path) }
-    else {
-        let _ = level1c_usage()
-        1
-    }
+    if streq(cmd, mk_str("lex", 3)) != 0 { level1c_run_lex(path) } else { level1c_dispatch_parse(cmd, path) }
 
 #[entry]
 def main(argc: i64, argv: i64): i64 =

@@ -292,6 +292,7 @@ def astwriteat(out: Str, ast: AST, depth: i64): i64 =
         IfCond_Expr(value) => astnode1(out, depth, "IfCond_Expr", value)
         Expr_IfCondIdent(name, rest) => aststr_ast(out, depth, "Expr_IfCondIdent", name, rest)
         IfCondIdent_Call(args) => astnode1(out, depth, "IfCondIdent_Call", args)
+        IfCondIdent_CallBinary(args, op, rhs) => astnode3(out, depth, "IfCondIdent_CallBinary", args, op, rhs)
         IfCondIdent_Binary(op, rhs) => astnode2(out, depth, "IfCondIdent_Binary", op, rhs)
         IfCondIdent_Name => astleaf(out, "IfCondIdent_Name")
         Expr_Match(value, arms) => astnode2(out, depth, "Expr_Match", value, arms)

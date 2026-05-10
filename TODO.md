@@ -92,33 +92,37 @@
 	- **验收**: `src/backend/cir` 有 nanopass ADT 和 pass 边界；至少有 alpha-conv pass 骨架；不支持 AST/CIR 节点能进入显式 unsupported/diagnostic，而不是落回 opaque `i64`。
 	- **并行**: 不并行。
 
-- [ ] **Bootstrap Pass B03: Minimal Wat Emit**
+- [x] **Bootstrap Pass B03: Minimal Wat Emit**
 	- **TODO**: 支持函数、局部变量、整数运算、比较、block/loop/branch、call、tailcall/return、WASI imports、`env` imports、bootstrap heap object emit、最小 continuation frame/package emit。
 	- **DESC**: emitter 保持 dumb，只序列化已知 IR 到可读 wat。
 	- **验收**: 算术、if、loop、函数调用、tail-recursive call、stdout、file read、simple reset/shift、multi-resume backtracking smoke tests 都能生成合法 wat 并运行。
 	- **并行**: 不并行。
 
-- [ ] **Bootstrap Pass B04: Runtime/Extern Glue**
+- [x] **Bootstrap Pass B04: Runtime/Extern Glue**
 	- **TODO**: 提供 allocator、argv/env、file read、write stdout/stderr、exit/status、string/slice helpers，并支持 typed extern import declaration：`def name(args): ret = extern "wasi" "function_name"` 进入 WASI import，`def name(args): ret = extern "C" "function_name"` 进入 wasm embedder / JS 侧 `env` import。
 	- **DESC**: 先走 WASI + `env` 两类最小外部边界；不要提前实现完整 managed runtime。extern 函数通过 typed declaration 进入 symbol table，backend 只按已检查签名生成 import/call，不在 emit 阶段猜 ABI。为兼容 level-0 既有写法，`"c"` 和 `"C"` 应 canonicalize 到同一个 C/env ABI。
 	- **验收**: wasm 程序能读输入文件、写输出文件、错误返回非零；`extern "wasi" "fd_write"` 能生成稳定 WASI import；`extern "C" "js_log"` 能生成稳定 `(import "env" "js_log" ...)` 并被普通 call 调用。
 	- **并行**: 不并行。
 
-- [ ] **Bootstrap Pass B05: level-1 Compiler Skeleton**
+- [x] **Bootstrap Pass B05: level-1 Compiler Skeleton**
 	- **TODO**: 建立最小 level-1 compiler wasm 项目：CLI、文件扫描、parse-only、check-stub、diagnostic 输出、continuation smoke runner。
 	- **DESC**: 首版可以直接携带当前 generated level-1 lexer/parser，不要求先自举 chibalex/chibacc；但 skeleton 必须能编译并运行使用 continuation primitive 的小型 lowering/backtracking/recovery 示例。
 	- **验收**: `level1c.wasm --help`、`level1c.wasm parse file.chiba`、`level1c.wasm check file.chiba` 可运行；continuation smoke runner 能覆盖 single resume、multi resume、nested reset、非法跨 world/thread continuation。
 	- **并行**: 不并行。
 
-- [ ] **Bootstrap Pass B06: First Bootstrap Validation**
+- [x] **Bootstrap Pass B06: First Bootstrap Validation**
 	- **TODO**: 用 level-0 seed 编译 `level1c.wasm`，并对拍 native parser runner 与 wasm parser runner。
 	- **DESC**: 第一成功点不是完整自举，而是 level-1 compiler wasm 能稳定运行。
 	- **验收**: 25 个 grammar spec 正向 OK；错误 spec Err；关键 AST 节点一致；continuation smoke tests 通过；记录 seed hash、wasm hash、toolchain version。
 	- **并行**: 不并行。
 
 ### 最终验收标准
-- [ ] 有没有正确的使用 nanopass 思想：每个pass只干一件事
-- [ ] 有没有实现 nodejs runner 并能够运行示例程序（需要准备一系列程序涉及到你实现的所有的功能并运行）
+- [x] 有没有正确的使用 nanopass 思想：每个pass只干一件事
+- [x] 有没有实现 nodejs runner 并能够运行示例程序（需要准备一系列程序涉及到你实现的所有的功能并运行）
+- [ ] 有没有实现 `.method(call)` 有没有正确的按类型实现，符合Spec的三种标准不？
+- [ ] 有没有正确实现 row poly
+- [ ] 有没有正确实现 namespace, 测试两个文件同一个namespace，第三个文件调用这一个namespace里面的两个文件里面的函数
+- [ ] 有没有实现 `Ref[T]` `UnsafeRef[T]` `Ptr[T]` `Atomic[T]`, `:=` 实现和spec对的上不, Ref[T] 和 UnsafeRef[T] 跟 wasm-gc 的行为对齐没有
 
 ## Second Bootstrap: level-1 wasm 接管 generators + Optimized CPS Core
 

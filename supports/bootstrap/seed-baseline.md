@@ -92,20 +92,28 @@ Current result on 2026-05-10:
 - lexer compare: 30 specs pass
 - parser compare: 30 specs pass
 - parser error smoke: 108 specs pass
+- `level1c.wasm --help`: pass
+- `level1c.wasm parse chiba-level1-grammar-spec/01-test.chiba`: pass
+- `level1c.wasm check supports/bootstrap/continuation-valid.chiba`: pass
+- `level1c.wasm cont-usage supports/bootstrap/continuation-multi-resume.chiba`: pass
 - Node.js: `v24.15.0`
 - Binaryen: `129.0.0`
 
 Current hashes:
 
 - seed `chibac_amd64-unknown-linux_chiba_dev.o`: `7a7744ab9ace3d8e13ede45f2e5978e56cc07f597884085a9c4886753f3e268d`
-- native bootstrap runner `target/debug/level1c.o`: `a772bfe829f8f21c390e2cec7aaeab997c6dcec675d006fc3edf5f10c6243db0`
-- native parser runner `target/debug/parser_spec_runner.o`: `1f1e5420fe7aa82792dba8050f7913b4284233343aee73e4b02bb3312542687b`
-- generated `wat-tuple-heap-smoke.wat`: `933628efbf20637e41189be0cdc2157f0c25a5e21165002d8cb777323c81af4d`
-- generated `wat-tuple-heap-smoke.wasm`: `0b7edf0f79e80b27096deca09ca54fd81489d0479dbd00a1aeaf31a717768501`
+- native bootstrap runner `target/debug/level1c.o`: `1b3f3e4a9d91cb804e7230c7acd50c088172cb51778da8e0a5c32981bab13c8d`
+- native parser runner `target/debug/parser_spec_runner.o`: `11cac5f09b3d2f2f0c8a0da26b14fc24c0f8f1926056d0f21baff489e0db1b59`
+- generated `level1c.wat`: `f48cbc54a8d920143318a710666f54656312ffe978c58584edbda8b2ef3db1b8`
+- generated `level1c.wasm`: `8592ef1fc4683263292e712e102962fbe7ed1fb8701d5fddd9c342d12a23b66a`
+- generated `wat-tuple-heap-smoke.wat`: `a6cdf4d249822e454a9a9b4f695f5109d01703b9999237b9d8f068390fed95b8`
+- generated `wat-tuple-heap-smoke.wasm`: `3f005da259eab137cf66975cae8bfc89c8c33b3aaf6da837dfd3b54f3e26abc1`
 - generated `wat-extern-env-smoke.wat`: `795a1c76d5c6a60c6be42205fb18c1ce5ca98700159c831378431f17bd078f68`
 - generated `wat-extern-env-smoke.wasm`: `6f51626725cc1038b9b429088bedf4497f75c410f12886a0924f0b862c1b5186`
 
-B06 is not checked complete yet: this snapshot validates the current native
-level-1 compiler skeleton plus generated wasm smokes. The remaining B06 line is
-to emit and run `level1c.wasm` itself, then replace the native skeleton hash
-above with the real first-bootstrap wasm hash.
+The first `level1c.wasm` is a host-assisted bootstrap skeleton: the wasm module
+is emitted from level-1 Chiba source by the level-0 seed and dispatches through
+explicit `extern "C" ...` imports. Parser/check execution still delegates to the
+native level-1 runner through the Node bootstrap launcher; replacing those host
+imports with in-wasm lexer/parser/runtime code is the handoff into the second
+bootstrap work.

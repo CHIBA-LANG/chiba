@@ -402,6 +402,14 @@ def wat_emit_func(out: Str, item: CirItem, export_main: i64): i64 =
             let _ = wat_emit_expr(out, 2, body)
             let _ = str_push_cstr(out, "  )")
             let _ = str_push(out, 10)
+            let _ = if wat_params_empty(params) != 0 && streq(binder.name, mk_str("main", 4)) == 0 {
+                let _ = str_push_cstr(out, "  (export \"")
+                let _ = str_append(out, binder.name)
+                let _ = str_push_cstr(out, "\" (func ")
+                let _ = wat_func_name(out, binder.name)
+                let _ = str_push_cstr(out, "))")
+                str_push(out, 10)
+            } else { 0 }
             if export_main != 0 {
                 let _ = str_push_cstr(out, "  (export \"main\" (func ")
                 let _ = wat_func_name(out, binder.name)
