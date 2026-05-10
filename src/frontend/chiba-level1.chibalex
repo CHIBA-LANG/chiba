@@ -64,6 +64,7 @@ mode STRING
 @kw_unique = "unique" @wsnl?
 @kw_send = "send" @wsnl?
 @kw_self = "self"
+@kw_bittype = "bittype" @wsnl?
 
 @op_pipe_gt = "|>" @wsnl?
 @op_colon_eq = ":=" @wsnl?
@@ -150,6 +151,7 @@ tokens CODE :-
     @kw_unique              { KwUnique }
     @kw_send                { KwSend }
     @kw_self                { KwSelf }
+    @kw_bittype             { KwBittype }
 
     @ident                  => ident_or_string_open
 

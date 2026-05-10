@@ -99,6 +99,7 @@ rule item_core ::=
     | dat:data_item => Item_Adt(dat)
     | un:union_item => Item_Union(un)
     | iface:interface_item => Item_Interface(iface)
+    | bit:bittype_item => Item_Bittype(bit)
     ;
 
 rule private_opt ::= 
@@ -246,6 +247,33 @@ rule interface_method_list ::=
 
 rule interface_method ::= 
     name:Ident LParen params:param_list RParen Colon ret:type_expr => InterfaceMethod(name, params, ret)
+    ;
+
+rule bittype_item ::= 
+    KwBittype name:Ident generics:opt_generics Eq LtLt fields:bit_field_list GtGt => BittypeItem(name, generics, fields)
+    ;
+
+rule bit_field_list ::= 
+    _:trivia_list head:bit_field tail:bit_field_tail => BitField_Cons(head, tail)
+    | => BitField_End
+    ;
+
+rule bit_field_tail ::= 
+    _:trivia_list Comma rest:bit_field_list => rest
+    | => BitField_End
+    ;
+
+rule bit_field ::= 
+    name:Ident Colon _:trivia_list ty:bit_field_type => BitField(name, ty)
+    ;
+
+rule bit_field_type ::= 
+    name:Ident tail:bit_field_type_tail => BitFieldType_Named(name, tail)
+    ;
+
+rule bit_field_type_tail ::= 
+    LParen args:arg_list RParen => BitFieldType_Args(args)
+    | => BitFieldType_NoArgs
     ;
 
 rule opt_generics ::= 
@@ -617,6 +645,7 @@ rule pattern_atom_no_ident ::=
     | KwFalse => Pattern_Bool(0)
     | LParen body:pattern_paren_body RParen => body
     | LBrace fields:pattern_record_fields_opt RBrace => Pattern_Record(fields)
+    | LtLt fields:bit_pattern_field_list GtGt => Pattern_Bit(fields)
     ;
 
 rule pattern_ident_tail ::= 
@@ -661,6 +690,22 @@ rule pattern_record_field ::=
 rule pattern_record_field_value ::= 
     Colon value:pattern => value
     | => Pattern_IdentStart(str_empty(), PatternAfterIdent_Atom(PatternIdent_Name))
+    ;
+
+rule bit_pattern_field_list ::= 
+    _:trivia_list head:bit_pattern_field tail:bit_pattern_field_tail => BitPatField_Cons(head, tail)
+    | => BitPatField_End
+    ;
+
+rule bit_pattern_field_tail ::= 
+    _:trivia_list Comma rest:bit_pattern_field_list => rest
+    | => BitPatField_End
+    ;
+
+rule bit_pattern_field ::= 
+    lit:IntLit => BitPatField_Lit(lit)
+    | DotDot => BitPatField_Rest
+    | name:Ident Colon _:trivia_list ty:bit_field_type => BitPatField_Bind(name, ty)
     ;
 
 rule paren_expr ::= 
@@ -920,6 +965,7 @@ rule arg_tail ::=
         Item_Adt(AST),
         Item_Union(AST),
         Item_Interface(AST),
+        Item_Bittype(AST),
 
         DefItem(Str, AST, AST, AST, AST),
         DefItem2(AST, AST),
@@ -950,6 +996,14 @@ rule arg_tail ::=
         InterfaceMethod_Cons(AST, AST),
         InterfaceMethod_End,
         InterfaceMethod(Str, AST, AST),
+
+        BittypeItem(Str, AST, AST),
+        BitField_Cons(AST, AST),
+        BitField_End,
+        BitField(Str, AST),
+        BitFieldType_Named(Str, AST),
+        BitFieldType_Args(AST),
+        BitFieldType_NoArgs,
         Generic_Cons(AST, AST),
         Generic_End,
         GenericParam(Str, AST),
@@ -1031,6 +1085,12 @@ rule arg_tail ::=
         PatternRecord_Cons(AST, AST),
         PatternRecord_End,
         PatternRecordField(Str, AST),
+        Pattern_Bit(AST),
+        BitPatField_Cons(AST, AST),
+        BitPatField_End,
+        BitPatField_Bind(Str, AST),
+        BitPatField_Lit(Str),
+        BitPatField_Rest,
         Expr_Paren(AST),
         Expr_ParenIdent(Str, AST),
         ParenIdent_Lambda(AST, AST, AST),
