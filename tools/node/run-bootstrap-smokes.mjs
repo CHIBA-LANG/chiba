@@ -8,6 +8,8 @@ function run(command, args, options = {}) {
   });
 }
 
+const USE_BINARYEN_OPT = process.argv.includes("--opt");
+
 function checkOutput(name, result, expect, status = 0) {
   const output = `${result.stdout}${result.stderr}`;
   const ok =
@@ -28,6 +30,7 @@ function runWatFile(test) {
     "--no-warnings",
     "tools/node/run-wat.mjs",
     test.file,
+    ...(USE_BINARYEN_OPT ? ["--opt"] : []),
     ...(test.args || []),
   ]);
   return checkOutput(test.name, result, test.expect, test.status || 0);
@@ -46,7 +49,12 @@ function runGeneratedWat(test) {
 
   const result = run(
     process.execPath,
-    ["--no-warnings", "tools/node/run-wat.mjs", "-"],
+    [
+      "--no-warnings",
+      "tools/node/run-wat.mjs",
+      "-",
+      ...(USE_BINARYEN_OPT ? ["--opt"] : []),
+    ],
     { input: generated.stdout },
   );
   return checkOutput(test.name, result, test.expect);
@@ -130,6 +138,11 @@ const GENERATED_WAT_CASES = [
     name: "generated wat tailcall",
     file: "supports/bootstrap/wat-tailcall-smoke.chiba",
     expect: ["0"],
+  },
+  {
+    name: "generated wat tuple heap",
+    file: "supports/bootstrap/wat-tuple-heap-smoke.chiba",
+    expect: ["41"],
   },
 ];
 

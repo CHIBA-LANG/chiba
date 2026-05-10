@@ -194,6 +194,13 @@ def wat_binary_is_compare(op: Str): i64 =
     else if streq(op, mk_str(">=", 2)) != 0 { 1 }
     else { 0 }
 
+def wat_is_ref_name(ref: CirRef, want: Str): i64 =
+    match ref {
+        L1RefGlobal(name) => streq(name, want)
+        L1RefUnresolved(name) => streq(name, want)
+        _ => 0
+    }
+
 def wat_emit_expr_list(out: Str, depth: i64, args: CirExprList): i64 =
     match args {
         CirExprEnd => 0
@@ -201,6 +208,15 @@ def wat_emit_expr_list(out: Str, depth: i64, args: CirExprList): i64 =
             let _ = wat_emit_expr(out, depth, head)
             wat_emit_expr_list(out, depth, tail)
         }
+    }
+
+def wat_emit_tuple_get_1(out: Str, depth: i64, args: CirExprList): i64 =
+    match args {
+        CirExprCons(value, CirExprEnd) => {
+            let _ = wat_emit_expr(out, depth, value)
+            wat_line(out, depth, "struct.get $tuple2_i64 0")
+        }
+        _ => wat_line(out, depth, "unreachable ;; tuple-get-1 arity")
     }
 
 def wat_emit_stmt_list(out: Str, depth: i64, stmts: CirStmtList): i64 =
@@ -290,20 +306,31 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
             wat_line(out, depth, "end")
         }
         L1OpCall(callee, args) => {
-            let _ = wat_emit_expr_list(out, depth, args)
             match callee {
-                L1OpRef(L1RefGlobal(name)) => {
-                    let _ = wat_indent(out, depth)
-                    let _ = str_push_cstr(out, "call ")
-                    let _ = wat_func_name(out, name)
-                    str_push(out, 10)
-                }
-                L1OpRef(L1RefUnresolved(name)) => {
-                    let _ = wat_indent(out, depth)
-                    let _ = str_push_cstr(out, "call ")
-                    let _ = wat_func_name(out, name)
-                    str_push(out, 10)
-                }
+                L1OpRef(ref) =>
+                    if wat_is_ref_name(ref, mk_str("__tuple", 7)) != 0 {
+                        let _ = wat_emit_expr_list(out, depth, args)
+                        wat_line(out, depth, "struct.new $tuple2_i64")
+                    } else if wat_is_ref_name(ref, mk_str("__tuple_get_1", 13)) != 0 {
+                        wat_emit_tuple_get_1(out, depth, args)
+                    } else {
+                        let _ = wat_emit_expr_list(out, depth, args)
+                        match ref {
+                            L1RefGlobal(name) => {
+                                let _ = wat_indent(out, depth)
+                                let _ = str_push_cstr(out, "call ")
+                                let _ = wat_func_name(out, name)
+                                str_push(out, 10)
+                            }
+                            L1RefUnresolved(name) => {
+                                let _ = wat_indent(out, depth)
+                                let _ = str_push_cstr(out, "call ")
+                                let _ = wat_func_name(out, name)
+                                str_push(out, 10)
+                            }
+                            _ => wat_line(out, depth, "unreachable ;; indirect call unsupported")
+                        }
+                    }
                 _ => wat_line(out, depth, "unreachable ;; indirect call unsupported")
             }
         }
@@ -394,6 +421,7 @@ def wat_emit_items(out: Str, items: CirItemList, exported: i64): i64 =
 def wat_emit_module(module: CirModule): Str = {
     let out = str_new()
     let _ = str_push_cstr(out, "(module\n")
+    let _ = str_push_cstr(out, "  (type $tuple2_i64 (struct (field i64) (field i64)))\n")
     let _ = match module {
         L1Module(_, items) => {
             let _ = wat_emit_imports(out, items)

@@ -1,28 +1,27 @@
 import fs from "node:fs/promises";
 import process from "node:process";
-import wabtInit from "wabt";
+import binaryen from "binaryen";
 
 // Keep this profile aligned with https://webassembly.org/features/:
 // Chrome, Firefox, Safari, and Node.js must support selected features without
 // runtime flags; Wasmtime/WasmEdge may require their documented wasm flags.
-const WABT_PORTABLE_FEATURES = {
-  mutable_globals: true,
-  sat_float_to_int: true,
-  sign_extension: true,
-  simd: true,
-  threads: true,
-  function_references: true,
-  multi_value: true,
-  tail_call: true,
-  bulk_memory: true,
-  reference_types: true,
-  gc: true,
-  extended_const: true,
-};
+const BINARYEN_PORTABLE_FEATURES =
+  binaryen.Features.MutableGlobals |
+  binaryen.Features.NontrappingFPToInt |
+  binaryen.Features.SignExt |
+  binaryen.Features.SIMD128 |
+  binaryen.Features.Atomics |
+  binaryen.Features.ReferenceTypes |
+  binaryen.Features.Multivalue |
+  binaryen.Features.TailCall |
+  binaryen.Features.BulkMemory |
+  binaryen.Features.GC |
+  binaryen.Features.ExtendedConst;
 
 function parseArgs() {
   let path = null;
   let invoke = null;
+  let opt = false;
   const wasiArgs = [];
   const wasiEnv = {};
   let i = 2;
@@ -31,6 +30,9 @@ function parseArgs() {
     if (arg === "--invoke") {
       invoke = process.argv[i + 1] || null;
       i += 2;
+    } else if (arg === "--opt") {
+      opt = true;
+      i += 1;
     } else if (arg === "--arg") {
       wasiArgs.push(process.argv[i + 1] || "");
       i += 2;
@@ -48,7 +50,7 @@ function parseArgs() {
       i += 1;
     }
   }
-  return { path, invoke, wasiArgs, wasiEnv };
+  return { path, invoke, opt, wasiArgs, wasiEnv };
 }
 
 async function readInput(args) {
@@ -71,6 +73,25 @@ function extractModule(text) {
     throw new Error("input does not contain a complete wat module");
   }
   return text.slice(start, end + 2);
+}
+
+function validateModule(module, label) {
+  if (!module.validate()) {
+    throw new Error(`Binaryen ${label} validation failed`);
+  }
+}
+
+function compileWat(wat, args) {
+  const module = binaryen.parseText(wat);
+  module.setFeatures(BINARYEN_PORTABLE_FEATURES);
+  validateModule(module, "raw");
+
+  if (args.opt) {
+    module.optimize();
+    validateModule(module, "optimized");
+  }
+
+  return module.emitBinary();
 }
 
 async function makeImports(wat, args) {
@@ -114,11 +135,7 @@ try {
   const { invoke } = args;
   const raw = await readInput(args);
   const wat = extractModule(raw);
-  const wabt = await wabtInit();
-  const parsed = wabt.parseWat("bootstrap.wat", wat, WABT_PORTABLE_FEATURES);
-  parsed.resolveNames();
-  parsed.validate();
-  const { buffer } = parsed.toBinary({ write_debug_names: true });
+  const buffer = compileWat(wat, args);
   const { imports, wasi } = await makeImports(wat, args);
   const instance = await WebAssembly.instantiate(buffer, imports);
   const exports = instance.instance.exports;

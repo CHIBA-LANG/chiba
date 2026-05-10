@@ -14,9 +14,9 @@ importers:
       '@tybys/wasm-util':
         specifier: latest
         version: 0.10.2
-      wabt:
-        specifier: latest
-        version: 1.0.39
+      binaryen:
+        specifier: ^129.0.0
+        version: 129.0.0
 
 packages:
 
@@ -26,12 +26,12 @@ packages:
   '@tybys/wasm-util@0.10.2':
     resolution: {integrity: sha512-RoBvJ2X0wuKlWFIjrwffGw1IqZHKQqzIchKaadZZfnNpsAYp2mM0h36JtPCjNDAHGgYez/15uMBpfGwchhiMgg==}
 
+  binaryen@129.0.0:
+    resolution: {integrity: sha512-NyF5J0SfRoLDthpPh36FGTycOEv3Eqnkq3+mP5Cqt6iD9BLGGJMEVuPzu81nhLy2MMpPKmRTM9VLZihfyRQv8A==}
+    hasBin: true
+
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
-
-  wabt@1.0.39:
-    resolution: {integrity: sha512-ba+dRL/75VQQY7RkU/CgriGbkoWAfS8TDyUlJfJhJ8KhtXgMl5dhNvoPNUcQ9IWRhW8u41glMSuZeTvsYq2rRg==}
-    hasBin: true
 
 snapshots:
 
@@ -43,6 +43,6 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  tslib@2.8.1: {}
+  binaryen@129.0.0: {}
 
-  wabt@1.0.39: {}
+  tslib@2.8.1: {}
