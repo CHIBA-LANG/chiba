@@ -35,6 +35,13 @@ const CASES = [
 `,
   },
   {
+    name: "recover",
+    file: "pratt.chibacc",
+    namespace: "level1b.chibaccmini.pratt",
+    expected: ["recover_pos", "RParen"],
+    tokens: ["LParen", "RParen"],
+  },
+  {
     file: "list.chibacc",
     namespace: "level1b.chibaccmini.list",
     expected: ["Name_Cons", "Name_End"],
@@ -108,6 +115,23 @@ function mainSource(namespace, tokens, check) {
   const pushes = tokens
     .map((token) => `    let _ = push_token(tokens, ${token})`)
     .join("\n");
+  const resultCheck =
+    check == null
+      ? `    match parse_tokens(tokens) {
+        Err(fail, errors) =>
+            match fail {
+                Some(ast) => 0
+                None => 3
+            }
+        OK(ast, errors) => 2
+    }`
+      : `    match parse_tokens(tokens) {
+        OK(ast, errors) => {
+            let node = ast as AST
+            match node {${check}            }
+        }
+        Err(fail, errors) => 2
+    }`;
   return `namespace ${namespace}
 use metalstd.str.*
 use metalstd.vec.*
@@ -119,19 +143,14 @@ def push_token(tokens: Vec, tok: Token): i64 =
 def main(argc: i64, argv: i64): i64 = {
     let tokens = vec_new()
 ${pushes}
-    match parse_tokens(tokens) {
-        OK(ast, errors) => {
-            let node = ast as AST
-            match node {${check}            }
-        }
-        Err(fail, errors) => 2
-    }
+${resultCheck}
 }
 `;
 }
 
 function runGeneratedParser(caseInfo, generated) {
-  const name = caseInfo.file.replace(/\.chibacc$/, "");
+  const name = caseInfo.name ?? caseInfo.file.replace(/\.chibacc$/, "");
+  const label = caseInfo.name == null ? caseInfo.file : `${caseInfo.file}:${caseInfo.name}`;
   const project = path.join(RUNNERS, name);
   const src = path.join(project, "src");
   fs.rmSync(project, { recursive: true, force: true });
@@ -146,7 +165,7 @@ function runGeneratedParser(caseInfo, generated) {
     path.join(src, "main.chiba"),
     `${tokenPrelude(caseInfo.namespace)}\n${generated}\n${mainSource(caseInfo.namespace, caseInfo.tokens, caseInfo.check)}`,
   );
-  run(`generated parser compile ${caseInfo.file}`, "timeout", [
+  run(`generated parser compile ${label}`, "timeout", [
     "10",
     "./chibac_amd64-unknown-linux_chiba_dev.o",
     "--project",
@@ -156,7 +175,7 @@ function runGeneratedParser(caseInfo, generated) {
     "--output",
     "runner.o",
   ]);
-  run(`generated parser run ${caseInfo.file}`, path.join(project, "target/debug/runner.o"), []);
+  run(`generated parser run ${label}`, path.join(project, "target/debug/runner.o"), []);
 }
 
 for (const caseInfo of CASES) {
