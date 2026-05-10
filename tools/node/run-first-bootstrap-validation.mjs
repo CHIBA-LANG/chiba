@@ -90,6 +90,13 @@ run("level1c.wasm typed", process.execPath, [
   "typed",
   "chiba-level1-grammar-spec/01-test.chiba",
 ]);
+run("level1c.wasm cps", process.execPath, [
+  "tools/node/run-level1c-wasm.mjs",
+  "--wasm",
+  artifacts[0].wasmPath,
+  "cps",
+  "supports/bootstrap/continuation-multi-resume.chiba",
+]);
 run("level1c.wasm nanopass", process.execPath, [
   "tools/node/run-level1c-wasm.mjs",
   "--wasm",

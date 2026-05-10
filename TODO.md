@@ -161,6 +161,7 @@
 - [ ] **Pre-C04: continuation answer/effect + one-pass CPS**
 	- **TODO**: 实现 answer type check、continuation kind check、effect/replay-safety check、one-pass CPS transformation 和 administrative continuation beta-reduction。
 	- **DESC**: `reset`/`shift` 不能停留在 check gate；chibalex/chibacc 的 backtracking/recovery 要能落到同一 CPS core。
+	- **PROGRESS**: `level1c.o cps` 已能把 continuation fixture dump 到 L5 CPS/continuation package，并由 bootstrap smoke 与 wasm bridge 覆盖；当前仍是骨架 CPS，不含完整 answer/effect/replay-safety 与 beta-reduction。
 	- **验收**: simple reset/shift、nested reset、multi-resume Scheme smoke、lexer backtracking、parser alternative/recovery 都能 dump CPS；answer mismatch、multi-resume 捕获不可 replay state、跨 world/thread continuation 稳定报错。
 	- **并行**: 不并行；先保证语义正确和 dump 稳定。
 

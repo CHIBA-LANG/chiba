@@ -4,6 +4,7 @@ def host_help(): i64 = extern "C" "level1c_help"
 def host_parse(): i64 = extern "C" "level1c_parse"
 def host_check(): i64 = extern "C" "level1c_check"
 def host_typed(): i64 = extern "C" "level1c_typed"
+def host_cps(): i64 = extern "C" "level1c_cps"
 def host_nanopass(): i64 = extern "C" "level1c_nanopass"
 def host_cont_usage(): i64 = extern "C" "level1c_cont_usage"
 
@@ -11,6 +12,7 @@ def level1c_help(): i64 = host_help()
 def level1c_parse(): i64 = host_parse()
 def level1c_check(): i64 = host_check()
 def level1c_typed(): i64 = host_typed()
+def level1c_cps(): i64 = host_cps()
 def level1c_nanopass(): i64 = host_nanopass()
 def level1c_cont_usage(): i64 = host_cont_usage()
 

@@ -29,6 +29,7 @@ function commandExport(command) {
   if (command === "parse") return "level1c_parse";
   if (command === "check") return "level1c_check";
   if (command === "typed") return "level1c_typed";
+  if (command === "cps") return "level1c_cps";
   if (command === "nanopass") return "level1c_nanopass";
   if (command === "cont-usage") return "level1c_cont_usage";
   return "level1c_help";
@@ -43,7 +44,7 @@ const imports = {
   env: {
     level1c_help() {
       process.stdout.write("Usage: level1c <command> <file>\n");
-      process.stdout.write("Commands: lex parse check cir typed nanopass cont-usage wat\n");
+      process.stdout.write("Commands: lex parse check cir typed cps nanopass cont-usage wat\n");
       return 0n;
     },
     level1c_parse() {
@@ -54,6 +55,9 @@ const imports = {
     },
     level1c_typed() {
       return runNative(["typed", file]);
+    },
+    level1c_cps() {
+      return runNative(["cps", file]);
     },
     level1c_nanopass() {
       return runNative(["nanopass", file]);
