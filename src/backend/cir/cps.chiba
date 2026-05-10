@@ -10,24 +10,99 @@ def cir_l5_has_control_args(args: CirExprList): i64 =
 
 def cir_l5_has_control_expr(expr: CirExpr): i64 =
     match expr {
+        L5OpContinuationPackage(_, _, _) => 1
+        L5OpCps(value, _) => cir_l5_has_control_expr(value)
         L4OpUsage(value, _) => cir_l5_has_control_expr(value)
         L3OpAnswerControl(value, _, _) => cir_l5_has_control_expr(value)
         L2OpTyped(value, _) => cir_l5_has_control_expr(value)
+        L1OpBlock(stmts, tail) => cir_l5_has_control_stmts(stmts) + cir_l5_has_control_expr(tail)
+        L1OpIf(cond, then_expr, else_expr) => cir_l5_has_control_expr(cond) + cir_l5_has_control_expr(then_expr) + cir_l5_has_control_expr(else_expr)
+        L1OpMatch(value, _) => cir_l5_has_control_expr(value)
+        L1OpClosure(_, body) => cir_l5_has_control_expr(body)
         L1OpReset(_, body) => 1 + cir_l5_has_control_expr(body)
         L1OpShift(_, _, body) => 1 + cir_l5_has_control_expr(body)
         L1OpCall(callee, args) => cir_l5_has_control_expr(callee) + cir_l5_has_control_args(args)
+        L1OpField(value, _) => cir_l5_has_control_expr(value)
+        L1OpIndex(value, args) => cir_l5_has_control_expr(value) + cir_l5_has_control_args(args)
+        L1OpAssign(lhs, rhs) => cir_l5_has_control_expr(lhs) + cir_l5_has_control_expr(rhs)
+        L1OpPrefix(_, value) => cir_l5_has_control_expr(value)
+        L1OpBinary(_, lhs, rhs) => cir_l5_has_control_expr(lhs) + cir_l5_has_control_expr(rhs)
         _ => 0
     }
 
-def cir_l5_cps_expr(expr: CirExpr): CirExpr =
+def cir_l5_has_control_stmt(stmt: CirStmt): i64 =
+    match stmt {
+        L2StmtLet(_, _, value) => cir_l5_has_control_expr(value)
+        L2StmtLetPattern(_, value) => cir_l5_has_control_expr(value)
+        L2StmtAssign(lhs, rhs) => cir_l5_has_control_expr(lhs) + cir_l5_has_control_expr(rhs)
+        L2StmtExpr(value) => cir_l5_has_control_expr(value)
+        L2StmtReturn(value) => cir_l5_has_control_expr(value)
+        L2StmtFor(_, cond, body) => cir_l5_has_control_expr(cond) + cir_l5_has_control_expr(body)
+        _ => 0
+    }
+
+def cir_l5_has_control_stmts(stmts: CirStmtList): i64 =
+    match stmts {
+        CirStmtEnd => 0
+        CirStmtCons(stmt, rest) => cir_l5_has_control_stmt(stmt) + cir_l5_has_control_stmts(rest)
+    }
+
+def cir_l5_cps_expr_list(args: CirExprList): CirExprList =
+    match args {
+        CirExprEnd => CirExprEnd
+        CirExprCons(head, tail) => CirExprCons(cir_l5_cps_expr(head), cir_l5_cps_expr_list(tail))
+    }
+
+def cir_l5_cps_stmt(stmt: CirStmt): CirStmt =
+    match stmt {
+        L2StmtLet(binder, ty, value) => L2StmtLet(binder, ty, cir_l5_cps_expr(value))
+        L2StmtLetPattern(pat, value) => L2StmtLetPattern(pat, cir_l5_cps_expr(value))
+        L2StmtAssign(lhs, rhs) => L2StmtAssign(cir_l5_cps_expr(lhs), cir_l5_cps_expr(rhs))
+        L2StmtExpr(value) => L2StmtExpr(cir_l5_cps_expr(value))
+        L2StmtReturn(value) => L2StmtReturn(cir_l5_cps_expr(value))
+        L2StmtFor(label, cond, body) => L2StmtFor(label, cir_l5_cps_expr(cond), cir_l5_cps_expr(body))
+        _ => stmt
+    }
+
+def cir_l5_cps_stmt_list(stmts: CirStmtList): CirStmtList =
+    match stmts {
+        CirStmtEnd => CirStmtEnd
+        CirStmtCons(stmt, rest) => CirStmtCons(cir_l5_cps_stmt(stmt), cir_l5_cps_stmt_list(rest))
+    }
+
+def cir_l5_cps_payload(expr: CirExpr): CirExpr =
     match expr {
-        L4OpUsage(value, usage) =>
-            if cir_l5_has_control_expr(value) != 0 {
-                L5OpContinuationPackage(cir_binder(-1, mk_str("synthetic-cont", 14)), usage, L5OpCps(expr, usage))
-            } else {
-                L5OpCps(expr, usage)
-            }
-        _ => L5OpCps(expr, CirUseUnknown)
+        L4OpUsage(value, usage) => L4OpUsage(cir_l5_cps_expr(value), usage)
+        L3OpAnswerControl(value, answer, boundary) => L3OpAnswerControl(cir_l5_cps_expr(value), answer, boundary)
+        L2OpTyped(value, ty) => L2OpTyped(cir_l5_cps_expr(value), ty)
+        L1OpBlock(stmts, tail) => L1OpBlock(cir_l5_cps_stmt_list(stmts), cir_l5_cps_expr(tail))
+        L1OpIf(cond, then_expr, else_expr) => L1OpIf(cir_l5_cps_expr(cond), cir_l5_cps_expr(then_expr), cir_l5_cps_expr(else_expr))
+        L1OpMatch(value, arms) => L1OpMatch(cir_l5_cps_expr(value), arms)
+        L1OpClosure(params, body) => L1OpClosure(params, cir_l5_cps_expr(body))
+        L1OpReset(label, body) => L1OpReset(label, cir_l5_cps_expr(body))
+        L1OpShift(label, binder, body) => L1OpShift(label, binder, cir_l5_cps_expr(body))
+        L1OpCall(callee, args) => L1OpCall(cir_l5_cps_expr(callee), cir_l5_cps_expr_list(args))
+        L1OpField(value, field) => L1OpField(cir_l5_cps_expr(value), field)
+        L1OpIndex(value, args) => L1OpIndex(cir_l5_cps_expr(value), cir_l5_cps_expr_list(args))
+        L1OpAssign(lhs, rhs) => L1OpAssign(cir_l5_cps_expr(lhs), cir_l5_cps_expr(rhs))
+        L1OpPrefix(op, value) => L1OpPrefix(op, cir_l5_cps_expr(value))
+        L1OpBinary(op, lhs, rhs) => L1OpBinary(op, cir_l5_cps_expr(lhs), cir_l5_cps_expr(rhs))
+        _ => expr
+    }
+
+def cir_l5_cps_expr(expr: CirExpr): CirExpr =
+    {
+        let payload = cir_l5_cps_payload(expr)
+        let has_control = cir_l5_has_control_expr(payload)
+        let usage = match expr {
+            L4OpUsage(_, usage2) => usage2
+            _ => if has_control != 0 { CirUseMany } else { CirUseOne }
+        }
+        if has_control != 0 {
+            L5OpContinuationPackage(cir_binder(-1, mk_str("synthetic-cont", 14)), usage, L5OpCps(payload, usage))
+        } else {
+            L5OpCps(payload, usage)
+        }
     }
 
 def cir_l5_items(items: CirItemList): CirItemList =

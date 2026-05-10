@@ -24,12 +24,13 @@ function outputHasSequence(output, sequence) {
   return true;
 }
 
-function checkOutput(name, result, expect, status = 0, expectSequence = []) {
+function checkOutput(name, result, expect, status = 0, expectSequence = [], reject = []) {
   const output = `${result.stdout}${result.stderr}`;
   const ok =
     result.status === status &&
     expect.every((line) => output.includes(line)) &&
-    expectSequence.every((sequence) => outputHasSequence(output, sequence));
+    expectSequence.every((sequence) => outputHasSequence(output, sequence)) &&
+    reject.every((line) => !output.includes(line));
 
   if (ok) {
     console.log(`[PASS] ${name}`);
@@ -54,7 +55,7 @@ function runWatFile(test) {
 
 function runLevel1c(test) {
   const result = run("./target/debug/level1c.o", test.args);
-  return checkOutput(test.name, result, test.expect, 0, test.expectSequence || []);
+  return checkOutput(test.name, result, test.expect, 0, test.expectSequence || [], test.reject || []);
 }
 
 function watName(file) {
@@ -181,6 +182,8 @@ const LEVEL1C_CASES = [
     name: "level1c cps continuation multi resume",
     args: ["cps", "supports/bootstrap/continuation-multi-resume.chiba"],
     expect: ["L5Module", "L5OpContinuationPackage", "L5OpCps", "L4OpUsage", "control-boundary", "0"],
+    expectSequence: [["L5OpContinuationPackage", "usage many", "L5OpCps", "usage many", "L4OpUsage", "usage many"]],
+    reject: ["usage unknown"],
   },
   {
     name: "level1c check continuation valid",
