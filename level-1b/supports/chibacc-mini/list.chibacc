@@ -1,0 +1,25 @@
+#![CHIBACC]
+
+{
+    namespace level1b.chibaccmini.list
+    use metalstd.option.*
+    use metalstd.vec.*
+}
+
+start names
+
+rule names ::=
+    head:Ident tail:names_tail => Name_Cons(head, tail)
+    ;
+
+rule names_tail ::=
+    Comma tail:names => tail
+    | => Name_End
+    ;
+
+{
+    data AST {
+        Name_Cons(Str, AST),
+        Name_End,
+    }
+}

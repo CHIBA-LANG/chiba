@@ -1,0 +1,32 @@
+#![CHIBACC]
+
+{
+    namespace level1b.chibaccmini.pratt
+    use metalstd.option.*
+    use metalstd.vec.*
+}
+
+start expr
+
+rule expr ::= pratt {
+    prefix (100) {
+        n:IntLit => Expr_Int(n) ;
+        LParen e:expr RParen => e ;
+        Minus e:expr => Expr_Neg(e) ;
+    }
+
+    infix(80, 81) {
+        Plus rhs:expr => Expr_Binary(OpAdd, $lhs, rhs) ;
+        Minus rhs:expr => Expr_Binary(OpSub, $lhs, rhs) ;
+    }
+} ;
+
+{
+    data AST {
+        Expr_Int(Str),
+        Expr_Neg(AST),
+        Expr_Binary(AST, AST, AST),
+        OpAdd,
+        OpSub,
+    }
+}

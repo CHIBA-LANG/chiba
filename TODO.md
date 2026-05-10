@@ -201,6 +201,7 @@
 - [ ] **Pre-C10: level-1b chibacc/bootstrap parser slice**
 	- **TODO**: 在 level-1b 写最小 `.chibacc` meta-parser、grammar IR、Pratt/recovery skeleton 和 parser codegen。
 	- **DESC**: 在完整 C01 前先证明 parser generator 的核心数据结构、diagnostic recovery 和 generated parser runner 能在 wasm/node 下工作。
+	- **PROGRESS**: 已固定 `level-1b/supports/chibacc-mini` simple/pratt/list grammar fixtures，并用 `vp run level1b:chibacc-mini` 对 native chibacc 生成结果做结构 smoke；level-1b 自身 meta-parser/IR/codegen 尚未实现，错误恢复 runner golden 仍需补齐。
 	- **验收**: simple grammar、Pratt expression、错误恢复三类样例可生成 parser 并运行；输出与 native chibacc golden 对拍。
 	- **并行**: 不并行。
 

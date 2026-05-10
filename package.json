@@ -10,6 +10,7 @@
     "level1b:smoke": "node tools/node/run-level1b-smoke.mjs",
     "level1b:namespace": "node tools/node/run-level1b-namespace-smoke.mjs",
     "level1b:chibalex-mini": "node tools/node/run-level1b-chibalex-mini.mjs",
+    "level1b:chibacc-mini": "node tools/node/run-level1b-chibacc-mini.mjs",
     "level1b:std-surface": "node tools/node/run-level1b-std-surface.mjs",
     "validate:first-bootstrap": "node tools/node/run-first-bootstrap-validation.mjs",
     "smoke:bootstrap": "node tools/node/run-bootstrap-smokes.mjs",

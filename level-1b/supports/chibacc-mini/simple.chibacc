@@ -1,0 +1,19 @@
+#![CHIBACC]
+
+{
+    namespace level1b.chibaccmini.simple
+    use metalstd.option.*
+    use metalstd.vec.*
+}
+
+start source
+
+rule source ::=
+    name:Ident Eq value:IntLit => Assign(name, value)
+    ;
+
+{
+    data AST {
+        Assign(Str, Str),
+    }
+}
