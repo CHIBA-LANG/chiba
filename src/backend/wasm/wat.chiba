@@ -210,15 +210,6 @@ def wat_emit_expr_list(out: Str, depth: i64, args: CirExprList): i64 =
         }
     }
 
-def wat_emit_tuple_get_1(out: Str, depth: i64, args: CirExprList): i64 =
-    match args {
-        CirExprCons(value, CirExprEnd) => {
-            let _ = wat_emit_expr(out, depth, value)
-            wat_line(out, depth, "struct.get $tuple2_i64 0")
-        }
-        _ => wat_line(out, depth, "unreachable ;; tuple-get-1 arity")
-    }
-
 def wat_emit_stmt_list(out: Str, depth: i64, stmts: CirStmtList): i64 =
     match stmts {
         CirStmtEnd => 0
@@ -311,8 +302,6 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
                     if wat_is_ref_name(ref, mk_str("__tuple", 7)) != 0 {
                         let _ = wat_emit_expr_list(out, depth, args)
                         wat_line(out, depth, "struct.new $tuple2_i64")
-                    } else if wat_is_ref_name(ref, mk_str("__tuple_get_1", 13)) != 0 {
-                        wat_emit_tuple_get_1(out, depth, args)
                     } else {
                         let _ = wat_emit_expr_list(out, depth, args)
                         match ref {
@@ -333,6 +322,12 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
                     }
                 _ => wat_line(out, depth, "unreachable ;; indirect call unsupported")
             }
+        }
+        L1OpField(value, field) => {
+            let _ = wat_emit_expr(out, depth, value)
+            if streq(field, mk_str("_1", 2)) != 0 { wat_line(out, depth, "struct.get $tuple2_i64 0") }
+            else if streq(field, mk_str("_2", 2)) != 0 { wat_line(out, depth, "struct.get $tuple2_i64 1") }
+            else { wat_line(out, depth, "unreachable ;; field unsupported") }
         }
         L1OpPrefix(op, value) => {
             if streq(op, mk_str("-", 1)) != 0 {
