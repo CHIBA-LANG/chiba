@@ -1,22 +1,6 @@
 import fs from "node:fs/promises";
 import process from "node:process";
-import binaryen from "binaryen";
-
-// Keep this profile aligned with https://webassembly.org/features/:
-// Chrome, Firefox, Safari, and Node.js must support selected features without
-// runtime flags; Wasmtime/WasmEdge may require their documented wasm flags.
-const BINARYEN_PORTABLE_FEATURES =
-  binaryen.Features.MutableGlobals |
-  binaryen.Features.NontrappingFPToInt |
-  binaryen.Features.SignExt |
-  binaryen.Features.SIMD128 |
-  binaryen.Features.Atomics |
-  binaryen.Features.ReferenceTypes |
-  binaryen.Features.Multivalue |
-  binaryen.Features.TailCall |
-  binaryen.Features.BulkMemory |
-  binaryen.Features.GC |
-  binaryen.Features.ExtendedConst;
+import { compileWat, extractModule } from "./wat-compile.mjs";
 
 function parseArgs() {
   let path = null;
@@ -66,34 +50,6 @@ async function readInput(args) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function extractModule(text) {
-  const start = text.indexOf("(module");
-  const end = text.lastIndexOf("\n)");
-  if (start < 0 || end < start) {
-    throw new Error("input does not contain a complete wat module");
-  }
-  return text.slice(start, end + 2);
-}
-
-function validateModule(module, label) {
-  if (!module.validate()) {
-    throw new Error(`Binaryen ${label} validation failed`);
-  }
-}
-
-function compileWat(wat, args) {
-  const module = binaryen.parseText(wat);
-  module.setFeatures(BINARYEN_PORTABLE_FEATURES);
-  validateModule(module, "raw");
-
-  if (args.opt) {
-    module.optimize();
-    validateModule(module, "optimized");
-  }
-
-  return module.emitBinary();
-}
-
 async function makeImports(wat, args) {
   const imports = {
     env: {
@@ -135,7 +91,7 @@ try {
   const { invoke } = args;
   const raw = await readInput(args);
   const wat = extractModule(raw);
-  const buffer = compileWat(wat, args);
+  const buffer = compileWat(wat, { opt: args.opt });
   const { imports, wasi } = await makeImports(wat, args);
   const instance = await WebAssembly.instantiate(buffer, imports);
   const exports = instance.instance.exports;
