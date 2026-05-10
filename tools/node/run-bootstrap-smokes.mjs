@@ -158,6 +158,14 @@ const LEVEL1C_CASES = [
     name: "level1c nanopass continuation core",
     args: ["nanopass", "supports/bootstrap/continuation-multi-resume.chiba"],
     expect: ["L8ValidatedCoreModule", "L7CoreOp", "core-op continuation-package", "L5OpContinuationPackage", "validation ok", "0"],
+    expectSequence: [[
+      "L3OpAnswerControl",
+      "control-boundary delimited",
+      "L1OpReset",
+      "L3OpAnswerControl",
+      "control-boundary shift",
+      "L1OpShift(#1 \"k\")",
+    ]],
   },
   {
     name: "level1c core validator rejects invalid core",

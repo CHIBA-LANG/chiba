@@ -43,10 +43,13 @@ def cir_l3_control_stmt(stmt: CirStmt): CirControlBoundary =
 
 def cir_l3_control_expr(expr: CirExpr): CirControlBoundary =
     match expr {
+        L3OpAnswerControl(_, _, boundary) => boundary
         L2OpTyped(value, _) => cir_l3_control_expr(value)
         L1OpBlock(stmts, tail) => cir_l3_merge_control(cir_l3_control_stmts(stmts), cir_l3_control_expr(tail))
         L1OpIf(cond, then_expr, else_expr) =>
             cir_l3_merge_control(cir_l3_control_expr(cond), cir_l3_merge_control(cir_l3_control_expr(then_expr), cir_l3_control_expr(else_expr)))
+        L1OpMatch(value, _) => cir_l3_control_expr(value)
+        L1OpClosure(_, body) => cir_l3_control_expr(body)
         L1OpReset(_, body) => cir_l3_merge_control(CirControlReset, cir_l3_control_expr(body))
         L1OpShift(_, _, body) => cir_l3_merge_control(CirControlShift, cir_l3_control_expr(body))
         L1OpCall(callee, args) => cir_l3_merge_control(cir_l3_control_expr(callee), cir_l3_control_args(args))
@@ -58,10 +61,55 @@ def cir_l3_control_expr(expr: CirExpr): CirControlBoundary =
         _ => CirControlNone
     }
 
-def cir_l3_answer_expr(expr: CirExpr): CirExpr =
+def cir_l3_answer_expr_list(args: CirExprList): CirExprList =
+    match args {
+        CirExprEnd => CirExprEnd
+        CirExprCons(head, tail) => CirExprCons(cir_l3_answer_expr(head), cir_l3_answer_expr_list(tail))
+    }
+
+def cir_l3_answer_stmt(stmt: CirStmt): CirStmt =
+    match stmt {
+        L2StmtLet(binder, ty, value) => L2StmtLet(binder, ty, cir_l3_answer_expr(value))
+        L2StmtLetPattern(pat, value) => L2StmtLetPattern(pat, cir_l3_answer_expr(value))
+        L2StmtAssign(lhs, rhs) => L2StmtAssign(cir_l3_answer_expr(lhs), cir_l3_answer_expr(rhs))
+        L2StmtExpr(value) => L2StmtExpr(cir_l3_answer_expr(value))
+        L2StmtReturn(value) => L2StmtReturn(cir_l3_answer_expr(value))
+        L2StmtFor(label, cond, body) => L2StmtFor(label, cir_l3_answer_expr(cond), cir_l3_answer_expr(body))
+        _ => stmt
+    }
+
+def cir_l3_answer_stmt_list(stmts: CirStmtList): CirStmtList =
+    match stmts {
+        CirStmtEnd => CirStmtEnd
+        CirStmtCons(stmt, rest) => CirStmtCons(cir_l3_answer_stmt(stmt), cir_l3_answer_stmt_list(rest))
+    }
+
+def cir_l3_answer_payload(expr: CirExpr): CirExpr =
     match expr {
-        L2OpTyped(_, ty) => L3OpAnswerControl(expr, ty, cir_l3_control_expr(expr))
-        _ => L3OpAnswerControl(expr, cir_typed_expr_type(expr), cir_l3_control_expr(expr))
+        L2OpTyped(value, ty) => L2OpTyped(cir_l3_answer_expr(value), ty)
+        L1OpBlock(stmts, tail) => L1OpBlock(cir_l3_answer_stmt_list(stmts), cir_l3_answer_expr(tail))
+        L1OpIf(cond, then_expr, else_expr) => L1OpIf(cir_l3_answer_expr(cond), cir_l3_answer_expr(then_expr), cir_l3_answer_expr(else_expr))
+        L1OpMatch(value, arms) => L1OpMatch(cir_l3_answer_expr(value), arms)
+        L1OpClosure(params, body) => L1OpClosure(params, cir_l3_answer_expr(body))
+        L1OpReset(label, body) => L1OpReset(label, cir_l3_answer_expr(body))
+        L1OpShift(label, binder, body) => L1OpShift(label, binder, cir_l3_answer_expr(body))
+        L1OpCall(callee, args) => L1OpCall(cir_l3_answer_expr(callee), cir_l3_answer_expr_list(args))
+        L1OpField(value, field) => L1OpField(cir_l3_answer_expr(value), field)
+        L1OpIndex(value, args) => L1OpIndex(cir_l3_answer_expr(value), cir_l3_answer_expr_list(args))
+        L1OpAssign(lhs, rhs) => L1OpAssign(cir_l3_answer_expr(lhs), cir_l3_answer_expr(rhs))
+        L1OpPrefix(op, value) => L1OpPrefix(op, cir_l3_answer_expr(value))
+        L1OpBinary(op, lhs, rhs) => L1OpBinary(op, cir_l3_answer_expr(lhs), cir_l3_answer_expr(rhs))
+        _ => expr
+    }
+
+def cir_l3_answer_expr(expr: CirExpr): CirExpr =
+    {
+        let payload = cir_l3_answer_payload(expr)
+        let answer = match expr {
+            L2OpTyped(_, ty) => ty
+            _ => cir_typed_expr_type(expr)
+        }
+        L3OpAnswerControl(payload, answer, cir_l3_control_expr(payload))
     }
 
 def cir_l3_items(items: CirItemList): CirItemList =
