@@ -1,0 +1,24 @@
+namespace level1b.pre_c12.valid_capability
+
+#[world_local]
+def local_ref: Ref[i64] = Ref.new(0)
+
+def safe_ref(r: Ref[i64], a: Atomic[i64]): i64 = {
+    let current = Ref.get(r)
+    let _ = r := current + 1
+    let _ = Atomic.load(a, Acquire)
+    let _ = Atomic.store(a, current, Release)
+    current
+}
+
+def explicit_unsafe_ptr(): i64 =
+    unsafe {
+        let p = null_ptr() as Ptr[u8]
+        Ptr.addr(p)
+    }
+
+def explicit_unsafe_ref(u: i64): i64 =
+    unsafe {
+        let r = u as UnsafeRef[i64]
+        UnsafeRef.get(r)
+    }

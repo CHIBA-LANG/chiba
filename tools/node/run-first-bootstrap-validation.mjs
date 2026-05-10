@@ -59,6 +59,7 @@ run("level-1b namespace", process.execPath, ["tools/node/run-level1b-namespace-s
 run("level-1b chibalex mini", process.execPath, ["tools/node/run-level1b-chibalex-mini.mjs"]);
 run("level-1b chibacc mini", process.execPath, ["tools/node/run-level1b-chibacc-mini.mjs"]);
 run("level-1b std surface", process.execPath, ["tools/node/run-level1b-std-surface.mjs"]);
+run("level-1b capability", process.execPath, ["tools/node/run-level1b-capability-gate.mjs"]);
 
 const artifacts = [
   compileArtifact("level1c", "supports/bootstrap/level1c-bootstrap-main.chiba"),

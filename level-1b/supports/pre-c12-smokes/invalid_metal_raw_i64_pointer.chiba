@@ -1,0 +1,5 @@
+#![Metal]
+namespace level1b.pre_c12.invalid_metal_raw_i64_pointer
+
+def metal_raw_i64_pointer_api(ptr: i64, offset: i64): i64 =
+    ptr + offset

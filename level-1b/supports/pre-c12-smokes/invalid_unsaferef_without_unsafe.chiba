@@ -1,0 +1,4 @@
+namespace level1b.pre_c12.invalid_unsaferef_without_unsafe
+
+def bad_unsafe_ref_without_unsafe(u: UnsafeRef[i64]): i64 =
+    UnsafeRef.get(u)

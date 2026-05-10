@@ -1,0 +1,12 @@
+#![Metal]
+namespace level1b.pre_c12.valid_metal_typed_ptr
+
+def metal_load_byte(p: Ptr[u8], offset: i64): i64 =
+    unsafe {
+        Ptr.load8(p, offset)
+    }
+
+def metal_store_byte(p: Ptr[u8], offset: i64, value: u8): i64 =
+    unsafe {
+        Ptr.store8(p, offset, value)
+    }

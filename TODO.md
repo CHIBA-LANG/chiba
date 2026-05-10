@@ -216,6 +216,7 @@
 - [ ] **Pre-C12: Metal/unsafe/capability discipline**
 	- **TODO**: 把 `#![Metal]`、`unsafe` 块、`Ref[T]`/`UnsafeRef[T]`/`Ptr[T]`/`Atomic[T]` capability 规则从最终验收拆成可执行 gate：源码扫描、parser/semantic check、valid/invalid fixtures、level-1b std surface 审计。
 	- **DESC**: 非 Metal 的 level-1b 源码 **不能包含任何** opaque pointer `i64` 风格接口；Metal 内部也必须优先使用 typed `Ptr[T]`/capability wrapper，而不是裸 `i64` 指针。`UnsafeRef`/`Ptr` 只能在显式 unsafe 区域使用，非 Metal 源码没有 unsafe 块时不能触碰 unsafe capability。
+	- **PROGRESS**: 新增 `level-1b/supports/pre-c12-smokes` valid/invalid fixtures 与 `vp run level1b:capability`；gate 会扫描非 Metal raw pointer、非 unsafe 块 `Ptr`/`UnsafeRef`、Metal raw `i64` pointer API，并通过 `level1c.o check` 对同一组 fixture 做 compiler-side 对拍。当前仍是 source-level gate，尚未迁入真实 L2 capability/type pass。
 	- **验收**: `vp run level1b:std-surface` 或独立 gate 能拒绝非 Metal 裸 pointer API、Metal 裸 `i64` pointer 扩散、非 unsafe 块使用 `UnsafeRef`/`Ptr`、错误 `Atomic[T]`/`Ref[T]` assignment；valid fixtures 覆盖 Metal typed pointer helper、safe `Ref[T]`、unsafe block 中的 `UnsafeRef`/`Ptr`、Atomic 操作。
 	- **并行**: 不并行；先保证诊断稳定，再把 gate 并入全量 validation。
 

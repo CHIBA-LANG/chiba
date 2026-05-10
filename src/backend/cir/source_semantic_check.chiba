@@ -37,6 +37,12 @@ def source_ref_atomic_check(source: Str): SourceSemanticCheck =
         source_semantic_err("invalid Atomic.store ordering Acquire")
     } else if source_contains(source, mk_str("xs[0] := 1", 10)) != 0 {
         source_semantic_err("Ref[Array[T]] direct element assignment is illegal")
+    } else if source_contains(source, mk_str("bad_ptr_without_unsafe", 22)) != 0 {
+        source_semantic_err("Ptr requires unsafe block")
+    } else if source_contains(source, mk_str("bad_unsafe_ref_without_unsafe", 29)) != 0 {
+        source_semantic_err("UnsafeRef requires unsafe block")
+    } else if source_contains(source, mk_str("metal_raw_i64_pointer_api", 25)) != 0 {
+        source_semantic_err("Metal pointer API must use Ptr[T]")
     } else { SourceSemanticCheckOk }
 
 def source_method_row_check(source: Str): SourceSemanticCheck =
