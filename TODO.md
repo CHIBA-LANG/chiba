@@ -195,7 +195,7 @@
 - [ ] **Pre-C09: level-1b regex + chibalex bootstrap slice**
 	- **TODO**: 在 level-1b 写最小 regex IR、scanner runtime、chibalex parser/codegen，先覆盖 chibalex 自身需要的 token 子集。
 	- **DESC**: C00 的第一刀必须有可运行闭环，而不是一次性重写完整 chibalex。
-	- **PROGRESS**: 已固定 `level-1b/supports/chibalex-mini` 三个 lexer spec fixtures，并用 `vp run level1b:chibalex-mini` 对 native chibalex 生成结果做 token/golden smoke；level-1b 自身 regex/parser/codegen 尚未实现。
+	- **PROGRESS**: 已固定 `level-1b/supports/chibalex-mini` 三个 lexer spec fixtures；`vp run level1b:chibalex-mini` 会调用 native chibalex、检查生成结构，并用 fixture-local regex/Vec stub 编译运行 generated lexer token golden。level-1b 自身 regex/parser/codegen 尚未实现，当前 runner stub 只覆盖 mini fixtures。
 	- **验收**: wasm chibalex-mini 能读 3-5 个 lexer spec，生成 lexer 或 token stream；与 native chibalex/lexer runner golden 对拍；至少一个 longest-match/backtracking/recovery 用例使用 multi-resume continuation。
 	- **并行**: 不并行。
 
@@ -213,11 +213,17 @@
 	- **验收**: `vp run level1b:*` 能编译、运行、对拍、记录 seed/object/wasm/toolchain hash；所有生成 `.wat` 都 run 或 instantiate；opt 与 non-opt 均通过核心 smoke。
 	- **并行**: runner 可串行；输出必须确定。
 
+- [ ] **Pre-C12: Metal/unsafe/capability discipline**
+	- **TODO**: 把 `#![Metal]`、`unsafe` 块、`Ref[T]`/`UnsafeRef[T]`/`Ptr[T]`/`Atomic[T]` capability 规则从最终验收拆成可执行 gate：源码扫描、parser/semantic check、valid/invalid fixtures、level-1b std surface 审计。
+	- **DESC**: 非 Metal 的 level-1b 源码 **不能包含任何** opaque pointer `i64` 风格接口；Metal 内部也必须优先使用 typed `Ptr[T]`/capability wrapper，而不是裸 `i64` 指针。`UnsafeRef`/`Ptr` 只能在显式 unsafe 区域使用，非 Metal 源码没有 unsafe 块时不能触碰 unsafe capability。
+	- **验收**: `vp run level1b:std-surface` 或独立 gate 能拒绝非 Metal 裸 pointer API、Metal 裸 `i64` pointer 扩散、非 unsafe 块使用 `UnsafeRef`/`Ptr`、错误 `Atomic[T]`/`Ref[T]` assignment；valid fixtures 覆盖 Metal typed pointer helper、safe `Ref[T]`、unsafe block 中的 `UnsafeRef`/`Ptr`、Atomic 操作。
+	- **并行**: 不并行；先保证诊断稳定，再把 gate 并入全量 validation。
+
 ### Second Bootstrap 启动前最终验收标准
 
 - [ ] `level-1b` 可以由当前 level-0 seed 编译，并在 node/WASI runner 下运行。
 - [ ] `level-1b` 源码能完整表达 level-0 当前承担的核心工具链：regex、chibalex、chibacc、metalstd surface、compiler semantic driver、wasm-gc backend skeleton。
-- [ ] 非 `#![Metal]` 的 level-1b 源码不新增 opaque pointer `i64` 风格接口；`Ref`/`UnsafeRef`/`Ptr`/`Atomic` 的使用符合 spec。
+- [ ] 非 `#![Metal]` 的 level-1b 源码不新增 opaque pointer `i64` 风格接口，Metal的也全体采用 Ptr， 然后还得有unsafe 检查，非metal没有开unsafe块不能碰 unsaferef 和 ptr；`Ref`/`UnsafeRef`/`Ptr`/`Atomic` 的使用符合 spec。
 - [ ] nanopass pipeline 不止停在 L1：至少 `L2Typed`、`L3EffectAnswer`、`L5Cps`、`L6Closure`、`L7Core`、`L8ValidatedCore` 有真实 ADT、dump 和 smoke。
 - [ ] WAT emitter 只吃 validated Core；semantic fallback/hole 不再作为普通成功路径。
 - [ ] `String == Array[u8]`、`str == Slice[u8]` 的真实 runtime contract 支撑 lexer/parser/diagnostic/file IO。
