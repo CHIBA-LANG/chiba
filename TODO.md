@@ -127,6 +127,94 @@
 - [x] string string interpolation slice 这些的 test 然后 wasmgc 后端的 string 和 slice 应该都是托管对象，所以你得想办法打洞
 - [x] 所有测试都生成对应的 `.wat` 文件
 
+## Second Bootstrap 启动前置 TODO
+
+这一段是 C00 之前的硬门槛：只有当 `level-1b` 能用 level-0 seed 编译、用 node 运行，并完整表达 level-0 当前承担的 generator/runtime/compiler 子集时，才算真正开始 Second Bootstrap。这里仍允许 `level-1b` 复用 level-0 的标准库实现作为过渡，但新写的 `level-1b` 源码不能继续扩散 opaque `i64`、隐式 mutable、非 `#![Metal]` 的低层写法。
+
+- [ ] **Pre-C00: level-1b source tree + build contract**
+	- **TODO**: 建立 `level-1b/` 或等价的新源码树，明确哪些源码来自当前 `src/` 的复制编辑，哪些仍临时复用 level-0/seed stdlib。
+	- **DESC**: `level-1b` 是准备接管 generators 和 compiler pipeline 的干净实现层；不能直接把 level-0 当长期源码继续补丁式扩展。
+	- **验收**: 有固定入口、固定 project layout、固定构建命令；`timeout 10` 能通过 phase1/语法检查，放宽后能编译出 node runner 可加载的 wasm/object。
+	- **并行**: 不并行；先固定目录和构建协议。
+
+- [ ] **Pre-C01: level-1b std surface freeze**
+	- **TODO**: 定义 level-1b 可用标准库 surface：`Option`、`List`、`Array[T]`、`Slice[T]`、`String == Array[u8]`、`str == Slice[u8]`、`Vec`/builder、`Map`、file/process/print、WASI/env boundary。
+	- **DESC**: 允许实现暂时复用 level-0 stdlib，但 level-1b 代码必须按 level-1 语义写调用面；低层 raw pointer/opaque `i64` 只能出现在 `#![Metal]` 标注模块。
+	- **验收**: string/index/slice/`.char_at`、file read/write、stdout/stderr、argv/env、Vec/Map 基础操作都有 level-1b smoke；非 Metal 源码中没有新增裸 pointer 风格 helper。
+	- **并行**: 不并行；先稳定 surface，再迁移实现。
+
+- [ ] **Pre-C02: real typed nanopass spine past L1**
+	- **TODO**: 把当前只到 `L1Alpha` 的 nanopass 继续拆到 `L2Typed`、`L3EffectAnswer`、`L4Usage`、`L5Cps`、`L6Closure`、`L7Core`、`L8ValidatedCore`。
+	- **DESC**: 每个 pass 只做一件事，并且产物进入新的 ADT/节点族，而不是 side script 检查后继续让 WAT emitter 直接吃 L1。
+	- **验收**: CIR/Core 中能 dump `L2*` typed refs、`L3*` answer/effect facts、`L5*` CPS continuation、`L6*` closure/env、`L7Core*` wasm-gc 节点；每层至少有一个 golden smoke。
+	- **并行**: 函数体级并行暂不实现；设计上保留 arena/symbol id 边界。
+
+- [ ] **Pre-C03: L2 type/method/row semantic implementation**
+	- **TODO**: 实现真实 type checker：HM 基础、row poly、nominal row/data/union、method resolution 三路径、extern ABI typing、`Ref[T]`/`UnsafeRef[T]`/`Ptr[T]`/`Atomic[T]` capability。
+	- **DESC**: 现在很多 semantic gate 还是脚本级检查；C00 前要进入 compiler pass，后端只消费已检查事实。
+	- **验收**: `.method(call)`、row identity、namespace 多文件、Ref/Atomic invalid cases 不再只靠 JS gate；`level1c.o check` 能稳定接受/拒绝同一组 semantic fixtures。
+	- **并行**: 暂不并行；错误排序必须确定。
+
+- [ ] **Pre-C04: continuation answer/effect + one-pass CPS**
+	- **TODO**: 实现 answer type check、continuation kind check、effect/replay-safety check、one-pass CPS transformation 和 administrative continuation beta-reduction。
+	- **DESC**: `reset`/`shift` 不能停留在 check gate；chibalex/chibacc 的 backtracking/recovery 要能落到同一 CPS core。
+	- **验收**: simple reset/shift、nested reset、multi-resume Scheme smoke、lexer backtracking、parser alternative/recovery 都能 dump CPS；answer mismatch、multi-resume 捕获不可 replay state、跨 world/thread continuation 稳定报错。
+	- **并行**: 不并行；先保证语义正确和 dump 稳定。
+
+- [ ] **Pre-C05: closure/lambda/continuation package lowering**
+	- **TODO**: 实现 usage facts 驱动的 dead continuation 删除、single-use continuation inline、many-use continuation package、closure conversion、lambda lifting、env shrinking。
+	- **DESC**: level-1b 需要能写 generator 和 compiler helper，而不是所有 lambda/continuation 都分配成 opaque runtime 包。
+	- **验收**: no-capture lambda direct call；single-use closure directified；escaping closure 有可 dump env layout；multi-resume continuation package 可重复 resume；非法 package 不进入 Core。
+	- **并行**: 不并行。
+
+- [ ] **Pre-C06: wasm-gc CoreIR + validator**
+	- **TODO**: 建立独立 Wasm-GC CoreIR，覆盖 struct/array/funcref/import/tailcall/layout id、String/Array/Slice、closure env、continuation package、world/thread facts。
+	- **DESC**: WAT emitter 必须从 validated Core 序列化，不能继续在 emitter 中做 unresolved hole、semantic fallback 或类型猜测。
+	- **验收**: Core validator 能拒绝 dangling symbol、错误 layout ref、非法 tailcall、非法 continuation package、错误 String/str/Array/Slice layout；valid Core 全量能 emit `.wat` 并由 Binaryen validate。
+	- **并行**: 不并行；layout table 稳定排序。
+
+- [ ] **Pre-C07: real String/Array/Slice runtime**
+	- **TODO**: 实现 `String == Array[u8]`、`str == Slice[u8]` 的真实 payload lowering 和 runtime helpers：literal bytes、interpolation concat、byte index、range slice、bounds check、`.char_at`、WASI encode/decode。
+	- **DESC**: 当前 string/slice 是 wasm-gc managed layout hole；C00 前至少要能支撑 lexer/parser 输入、source span、diagnostic 输出和 generated code 拼接。
+	- **验收**: string literal WAT 含真实 byte payload；`s[i]` 返回 byte/slice 语义；`s[a..b]` 不复制并保活 backing array；`.char_at(n)` 做显式 codepoint 访问；file read/stdout/lexer input 共用同一 contract。
+	- **并行**: 不并行。
+
+- [ ] **Pre-C08: namespace/project driver**
+	- **TODO**: 实现 level-1b project scan、namespace summary、multi-file merge、entry selection、dependency ordering、diagnostic ordering。
+	- **DESC**: chibalex/chibacc/metalstd/compiler 不会是单文件；C00 前必须能稳定处理多个文件、同 namespace 多 fragment 和第三方 consumer。
+	- **验收**: 两个文件同 namespace + 第三个 consumer 的 wasm/Core path 通过；summary hash 稳定；错误输出不依赖文件系统遍历顺序。
+	- **并行**: 暂不并行；接口为后续 namespace 并行预留。
+
+- [ ] **Pre-C09: level-1b regex + chibalex bootstrap slice**
+	- **TODO**: 在 level-1b 写最小 regex IR、scanner runtime、chibalex parser/codegen，先覆盖 chibalex 自身需要的 token 子集。
+	- **DESC**: C00 的第一刀必须有可运行闭环，而不是一次性重写完整 chibalex。
+	- **验收**: wasm chibalex-mini 能读 3-5 个 lexer spec，生成 lexer 或 token stream；与 native chibalex/lexer runner golden 对拍；至少一个 longest-match/backtracking/recovery 用例使用 multi-resume continuation。
+	- **并行**: 不并行。
+
+- [ ] **Pre-C10: level-1b chibacc/bootstrap parser slice**
+	- **TODO**: 在 level-1b 写最小 `.chibacc` meta-parser、grammar IR、Pratt/recovery skeleton 和 parser codegen。
+	- **DESC**: 在完整 C01 前先证明 parser generator 的核心数据结构、diagnostic recovery 和 generated parser runner 能在 wasm/node 下工作。
+	- **验收**: simple grammar、Pratt expression、错误恢复三类样例可生成 parser 并运行；输出与 native chibacc golden 对拍。
+	- **并行**: 不并行。
+
+- [ ] **Pre-C11: node/browser/WASI execution harness**
+	- **TODO**: 固定 node runner、WASI imports、env imports、wasi-thread 预留、Binaryen opt/validate、all-wat run、artifact/hash 记录。
+	- **DESC**: level-1b 产物必须能由 node 执行 generators，不能只生成静态 `.wat`。
+	- **验收**: `vp run level1b:*` 能编译、运行、对拍、记录 seed/object/wasm/toolchain hash；所有生成 `.wat` 都 run 或 instantiate；opt 与 non-opt 均通过核心 smoke。
+	- **并行**: runner 可串行；输出必须确定。
+
+### Second Bootstrap 启动前最终验收标准
+
+- [ ] `level-1b` 可以由当前 level-0 seed 编译，并在 node/WASI runner 下运行。
+- [ ] `level-1b` 源码能完整表达 level-0 当前承担的核心工具链：regex、chibalex、chibacc、metalstd surface、compiler semantic driver、wasm-gc backend skeleton。
+- [ ] 非 `#![Metal]` 的 level-1b 源码不新增 opaque pointer `i64` 风格接口；`Ref`/`UnsafeRef`/`Ptr`/`Atomic` 的使用符合 spec。
+- [ ] nanopass pipeline 不止停在 L1：至少 `L2Typed`、`L3EffectAnswer`、`L5Cps`、`L6Closure`、`L7Core`、`L8ValidatedCore` 有真实 ADT、dump 和 smoke。
+- [ ] WAT emitter 只吃 validated Core；semantic fallback/hole 不再作为普通成功路径。
+- [ ] `String == Array[u8]`、`str == Slice[u8]` 的真实 runtime contract 支撑 lexer/parser/diagnostic/file IO。
+- [ ] wasm chibalex-mini 和 chibacc-mini 能在 node 下运行并与 native generator/runner golden 对拍。
+- [ ] continuation day-0 能力进入 CPS/Core lowering：multi-resume lexer/parser recovery 可运行，非法跨 world/thread capture/resume 稳定报错。
+- [ ] 全量 bootstrap/semantic/all-wat validation 通过，并记录 seed hash、level-1b wasm hash、generated lexer/parser hash、toolchain version。
+
 
 ## Second Bootstrap: level-1 wasm 接管 generators + Optimized CPS Core
 
