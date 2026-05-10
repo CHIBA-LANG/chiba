@@ -13,6 +13,8 @@ const GATE_FILES = [
   "row_poly_invalid.chiba",
   "refs_atomic_valid.chiba",
   "refs_atomic_invalid.chiba",
+  "type_inference.chiba",
+  "type_inference_invalid.chiba",
   "continuation_scheme_multi.chiba",
   "string_slice.chiba",
   "namespace/part_a.chiba",
@@ -328,6 +330,17 @@ function checkMemory() {
   pass(name);
 }
 
+function checkTypeInference() {
+  const name = "type inference gates";
+  const valid = run("./target/debug/level1c.o", ["parse", path.join(ROOT, "type_inference.chiba")]);
+  assert(name, valid.status === 0 && valid.stdout.startsWith("OK("), valid.stdout || valid.stderr);
+  const checkedValid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_inference.chiba")]);
+  assert(name, checkedValid.status === 0 && checkedValid.stdout.includes("check ok"), checkedValid.stdout || checkedValid.stderr);
+  const checkedInvalid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_inference_invalid.chiba")]);
+  assert(name, checkedInvalid.status === 0 && checkedInvalid.stderr.includes("generic parameter type requires annotation"), checkedInvalid.stdout || checkedInvalid.stderr);
+  pass(name);
+}
+
 function evaluateClassicShiftReset() {
   const k = (value) => 2 * value;
   return 1 + k(k(4));
@@ -353,4 +366,5 @@ checkRowPolyCompilerGate();
 checkNamespaceMerge();
 checkStringSlice();
 checkMemory();
+checkTypeInference();
 checkContinuation();

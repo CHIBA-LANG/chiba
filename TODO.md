@@ -154,7 +154,7 @@
 - [ ] **Pre-C03: L2 type/method/row semantic implementation**
 	- **TODO**: 实现真实 type checker：HM 基础、row poly、nominal row/data/union、method resolution 三路径、extern ABI typing、`Ref[T]`/`UnsafeRef[T]`/`Ptr[T]`/`Atomic[T]` capability。
 	- **DESC**: 现在很多 semantic gate 还是脚本级检查；C00 前要进入 compiler pass，后端只消费已检查事实。
-	- **PROGRESS**: `level1c.o check` 已从 source semantic gate 迁到 L2 typed semantic pass，先按 AST/L2Module 检查 Ref/Atomic capability、Ptr/UnsafeRef unsafe API 使用、Metal raw i64 pointer API、method resolution 三路径和 row field obligation；`vp run semantic:gates` 与 `vp run level1b:capability` 已覆盖 valid/invalid fixtures。HM 基础推断、extern ABI typing、namespace project-aware compiler check、完整 nominal row/data/union 仍未完成。
+	- **PROGRESS**: `level1c.o check` 已从 source semantic gate 迁到 L2 typed semantic pass，先按 AST/L2Module 检查 Ref/Atomic capability、Ptr/UnsafeRef unsafe API 使用、Metal raw i64 pointer API、method resolution 三路径和 row field obligation；`vp run semantic:gates` 与 `vp run level1b:capability` 已覆盖 valid/invalid fixtures。已新增最小 HM surface gate：函数返回类型可省略，普通函数参数/let 可省略并由使用点或返回表达式形成基础推导；显式 generic 函数仍要求参数/返回类型标注。extern ABI typing、namespace project-aware compiler check、完整 nominal row/data/union 与真正 unify/generalization 仍未完成。
 	- **验收**: `.method(call)`、row identity、namespace 多文件、Ref/Atomic invalid cases 不再只靠 JS gate；`level1c.o check` 能稳定接受/拒绝同一组 semantic fixtures。
 	- **并行**: 暂不并行；错误排序必须确定。
 

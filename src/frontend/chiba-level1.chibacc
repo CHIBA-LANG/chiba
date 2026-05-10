@@ -145,8 +145,13 @@ rule def_name_tail ::=
     ;
 
 rule def_after_name ::= 
-    generics:opt_generics LParen params:param_list RParen Colon ret:type_expr Eq body:def_body => DefFun(generics, params, ret, body)
+    generics:opt_generics LParen params:param_list RParen ret:def_return_type_opt Eq body:def_body => DefFun(generics, params, ret, body)
     | Colon ret:type_expr Eq value:expr => DefConst(ret, value)
+    ;
+
+rule def_return_type_opt ::=
+    Colon ret:type_expr => ret
+    | => Type_Path(str_empty(), Type_Tail_End)
     ;
 
 rule def_body ::= 

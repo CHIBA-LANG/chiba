@@ -1,0 +1,14 @@
+namespace semantic.gates.type_inference
+
+def infer_return() = 1
+
+def infer_params(a, b) = a + b
+
+def infer_identity(value) = value
+
+def infer_local(): i64 = {
+    let value = 41
+    value + 1
+}
+
+def annotated_generic[T](value: T): T = value

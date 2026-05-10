@@ -24,6 +24,12 @@ def ast_type_path_name(ty: AST): Str =
         _ => mk_str("", 0)
     }
 
+def ast_type_is_missing(ty: AST): i64 =
+    match ty {
+        Type_Path(name, _) => if name.len == 0 { 1 } else { 0 }
+        _ => 0
+    }
+
 def ast_type_is_path(ty: AST, name: Str): i64 =
     streq(ast_type_path_name(ty), name)
 
@@ -136,6 +142,12 @@ def ast_def_generics_from_name(name_ast: AST): AST =
         _ => Generic_End
     }
 
+def ast_generics_nonempty(generics: AST): i64 =
+    match generics {
+        Generic_Cons(_, _) => 1
+        _ => 0
+    }
+
 def ast_item_def_name(ast: AST): Str =
     match ast {
         DefItem(name, _, _, _, _) => name
@@ -214,6 +226,17 @@ def ast_param_type_name(params: AST, param_name: Str): Str =
                 _ => ast_param_type_name(tail, param_name)
             }
         _ => mk_str("", 0)
+    }
+
+def ast_params_has_name(params: AST, param_name: Str): i64 =
+    match params {
+        Param_Cons(head, tail) =>
+            match head {
+                Param(name, _) =>
+                    if streq(name, param_name) != 0 { 1 } else { ast_params_has_name(tail, param_name) }
+                _ => ast_params_has_name(tail, param_name)
+            }
+        _ => 0
     }
 
 def ast_generic_row_has_field(fields: AST, field: Str): i64 =
@@ -386,6 +409,139 @@ def ast_expr_check_assign(lhs: AST, rhs: AST, params: AST): CirTypedSemanticChec
         _ => CirTypedSemanticCheckOk
     }
 
+def ast_expr_references_name(expr: AST, name: Str): i64 =
+    match expr {
+        Expr_Name(n) => streq(n, name)
+        Expr_IdentTail(n, _) => streq(n, name)
+        Expr_Block(stmts, tail) =>
+            if ast_stmt_list_references_name(stmts, name) != 0 { 1 } else { ast_tail_references_name(tail, name) }
+        Expr_Call(callee, args) =>
+            if ast_expr_references_name(callee, name) != 0 { 1 } else { ast_args_references_name(args, name) }
+        Expr_Field(value, _) => ast_expr_references_name(value, name)
+        Expr_Index(value, args) =>
+            if ast_expr_references_name(value, name) != 0 { 1 } else { ast_args_references_name(args, name) }
+        Expr_Assign(lhs, rhs) =>
+            if ast_expr_references_name(lhs, name) != 0 { 1 } else { ast_expr_references_name(rhs, name) }
+        Expr_If(cond, then_expr, else_expr) =>
+            if ast_expr_references_name(cond, name) != 0 { 1 }
+            else if ast_expr_references_name(then_expr, name) != 0 { 1 }
+            else { ast_expr_references_name(else_expr, name) }
+        Expr_Reset(_, body) => ast_expr_references_name(body, name)
+        Expr_Shift(_, _, body) => ast_expr_references_name(body, name)
+        Expr_Prefix(_, value) => ast_expr_references_name(value, name)
+        Expr_Binary(_, lhs, rhs) =>
+            if ast_expr_references_name(lhs, name) != 0 { 1 } else { ast_expr_references_name(rhs, name) }
+        Expr_Cast(value, _) => ast_expr_references_name(value, name)
+        _ => 0
+    }
+
+def ast_tail_references_name(tail: AST, name: Str): i64 =
+    match tail {
+        TailExpr_Some(value) => ast_expr_references_name(value, name)
+        _ => 0
+    }
+
+def ast_args_references_name(args: AST, name: Str): i64 =
+    match args {
+        Arg_Cons(head, tail) =>
+            if ast_expr_references_name(head, name) != 0 { 1 } else { ast_args_references_name(tail, name) }
+        ExprList_Cons(head, tail) =>
+            if ast_expr_references_name(head, name) != 0 { 1 } else { ast_args_references_name(tail, name) }
+        _ => 0
+    }
+
+def ast_stmt_references_name(stmt: AST, name: Str): i64 =
+    match stmt {
+        Stmt_Expr(value) => ast_expr_references_name(value, name)
+        Stmt_Return(value) => ast_expr_references_name(value, name)
+        Stmt_Assign(lhs, rhs) =>
+            if ast_expr_references_name(lhs, name) != 0 { 1 } else { ast_expr_references_name(rhs, name) }
+        Stmt_Let(_, value) => ast_expr_references_name(value, name)
+        Stmt_LetPattern(_, value) => ast_expr_references_name(value, name)
+        Stmt_LetPatternTyped(_, _, value) => ast_expr_references_name(value, name)
+        Stmt_For(_, cond, body) =>
+            if ast_expr_references_name(cond, name) != 0 { 1 } else { ast_expr_references_name(body, name) }
+        Stmt_WithAttrs(_, inner) => ast_stmt_references_name(inner, name)
+        _ => 0
+    }
+
+def ast_stmt_list_references_name(stmts: AST, name: Str): i64 =
+    match stmts {
+        Stmt_Cons(head, tail) =>
+            if ast_stmt_references_name(head, name) != 0 { 1 } else { ast_stmt_list_references_name(tail, name) }
+        _ => 0
+    }
+
+def ast_expr_infers_known(expr: AST, params: AST): i64 =
+    match expr {
+        Expr_Int(_) => 1
+        Expr_Bool(_) => 1
+        Expr_String => 1
+        Expr_Name(name) => ast_params_has_name(params, name)
+        Expr_IdentTail(name, IdentTail_None) =>
+            ast_params_has_name(params, name)
+        Expr_Field(value, _) => ast_expr_infers_known(value, params)
+        Expr_Index(value, _) => ast_expr_infers_known(value, params)
+        Expr_Binary(_, lhs, rhs) =>
+            if ast_expr_infers_known(lhs, params) != 0 || ast_expr_infers_known(rhs, params) != 0 { 1 }
+            else { 0 }
+        Expr_Prefix(_, value) => ast_expr_infers_known(value, params)
+        Expr_Cast(_, _) => 1
+        Expr_Call(_, _) => 0
+        Expr_Block(stmts, tail) => {
+            let tail_known = ast_tail_infers_known(tail, params)
+            if tail_known != 0 { 1 } else { ast_stmt_list_return_infers_known(stmts, params) }
+        }
+        Expr_If(_, then_expr, else_expr) =>
+            if ast_expr_infers_known(then_expr, params) != 0 && ast_expr_infers_known(else_expr, params) != 0 { 1 } else { 0 }
+        Expr_Reset(_, body) => ast_expr_infers_known(body, params)
+        _ => 0
+    }
+
+def ast_tail_infers_known(tail: AST, params: AST): i64 =
+    match tail {
+        TailExpr_Some(value) => ast_expr_infers_known(value, params)
+        TailExpr_None => 1
+        _ => 0
+    }
+
+def ast_stmt_return_infers_known(stmt: AST, params: AST): i64 =
+    match stmt {
+        Stmt_Return(value) => ast_expr_infers_known(value, params)
+        Stmt_WithAttrs(_, inner) => ast_stmt_return_infers_known(inner, params)
+        _ => 0
+    }
+
+def ast_stmt_list_return_infers_known(stmts: AST, params: AST): i64 =
+    match stmts {
+        Stmt_Cons(head, tail) =>
+            if ast_stmt_return_infers_known(head, params) != 0 { 1 } else { ast_stmt_list_return_infers_known(tail, params) }
+        _ => 0
+    }
+
+def ast_params_check_inference(params: AST, body: AST, generics: AST): CirTypedSemanticCheck =
+    match params {
+        Param_Cons(head, tail) =>
+            match head {
+                Param(name, ty) => {
+                    let here = if ast_type_is_missing(ty) != 0 {
+                        if ast_generics_nonempty(generics) != 0 { cir_typed_semantic_err("generic parameter type requires annotation") }
+                        else if ast_expr_references_name(body, name) == 0 { cir_typed_semantic_err("parameter type could not be inferred") }
+                        else { CirTypedSemanticCheckOk }
+                    } else { CirTypedSemanticCheckOk }
+                    cir_typed_semantic_merge(here, ast_params_check_inference(tail, body, generics))
+                }
+                _ => ast_params_check_inference(tail, body, generics)
+            }
+        _ => CirTypedSemanticCheckOk
+    }
+
+def ast_return_check_inference(ret: AST, params: AST, body: AST, generics: AST): CirTypedSemanticCheck =
+    if ast_type_is_missing(ret) == 0 { CirTypedSemanticCheckOk }
+    else if ast_generics_nonempty(generics) != 0 { cir_typed_semantic_err("generic return type requires annotation") }
+    else if ast_expr_infers_known(body, params) != 0 { CirTypedSemanticCheckOk }
+    else { cir_typed_semantic_err("function return type could not be inferred") }
+
 def ast_expr_check(expr: AST, all_items: AST, params: AST, generics: AST, unsafe_depth: i64): CirTypedSemanticCheck =
     match expr {
         Expr_Unsafe(body) => ast_expr_check(body, all_items, params, generics, unsafe_depth + 1)
@@ -448,7 +604,8 @@ def ast_item_check_def(defn: AST, all_items: AST, attrs: AST, file_is_metal: i64
         DefItem(_, generics, params, ret, body) => {
             let ref_check = if ast_type_is_path(ret, mk_str("Ref", 3)) != 0 && ast_attrs_has_world_local(attrs) == 0 { cir_typed_semantic_err("top-level Ref requires #[world_local]") } else { CirTypedSemanticCheckOk }
             let metal_check = if file_is_metal != 0 { ast_params_check_metal_raw_i64(params) } else { CirTypedSemanticCheckOk }
-            cir_typed_semantic_merge(ref_check, cir_typed_semantic_merge(metal_check, cir_typed_semantic_merge(ast_type_check_atomic(ret), cir_typed_semantic_merge(ast_params_check_types(params), ast_expr_check(body, all_items, params, generics, 0)))))
+            let infer_check = cir_typed_semantic_merge(ast_params_check_inference(params, body, generics), ast_return_check_inference(ret, params, body, generics))
+            cir_typed_semantic_merge(ref_check, cir_typed_semantic_merge(metal_check, cir_typed_semantic_merge(infer_check, cir_typed_semantic_merge(ast_type_check_atomic(ret), cir_typed_semantic_merge(ast_params_check_types(params), ast_expr_check(body, all_items, params, generics, 0))))))
         }
         DefItem2(name_ast, rest) => {
             let ret = ast_def_ret_type(rest)
@@ -457,7 +614,8 @@ def ast_item_check_def(defn: AST, all_items: AST, attrs: AST, file_is_metal: i64
             let generics = ast_def_generics_from_name(name_ast)
             let ref_check = if ast_type_is_path(ret, mk_str("Ref", 3)) != 0 && ast_attrs_has_world_local(attrs) == 0 { cir_typed_semantic_err("top-level Ref requires #[world_local]") } else { CirTypedSemanticCheckOk }
             let metal_check = if file_is_metal != 0 { ast_params_check_metal_raw_i64(params) } else { CirTypedSemanticCheckOk }
-            cir_typed_semantic_merge(ref_check, cir_typed_semantic_merge(metal_check, cir_typed_semantic_merge(ast_type_check_atomic(ret), cir_typed_semantic_merge(ast_params_check_types(params), ast_expr_check(body, all_items, params, generics, 0)))))
+            let infer_check = cir_typed_semantic_merge(ast_params_check_inference(params, body, generics), ast_return_check_inference(ret, params, body, generics))
+            cir_typed_semantic_merge(ref_check, cir_typed_semantic_merge(metal_check, cir_typed_semantic_merge(infer_check, cir_typed_semantic_merge(ast_type_check_atomic(ret), cir_typed_semantic_merge(ast_params_check_types(params), ast_expr_check(body, all_items, params, generics, 0))))))
         }
         _ => CirTypedSemanticCheckOk
     }
