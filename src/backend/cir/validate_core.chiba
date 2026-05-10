@@ -1,8 +1,63 @@
 namespace backend.cir.validate_core
 use backend.cir.ir.*
 
+def cir_l8_validate_expr_list(args: CirExprList): CirExprList =
+    match args {
+        CirExprEnd => CirExprEnd
+        CirExprCons(head, tail) => CirExprCons(cir_l8_validate_expr(head), cir_l8_validate_expr_list(tail))
+    }
+
+def cir_l8_validate_stmt(stmt: CirStmt): CirStmt =
+    match stmt {
+        L2StmtLet(binder, ty, value) => L2StmtLet(binder, ty, cir_l8_validate_expr(value))
+        L2StmtLetPattern(pat, value) => L2StmtLetPattern(pat, cir_l8_validate_expr(value))
+        L2StmtAssign(lhs, rhs) => L2StmtAssign(cir_l8_validate_expr(lhs), cir_l8_validate_expr(rhs))
+        L2StmtExpr(value) => L2StmtExpr(cir_l8_validate_expr(value))
+        L2StmtReturn(value) => L2StmtReturn(cir_l8_validate_expr(value))
+        L2StmtFor(label, cond, body) => L2StmtFor(label, cir_l8_validate_expr(cond), cir_l8_validate_expr(body))
+        _ => stmt
+    }
+
+def cir_l8_validate_stmt_list(stmts: CirStmtList): CirStmtList =
+    match stmts {
+        CirStmtEnd => CirStmtEnd
+        CirStmtCons(stmt, rest) => CirStmtCons(cir_l8_validate_stmt(stmt), cir_l8_validate_stmt_list(rest))
+    }
+
+def cir_l8_validate_payload(expr: CirExpr): CirExpr =
+    match expr {
+        L6OpClosureEnv(value, usage) => L6OpClosureEnv(cir_l8_validate_expr(value), usage)
+        L5OpContinuationPackage(binder, usage, value) => L5OpContinuationPackage(binder, usage, cir_l8_validate_expr(value))
+        L5OpCps(value, usage) => L5OpCps(cir_l8_validate_expr(value), usage)
+        L4OpUsage(value, usage) => L4OpUsage(cir_l8_validate_expr(value), usage)
+        L3OpAnswerEffect(value, answer, effect) => L3OpAnswerEffect(cir_l8_validate_expr(value), answer, effect)
+        L2OpTyped(value, ty) => L2OpTyped(cir_l8_validate_expr(value), ty)
+        L1OpBlock(stmts, tail) => L1OpBlock(cir_l8_validate_stmt_list(stmts), cir_l8_validate_expr(tail))
+        L1OpIf(cond, then_expr, else_expr) => L1OpIf(cir_l8_validate_expr(cond), cir_l8_validate_expr(then_expr), cir_l8_validate_expr(else_expr))
+        L1OpCall(callee, args) => L1OpCall(cir_l8_validate_expr(callee), cir_l8_validate_expr_list(args))
+        L1OpField(value, field) => L1OpField(cir_l8_validate_expr(value), field)
+        L1OpIndex(value, args) => L1OpIndex(cir_l8_validate_expr(value), cir_l8_validate_expr_list(args))
+        L1OpAssign(lhs, rhs) => L1OpAssign(cir_l8_validate_expr(lhs), cir_l8_validate_expr(rhs))
+        L1OpPrefix(op, value) => L1OpPrefix(op, cir_l8_validate_expr(value))
+        L1OpBinary(op, lhs, rhs) => L1OpBinary(op, cir_l8_validate_expr(lhs), cir_l8_validate_expr(rhs))
+        L1OpReset(label, body) => L1OpReset(label, cir_l8_validate_expr(body))
+        L1OpShift(label, binder, body) => L1OpShift(label, binder, cir_l8_validate_expr(body))
+        _ => expr
+    }
+
+def cir_l8_validate_core_op(op: CirCoreOp): CirCoreValidation =
+    match op {
+        L7CoreFunc => L8ValidatedCoreOk
+        L7CoreWasmGcObject => L8ValidatedCoreOk
+        L7CoreStringSlice => L8ValidatedCoreOk
+        L7CoreContinuationPackage => L8ValidatedCoreOk
+    }
+
 def cir_l8_validate_expr(expr: CirExpr): CirExpr =
-    L8ValidatedCoreOp(expr, L8ValidatedCoreOk)
+    match expr {
+        L7CoreOp(value, op) => L8ValidatedCoreOp(L7CoreOp(cir_l8_validate_payload(value), op), cir_l8_validate_core_op(op))
+        _ => L8ValidatedCoreOp(expr, L8ValidatedCoreErr("missing L7CoreOp"))
+    }
 
 def cir_l8_items(items: CirItemList): CirItemList =
     match items {

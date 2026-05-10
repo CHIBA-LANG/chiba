@@ -137,6 +137,16 @@ const LEVEL1C_CASES = [
     expect: ["L8ValidatedCoreModule", "L8ValidatedCoreOp", "L7CoreOp", "L6OpClosureEnv", "L5OpCps", "L4OpUsage", "L3OpAnswerEffect", "validation ok", "0"],
   },
   {
+    name: "level1c nanopass string slice core",
+    args: ["nanopass", "supports/semantic-gates/string_slice.chiba"],
+    expect: ["L8ValidatedCoreModule", "L7CoreOp", "core-op string-slice", "type Slice[u8]", "validation ok", "0"],
+  },
+  {
+    name: "level1c nanopass continuation core",
+    args: ["nanopass", "supports/bootstrap/continuation-multi-resume.chiba"],
+    expect: ["L8ValidatedCoreModule", "L7CoreOp", "core-op continuation-package", "L5OpContinuationPackage", "validation ok", "0"],
+  },
+  {
     name: "level1c cps continuation multi resume",
     args: ["cps", "supports/bootstrap/continuation-multi-resume.chiba"],
     expect: ["L5Module", "L5OpContinuationPackage", "L5OpCps", "L4OpUsage", "effect control", "0"],

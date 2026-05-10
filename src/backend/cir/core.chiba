@@ -3,9 +3,11 @@ use backend.cir.ir.*
 
 def cir_l7_core_op(expr: CirExpr): CirCoreOp =
     match expr {
+        L7CoreOp(_, op) => op
         L6OpClosureEnv(value, _) => cir_l7_core_op(value)
         L5OpContinuationPackage(_, _, _) => L7CoreContinuationPackage
         L5OpCps(value, _) => cir_l7_core_op(value)
+        L4OpUsage(value, _) => cir_l7_core_op(value)
         L3OpAnswerEffect(value, _, _) => cir_l7_core_op(value)
         L2OpTyped(value, ty) => match ty {
             CirTyString => L7CoreStringSlice
@@ -15,13 +17,62 @@ def cir_l7_core_op(expr: CirExpr): CirCoreOp =
         }
         L1OpString => L7CoreStringSlice
         L1OpIndex(_, _) => L7CoreStringSlice
+        L1OpBlock(_, tail) => cir_l7_core_op(tail)
+        L1OpIf(_, then_expr, _) => cir_l7_core_op(then_expr)
         L1OpReset(_, _) => L7CoreContinuationPackage
         L1OpShift(_, _, _) => L7CoreContinuationPackage
         _ => L7CoreFunc
     }
 
+def cir_l7_core_expr_list(args: CirExprList): CirExprList =
+    match args {
+        CirExprEnd => CirExprEnd
+        CirExprCons(head, tail) => CirExprCons(cir_l7_core_expr(head), cir_l7_core_expr_list(tail))
+    }
+
+def cir_l7_core_stmt(stmt: CirStmt): CirStmt =
+    match stmt {
+        L2StmtLet(binder, ty, value) => L2StmtLet(binder, ty, cir_l7_core_expr(value))
+        L2StmtLetPattern(pat, value) => L2StmtLetPattern(pat, cir_l7_core_expr(value))
+        L2StmtAssign(lhs, rhs) => L2StmtAssign(cir_l7_core_expr(lhs), cir_l7_core_expr(rhs))
+        L2StmtExpr(value) => L2StmtExpr(cir_l7_core_expr(value))
+        L2StmtReturn(value) => L2StmtReturn(cir_l7_core_expr(value))
+        L2StmtFor(label, cond, body) => L2StmtFor(label, cir_l7_core_expr(cond), cir_l7_core_expr(body))
+        _ => stmt
+    }
+
+def cir_l7_core_stmt_list(stmts: CirStmtList): CirStmtList =
+    match stmts {
+        CirStmtEnd => CirStmtEnd
+        CirStmtCons(stmt, rest) => CirStmtCons(cir_l7_core_stmt(stmt), cir_l7_core_stmt_list(rest))
+    }
+
+def cir_l7_core_expr_payload(expr: CirExpr): CirExpr =
+    match expr {
+        L6OpClosureEnv(value, usage) => L6OpClosureEnv(cir_l7_core_expr(value), usage)
+        L5OpContinuationPackage(binder, usage, value) => L5OpContinuationPackage(binder, usage, cir_l7_core_expr(value))
+        L5OpCps(value, usage) => L5OpCps(cir_l7_core_expr(value), usage)
+        L4OpUsage(value, usage) => L4OpUsage(cir_l7_core_expr(value), usage)
+        L3OpAnswerEffect(value, answer, effect) => L3OpAnswerEffect(cir_l7_core_expr(value), answer, effect)
+        L2OpTyped(value, ty) => L2OpTyped(cir_l7_core_expr(value), ty)
+        L1OpBlock(stmts, tail) => L1OpBlock(cir_l7_core_stmt_list(stmts), cir_l7_core_expr(tail))
+        L1OpIf(cond, then_expr, else_expr) => L1OpIf(cir_l7_core_expr(cond), cir_l7_core_expr(then_expr), cir_l7_core_expr(else_expr))
+        L1OpCall(callee, args) => L1OpCall(cir_l7_core_expr(callee), cir_l7_core_expr_list(args))
+        L1OpField(value, field) => L1OpField(cir_l7_core_expr(value), field)
+        L1OpIndex(value, args) => L1OpIndex(cir_l7_core_expr(value), cir_l7_core_expr_list(args))
+        L1OpAssign(lhs, rhs) => L1OpAssign(cir_l7_core_expr(lhs), cir_l7_core_expr(rhs))
+        L1OpPrefix(op, value) => L1OpPrefix(op, cir_l7_core_expr(value))
+        L1OpBinary(op, lhs, rhs) => L1OpBinary(op, cir_l7_core_expr(lhs), cir_l7_core_expr(rhs))
+        L1OpReset(label, body) => L1OpReset(label, cir_l7_core_expr(body))
+        L1OpShift(label, binder, body) => L1OpShift(label, binder, cir_l7_core_expr(body))
+        _ => expr
+    }
+
 def cir_l7_core_expr(expr: CirExpr): CirExpr =
-    L7CoreOp(expr, cir_l7_core_op(expr))
+    {
+        let payload = cir_l7_core_expr_payload(expr)
+        L7CoreOp(payload, cir_l7_core_op(payload))
+    }
 
 def cir_l7_items(items: CirItemList): CirItemList =
     match items {
