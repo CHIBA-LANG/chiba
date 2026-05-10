@@ -144,10 +144,10 @@
 	- **验收**: string/index/slice/`.char_at`、file read/write、stdout/stderr、argv/env、Vec/Map 基础操作都有 level-1b smoke；非 Metal 源码中没有新增裸 pointer 风格 helper。
 	- **并行**: 不并行；先稳定 surface，再迁移实现。
 
-- [ ] **Pre-C02: real typed nanopass spine past L1**
+- [x] **Pre-C02: real typed nanopass spine past L1**
 	- **TODO**: 把当前只到 `L1Alpha` 的 nanopass 继续拆到 `L2Typed`、`L3AnswerControl`、`L4Usage`、`L5Cps`、`L6Closure`、`L7Core`、`L8ValidatedCore`。
 	- **DESC**: 每个 pass 只做一件事，并且产物进入新的 ADT/节点族，而不是 side script 检查后继续让 WAT emitter 直接吃 L1。
-	- **PROGRESS**: 已建立 L2-L8 ADT 节点族、独立 pass 文件和 `level1c.o nanopass` dump smoke；L2 typed pass 已维护函数体局部类型环境，`let` 绑定后的 local ref 会 dump 为对应 `L2OpTyped` 类型事实，并由 bootstrap smoke 顺序断言；L3 answer/control pass 已递归标注表达式子树，continuation smoke 会断言 `reset` 子树的 `delimited` fact 和 `shift` 子树的 `shift` fact；L4 usage pass 已递归汇总 block/stmt/call/reset/shift 子树，multi-resume continuation dump 会落出 `usage many`；L5 CPS pass 已递归标注 continuation 子树，control 子树会落出 `L5OpContinuationPackage`；L6 closure/env pass 已递归保留 L5/L4 usage facts，continuation dump 中 `L6OpClosureEnv` 不再回退到 `usage unknown`；L7/L8 现在递归标注表达式节点，并在 bootstrap smoke 中断言 string/slice 与 continuation package Core facts。当前仍是保守骨架，尚未满足真实 type/CPS/Core 语义。
+	- **DONE**: 已建立 L2-L8 ADT 节点族、独立 pass 文件和 `level1c.o nanopass` dump smoke；L2 typed pass 维护函数体局部类型环境，`let` 绑定后的 local ref 会 dump 为对应 `L2OpTyped` 类型事实，并由 bootstrap smoke 顺序断言；L3 answer/control pass 递归标注表达式子树，continuation smoke 断言 `reset` 子树的 `delimited` fact 和 `shift` 子树的 `shift` fact；L4 usage pass 递归汇总 block/stmt/call/reset/shift 子树，multi-resume continuation dump 会落出 `usage many`；L5 CPS pass 递归标注 continuation 子树，control 子树会落出 `L5OpContinuationPackage`；L6 closure/env pass 递归保留 L5/L4 usage facts，continuation dump 中 `L6OpClosureEnv` 不再回退到 `usage unknown`；L7/L8 递归标注表达式节点，并在 bootstrap smoke 中断言 string/slice 与 continuation package Core facts。真实 type/method/row、完整 continuation CPS 语义和 validated Core 后续分别由 Pre-C03/Pre-C04/Pre-C06 承接。
 	- **验收**: CIR/Core 中能 dump `L2*` typed refs、`L3*` answer/control-boundary facts、`L5*` CPS continuation、`L6*` closure/env、`L7Core*` wasm-gc 节点；每层至少有一个 golden smoke。
 	- **并行**: 函数体级并行暂不实现；设计上保留 arena/symbol id 边界。
 
@@ -225,7 +225,7 @@
 - [ ] `level-1b` 可以由当前 level-0 seed 编译，并在 node/WASI runner 下运行。
 - [ ] `level-1b` 源码能完整表达 level-0 当前承担的核心工具链：regex、chibalex、chibacc、metalstd surface、compiler semantic driver、wasm-gc backend skeleton。
 - [ ] 非 `#![Metal]` 的 level-1b 源码不新增 opaque pointer `i64` 风格接口，Metal的也全体采用 Ptr， 然后还得有unsafe 检查，非metal没有开unsafe块不能碰 unsaferef 和 ptr；`Ref`/`UnsafeRef`/`Ptr`/`Atomic` 的使用符合 spec。
-- [ ] nanopass pipeline 不止停在 L1：至少 `L2Typed`、`L3AnswerControl`、`L5Cps`、`L6Closure`、`L7Core`、`L8ValidatedCore` 有真实 ADT、dump 和 smoke。
+- [x] nanopass pipeline 不止停在 L1：至少 `L2Typed`、`L3AnswerControl`、`L5Cps`、`L6Closure`、`L7Core`、`L8ValidatedCore` 有真实 ADT、dump 和 smoke。
 - [ ] WAT emitter 只吃 validated Core；semantic fallback/hole 不再作为普通成功路径。
 - [ ] `String == Array[u8]`、`str == Slice[u8]` 的真实 runtime contract 支撑 lexer/parser/diagnostic/file IO。
 - [ ] wasm chibalex-mini 和 chibacc-mini 能在 node 下运行并与 native generator/runner golden 对拍。
