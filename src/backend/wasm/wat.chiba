@@ -346,6 +346,18 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
             let _ = wat_line(out, depth, wat_binary_instr(op))
             if wat_binary_is_compare(op) != 0 { wat_line(out, depth, "i64.extend_i32_u") } else { 0 }
         }
+        L1OpAssign(lhs, rhs) => {
+            match lhs {
+                L1OpRef(L1RefLocal(id, _)) => {
+                    let _ = wat_emit_expr(out, depth, rhs)
+                    let _ = wat_indent(out, depth)
+                    let _ = str_push_cstr(out, "local.tee ")
+                    let _ = wat_local_name(out, id)
+                    str_push(out, 10)
+                }
+                _ => wat_line(out, depth, "unreachable ;; assign target unsupported")
+            }
+        }
         L1OpRef(L1RefLocal(id, _)) => {
             let _ = wat_indent(out, depth)
             let _ = str_push_cstr(out, "local.get ")

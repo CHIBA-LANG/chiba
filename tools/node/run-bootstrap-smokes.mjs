@@ -140,6 +140,11 @@ const GENERATED_WAT_CASES = [
     expect: ["7"],
   },
   {
+    name: "generated wat assign",
+    file: "supports/bootstrap/wat-assign-smoke.chiba",
+    expect: ["7"],
+  },
+  {
     name: "generated wat tailcall",
     file: "supports/bootstrap/wat-tailcall-smoke.chiba",
     expect: ["0"],

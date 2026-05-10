@@ -1,0 +1,7 @@
+namespace bootstrap.wat.assign_smoke
+
+def main(): i64 = {
+    let x = 1
+    x := x + 6
+    x
+}

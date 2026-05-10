@@ -98,7 +98,7 @@ Current result on 2026-05-10:
 Current hashes:
 
 - seed `chibac_amd64-unknown-linux_chiba_dev.o`: `7a7744ab9ace3d8e13ede45f2e5978e56cc07f597884085a9c4886753f3e268d`
-- native bootstrap runner `target/debug/level1c.o`: `99cfcef20f089f598672c76066605efde72977b1e34fd46e738e6d38b341b685`
+- native bootstrap runner `target/debug/level1c.o`: `a772bfe829f8f21c390e2cec7aaeab997c6dcec675d006fc3edf5f10c6243db0`
 - native parser runner `target/debug/parser_spec_runner.o`: `1f1e5420fe7aa82792dba8050f7913b4284233343aee73e4b02bb3312542687b`
 - generated `wat-tuple-heap-smoke.wat`: `933628efbf20637e41189be0cdc2157f0c25a5e21165002d8cb777323c81af4d`
 - generated `wat-tuple-heap-smoke.wasm`: `0b7edf0f79e80b27096deca09ca54fd81489d0479dbd00a1aeaf31a717768501`
