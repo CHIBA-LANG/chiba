@@ -1,7 +1,7 @@
 namespace lexer.spec.externasm
 
-def puts(msg: cstr): i32 = extern "c"
-def cbx_entry(x: i64): i64 = extern "cbx"
+def puts(msg: cstr): i32 = extern "c" "puts"
+def cbx_entry(x: i64): i64 = extern "cbx" "cbx_entry"
 
 def low_level(ptr: Ptr[u8], idx: i64): i64 = unsafe {
     let loaded : u8 = ptr.*

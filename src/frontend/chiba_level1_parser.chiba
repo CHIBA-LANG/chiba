@@ -119,7 +119,7 @@ use lexer.chiba_level1.*
         MatchGuard_Some(AST),
         MatchGuard_None,
         Expr_Extern(AST),
-        Expr_ExternAbi(Str),
+        Expr_ExternImport(Str, Str),
         Expr_Unsafe(AST),
         Expr_Asm(AST, AST, AST),
         AsmBind_Cons(AST, AST),
@@ -9393,6 +9393,8 @@ def parse_rule_112_alt_0_item_0(tokens: Vec, pos: i64): MatchResult = match_toke
 
 def parse_rule_112_alt_0_item_1(tokens: Vec, pos: i64): MatchResult = parse_rule_113(tokens, pos)
 
+def parse_rule_112_alt_0_item_2(tokens: Vec, pos: i64): MatchResult = parse_rule_113(tokens, pos)
+
 def parse_rule_112_alt_0(tokens: Vec, pos: i64): MatchResult = parse_rule_112_alt_0_step_0(tokens, pos, 0)
 
 def parse_rule_112_alt_0_step_0(tokens: Vec, pos: i64, recovered: i64): MatchResult =
@@ -9407,9 +9409,16 @@ def parse_rule_112_alt_0_step_1(tokens: Vec, pos: i64, recovered: i64, __v0: i64
         MatchFail(fail_pos) => MatchFail(fail_pos)
     }
 
-def parse_rule_112_alt_0_step_2(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64): MatchResult = {
+def parse_rule_112_alt_0_step_2(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64): MatchResult =
+    match parse_rule_112_alt_0_item_2(tokens, pos) {
+        MatchOK(__v2, pos1, recovered1) => parse_rule_112_alt_0_step_3(tokens, pos1, recover_or(recovered, recovered1), __v0, __v1, __v2)
+        MatchFail(fail_pos) => MatchFail(fail_pos)
+    }
+
+def parse_rule_112_alt_0_step_3(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64, __v2: i64): MatchResult = {
     let abi: AST = __v1 as AST
-    MatchOK((Expr_ExternAbi(abi)
+    let symbol: AST = __v2 as AST
+    MatchOK((Expr_ExternImport(abi, symbol)
     ) as i64, pos, recovered)
 }
 

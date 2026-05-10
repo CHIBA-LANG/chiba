@@ -16,7 +16,11 @@ OK(
     Item_Cons(
       Item_Def(
         DefItem2(
-          "puts",
+          DefName(
+            "puts",
+            Generic_End,
+            DefNamePlain
+          ),
           DefFun(
             Generic_End,
             Param_Cons(
@@ -33,8 +37,9 @@ OK(
               "i32",
               Type_Tail_End
             ),
-            Expr_Extern(
-              Expr_String
+            Expr_ExternImport(
+              "c",
+              "puts"
             )
           )
         )
@@ -42,7 +47,11 @@ OK(
       Item_Cons(
         Item_Def(
           DefItem2(
-            "cbx_entry",
+            DefName(
+              "cbx_entry",
+              Generic_End,
+              DefNamePlain
+            ),
             DefFun(
               Generic_End,
               Param_Cons(
@@ -59,8 +68,9 @@ OK(
                 "i64",
                 Type_Tail_End
               ),
-              Expr_Extern(
-                Expr_String
+              Expr_ExternImport(
+                "cbx",
+                "cbx_entry"
               )
             )
           )
@@ -68,7 +78,11 @@ OK(
         Item_Cons(
           Item_Def(
             DefItem2(
-              "low_level",
+              DefName(
+                "low_level",
+                Generic_End,
+                DefNamePlain
+              ),
               DefFun(
                 Generic_End,
                 Param_Cons(

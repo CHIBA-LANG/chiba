@@ -3,55 +3,6 @@ Err(
     reason="unexpected token or incomplete construct",
     final_reason="final failure at next unconsumed token",
     prev_token=[3:37 len=1] Token,
-    next_token=[3:39 len=1] Token,
-    partial_ast=SourceFile(
-    Attr_End,
-    Namespace(
-      Path_Cons(
-        "parser",
-        Path_Cons(
-          "error",
-          Path_Cons(
-            "kwextern",
-            Path_Cons(
-              "extra",
-              Path_Cons(
-                "string",
-                Path_End
-              )
-            )
-          )
-        )
-      )
-    ),
-    Item_Cons(
-      Item_Def(
-        DefItem2(
-          "puts",
-          DefFun(
-            Generic_End,
-            Param_Cons(
-              Param(
-                "msg",
-                Type_Path(
-                  "cstr",
-                  Type_Tail_End
-                )
-              ),
-              Param_End
-            ),
-            Type_Path(
-              "i32",
-              Type_Tail_End
-            ),
-            Expr_Extern(
-              Expr_String
-            )
-          )
-        )
-      ),
-      Item_End
-    )
-  )
+    next_token=[3:38 len=1] Token
 )
 0
