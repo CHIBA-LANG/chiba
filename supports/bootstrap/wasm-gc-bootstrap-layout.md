@@ -66,16 +66,43 @@ record/type access.
 Long-term surface `union` remains restricted to `#![Metal]` low-level layout
 work; this bootstrap carrier is an internal lowering device.
 
-## String, Slice, and `cstr`
+## Array, String, `str`, and `cstr`
 
-`Str` and slice values lower to a two-field heap object:
+`Array[T]` is owned managed storage. `String` is the UTF-8/WTF-8 byte-specialized
+owned array:
 
-- `ptr` or `arrayref`
-- `len`
+```text
+String == Array[u8]
+```
 
-`String` may use the same first-hop representation plus capacity/ownership side
-fields when needed by runtime helpers. `cstr` is an ABI boundary view and is not
-the ordinary managed string representation.
+`str` is the corresponding borrowed/read-only view:
+
+```text
+str == Slice[u8]
+```
+
+`Slice[T]` keeps the backing array alive and carries a stable range into it:
+
+- `arrayref`: Wasm-GC backing array reference
+- `offset`: `i32` element offset
+- `len`: `i32` element count
+
+Bootstrap byte-string layouts therefore use an owned array plus a view object:
+
+```wat
+(type $array_u8 (array i8))
+(type $slice_u8
+  (struct
+    (field (ref $array_u8))
+    (field i32)
+    (field i32)))
+```
+
+String literals and interpolation results produce `$array_u8` values. Index and
+range operations produce or consume `$slice_u8` view values. `String[index]`
+follows `Slice[u8]` byte-index semantics. Character/codepoint access is not
+implicit indexing; use an explicit method such as `.char_at(n)`. `cstr` is an
+ABI boundary view and is not the ordinary managed string representation.
 
 File read, stdout/stderr write, lexer input, parser source span, and WASI
 boundary helpers must use this same string/slice contract.

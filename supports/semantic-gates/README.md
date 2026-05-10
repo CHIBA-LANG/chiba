@@ -12,7 +12,7 @@ the full HM/row/answer-type pipeline is still being rewritten in level-1.
   including a real level-0 project compile smoke
 - memory capabilities: `Ref[T]`, `UnsafeRef[T]`, `Ptr[T]`, `Atomic[T]`, `:=`
 - delimited continuation multi-entry: classic multi-shot shift/reset shape
-- string, interpolation, and slice WAT lowering holes
+- string, interpolation, byte-index, explicit `char_at`, and slice WAT lowering holes
 
 The gates first require every fixture to parse with the level-1 parser. They then
 apply spec-level checks that are stricter than the current bootstrap backend, so
@@ -21,5 +21,7 @@ exists.
 
 Every fixture also emits a corresponding WAT file under
 `.scratch/semantic-gates/wat/`. String and slice fixtures assert that the
-bootstrap Wasm-GC backend emits managed object layouts (`$str_view` and
-`$slice_i64`) rather than treating them as opaque integers.
+bootstrap Wasm-GC backend emits managed layouts: `String` as `$array_u8` and
+`str`/slice as a `$slice_u8` view over that backing array, rather than treating
+them as opaque integers. `String[index]` follows `Slice[u8]` indexing semantics;
+character access must be explicit through `.char_at(n)`.

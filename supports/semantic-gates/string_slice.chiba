@@ -3,6 +3,8 @@ namespace semantic.gates.strings
 def string_slice_smoke(text: String): i64 = {
     "hello ${text}"
     r#"raw ${text} stays raw"#
+    text[0]
     text[0..4]
+    text.char_at(0)
     0
 }

@@ -439,9 +439,10 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
             else { wat_line(out, depth, "unreachable ;; field unsupported") }
         }
         L1OpIndex(_, _) => {
-            let _ = wat_line(out, depth, "i64.const 0")
-            let _ = wat_line(out, depth, "i64.const 0")
-            wat_line(out, depth, "struct.new $slice_i64")
+            let _ = wat_line(out, depth, "array.new_fixed $array_u8 0")
+            let _ = wat_line(out, depth, "i32.const 0")
+            let _ = wat_line(out, depth, "i32.const 0")
+            wat_line(out, depth, "struct.new $slice_u8")
         }
         L1OpPrefix(op, value) => {
             if streq(op, mk_str("-", 1)) != 0 {
@@ -498,9 +499,7 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
             str_push(out, 10)
         }
         L1OpString => {
-            let _ = wat_line(out, depth, "i64.const 0")
-            let _ = wat_line(out, depth, "i64.const 0")
-            wat_line(out, depth, "struct.new $str_view")
+            wat_line(out, depth, "array.new_fixed $array_u8 0")
         }
         L1OpUnit => wat_line(out, depth, "i64.const 0")
         L1OpReset(_, body) => wat_emit_expr(out, depth, body)
@@ -556,8 +555,8 @@ def wat_emit_module(module: CirModule): Str = {
     let out = str_new()
     let _ = str_push_cstr(out, "(module\n")
     let _ = str_push_cstr(out, "  (type $tuple2_i64 (struct (field i64) (field i64)))\n")
-    let _ = str_push_cstr(out, "  (type $str_view (struct (field i64) (field i64)))\n")
-    let _ = str_push_cstr(out, "  (type $slice_i64 (struct (field i64) (field i64)))\n")
+    let _ = str_push_cstr(out, "  (type $array_u8 (array i8))\n")
+    let _ = str_push_cstr(out, "  (type $slice_u8 (struct (field (ref $array_u8)) (field i32) (field i32)))\n")
     let _ = match module {
         L1Module(_, items) => {
             let _ = wat_emit_imports(out, items)

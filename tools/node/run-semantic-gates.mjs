@@ -168,12 +168,14 @@ function checkStringSlice() {
   const source = read(path.join(ROOT, "string_slice.chiba"));
   assert(name, source.includes("${text}"), "string interpolation smoke missing");
   assert(name, source.includes('r#"raw ${text} stays raw"#'), "raw string smoke missing");
+  assert(name, /text\[0\]/.test(source), "string byte-index smoke missing");
   assert(name, /text\[0\.\.4\]/.test(source), "slice smoke missing");
+  assert(name, /text\.char_at\(0\)/.test(source), "explicit char_at smoke missing");
   const wat = read(path.join(WAT_DIR, "string_slice.wat"));
-  assert(name, wat.includes("(type $str_view (struct (field i64) (field i64)))"), "WAT string layout missing");
-  assert(name, wat.includes("(type $slice_i64 (struct (field i64) (field i64)))"), "WAT slice layout missing");
-  assert(name, wat.includes("struct.new $str_view"), "string literal does not lower to managed object");
-  assert(name, wat.includes("struct.new $slice_i64"), "slice expression does not lower to managed object");
+  assert(name, wat.includes("(type $array_u8 (array i8))"), "WAT backing byte array layout missing");
+  assert(name, wat.includes("(type $slice_u8 (struct (field (ref $array_u8)) (field i32) (field i32)))"), "WAT slice layout missing");
+  assert(name, wat.includes("array.new_fixed $array_u8 0"), "String does not lower to managed Array[u8]");
+  assert(name, wat.includes("struct.new $slice_u8"), "str/slice expression does not lower to managed Slice[u8] view");
   pass(name);
 }
 
