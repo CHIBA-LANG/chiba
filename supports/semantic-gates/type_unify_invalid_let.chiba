@@ -1,0 +1,6 @@
+namespace semantic.gates.type_unify.invalid_let
+
+def bad_let(): i64 = {
+    let value: i64 = false
+    1
+}

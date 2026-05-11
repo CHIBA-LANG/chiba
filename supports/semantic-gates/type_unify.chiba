@@ -1,0 +1,12 @@
+namespace semantic.gates.type_unify
+
+def typed_return_i64(): i64 = 1
+
+def typed_return_bool(): bool = true
+
+def typed_let_i64(): i64 = {
+    let value: i64 = 41
+    value + 1
+}
+
+def typed_param_add(left: i64, right: i64): i64 = left + right

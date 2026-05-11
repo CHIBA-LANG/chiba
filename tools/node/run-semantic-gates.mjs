@@ -15,6 +15,10 @@ const GATE_FILES = [
   "refs_atomic_invalid.chiba",
   "type_inference.chiba",
   "type_inference_invalid.chiba",
+  "type_unify.chiba",
+  "type_unify_invalid_return.chiba",
+  "type_unify_invalid_let.chiba",
+  "type_unify_invalid_binary.chiba",
   "extern_abi.chiba",
   "extern_abi_invalid.chiba",
   "extern_abi_invalid_signature.chiba",
@@ -355,6 +359,19 @@ function checkTypeInference() {
   pass(name);
 }
 
+function checkTypeUnify() {
+  const name = "type unification gates";
+  const checkedValid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_unify.chiba")]);
+  assert(name, checkedValid.status === 0 && checkedValid.stdout.includes("check ok"), checkedValid.stdout || checkedValid.stderr);
+  const badReturn = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_unify_invalid_return.chiba")]);
+  assert(name, badReturn.status === 0 && badReturn.stderr.includes("return type mismatch"), badReturn.stdout || badReturn.stderr);
+  const badLet = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_unify_invalid_let.chiba")]);
+  assert(name, badLet.status === 0 && badLet.stderr.includes("let type mismatch"), badLet.stdout || badLet.stderr);
+  const badBinary = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_unify_invalid_binary.chiba")]);
+  assert(name, badBinary.status === 0 && badBinary.stderr.includes("expression type mismatch"), badBinary.stdout || badBinary.stderr);
+  pass(name);
+}
+
 function checkExternAbi() {
   const name = "extern ABI gates";
   const checkedValid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "extern_abi.chiba")]);
@@ -405,6 +422,7 @@ checkNamespaceMerge();
 checkStringSlice();
 checkMemory();
 checkTypeInference();
+checkTypeUnify();
 checkExternAbi();
 checkNominalRowDataUnion();
 checkContinuation();
