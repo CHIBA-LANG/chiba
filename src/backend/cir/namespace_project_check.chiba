@@ -1,0 +1,168 @@
+namespace backend.cir.namespace_project_check
+use metalstd.mem.*
+use metalstd.str.*
+use parser.chiba_level1.*
+
+data NamespaceProjectCheck {
+    NamespaceProjectCheckOk,
+    NamespaceProjectCheckErr(Str)
+}
+
+def namespace_project_err(text: i64): NamespaceProjectCheck =
+    NamespaceProjectCheckErr(mk_str(text, strlen(text)))
+
+def namespace_project_merge(a: NamespaceProjectCheck, b: NamespaceProjectCheck): NamespaceProjectCheck =
+    match a {
+        NamespaceProjectCheckErr(_) => a
+        NamespaceProjectCheckOk => b
+    }
+
+def np_path_part_eq(path: AST, a: Str, b: Str, c: Str): i64 =
+    match path {
+        Path_Cons(p0, Path_Cons(p1, Path_Cons(p2, Path_End))) =>
+            if streq(p0, a) != 0 && streq(p1, b) != 0 && streq(p2, c) != 0 { 1 } else { 0 }
+        _ => 0
+    }
+
+def np_ast_namespace_is(ast: AST, a: Str, b: Str, c: Str): i64 =
+    match ast {
+        SourceFile(_, ns, _) =>
+            match ns {
+                Namespace(path) => np_path_part_eq(path as AST, a, b, c)
+                _ => 0
+            }
+        _ => 0
+    }
+
+def np_source_items(ast: AST): AST =
+    match ast {
+        SourceFile(_, _, items) => items
+        _ => Item_End
+    }
+
+def np_def_name(defn: AST): Str =
+    match defn {
+        DefItem(name, _, _, _, _) => name
+        DefItem2(name_ast, _) =>
+            match name_ast {
+                DefName(name, _, _) => name
+                _ => mk_str("", 0)
+            }
+        _ => mk_str("", 0)
+    }
+
+def np_item_has_def(item: AST, name: Str): i64 =
+    match item {
+        Item_WithAttrs(_, inner) => np_item_has_def(inner, name)
+        Item_Def(defn) => streq(np_def_name(defn), name)
+        _ => 0
+    }
+
+def np_items_has_def(items: AST, name: Str): i64 =
+    match items {
+        Item_Cons(head, tail) =>
+            if np_item_has_def(head, name) != 0 { 1 } else { np_items_has_def(tail, name) }
+        _ => 0
+    }
+
+def np_expr_references(expr: AST, name: Str): i64 =
+    match expr {
+        Expr_Name(n) => streq(n, name)
+        Expr_IdentTail(n, _) => streq(n, name)
+        Expr_Call(callee, args) =>
+            if np_expr_references(callee, name) != 0 { 1 } else { np_args_reference(args, name) }
+        Expr_Block(stmts, tail) =>
+            if np_stmts_reference(stmts, name) != 0 { 1 } else { np_tail_reference(tail, name) }
+        Expr_Field(value, _) => np_expr_references(value, name)
+        Expr_Index(value, args) =>
+            if np_expr_references(value, name) != 0 { 1 } else { np_args_reference(args, name) }
+        Expr_Assign(lhs, rhs) =>
+            if np_expr_references(lhs, name) != 0 { 1 } else { np_expr_references(rhs, name) }
+        Expr_If(cond, then_expr, else_expr) =>
+            if np_expr_references(cond, name) != 0 { 1 }
+            else if np_expr_references(then_expr, name) != 0 { 1 }
+            else { np_expr_references(else_expr, name) }
+        Expr_Prefix(_, value) => np_expr_references(value, name)
+        Expr_Binary(_, lhs, rhs) =>
+            if np_expr_references(lhs, name) != 0 { 1 } else { np_expr_references(rhs, name) }
+        Expr_Reset(_, body) => np_expr_references(body, name)
+        Expr_Shift(_, _, body) => np_expr_references(body, name)
+        _ => 0
+    }
+
+def np_args_reference(args: AST, name: Str): i64 =
+    match args {
+        Arg_Cons(head, tail) =>
+            if np_expr_references(head, name) != 0 { 1 } else { np_args_reference(tail, name) }
+        ExprList_Cons(head, tail) =>
+            if np_expr_references(head, name) != 0 { 1 } else { np_args_reference(tail, name) }
+        _ => 0
+    }
+
+def np_tail_reference(tail: AST, name: Str): i64 =
+    match tail {
+        TailExpr_Some(value) => np_expr_references(value, name)
+        _ => 0
+    }
+
+def np_stmt_reference(stmt: AST, name: Str): i64 =
+    match stmt {
+        Stmt_Expr(value) => np_expr_references(value, name)
+        Stmt_Return(value) => np_expr_references(value, name)
+        Stmt_Assign(lhs, rhs) =>
+            if np_expr_references(lhs, name) != 0 { 1 } else { np_expr_references(rhs, name) }
+        Stmt_Let(_, value) => np_expr_references(value, name)
+        Stmt_LetPattern(_, value) => np_expr_references(value, name)
+        Stmt_LetPatternTyped(_, _, value) => np_expr_references(value, name)
+        Stmt_WithAttrs(_, inner) => np_stmt_reference(inner, name)
+        _ => 0
+    }
+
+def np_stmts_reference(stmts: AST, name: Str): i64 =
+    match stmts {
+        Stmt_Cons(head, tail) =>
+            if np_stmt_reference(head, name) != 0 { 1 } else { np_stmts_reference(tail, name) }
+        _ => 0
+    }
+
+def np_def_body_references(defn: AST, name: Str): i64 =
+    match defn {
+        DefItem(_, _, _, _, body) => np_expr_references(body, name)
+        DefItem2(_, rest) =>
+            match rest {
+                DefFun(_, _, _, body) => np_expr_references(body, name)
+                DefConst(_, value) => np_expr_references(value, name)
+                _ => 0
+            }
+        _ => 0
+    }
+
+def np_item_body_references(item: AST, name: Str): i64 =
+    match item {
+        Item_WithAttrs(_, inner) => np_item_body_references(inner, name)
+        Item_Def(defn) => np_def_body_references(defn, name)
+        _ => 0
+    }
+
+def np_items_reference(items: AST, name: Str): i64 =
+    match items {
+        Item_Cons(head, tail) =>
+            if np_item_body_references(head, name) != 0 { 1 } else { np_items_reference(tail, name) }
+        _ => 0
+    }
+
+def namespace_project_check(part_a: AST, part_b: AST, consumer: AST): NamespaceProjectCheck = {
+    let parts_ns = namespace_project_merge(
+        if np_ast_namespace_is(part_a, mk_str("semantic", 8), mk_str("gates", 5), mk_str("parts", 5)) != 0 { NamespaceProjectCheckOk } else { namespace_project_err("part_a namespace mismatch") },
+        if np_ast_namespace_is(part_b, mk_str("semantic", 8), mk_str("gates", 5), mk_str("parts", 5)) != 0 { NamespaceProjectCheckOk } else { namespace_project_err("part_b namespace mismatch") }
+    )
+    let defs = namespace_project_merge(
+        if np_items_has_def(np_source_items(part_a), mk_str("left", 4)) != 0 { NamespaceProjectCheckOk } else { namespace_project_err("merged namespace missing left") },
+        if np_items_has_def(np_source_items(part_b), mk_str("right", 5)) != 0 { NamespaceProjectCheckOk } else { namespace_project_err("merged namespace missing right") }
+    )
+    let consumer_refs = namespace_project_merge(
+        if np_items_reference(np_source_items(consumer), mk_str("left", 4)) != 0 { NamespaceProjectCheckOk } else { namespace_project_err("consumer missing left call") },
+        if np_items_reference(np_source_items(consumer), mk_str("right", 5)) != 0 { NamespaceProjectCheckOk } else { namespace_project_err("consumer missing right call") }
+    )
+    namespace_project_merge(parts_ns, namespace_project_merge(defs, consumer_refs))
+}

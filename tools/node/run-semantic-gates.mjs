@@ -234,6 +234,10 @@ function checkNamespaceMerge() {
   const app = read(path.join(project, "src/use_both.chiba"));
   assert(name, app.includes("use semantic.gates.parts.*"), "consumer must import merged namespace");
   assert(name, /\bleft\(\)\s*\+\s*right\(\)/.test(app), "consumer must call functions from both namespace fragments");
+  const projectChecked = run("./target/debug/level1c.o", ["check-project", project]);
+  assert(name, projectChecked.status === 0 && projectChecked.stdout.includes("check project ok"), projectChecked.stdout || projectChecked.stderr);
+  const invalidProject = run("./target/debug/level1c.o", ["check-project", path.join(ROOT, "namespace_project_invalid")]);
+  assert(name, invalidProject.status === 0 && invalidProject.stderr.includes("project missing src/part_b.chiba"), invalidProject.stdout || invalidProject.stderr);
   const compiled = run("timeout", [
     "10",
     "./chibac_amd64-unknown-linux_chiba_dev.o",
