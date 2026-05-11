@@ -1,0 +1,6 @@
+namespace semantic.gates.nominal.invalid
+
+type Bad {
+    id: i64,
+    id: i64,
+}

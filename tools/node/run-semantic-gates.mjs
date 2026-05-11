@@ -18,6 +18,10 @@ const GATE_FILES = [
   "extern_abi.chiba",
   "extern_abi_invalid.chiba",
   "extern_abi_invalid_signature.chiba",
+  "nominal_row_data_union.chiba",
+  "nominal_row_data_union_invalid.chiba",
+  "nominal_row_data_union_invalid_data.chiba",
+  "nominal_row_data_union_invalid_union.chiba",
   "continuation_scheme_multi.chiba",
   "string_slice.chiba",
   "namespace/part_a.chiba",
@@ -362,6 +366,19 @@ function checkExternAbi() {
   pass(name);
 }
 
+function checkNominalRowDataUnion() {
+  const name = "nominal row data union gates";
+  const checkedValid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "nominal_row_data_union.chiba")]);
+  assert(name, checkedValid.status === 0 && checkedValid.stdout.includes("check ok"), checkedValid.stdout || checkedValid.stderr);
+  const badType = run("./target/debug/level1c.o", ["check", path.join(ROOT, "nominal_row_data_union_invalid.chiba")]);
+  assert(name, badType.status === 0 && badType.stderr.includes("duplicate nominal field"), badType.stdout || badType.stderr);
+  const badData = run("./target/debug/level1c.o", ["check", path.join(ROOT, "nominal_row_data_union_invalid_data.chiba")]);
+  assert(name, badData.status === 0 && badData.stderr.includes("duplicate data variant or field"), badData.stdout || badData.stderr);
+  const badUnion = run("./target/debug/level1c.o", ["check", path.join(ROOT, "nominal_row_data_union_invalid_union.chiba")]);
+  assert(name, badUnion.status === 0 && badUnion.stderr.includes("duplicate union field"), badUnion.stdout || badUnion.stderr);
+  pass(name);
+}
+
 function evaluateClassicShiftReset() {
   const k = (value) => 2 * value;
   return 1 + k(k(4));
@@ -389,4 +406,5 @@ checkStringSlice();
 checkMemory();
 checkTypeInference();
 checkExternAbi();
+checkNominalRowDataUnion();
 checkContinuation();

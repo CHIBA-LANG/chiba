@@ -1,0 +1,6 @@
+namespace semantic.gates.nominal.invalid_data
+
+data BadToken {
+    id: i64,
+    id: Str,
+}

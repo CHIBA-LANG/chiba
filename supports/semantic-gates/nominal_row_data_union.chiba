@@ -1,0 +1,24 @@
+namespace semantic.gates.nominal
+
+type User {
+    id: i64,
+    name: Str,
+}
+
+type Account {
+    name: Str,
+    id: i64,
+}
+
+data Span {
+    start: i64,
+    end: i64,
+}
+
+union Payload {
+    id: i64,
+    name: Str,
+}
+
+def User.display(self: User): i64 = self.id
+def user_display(user: User): i64 = user.display()

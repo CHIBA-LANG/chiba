@@ -1,0 +1,6 @@
+namespace semantic.gates.nominal.invalid_union
+
+union BadPayload {
+    id: i64,
+    id: Str,
+}
