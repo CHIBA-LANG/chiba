@@ -74,6 +74,13 @@ The checker must record at least:
 
 Implicit variables are synthetic binders. They are still real type variables; they are not parser hacks and not erased diagnostics.
 
+There are two important variable modes:
+
+- **inference variables** are flexible until solved by HM unification.
+- **explicit generic binders** such as `[T]` are rigid inside the definition body.
+
+So `[T]` participates in HM checking as a type variable, but it is not a flexible hole that the body may silently solve to a concrete type. This is the core of the checked-template model: definition-time HM checks the body under rigid abstract binders, and instantiation-time later substitutes concrete types and discharges obligations.
+
 Examples:
 
 ```chiba
@@ -97,6 +104,28 @@ forall T. fn(T) -> T
 ```
 
 Both are polymorphic, but only the second exposes the name `T` to source-level diagnostics and future explicit instantiation syntax.
+
+Example:
+
+```chiba
+def f[T, F](value: T): F = value
+```
+
+This is ill-typed unless another constraint proves `T == F`, because `F` is a rigid explicit generic binder. The return annotation `F` does not allow the body to manufacture an `F`.
+
+This is valid:
+
+```chiba
+def f[T](value: T): T = value
+```
+
+This is also valid:
+
+```chiba
+def f[T, F](value: T, convert: fn(T): F): F = convert(value)
+```
+
+`TyNever` may flow into any return type for diverging expressions such as `panic()` or `todo()`, but that is a `Never` rule, not a generic escape hatch.
 
 ## ConstraintSet
 
@@ -259,6 +288,32 @@ Method-call resolution uses three paths:
 3. Qualified callee: an explicitly named function path.
 
 The chosen path must be recorded in TypedAst. If the receiver is abstract and cannot be decided yet, L2 records a `MethodObligation`.
+
+A row fact such as `{r | y: ty}` proves field availability only. It must not be used as proof that nominal method `def X.y(...)` exists. For `x.y`, the row fact is enough to type a field access. For `x.y(...)`, field-callable resolution may use the row fact if `y` has a function type; receiver-method resolution still requires a concrete nominal receiver id at definition time or a `MethodObligation` to be discharged at instantiation time.
+
+Method-style definitions bind `self` through the owner nominal type:
+
+```chiba
+def X.y(self, arg: A): R = ...
+```
+
+Inside the method body:
+
+```text
+Self := X
+self : Self
+method index key: (nominal_id(X), "y")
+callable shape: fn(Self, A) -> R
+```
+
+For a generic owner:
+
+```chiba
+type Box[T] { value: T }
+def Box[T].get(self): T = self.value
+```
+
+the method scope binds `Self := Box[T]` and `self : Box[T]`. `Self` is a special receiver-scope alias, not a top-level generic name and not a row type.
 
 Operator checking:
 

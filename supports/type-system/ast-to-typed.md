@@ -139,6 +139,39 @@ scheme: forall T $T0. fn(T, $T0) -> T
 
 The checker must not reject `y` just because the item has an explicit generic header.
 
+Explicit generic binders are rigid while checking the body. They are not flexible inference variables.
+
+Input:
+
+```chiba
+def bad[T, F](x: T): F = x
+```
+
+Elaboration fails unless constraints elsewhere prove `T == F`:
+
+```text
+T: rigid user generic
+F: rigid user generic
+body x: T
+return annotation: F
+constraint T == F cannot be solved by assigning F := T
+diagnostic: return type mismatch
+```
+
+Input:
+
+```chiba
+def map_one[T, F](x: T, f: fn(T): F): F = f(x)
+```
+
+Elaboration succeeds:
+
+```text
+f: fn(T) -> F
+f(x): F
+return: F
+```
+
 ## Row-Bound Shorthand
 
 Input:
@@ -333,6 +366,47 @@ MethodObligation(receiver_ty, method_name, arg_tys, result_ty, origin)
 ```
 
 If multiple concrete paths are valid at the same priority, report ambiguity. The chosen path must be stored in TypedAst.
+
+A row field fact does not prove a nominal method. If `receiver` has abstract type `$T0` and L2 knows only `{r | method: ty}`, then `receiver.method` is a field access. For `receiver.method(args...)`, it can become a field-callable call only if `ty` unifies with `fn(args...) -> result`. A receiver method `def X.method(self, ...)` is selected only when the receiver has concrete nominal id `X`, or when a `MethodObligation($T0, "method", ...)` is later discharged at an instantiation whose concrete receiver is `X`.
+
+## Method-Style `def` And `Self`
+
+Input:
+
+```chiba
+def X.y(self, arg: A): R = body
+```
+
+Elaboration:
+
+```text
+owner nominal: X
+method binder Self := X
+self: Self
+arg: A
+return: R
+method index key: (nominal_id(X), "y")
+call target type: fn(Self, A) -> R
+```
+
+Input:
+
+```chiba
+type Box[T] { value: T }
+def Box[T].get(self): T = self.value
+```
+
+Elaboration:
+
+```text
+owner generic binder T
+Self := Box[T]
+self: Box[T]
+self.value: T
+method index key: (nominal_id(Box), "get")
+```
+
+`Self` is available only inside the method header/body receiver scope. It is not a global type name and not a structural row alias.
 
 ## Operator
 
