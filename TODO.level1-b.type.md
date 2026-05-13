@@ -80,7 +80,7 @@
 - [ ] **Let-generalization**
 	- **TODO**: 实现 HM let-generalization，带 value restriction。
 	- **DESC**: immutable pure value 可泛化；`Ref`、`UnsafeRef`、`Ptr`、`Atomic`、extern/unsafe/capability-bearing value、continuation-bearing value 保守不自由泛化。
-	- **验收**: polymorphic `let id = fn(x)=x` 可多处实例化；`let r = ref(...)` 不被泛化；错误指向 let binder。
+	- **验收**: polymorphic identity lambda 可多处实例化；`let r = ref(...)` 不被泛化；错误指向 let binder。
 
 ## 3. Unification 设计
 
@@ -140,8 +140,8 @@
 
 - [ ] **Operator obligation**
 	- **TODO**: numeric builtin operator 直接 unify；abstract/generic receiver 生成 structural operator obligation。
-	- **DESC**: `i64 + i64` 定义期解决；`T + T` 在有抽象参数时保留 `op_add` obligation，等价 contract 为 `T: {t | op_add: fn(Self, Self): Self}`，但不能把 row fact 当普通 nominal method 证据。
-	- **验收**: `1 + true` 报错；`def add(a,b)=a+b` 泛化为 `def add[T:{t|op_add: fn(Self, Self): Self}](a:T,b:T):T`；generic operator 实例化失败能定位 call site。
+	- **DESC**: `i64 + i64` 定义期解决；`T + T` 在有抽象参数时保留 `op_add` obligation，等价 contract 为 `T: {t | op_add: (Self, Self) => Self}`，但不能把 row fact 当普通 nominal method 证据。
+	- **验收**: `1 + true` 报错；`def add(a,b)=a+b` 泛化为 `def add[T:{t|op_add: (Self, Self) => Self}](a:T,b:T):T`；generic operator 实例化失败能定位 call site。
 
 - [ ] **Shape dispatch boundary**
 	- **TODO**: shape dispatch 只使用 row/shape facts 和 explicit dispatch syntax，不引入全局 witness search。
@@ -166,8 +166,8 @@
 	- **验收**: unsupported `Atomic[String]`、错误 ordering、错误 value type 都有 L2 diagnostic。
 
 - [ ] **Extern ABI typing**
-	- **TODO**: `extern "wasi"`、`extern "C"`/`"c"`/`"env"` 必须显式参数/返回 ABI type；backend 只消费 typed import ref。
-	- **DESC**: emit 阶段不猜 ABI。先固定 WASI fd_write 等最小签名，C/env 保留 embedder typed import。
+	- **TODO**: `extern "wasi"`、`extern "C"`/`"c"`/`"wasi"` 必须显式参数/返回 ABI type；backend 只消费 typed import ref。
+	- **DESC**: emit 阶段不猜 ABI。先固定 WASI fd_write 等最小签名，C/wasi 保留 embedder typed import。
 	- **验收**: ABI unsupported、缺标注、fd_write 签名错误都由 L2 check 报错。
 
 ## 7. 单测与验证矩阵

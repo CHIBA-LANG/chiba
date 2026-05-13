@@ -52,7 +52,7 @@ Elaboration:
 param x: $T0(origin=param x)
 body x: $T0
 return: $T0
-scheme: forall $T0. fn($T0) -> $T0
+scheme: forall $T0. ($T0) => $T0
 constraints: []
 obligations: []
 ```
@@ -70,7 +70,7 @@ a: $T0
 b: $T1
 result: $T2
 obligation: OperatorObligation("+", [$T0, $T1], $T2, origin=a+b)
-scheme: forall $T0 $T1 $T2. fn($T0, $T1) -> $T2 where obligation
+scheme: forall $T0 $T1 $T2. ($T0, $T1) => $T2 where obligation
 ```
 
 If both operands are concrete numeric types, the operator is solved immediately instead of producing an obligation.
@@ -87,7 +87,7 @@ Elaboration:
 return annotation: i64
 body: i64
 constraint: body == i64
-scheme: fn() -> i64
+scheme: () => i64
 ```
 
 Input:
@@ -118,7 +118,7 @@ generic binder T: TyVar(origin=user generic T, visibility=user)
 param x: T
 body x: T
 return: T
-scheme: forall T. fn(T) -> T
+scheme: forall T. (T) => T
 ```
 
 Input:
@@ -134,7 +134,7 @@ generic binder T: user-visible
 param x: T
 param y: $T0(origin=param y, visibility=synthetic)
 body x: T
-scheme: forall T $T0. fn(T, $T0) -> T
+scheme: forall T $T0. (T, $T0) => T
 ```
 
 The checker must not reject `y` just because the item has an explicit generic header.
@@ -163,13 +163,13 @@ diagnostic: return type mismatch
 Input:
 
 ```chiba
-def map_one[T, F](x: T, f: fn(T): F): F = f(x)
+def map_one[T, F](x: T, f: (T) => F): F = f(x)
 ```
 
 Elaboration succeeds:
 
 ```text
-f: fn(T) -> F
+f: (T) => F
 f(x): F
 return: F
 ```
@@ -194,7 +194,7 @@ Body elaboration:
 ```text
 x.name result: Str
 field obligation: x has field name: Str
-scheme: forall $T0: {r | name: Str}. fn($T0) -> Str
+scheme: forall $T0: {r | name: Str}. ($T0) => Str
 ```
 
 Input:
@@ -230,7 +230,7 @@ binder x: i64
 Input:
 
 ```chiba
-let id = fn(x) = x
+let id = {|x| x }
 ```
 
 Elaboration:
@@ -238,7 +238,7 @@ Elaboration:
 ```text
 lambda param x: $T0
 lambda result: $T0
-let scheme: forall $T0. fn($T0) -> $T0
+let scheme: forall $T0. ($T0) => $T0
 ```
 
 This generalization is legal only if the lambda passes the value restriction.
@@ -357,7 +357,7 @@ receiver.method(args...)
 
 Elaboration tries or records the three paths:
 
-1. field-callable: `receiver.method` is a field whose type unifies with `fn(args...) -> result`
+1. field-callable: `receiver.method` is a field whose type unifies with `(args...) => result`
 2. nominal receiver method: method index lookup by receiver nominal id
 3. qualified callee: if syntax resolved to an explicit function path
 
@@ -369,7 +369,7 @@ MethodObligation(receiver_ty, method_name, arg_tys, result_ty, behavior_source, 
 
 If multiple concrete paths are valid at the same priority, report ambiguity. The chosen path must be stored in TypedAst.
 
-A row field fact does not prove a nominal method. If `receiver` has abstract type `$T0` and L2 knows only `{r | method: ty}`, then `receiver.method` is a field access. For `receiver.method(args...)`, it can become a field-callable call only if `ty` unifies with `fn(args...) -> result`. A receiver method `def X.method(self, ...)` is selected only when the receiver has concrete nominal id `X`, or when a `MethodObligation($T0, "method", ...)` is later discharged at an instantiation whose concrete receiver is `X`.
+A row field fact does not prove a nominal method. If `receiver` has abstract type `$T0` and L2 knows only `{r | method: ty}`, then `receiver.method` is a field access. For `receiver.method(args...)`, it can become a field-callable call only if `ty` unifies with `(args...) => result`. A receiver method `def X.method(self, ...)` is selected only when the receiver has concrete nominal id `X`, or when a `MethodObligation($T0, "method", ...)` is later discharged at an instantiation whose concrete receiver is `X`.
 
 If the source explicitly casts or performs a checked conversion to a nominal type, the converted expression may enter nominal method resolution:
 
@@ -396,7 +396,7 @@ self: Self
 arg: A
 return: R
 method index key: (nominal_id(X), "y")
-call target type: fn(Self, A) -> R
+call target type: (Self, A) => R
 ```
 
 Input:
@@ -429,8 +429,8 @@ a + b
 Concrete builtin cases:
 
 ```text
-i64 + i64 -> i64
-bool + bool -> error
+i64 + i64 has result i64
+bool + bool is an error
 ```
 
 Abstract cases:
@@ -442,7 +442,7 @@ OperatorObligation("op_add", self=$T0, args=[$T0], result=$T0, origin)
 For homogeneous abstract `+`, the inferred scheme is equivalent to:
 
 ```chiba
-def add[T: {t | op_add: fn(Self, Self): Self}](a: T, b: T): T =
+def add[T: {t | op_add: (Self, Self) => Self}](a: T, b: T): T =
     a.op_add(b)
 ```
 
@@ -552,7 +552,7 @@ String and slice indexing use byte semantics:
 ```text
 String == Array[u8]
 str == Slice[u8]
-s[i] -> u8
+s[i]: u8
 ```
 
 Character access is `.char_at(n)`, which is a method/helper obligation and not the same as indexing.

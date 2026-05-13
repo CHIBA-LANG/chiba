@@ -100,7 +100,7 @@ def id(x) = x
 Elaborates after checking to something equivalent to:
 
 ```text
-forall $T0. fn($T0) -> $T0
+forall $T0. ($T0) => $T0
 ```
 
 ```chiba
@@ -110,7 +110,7 @@ def id[T](x: T): T = x
 Elaborates to:
 
 ```text
-forall T. fn(T) -> T
+forall T. (T) => T
 ```
 
 Both are polymorphic, but only the second exposes the name `T` to source-level diagnostics and future explicit instantiation syntax.
@@ -132,7 +132,7 @@ def f[T](value: T): T = value
 This is also valid:
 
 ```chiba
-def f[T, F](value: T, convert: fn(T): F): F = convert(value)
+def f[T, F](value: T, convert: (T) => F): F = convert(value)
 ```
 
 `TyNever` may flow into any return type for diverging expressions such as `panic()` or `todo()`, but that is a `Never` rule, not a generic escape hatch.
@@ -144,7 +144,7 @@ Underconstrained constructors must not silently become globally polymorphic muta
 Constraints that belong to HM/unification:
 
 - equality: `A == B`
-- function application shape: `callee == fn(args...) -> result`
+- function application shape: `callee == (args...) => result`
 - tuple element equality
 - type application arity and kind checks
 - concrete numeric/bool/string equality
@@ -290,7 +290,7 @@ Method resolution is not row unification.
 The L2 pass should create a method index:
 
 ```text
-(namespace_scope_or_behavior_source, nominal_id, method_name) -> method candidates
+(namespace_scope_or_behavior_source, nominal_id, method_name) maps to method candidates
 ```
 
 Method-call resolution uses three paths:
@@ -325,7 +325,7 @@ Inside the method body:
 Self := X
 self : Self
 method index key: (nominal_id(X), "y")
-callable shape: fn(Self, A) -> R
+callable shape: (Self, A) => R
 ```
 
 For a generic owner:
@@ -346,7 +346,7 @@ Operator checking:
 For homogeneous `+` on abstract operands, the default obligation is equivalent to:
 
 ```chiba
-def add[T: {t | op_add: fn(Self, Self): Self}](a: T, b: T): T =
+def add[T: {t | op_add: (Self, Self) => Self}](a: T, b: T): T =
     a.op_add(b)
 ```
 
