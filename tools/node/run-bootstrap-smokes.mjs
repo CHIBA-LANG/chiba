@@ -133,7 +133,7 @@ const LEVEL1C_CASES = [
   {
     name: "level1c help",
     args: ["--help"],
-    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
+    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-kind-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
   },
   {
     name: "level1c parse grammar 01",
@@ -183,6 +183,21 @@ const LEVEL1C_CASES = [
       "occurs check failed",
       "unify-nominal-namespace-error",
       "nominal mismatch",
+      "0",
+    ],
+  },
+  {
+    name: "level1c type kind smoke",
+    args: ["type-kind-smoke", "chiba-level1-grammar-spec/01-test.chiba"],
+    expect: [
+      "L2TypeKindSmoke",
+      "kind-i64 ok value",
+      "kind-row ok row",
+      "kind-ref ok capability",
+      "kind-continuation ok continuation",
+      "kind-abi-ptr ok abi-scalar",
+      "kind-row-as-value err type kind mismatch",
+      "kind-string-as-abi err not an ABI scalar type",
       "0",
     ],
   },

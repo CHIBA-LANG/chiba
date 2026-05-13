@@ -1,0 +1,103 @@
+namespace backend.cir.type_kind
+use metalstd.str.*
+use backend.cir.ir.*
+use backend.cir.show.*
+
+data CirTypeKindCheck {
+    CirTypeKindOk(CirTyVarKind),
+    CirTypeKindErr(Str)
+}
+
+def cir_type_kind_name(kind: CirTyVarKind): i64 =
+    match kind {
+        CirTyKindValue => "value"
+        CirTyKindRow => "row"
+        CirTyKindCapability => "capability"
+        CirTyKindContinuation => "continuation"
+        CirTyKindAbiScalar => "abi-scalar"
+    }
+
+def cir_type_kind_eq(a: CirTyVarKind, b: CirTyVarKind): i64 =
+    match a {
+        CirTyKindValue => match b { CirTyKindValue => 1  _ => 0 }
+        CirTyKindRow => match b { CirTyKindRow => 1  _ => 0 }
+        CirTyKindCapability => match b { CirTyKindCapability => 1  _ => 0 }
+        CirTyKindContinuation => match b { CirTyKindContinuation => 1  _ => 0 }
+        CirTyKindAbiScalar => match b { CirTyKindAbiScalar => 1  _ => 0 }
+    }
+
+def cir_type_kind(ty: CirType): CirTypeKindCheck =
+    match ty {
+        CirTyUnknown => CirTypeKindOk(CirTyKindValue)
+        CirTyI64 => CirTypeKindOk(CirTyKindValue)
+        CirTyI32 => CirTypeKindOk(CirTyKindValue)
+        CirTyUsize => CirTypeKindOk(CirTyKindValue)
+        CirTyBool => CirTypeKindOk(CirTyKindValue)
+        CirTyUnit => CirTypeKindOk(CirTyKindValue)
+        CirTyNever => CirTypeKindOk(CirTyKindValue)
+        CirTyString => CirTypeKindOk(CirTyKindValue)
+        CirTyStr => CirTypeKindOk(CirTyKindValue)
+        CirTySliceU8 => CirTypeKindOk(CirTyKindValue)
+        CirTyVar(_) => CirTypeKindOk(CirTyKindValue)
+        CirTyConst(_) => CirTypeKindOk(CirTyKindValue)
+        CirTyApp(_, _) => CirTypeKindOk(CirTyKindValue)
+        CirTyFn(_, _) => CirTypeKindOk(CirTyKindValue)
+        CirTyTuple(_) => CirTypeKindOk(CirTyKindValue)
+        CirTyRow(_) => CirTypeKindOk(CirTyKindRow)
+        CirTyNominal(_, _) => CirTypeKindOk(CirTyKindValue)
+        CirTyData(_, _) => CirTypeKindOk(CirTyKindValue)
+        CirTyUnion(_, _) => CirTypeKindOk(CirTyKindValue)
+        CirTyRef(_) => CirTypeKindOk(CirTyKindCapability)
+        CirTyUnsafeRef(_) => CirTypeKindOk(CirTyKindCapability)
+        CirTyPtr(_) => CirTypeKindOk(CirTyKindCapability)
+        CirTyAtomic(_) => CirTypeKindOk(CirTyKindCapability)
+        CirTyContinuation(_, _, _) => CirTypeKindOk(CirTyKindContinuation)
+    }
+
+def cir_type_abi_scalar_kind(ty: CirType): CirTypeKindCheck =
+    match ty {
+        CirTyI32 => CirTypeKindOk(CirTyKindAbiScalar)
+        CirTyI64 => CirTypeKindOk(CirTyKindAbiScalar)
+        CirTyUsize => CirTypeKindOk(CirTyKindAbiScalar)
+        CirTyPtr(_) => CirTypeKindOk(CirTyKindAbiScalar)
+        _ => CirTypeKindErr(mk_str("not an ABI scalar type", 22))
+    }
+
+def cir_type_expect_kind(ty: CirType, expected: CirTyVarKind): CirTypeKindCheck =
+    match cir_type_kind(ty) {
+        CirTypeKindOk(actual) =>
+            if cir_type_kind_eq(actual, expected) != 0 { CirTypeKindOk(actual) }
+            else { CirTypeKindErr(mk_str("type kind mismatch", 18)) }
+        CirTypeKindErr(_) => cir_type_kind(ty)
+    }
+
+def cir_type_kind_show_result(out: Str, depth: i64, label: i64, result: CirTypeKindCheck): i64 =
+    match result {
+        CirTypeKindOk(kind) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, label)
+            let _ = str_push_cstr(out, " ok ")
+            let _ = str_push_cstr(out, cir_type_kind_name(kind))
+            str_push(out, 10)
+        }
+        CirTypeKindErr(message) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, label)
+            let _ = str_push_cstr(out, " err ")
+            let _ = str_append(out, message)
+            str_push(out, 10)
+        }
+    }
+
+def cir_type_kind_smoke(): Str = {
+    let out = str_new()
+    let _ = cir_show_line(out, 0, "L2TypeKindSmoke")
+    let _ = cir_type_kind_show_result(out, 1, "kind-i64", cir_type_kind(CirTyI64))
+    let _ = cir_type_kind_show_result(out, 1, "kind-row", cir_type_kind(CirTyRow(CirRowId { id: 1 })))
+    let _ = cir_type_kind_show_result(out, 1, "kind-ref", cir_type_kind(CirTyRef(CirTyI64)))
+    let _ = cir_type_kind_show_result(out, 1, "kind-continuation", cir_type_kind(CirTyContinuation(CirTyI64, CirTyBool, CirContinuationLinear)))
+    let _ = cir_type_kind_show_result(out, 1, "kind-abi-ptr", cir_type_abi_scalar_kind(CirTyPtr(CirTyI32)))
+    let _ = cir_type_kind_show_result(out, 1, "kind-row-as-value", cir_type_expect_kind(CirTyRow(CirRowId { id: 2 }), CirTyKindValue))
+    let _ = cir_type_kind_show_result(out, 1, "kind-string-as-abi", cir_type_abi_scalar_kind(CirTyString))
+    out
+}

@@ -98,9 +98,10 @@
 	- **DONE**: `src/backend/cir/type_unify.chiba` 已实现 substitution apply/lookup、occurs check、var binding、一阶递归 unify；覆盖 function、tuple、type app、nominal namespace identity、Ref/Ptr/Atomic/continuation 等结构。`level1c type-unify-smoke` 已接入 bootstrap smoke。
 	- **验收**: 单测覆盖 var-var、var-concrete、fn-fn、tuple、type app、occurs check、错误路径。
 
-- [ ] **Kind / type family checks**
+- [x] **Kind / type family checks**
 	- **TODO**: 区分 value type、row type、capability type、continuation type、ABI scalar type。
 	- **DESC**: 防止把 row tail 当普通 value、把 `Ptr[T]` 当安全 value、把 ABI-only type 泄漏到 managed value。
+	- **DONE**: `src/backend/cir/type_kind.chiba` 已实现独立 kind pass，区分 value、row、capability、continuation、ABI scalar；`level1c type-kind-smoke` 覆盖正确分类、row-as-value mismatch、String-as-ABI error。
 	- **验收**: 错误 fixture 覆盖 kind mismatch、错误 type app arity、非法 row tail 使用。
 
 - [ ] **Row unification**
