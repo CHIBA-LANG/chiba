@@ -133,7 +133,7 @@ const LEVEL1C_CASES = [
   {
     name: "level1c help",
     args: ["--help"],
-    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed cps nanopass core-invalid-smoke cont-usage wat"],
+    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke cps nanopass core-invalid-smoke cont-usage wat"],
   },
   {
     name: "level1c parse grammar 01",
@@ -145,6 +145,29 @@ const LEVEL1C_CASES = [
     args: ["typed", "chiba-level1-grammar-spec/01-test.chiba"],
     expect: ["L2Module", "L2OpTyped", "type i64", "0"],
     expectSequence: [["L2StmtReturn", "type i64", "L1RefLocal(#1 \"value\")"]],
+  },
+  {
+    name: "level1c type system smoke",
+    args: ["type-smoke", "chiba-level1-grammar-spec/01-test.chiba"],
+    expect: [
+      "L2TypeSmoke",
+      "tyvar-meta $T0 kind=value level=0 scope=1 visibility=user rigidity=rigid origin=user-generic T",
+      "tyvar-meta $T1 kind=value level=1 scope=1 visibility=synthetic rigidity=flexible origin=implicit-param value",
+      "row-meta row#7 closed=0 tail=$T2",
+      "row-field name: str",
+      "type ((i64, bool), row#7) => nominal#3 semantic.gates::User[$T0]",
+      "type Ptr[Atomic[usize]]",
+      "type Continuation[i64, bool, linear]",
+      "constraint eq $T1 == Ref[String]",
+      "constraint field-type row#7.name: str",
+      "constraint abi i32 wasi",
+      "obligation field row#7.name: str",
+      "obligation operator op_add self=$T0 args=($T0) => $T0 source=default-visible",
+      "obligation method nominal#3 semantic.gates::User[].len() => usize source=qualified semantic.gates.User.len",
+      "obligation continuation-capability Continuation[i64, i64, multi] multi",
+      "subst $T1 := Ref[String]",
+      "0",
+    ],
   },
   {
     name: "level1c nanopass grammar 01",

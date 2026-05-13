@@ -13,6 +13,7 @@ use backend.cir.alpha.*
 use backend.cir.continuation_boundary_check.*
 use backend.cir.continuation_check.*
 use backend.cir.continuation_usage.*
+use backend.cir.ir.*
 use backend.cir.lower_ast.*
 use backend.cir.nanopass.*
 use backend.cir.namespace_project_check.*
@@ -28,7 +29,7 @@ def argv_str(argv: i64, i: i64): Str = str_from_cptr(argv_cstr(argv, i))
 
 def level1c_usage(): i64 = {
     let _ = write_fd(1, "Usage: level1c <command> <file>\n", 32)
-    let _ = write_fd(1, "Commands: lex parse check check-project cir typed cps nanopass core-invalid-smoke cont-usage wat\n", 97)
+    let _ = write_fd(1, "Commands: lex parse check check-project cir typed type-smoke cps nanopass core-invalid-smoke cont-usage wat\n", 108)
     0
 }
 
@@ -213,6 +214,53 @@ def level1c_run_typed(path: Str): i64 =
         }
     }
 
+def level1c_run_type_smoke(path: Str): i64 = {
+    let out = str_new()
+    let tv_user = CirTyVarMeta {
+        id: CirTyVarId { id: 0 },
+        level: 0,
+        scope: 1,
+        origin: CirTyOriginUserGeneric(mk_str("T", 1)),
+        kind: CirTyKindValue,
+        visibility: CirTyVisibleUser,
+        rigidity: CirTyRigid
+    }
+    let tv_param = CirTyVarMeta {
+        id: CirTyVarId { id: 1 },
+        level: 1,
+        scope: 1,
+        origin: CirTyOriginImplicitParam(mk_str("value", 5)),
+        kind: CirTyKindValue,
+        visibility: CirTyVisibleSynthetic,
+        rigidity: CirTyFlexible
+    }
+    let row = CirRowMeta {
+        id: CirRowId { id: 7 },
+        closed: 0,
+        fields: CirRowFieldCons(CirRowField { field_name: mk_str("name", 4), ty: CirTyStr }, CirRowFieldCons(CirRowField { field_name: mk_str("age", 3), ty: CirTyI64 }, CirRowFieldEnd)),
+        tail: CirTyVar(CirTyVarId { id: 2 })
+    }
+    let nominal = CirNominalId { id: 3, module_name: mk_str("semantic.gates", 14), local_name: mk_str("User", 4) }
+    let t0 = CirTyVar(CirTyVarId { id: 0 })
+    let t1 = CirTyVar(CirTyVarId { id: 1 })
+    let fn_ty = CirTyFn(CirTypeCons(CirTyTuple(CirTypeCons(CirTyI64, CirTypeCons(CirTyBool, CirTypeEnd))), CirTypeCons(CirTyRow(CirRowId { id: 7 }), CirTypeEnd)), CirTyNominal(nominal, CirTypeCons(t0, CirTypeEnd)))
+    let constraints = CirConstraintCons(CirConstraintEq(t1, CirTyRef(CirTyString)), CirConstraintCons(CirConstraintFieldType(CirTyRow(CirRowId { id: 7 }), mk_str("name", 4), CirTyStr), CirConstraintCons(CirConstraintAbi(CirTyI32, CirExternAbiWasi), CirConstraintEnd)))
+    let obligations = CirObligationCons(CirObligationField(CirTyRow(CirRowId { id: 7 }), mk_str("name", 4), CirTyStr), CirObligationCons(CirObligationOperator(mk_str("op_add", 6), t0, CirTypeCons(t0, CirTypeEnd), t0, CirBehaviorDefaultVisible), CirObligationCons(CirObligationMethod(CirTyNominal(nominal, CirTypeEnd), mk_str("len", 3), CirTypeEnd, CirTyUsize, CirBehaviorQualifiedPath(mk_str("semantic.gates.User.len", 23))), CirObligationCons(CirObligationContinuationCapability(CirTyContinuation(CirTyI64, CirTyI64, CirContinuationMultiResume), CirContinuationMultiResume), CirObligationEnd))))
+    let substs = CirTypeSubstCons(CirTypeSubst { var: CirTyVarId { id: 1 }, ty: CirTyRef(CirTyString) }, CirTypeSubstEnd)
+    let _ = cir_show_line(out, 0, "L2TypeSmoke")
+    let _ = cir_show_tyvar_meta(out, 1, tv_user)
+    let _ = cir_show_tyvar_meta(out, 1, tv_param)
+    let _ = cir_show_row_meta(out, 1, row)
+    let _ = cir_show_type(out, 1, fn_ty)
+    let _ = cir_show_type(out, 1, CirTyPtr(CirTyAtomic(CirTyUsize)))
+    let _ = cir_show_type(out, 1, CirTyContinuation(CirTyI64, CirTyBool, CirContinuationLinear))
+    let _ = cir_show_constraint_list(out, 1, constraints)
+    let _ = cir_show_obligation_list(out, 1, obligations)
+    let _ = cir_show_subst_list(out, 1, substs)
+    let _ = str_write_to(out, 1)
+    0
+}
+
 def level1c_run_nanopass(path: Str): i64 =
     match level1c_parse_file(path) {
         OK(ast, _) => {
@@ -297,8 +345,11 @@ def level1c_dispatch_nanopass(cmd: Str, path: Str): i64 =
 def level1c_dispatch_cps(cmd: Str, path: Str): i64 =
     if streq(cmd, mk_str("cps", 3)) != 0 { level1c_run_cps(path) } else { level1c_dispatch_nanopass(cmd, path) }
 
+def level1c_dispatch_type_smoke(cmd: Str, path: Str): i64 =
+    if streq(cmd, mk_str("type-smoke", 10)) != 0 { level1c_run_type_smoke(path) } else { level1c_dispatch_cps(cmd, path) }
+
 def level1c_dispatch_typed(cmd: Str, path: Str): i64 =
-    if streq(cmd, mk_str("typed", 5)) != 0 { level1c_run_typed(path) } else { level1c_dispatch_cps(cmd, path) }
+    if streq(cmd, mk_str("typed", 5)) != 0 { level1c_run_typed(path) } else { level1c_dispatch_type_smoke(cmd, path) }
 
 def level1c_dispatch_cir(cmd: Str, path: Str): i64 =
     if streq(cmd, mk_str("cir", 3)) != 0 { level1c_run_cir(path) } else { level1c_dispatch_typed(cmd, path) }

@@ -29,14 +29,153 @@ data CirRef {
     L1RefUnresolved(Str)
 }
 
+type CirTyVarId {
+    id: i64
+}
+
+type CirRowId {
+    id: i64
+}
+
+type CirNominalId {
+    id: i64
+    module_name: Str
+    local_name: Str
+}
+
+data CirTyVarKind {
+    CirTyKindValue,
+    CirTyKindRow,
+    CirTyKindCapability,
+    CirTyKindContinuation,
+    CirTyKindAbiScalar
+}
+
+data CirTyVarOrigin {
+    CirTyOriginUserGeneric(Str),
+    CirTyOriginImplicitParam(Str),
+    CirTyOriginLet(Str),
+    CirTyOriginRowTail(Str),
+    CirTyOriginFieldResult(Str),
+    CirTyOriginInternal(Str)
+}
+
+data CirTyVarVisibility {
+    CirTyVisibleUser,
+    CirTyVisibleSynthetic
+}
+
+data CirTyVarRigidity {
+    CirTyRigid,
+    CirTyFlexible
+}
+
+type CirTyVarMeta {
+    id: CirTyVarId
+    level: i64
+    scope: i64
+    origin: CirTyVarOrigin
+    kind: CirTyVarKind
+    visibility: CirTyVarVisibility
+    rigidity: CirTyVarRigidity
+}
+
+type CirRowField {
+    field_name: Str
+    ty: CirType
+}
+
+data CirRowFieldList {
+    CirRowFieldCons(CirRowField, CirRowFieldList),
+    CirRowFieldEnd
+}
+
+type CirRowMeta {
+    id: CirRowId
+    closed: i64
+    fields: CirRowFieldList
+    tail: CirType
+}
+
+data CirContinuationKind {
+    CirContinuationLinear,
+    CirContinuationMultiResume
+}
+
+data CirTypeList {
+    CirTypeCons(CirType, CirTypeList),
+    CirTypeEnd
+}
+
 data CirType {
     CirTyUnknown,
     CirTyI64,
+    CirTyI32,
+    CirTyUsize,
     CirTyBool,
     CirTyUnit,
+    CirTyNever,
     CirTyString,
     CirTyStr,
-    CirTySliceU8
+    CirTySliceU8,
+    CirTyVar(CirTyVarId),
+    CirTyConst(Str),
+    CirTyApp(CirType, CirTypeList),
+    CirTyFn(CirTypeList, CirType),
+    CirTyTuple(CirTypeList),
+    CirTyRow(CirRowId),
+    CirTyNominal(CirNominalId, CirTypeList),
+    CirTyData(CirNominalId, CirTypeList),
+    CirTyUnion(CirNominalId, CirTypeList),
+    CirTyRef(CirType),
+    CirTyUnsafeRef(CirType),
+    CirTyPtr(CirType),
+    CirTyAtomic(CirType),
+    CirTyContinuation(CirType, CirType, CirContinuationKind)
+}
+
+data CirBehaviorSource {
+    CirBehaviorDefaultVisible,
+    CirBehaviorExplicitVia(Str),
+    CirBehaviorQualifiedPath(Str)
+}
+
+data CirConstraintList {
+    CirConstraintCons(CirConstraint, CirConstraintList),
+    CirConstraintEnd
+}
+
+data CirConstraint {
+    CirConstraintEq(CirType, CirType),
+    CirConstraintRowEq(CirType, CirType),
+    CirConstraintFieldPresent(CirType, Str),
+    CirConstraintFieldType(CirType, Str, CirType),
+    CirConstraintCapability(CirType, Str),
+    CirConstraintAbi(CirType, CirExternAbi)
+}
+
+data CirObligationList {
+    CirObligationCons(CirObligation, CirObligationList),
+    CirObligationEnd
+}
+
+data CirObligation {
+    CirObligationField(CirType, Str, CirType),
+    CirObligationMethod(CirType, Str, CirTypeList, CirType, CirBehaviorSource),
+    CirObligationOperator(Str, CirType, CirTypeList, CirType, CirBehaviorSource),
+    CirObligationShapeDispatch(Str, CirType, CirTypeList, CirType, CirBehaviorSource),
+    CirObligationDynAdapter(CirType, CirType),
+    CirObligationContinuationCapability(CirType, CirContinuationKind)
+}
+
+type CirTypeSubst {
+    var: CirTyVarId
+    ty: CirType
+}
+
+data CirTypeSubstList {
+    CirTypeSubstCons(CirTypeSubst, CirTypeSubstList),
+    CirTypeSubstEnd
 }
 
 data CirControlBoundary {

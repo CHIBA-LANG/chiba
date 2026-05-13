@@ -35,24 +35,28 @@
 
 ## 1. L2 类型 IR 与数据结构
 
-- [ ] **Type ADT**
+- [x] **Type ADT**
 	- **TODO**: 在 `src/backend/cir/` 增加或重写 L2 type ADT：`TyVar`、`TyConst`、`TyApp`、`TyFn`、`TyTuple`、`TyRow`、`TyNominal`、`TyRef`、`TyUnsafeRef`、`TyPtr`、`TyAtomic`、`TyContinuation`。
 	- **DESC**: 不用 `i64` 当 opaque type handle；内部 id 必须有明确 newtype/ADT 表示。
+	- **DONE**: `src/backend/cir/ir.chiba` 已增加 `CirTyVarId`、`CirRowId`、namespace-qualified `CirNominalId`、完整 `CirType` ADT、capability type、continuation type；`src/backend/cir/show.chiba` 已增加稳定 type dump。
 	- **验收**: dump 能显示稳定类型结构；测试覆盖函数、tuple、row、nominal、capability、continuation 类型。
 
-- [ ] **Type variable model**
+- [x] **Type variable model**
 	- **TODO**: 设计 `TyVarId`、kind、level、scope、origin、synthetic/user-visible 标记。
 	- **DESC**: 支撑 let-generalization、隐式 generic 参数、显式 `[T]`、row tail variable、diagnostic。
+	- **DONE**: `CirTyVarMeta` 固定 `id/kind/level/scope/origin/visibility/rigidity`，其中 `[T]` 可表示为 user-visible rigid，省略参数可表示为 synthetic flexible。
 	- **验收**: dump 能区分用户写的 `T` 和 compiler synthetic 的 `$T0`；错误消息能回指参数、let、field access 等 origin。
 
-- [ ] **ConstraintSet**
+- [x] **ConstraintSet**
 	- **TODO**: 定义普通 equality constraint、row constraint、field presence constraint、field type constraint、capability constraint、ABI constraint。
 	- **DESC**: 普通类型不匹配进入 unify；shape/method/operator 不应被强行塞进普通 equality。
+	- **DONE**: `CirConstraint` / `CirConstraintList` 已覆盖 eq、row-eq、field-present、field-type、capability、ABI，并有稳定 dump。
 	- **验收**: `ConstraintSet` 可 dump、可排序、可 hash；同一源码两次运行输出稳定。
 
-- [ ] **ObligationIR**
+- [x] **ObligationIR**
 	- **TODO**: 定义 `FieldObligation`、`MethodObligation`、`OperatorObligation`、`ShapeDispatchObligation`、`DynAdapterObligation`、`ContinuationCapabilityObligation`。
 	- **DESC**: 这是 checked structural template 的核心记录，后续 specialization 和 method index 使用它，不再回读 AST 猜语义。
+	- **DONE**: `CirObligation` / `CirObligationList` 已覆盖 field、method、operator、shape dispatch、dyn adapter、continuation capability；method/operator obligation 均携带 behavior source。
 	- **验收**: `def get_name(x)=x.name` 产生 field obligation；`def len(x)=x.len()` 产生 method obligation；`def add(a,b)=a+b` 产生 operator obligation 或 concrete numeric unify。
 
 ## 2. `[T]` 与自动泛化

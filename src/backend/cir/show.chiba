@@ -54,15 +54,414 @@ def cir_show_ref(out: Str, depth: i64, r: CirRef): i64 =
         L1RefUnresolved(name) => cir_show_str_line(out, depth, "L1RefUnresolved", name)
     }
 
-def cir_show_type(out: Str, depth: i64, ty: CirType): i64 =
+def cir_show_tyvar_id(out: Str, id: CirTyVarId): i64 = {
+    let _ = str_push_cstr(out, "$T")
+    str_append_i64(out, id.id)
+}
+
+def cir_show_row_id(out: Str, id: CirRowId): i64 = {
+    let _ = str_push_cstr(out, "row#")
+    str_append_i64(out, id.id)
+}
+
+def cir_show_nominal_id(out: Str, id: CirNominalId): i64 = {
+    let _ = str_push_cstr(out, "nominal#")
+    let _ = str_append_i64(out, id.id)
+    let _ = str_push_cstr(out, " ")
+    let _ = str_append(out, id.module_name)
+    let _ = str_push_cstr(out, "::")
+    str_append(out, id.local_name)
+}
+
+def cir_show_type_inline(out: Str, ty: CirType): i64 =
     match ty {
-        CirTyUnknown => cir_show_line(out, depth, "type unknown")
-        CirTyI64 => cir_show_line(out, depth, "type i64")
-        CirTyBool => cir_show_line(out, depth, "type bool")
-        CirTyUnit => cir_show_line(out, depth, "type unit")
-        CirTyString => cir_show_line(out, depth, "type String")
-        CirTyStr => cir_show_line(out, depth, "type str")
-        CirTySliceU8 => cir_show_line(out, depth, "type Slice[u8]")
+        CirTyUnknown => str_push_cstr(out, "unknown")
+        CirTyI64 => str_push_cstr(out, "i64")
+        CirTyI32 => str_push_cstr(out, "i32")
+        CirTyUsize => str_push_cstr(out, "usize")
+        CirTyBool => str_push_cstr(out, "bool")
+        CirTyUnit => str_push_cstr(out, "Unit")
+        CirTyNever => str_push_cstr(out, "Never")
+        CirTyString => str_push_cstr(out, "String")
+        CirTyStr => str_push_cstr(out, "str")
+        CirTySliceU8 => str_push_cstr(out, "Slice[u8]")
+        CirTyVar(id) => cir_show_tyvar_id(out, id)
+        CirTyConst(name) => str_append(out, name)
+        CirTyApp(callee, args) => {
+            let _ = cir_show_type_inline(out, callee)
+            let _ = str_push_cstr(out, "[")
+            let _ = cir_show_type_list_inline(out, args)
+            str_push_cstr(out, "]")
+        }
+        CirTyFn(params, ret) => {
+            let _ = str_push_cstr(out, "(")
+            let _ = cir_show_type_list_inline(out, params)
+            let _ = str_push_cstr(out, ") => ")
+            cir_show_type_inline(out, ret)
+        }
+        CirTyTuple(items) => {
+            let _ = str_push_cstr(out, "(")
+            let _ = cir_show_type_list_inline(out, items)
+            str_push_cstr(out, ")")
+        }
+        CirTyRow(id) => cir_show_row_id(out, id)
+        CirTyNominal(id, args) => {
+            let _ = cir_show_nominal_id(out, id)
+            let _ = str_push_cstr(out, "[")
+            let _ = cir_show_type_list_inline(out, args)
+            str_push_cstr(out, "]")
+        }
+        CirTyData(id, args) => {
+            let _ = str_push_cstr(out, "data ")
+            let _ = cir_show_nominal_id(out, id)
+            let _ = str_push_cstr(out, "[")
+            let _ = cir_show_type_list_inline(out, args)
+            str_push_cstr(out, "]")
+        }
+        CirTyUnion(id, args) => {
+            let _ = str_push_cstr(out, "union ")
+            let _ = cir_show_nominal_id(out, id)
+            let _ = str_push_cstr(out, "[")
+            let _ = cir_show_type_list_inline(out, args)
+            str_push_cstr(out, "]")
+        }
+        CirTyRef(inner) => {
+            let _ = str_push_cstr(out, "Ref[")
+            let _ = cir_show_type_inline(out, inner)
+            str_push_cstr(out, "]")
+        }
+        CirTyUnsafeRef(inner) => {
+            let _ = str_push_cstr(out, "UnsafeRef[")
+            let _ = cir_show_type_inline(out, inner)
+            str_push_cstr(out, "]")
+        }
+        CirTyPtr(inner) => {
+            let _ = str_push_cstr(out, "Ptr[")
+            let _ = cir_show_type_inline(out, inner)
+            str_push_cstr(out, "]")
+        }
+        CirTyAtomic(inner) => {
+            let _ = str_push_cstr(out, "Atomic[")
+            let _ = cir_show_type_inline(out, inner)
+            str_push_cstr(out, "]")
+        }
+        CirTyContinuation(input, answer, kind) => {
+            let _ = str_push_cstr(out, "Continuation[")
+            let _ = cir_show_type_inline(out, input)
+            let _ = str_push_cstr(out, ", ")
+            let _ = cir_show_type_inline(out, answer)
+            let _ = str_push_cstr(out, ", ")
+            let _ = match kind {
+                CirContinuationLinear => str_push_cstr(out, "linear")
+                CirContinuationMultiResume => str_push_cstr(out, "multi")
+            }
+            str_push_cstr(out, "]")
+        }
+    }
+
+def cir_show_type_list_inline(out: Str, types: CirTypeList): i64 =
+    match types {
+        CirTypeEnd => 0
+        CirTypeCons(head, tail) => {
+            let _ = cir_show_type_inline(out, head)
+            match tail {
+                CirTypeEnd => 0
+                _ => {
+                    let _ = str_push_cstr(out, ", ")
+                    cir_show_type_list_inline(out, tail)
+                }
+            }
+        }
+    }
+
+def cir_show_type(out: Str, depth: i64, ty: CirType): i64 =
+    {
+        let _ = cir_show_indent(out, depth)
+        let _ = str_push_cstr(out, "type ")
+        let _ = cir_show_type_inline(out, ty)
+        str_push(out, 10)
+    }
+
+def cir_show_tyvar_kind_inline(out: Str, kind: CirTyVarKind): i64 =
+    match kind {
+        CirTyKindValue => str_push_cstr(out, "value")
+        CirTyKindRow => str_push_cstr(out, "row")
+        CirTyKindCapability => str_push_cstr(out, "capability")
+        CirTyKindContinuation => str_push_cstr(out, "continuation")
+        CirTyKindAbiScalar => str_push_cstr(out, "abi-scalar")
+    }
+
+def cir_show_tyvar_origin_inline(out: Str, origin: CirTyVarOrigin): i64 =
+    match origin {
+        CirTyOriginUserGeneric(name) => {
+            let _ = str_push_cstr(out, "user-generic ")
+            str_append(out, name)
+        }
+        CirTyOriginImplicitParam(name) => {
+            let _ = str_push_cstr(out, "implicit-param ")
+            str_append(out, name)
+        }
+        CirTyOriginLet(name) => {
+            let _ = str_push_cstr(out, "let ")
+            str_append(out, name)
+        }
+        CirTyOriginRowTail(name) => {
+            let _ = str_push_cstr(out, "row-tail ")
+            str_append(out, name)
+        }
+        CirTyOriginFieldResult(name) => {
+            let _ = str_push_cstr(out, "field-result ")
+            str_append(out, name)
+        }
+        CirTyOriginInternal(name) => {
+            let _ = str_push_cstr(out, "internal ")
+            str_append(out, name)
+        }
+    }
+
+def cir_show_tyvar_visibility_inline(out: Str, visibility: CirTyVarVisibility): i64 =
+    match visibility {
+        CirTyVisibleUser => str_push_cstr(out, "user")
+        CirTyVisibleSynthetic => str_push_cstr(out, "synthetic")
+    }
+
+def cir_show_tyvar_rigidity_inline(out: Str, rigidity: CirTyVarRigidity): i64 =
+    match rigidity {
+        CirTyRigid => str_push_cstr(out, "rigid")
+        CirTyFlexible => str_push_cstr(out, "flexible")
+    }
+
+def cir_show_tyvar_meta(out: Str, depth: i64, meta: CirTyVarMeta): i64 = {
+    let _ = cir_show_indent(out, depth)
+    let _ = str_push_cstr(out, "tyvar-meta ")
+    let _ = cir_show_tyvar_id(out, meta.id)
+    let _ = str_push_cstr(out, " kind=")
+    let _ = cir_show_tyvar_kind_inline(out, meta.kind)
+    let _ = str_push_cstr(out, " level=")
+    let _ = str_append_i64(out, meta.level)
+    let _ = str_push_cstr(out, " scope=")
+    let _ = str_append_i64(out, meta.scope)
+    let _ = str_push_cstr(out, " visibility=")
+    let _ = cir_show_tyvar_visibility_inline(out, meta.visibility)
+    let _ = str_push_cstr(out, " rigidity=")
+    let _ = cir_show_tyvar_rigidity_inline(out, meta.rigidity)
+    let _ = str_push_cstr(out, " origin=")
+    let _ = cir_show_tyvar_origin_inline(out, meta.origin)
+    str_push(out, 10)
+}
+
+def cir_show_row_field_list(out: Str, depth: i64, fields: CirRowFieldList): i64 =
+    match fields {
+        CirRowFieldEnd => cir_show_line(out, depth, "row-fields-end")
+        CirRowFieldCons(field, rest) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "row-field ")
+            let _ = str_append(out, field.field_name)
+            let _ = str_push_cstr(out, ": ")
+            let _ = cir_show_type_inline(out, field.ty)
+            let _ = str_push(out, 10)
+            cir_show_row_field_list(out, depth, rest)
+        }
+    }
+
+def cir_show_row_meta(out: Str, depth: i64, meta: CirRowMeta): i64 = {
+    let _ = cir_show_indent(out, depth)
+    let _ = str_push_cstr(out, "row-meta ")
+    let _ = cir_show_row_id(out, meta.id)
+    let _ = str_push_cstr(out, " closed=")
+    let _ = str_append_i64(out, meta.closed)
+    let _ = str_push_cstr(out, " tail=")
+    let _ = cir_show_type_inline(out, meta.tail)
+    let _ = str_push(out, 10)
+    cir_show_row_field_list(out, depth + 1, meta.fields)
+}
+
+def cir_show_behavior_source_inline(out: Str, source: CirBehaviorSource): i64 =
+    match source {
+        CirBehaviorDefaultVisible => str_push_cstr(out, "default-visible")
+        CirBehaviorExplicitVia(name) => {
+            let _ = str_push_cstr(out, "via ")
+            str_append(out, name)
+        }
+        CirBehaviorQualifiedPath(name) => {
+            let _ = str_push_cstr(out, "qualified ")
+            str_append(out, name)
+        }
+    }
+
+def cir_show_extern_abi_inline(out: Str, abi: CirExternAbi): i64 =
+    match abi {
+        CirExternAbiWasi => str_push_cstr(out, "wasi")
+        CirExternAbiEnv => str_push_cstr(out, "env")
+        CirExternAbiUnsupported(name) => {
+            let _ = str_push_cstr(out, "unsupported ")
+            str_append(out, name)
+        }
+    }
+
+def cir_show_constraint(out: Str, depth: i64, constraint: CirConstraint): i64 =
+    match constraint {
+        CirConstraintEq(lhs, rhs) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "constraint eq ")
+            let _ = cir_show_type_inline(out, lhs)
+            let _ = str_push_cstr(out, " == ")
+            let _ = cir_show_type_inline(out, rhs)
+            str_push(out, 10)
+        }
+        CirConstraintRowEq(lhs, rhs) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "constraint row-eq ")
+            let _ = cir_show_type_inline(out, lhs)
+            let _ = str_push_cstr(out, " == ")
+            let _ = cir_show_type_inline(out, rhs)
+            str_push(out, 10)
+        }
+        CirConstraintFieldPresent(receiver, field) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "constraint field-present ")
+            let _ = cir_show_type_inline(out, receiver)
+            let _ = str_push_cstr(out, ".")
+            let _ = str_append(out, field)
+            str_push(out, 10)
+        }
+        CirConstraintFieldType(receiver, field, ty) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "constraint field-type ")
+            let _ = cir_show_type_inline(out, receiver)
+            let _ = str_push_cstr(out, ".")
+            let _ = str_append(out, field)
+            let _ = str_push_cstr(out, ": ")
+            let _ = cir_show_type_inline(out, ty)
+            str_push(out, 10)
+        }
+        CirConstraintCapability(ty, name) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "constraint capability ")
+            let _ = cir_show_type_inline(out, ty)
+            let _ = str_push_cstr(out, " ")
+            let _ = str_append(out, name)
+            str_push(out, 10)
+        }
+        CirConstraintAbi(ty, abi) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "constraint abi ")
+            let _ = cir_show_type_inline(out, ty)
+            let _ = str_push_cstr(out, " ")
+            let _ = cir_show_extern_abi_inline(out, abi)
+            str_push(out, 10)
+        }
+    }
+
+def cir_show_constraint_list(out: Str, depth: i64, constraints: CirConstraintList): i64 =
+    match constraints {
+        CirConstraintEnd => cir_show_line(out, depth, "constraints-end")
+        CirConstraintCons(head, tail) => {
+            let _ = cir_show_constraint(out, depth, head)
+            cir_show_constraint_list(out, depth, tail)
+        }
+    }
+
+def cir_show_obligation(out: Str, depth: i64, obligation: CirObligation): i64 =
+    match obligation {
+        CirObligationField(receiver, field, result) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "obligation field ")
+            let _ = cir_show_type_inline(out, receiver)
+            let _ = str_push_cstr(out, ".")
+            let _ = str_append(out, field)
+            let _ = str_push_cstr(out, ": ")
+            let _ = cir_show_type_inline(out, result)
+            str_push(out, 10)
+        }
+        CirObligationMethod(receiver, name, args, result, source) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "obligation method ")
+            let _ = cir_show_type_inline(out, receiver)
+            let _ = str_push_cstr(out, ".")
+            let _ = str_append(out, name)
+            let _ = str_push_cstr(out, "(")
+            let _ = cir_show_type_list_inline(out, args)
+            let _ = str_push_cstr(out, ") => ")
+            let _ = cir_show_type_inline(out, result)
+            let _ = str_push_cstr(out, " source=")
+            let _ = cir_show_behavior_source_inline(out, source)
+            str_push(out, 10)
+        }
+        CirObligationOperator(name, receiver, args, result, source) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "obligation operator ")
+            let _ = str_append(out, name)
+            let _ = str_push_cstr(out, " self=")
+            let _ = cir_show_type_inline(out, receiver)
+            let _ = str_push_cstr(out, " args=(")
+            let _ = cir_show_type_list_inline(out, args)
+            let _ = str_push_cstr(out, ") => ")
+            let _ = cir_show_type_inline(out, result)
+            let _ = str_push_cstr(out, " source=")
+            let _ = cir_show_behavior_source_inline(out, source)
+            str_push(out, 10)
+        }
+        CirObligationShapeDispatch(name, receiver, args, result, source) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "obligation shape-dispatch ")
+            let _ = str_append(out, name)
+            let _ = str_push_cstr(out, " self=")
+            let _ = cir_show_type_inline(out, receiver)
+            let _ = str_push_cstr(out, " args=(")
+            let _ = cir_show_type_list_inline(out, args)
+            let _ = str_push_cstr(out, ") => ")
+            let _ = cir_show_type_inline(out, result)
+            let _ = str_push_cstr(out, " source=")
+            let _ = cir_show_behavior_source_inline(out, source)
+            str_push(out, 10)
+        }
+        CirObligationDynAdapter(from_ty, to_ty) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "obligation dyn-adapter ")
+            let _ = cir_show_type_inline(out, from_ty)
+            let _ = str_push_cstr(out, " => ")
+            let _ = cir_show_type_inline(out, to_ty)
+            str_push(out, 10)
+        }
+        CirObligationContinuationCapability(ty, kind) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "obligation continuation-capability ")
+            let _ = cir_show_type_inline(out, ty)
+            let _ = str_push_cstr(out, " ")
+            let _ = match kind {
+                CirContinuationLinear => str_push_cstr(out, "linear")
+                CirContinuationMultiResume => str_push_cstr(out, "multi")
+            }
+            str_push(out, 10)
+        }
+    }
+
+def cir_show_obligation_list(out: Str, depth: i64, obligations: CirObligationList): i64 =
+    match obligations {
+        CirObligationEnd => cir_show_line(out, depth, "obligations-end")
+        CirObligationCons(head, tail) => {
+            let _ = cir_show_obligation(out, depth, head)
+            cir_show_obligation_list(out, depth, tail)
+        }
+    }
+
+def cir_show_subst(out: Str, depth: i64, subst: CirTypeSubst): i64 = {
+    let _ = cir_show_indent(out, depth)
+    let _ = str_push_cstr(out, "subst ")
+    let _ = cir_show_tyvar_id(out, subst.var)
+    let _ = str_push_cstr(out, " := ")
+    let _ = cir_show_type_inline(out, subst.ty)
+    str_push(out, 10)
+}
+
+def cir_show_subst_list(out: Str, depth: i64, substs: CirTypeSubstList): i64 =
+    match substs {
+        CirTypeSubstEnd => cir_show_line(out, depth, "substs-end")
+        CirTypeSubstCons(head, tail) => {
+            let _ = cir_show_subst(out, depth, head)
+            cir_show_subst_list(out, depth, tail)
+        }
     }
 
 def cir_show_control_boundary(out: Str, depth: i64, boundary: CirControlBoundary): i64 =
