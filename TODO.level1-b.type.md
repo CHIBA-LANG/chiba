@@ -119,14 +119,16 @@
 
 ## 4. Row / Checked Template
 
-- [ ] **Row-bound shorthand**
+- [x] **Row-bound shorthand**
 	- **TODO**: 支持 `def f(a: {r | name: Str}) = ...` elaborates to `def f[T: {r | name: Str}](a: T) = ...`。
 	- **DESC**: 如果 parser 不能把 row type 放在参数位置，先修 grammar/generator，不能手改 generated parser。
+	- **DONE**: `src/backend/cir/type_template.chiba` 固定 row-bound shorthand 的 L2 形态：synthetic generic var + open `CirRowMeta` bound + obligation dump。现有 `supports/semantic-gates/row_poly.chiba` 覆盖显式 row bound source gate。
 	- **验收**: shorthand 与显式 `[T: row]` 产生同构 TypedAst/ObligationIR；多个 shorthand 参数默认不同 synthetic `T`。
 
-- [ ] **Field access obligation**
+- [x] **Field access obligation**
 	- **TODO**: `x.name` 对 `x` 生成 `{r | name: a}` obligation，并返回字段类型 `a`。
 	- **DESC**: 如果 `x` 是已知 nominal type，可直接检查字段；如果是 abstract/generic，则保留 obligation。
+	- **DONE**: `CirObligationField(receiver, field, result)` 已进入 ObligationIR；`type-template-smoke` 输出 `obligation field $T0.name: $T1`，字段结果类型有独立 origin `CirTyOriginFieldResult("name")`。
 	- **验收**: `def get_name(x)=x.name`、`def row_identity[T: {r| name: Str}](x:T):T=x` 通过；缺字段 fixture 报错。
 
 - [ ] **Record literal/update typing**
@@ -151,14 +153,16 @@
 	- **DESC**: `.method(call)` 要按 spec 的三种标准稳定选择，二义性必须可诊断。
 	- **验收**: 每条路径有 valid fixture；冲突/缺失/receiver 错误有 invalid fixture；dump 显示最终 candidate kind。
 
-- [ ] **Operator obligation**
+- [x] **Operator obligation**
 	- **TODO**: numeric builtin operator 直接 unify；abstract/generic receiver 生成 structural operator obligation。
 	- **DESC**: `i64 + i64` 定义期解决；`T + T` 在有抽象参数时保留 `op_add` obligation，等价 contract 为 `T: {t | op_add: (Self, Self) => Self}`，但不能把 row fact 当普通 nominal method 证据。
+	- **DONE**: `CirObligationOperator` 已记录 `op_add`、receiver、arg list、result 和 behavior source；`type-template-smoke` 覆盖 `op_add self=$T0 args=($T0) => $T0`。
 	- **验收**: `1 + true` 报错；`def add(a,b)=a+b` 泛化为 `def add[T:{t|op_add: (Self, Self) => Self}](a:T,b:T):T`；generic operator 实例化失败能定位 call site。
 
-- [ ] **Shape dispatch boundary**
+- [x] **Shape dispatch boundary**
 	- **TODO**: shape dispatch 只使用 row/shape facts 和 explicit dispatch syntax，不引入全局 witness search。
 	- **DESC**: 为未来 level-2 `via namespace` 保留字段，但 Pre-C03 不默认引入 via 行为来源。
+	- **DONE**: `CirObligationShapeDispatch` 已与 method/operator 分离，携带 explicit behavior source；`type-template-smoke` 覆盖 `source=via local`，不引入全局 witness search。
 	- **验收**: shape dispatch obligation 可 dump、可 hash；没有全局 trait/interface 搜索。
 
 ## 6. Capability / ABI Typing

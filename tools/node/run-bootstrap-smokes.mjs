@@ -133,7 +133,7 @@ const LEVEL1C_CASES = [
   {
     name: "level1c help",
     args: ["--help"],
-    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-generalize-smoke type-kind-smoke type-nominal-smoke type-row-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
+    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-generalize-smoke type-kind-smoke type-nominal-smoke type-row-smoke type-template-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
   },
   {
     name: "level1c parse grammar 01",
@@ -235,6 +235,21 @@ const LEVEL1C_CASES = [
       "type nominal#2 b.ns::User[]",
       "same-row-shape 1",
       "nominal-unify-error nominal mismatch",
+      "0",
+    ],
+  },
+  {
+    name: "level1c type template smoke",
+    args: ["type-template-smoke", "chiba-level1-grammar-spec/01-test.chiba"],
+    expect: [
+      "L2TypeTemplateSmoke",
+      "row-bound-shorthand synthetic generic",
+      "tyvar-meta $T0 kind=value level=0 scope=1 visibility=synthetic rigidity=flexible origin=implicit-param value",
+      "row-meta row#20 closed=0 tail=$T2",
+      "obligation field $T0.name: $T1",
+      "obligation method $T0.len() => usize source=default-visible",
+      "obligation operator op_add self=$T0 args=($T0) => $T0 source=default-visible",
+      "obligation shape-dispatch dispatch self=$T0 args=() => $T1 source=via local",
       "0",
     ],
   },

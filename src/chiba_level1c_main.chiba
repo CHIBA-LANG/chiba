@@ -24,6 +24,7 @@ use backend.cir.type_generalize.*
 use backend.cir.type_kind.*
 use backend.cir.type_nominal.*
 use backend.cir.type_row.*
+use backend.cir.type_template.*
 use backend.cir.type_unify.*
 use backend.cir.validate_core.*
 use backend.wasm.wat.*
@@ -34,7 +35,7 @@ def argv_str(argv: i64, i: i64): Str = str_from_cptr(argv_cstr(argv, i))
 
 def level1c_usage(): i64 = {
     let _ = write_fd(1, "Usage: level1c <command> <file>\n", 32)
-    let _ = write_fd(1, "Commands: lex parse check check-project cir typed type-smoke type-generalize-smoke type-kind-smoke type-nominal-smoke type-row-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat\n", 197)
+    let _ = write_fd(1, "Commands: lex parse check check-project cir typed type-smoke type-generalize-smoke type-kind-smoke type-nominal-smoke type-row-smoke type-template-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat\n", 217)
     0
 }
 
@@ -296,6 +297,12 @@ def level1c_run_type_nominal_smoke(path: Str): i64 = {
     0
 }
 
+def level1c_run_type_template_smoke(path: Str): i64 = {
+    let rendered = cir_type_template_smoke()
+    let _ = str_write_to(rendered, 1)
+    0
+}
+
 def level1c_run_nanopass(path: Str): i64 =
     match level1c_parse_file(path) {
         OK(ast, _) => {
@@ -398,8 +405,11 @@ def level1c_dispatch_type_row_smoke(cmd: Str, path: Str): i64 =
 def level1c_dispatch_type_nominal_smoke(cmd: Str, path: Str): i64 =
     if streq(cmd, mk_str("type-nominal-smoke", 18)) != 0 { level1c_run_type_nominal_smoke(path) } else { level1c_dispatch_type_row_smoke(cmd, path) }
 
+def level1c_dispatch_type_template_smoke(cmd: Str, path: Str): i64 =
+    if streq(cmd, mk_str("type-template-smoke", 19)) != 0 { level1c_run_type_template_smoke(path) } else { level1c_dispatch_type_nominal_smoke(cmd, path) }
+
 def level1c_dispatch_typed(cmd: Str, path: Str): i64 =
-    if streq(cmd, mk_str("typed", 5)) != 0 { level1c_run_typed(path) } else { level1c_dispatch_type_nominal_smoke(cmd, path) }
+    if streq(cmd, mk_str("typed", 5)) != 0 { level1c_run_typed(path) } else { level1c_dispatch_type_template_smoke(cmd, path) }
 
 def level1c_dispatch_cir(cmd: Str, path: Str): i64 =
     if streq(cmd, mk_str("cir", 3)) != 0 { level1c_run_cir(path) } else { level1c_dispatch_typed(cmd, path) }

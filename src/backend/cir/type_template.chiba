@@ -1,0 +1,54 @@
+namespace backend.cir.type_template
+use metalstd.str.*
+use backend.cir.ir.*
+use backend.cir.show.*
+
+def cir_type_template_smoke(): Str = {
+    let out = str_new()
+    let receiver = CirTyVar(CirTyVarId { id: 0 })
+    let field_result = CirTyVar(CirTyVarId { id: 1 })
+    let row_meta = CirTyVarMeta {
+        id: CirTyVarId { id: 0 },
+        level: 0,
+        scope: 1,
+        origin: CirTyOriginImplicitParam(mk_str("value", 5)),
+        kind: CirTyKindValue,
+        visibility: CirTyVisibleSynthetic,
+        rigidity: CirTyFlexible
+    }
+    let field_meta = CirTyVarMeta {
+        id: CirTyVarId { id: 1 },
+        level: 0,
+        scope: 1,
+        origin: CirTyOriginFieldResult(mk_str("name", 4)),
+        kind: CirTyKindValue,
+        visibility: CirTyVisibleSynthetic,
+        rigidity: CirTyFlexible
+    }
+    let row_bound = CirRowMeta {
+        id: CirRowId { id: 20 },
+        closed: 0,
+        fields: CirRowFieldCons(CirRowField { field_name: mk_str("name", 4), ty: CirTyStr }, CirRowFieldEnd),
+        tail: CirTyVar(CirTyVarId { id: 2 })
+    }
+    let obligations = CirObligationCons(
+        CirObligationField(receiver, mk_str("name", 4), field_result),
+        CirObligationCons(
+            CirObligationMethod(receiver, mk_str("len", 3), CirTypeEnd, CirTyUsize, CirBehaviorDefaultVisible),
+            CirObligationCons(
+                CirObligationOperator(mk_str("op_add", 6), receiver, CirTypeCons(receiver, CirTypeEnd), receiver, CirBehaviorDefaultVisible),
+                CirObligationCons(
+                    CirObligationShapeDispatch(mk_str("dispatch", 8), receiver, CirTypeEnd, field_result, CirBehaviorExplicitVia(mk_str("local", 5))),
+                    CirObligationEnd
+                )
+            )
+        )
+    )
+    let _ = cir_show_line(out, 0, "L2TypeTemplateSmoke")
+    let _ = cir_show_line(out, 1, "row-bound-shorthand synthetic generic")
+    let _ = cir_show_tyvar_meta(out, 2, row_meta)
+    let _ = cir_show_tyvar_meta(out, 2, field_meta)
+    let _ = cir_show_row_meta(out, 2, row_bound)
+    let _ = cir_show_obligation_list(out, 1, obligations)
+    out
+}
