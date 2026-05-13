@@ -240,8 +240,9 @@
 	- **TODO**: grammar 支持 `def f(a: {r | ...})`；parser 只能通过 chibacc 生成，不能手改 generated parser。TypedAst 中 shorthand 与显式 `[T: {r|...}]` 产出同构 synthetic generic + row obligation。
 	- **DONE**: `src/frontend/chiba-level1.chibacc` 支持 `Type_Row(GenericRow(...))`，并通过 `chibacc.o` 重新生成 parser；新增 `supports/semantic-gates/row_shorthand*.chiba`，`semantic:gates` 和 `level1b:type-system` 覆盖 valid/invalid 与 typed golden。
 	- **验收**: 新 fixture parse/check/typed 通过；`type-template-smoke` 或 typed dump 能显示 synthetic row-bound；invalid missing field 有稳定诊断。
-- [ ] **Finish-B: rigid `[T]` binding in L2**
+- [x] **Finish-B: rigid `[T]` binding in L2**
 	- **TODO**: 显式 `[T]` 进入 L2 item generic env，参数/返回 `T` 解析为同一个 user-visible rigid tyvar；未声明类型名和重复 generic 在 L2 报错。
+	- **DONE**: `supports/semantic-gates/type_generics*.chiba` 覆盖 explicit generic typed dump、rigid return mismatch、duplicate generic parameter；`type-generic-body-smoke` 增加稳定 specialization key dump。
 	- **验收**: `def id[T](x:T):T=x` dump 使用同一 rigid `T`；`def bad[T,F](x:T):F=x` 定义期报错；重复 `[T,T]` 报错。
 - [ ] **Finish-C: source gate migration**
 	- **TODO**: 将 return/binary/let、row field、method/operator、capability/ABI、nominal duplicate、record duplicate/update 逐步迁入 L2 check 或 L2 side table；source gate 只保留 parser/generated AST 完整性检查。
@@ -267,7 +268,8 @@
 	- **DONE**: `cir_typed_module` 现在为省略参数标注生成稳定 synthetic `CirTyVar` 并写入 L2 env；`typed supports/semantic-gates/type_inference.chiba` golden 覆盖 unannotated params、return inference、explicit+implicit generic、annotated generic。
 - [x] `def f(a: {r | ...})` row shorthand 与显式 `[T: row]` 等价。
 	- **DONE**: shorthand 已进入 grammar/AST，typed pass 使用 synthetic `$T` 参数类型，field check 与显式 row bound 共享 `row constraint missing field id` diagnostic；`type-template-smoke` 固定同构 row-bound obligation 形态。
-- [ ] `[T]` 的语义、作用域、diagnostic、specialization identity 稳定。
+- [x] `[T]` 的语义、作用域、diagnostic、specialization identity 稳定。
+	- **DONE**: explicit generic typed dump、rigid mismatch diagnostic、duplicate generic diagnostic 和 specialization key dump 均进入 `level1b:type-system` golden。
 - [x] unification 有独立测试，不只通过 parser fixture 间接覆盖。
 	- **DONE**: `type-unify-smoke` 与 `level1b:type-system` unifier group 覆盖 var/fn/tuple/occurs/nominal mismatch/substitution dump。
 - [x] row canonicalization 可 dump、可 hash、字段顺序无关。

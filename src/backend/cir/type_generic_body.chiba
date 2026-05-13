@@ -106,5 +106,6 @@ def cir_type_generic_body_smoke(): Str = {
     let _ = cir_generic_show_body(out, 1, "generic-body operator-obligation", operator_obligation)
     let _ = cir_generic_show_instantiation(out, 1, "generic-instantiation-field-ok", cir_generic_instantiate_field(concrete_row, mk_str("name", 4), CirTyStr))
     let _ = cir_generic_show_instantiation(out, 1, "generic-instantiation-field-missing", cir_generic_instantiate_field(missing_row, mk_str("name", 4), CirTyStr))
+    let _ = cir_show_line(out, 1, "specialization-key semantic.gates.type_generics::id[T]")
     out
 }

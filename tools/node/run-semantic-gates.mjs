@@ -22,6 +22,9 @@ const GATE_FILES = [
   "refs_atomic_invalid.chiba",
   "type_inference.chiba",
   "type_inference_invalid.chiba",
+  "type_generics.chiba",
+  "type_generics_invalid_return.chiba",
+  "type_generics_invalid_duplicate.chiba",
   "type_unify.chiba",
   "type_unify_invalid_return.chiba",
   "type_unify_invalid_let.chiba",
@@ -392,6 +395,19 @@ function checkTypeInference() {
   pass(name);
 }
 
+function checkTypeGenerics() {
+  const name = "explicit generic gates";
+  const valid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_generics.chiba")]);
+  assert(name, valid.status === 0 && valid.stdout.includes("check ok"), valid.stdout || valid.stderr);
+  const badReturn = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_generics_invalid_return.chiba")]);
+  assert(name, badReturn.status === 0 && badReturn.stderr.includes("return type mismatch"), badReturn.stdout || badReturn.stderr);
+  const badDuplicate = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_generics_invalid_duplicate.chiba")]);
+  assert(name, badDuplicate.status === 0 && badDuplicate.stderr.includes("duplicate generic parameter"), badDuplicate.stdout || badDuplicate.stderr);
+  const typed = run("./target/debug/level1c.o", ["typed", path.join(ROOT, "type_generics.chiba")]);
+  assert(name, typed.status === 0 && typed.stdout.includes("type T"), typed.stdout || typed.stderr);
+  pass(name);
+}
+
 function checkTypeUnify() {
   const name = "type unification gates";
   const checkedValid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_unify.chiba")]);
@@ -457,6 +473,7 @@ checkNamespaceMerge();
 checkStringSlice();
 checkMemory();
 checkTypeInference();
+checkTypeGenerics();
 checkTypeUnify();
 checkExternAbi();
 checkNominalRowDataUnion();

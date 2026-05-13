@@ -249,6 +249,7 @@ const LEVEL1C_CASES = [
       "obligation field $T0.name: $T1",
       "generic-body operator-obligation checked $T2",
       "obligation operator op_add self=$T2 args=($T2) => $T2 source=default-visible",
+      "specialization-key semantic.gates.type_generics::id[T]",
       "generic-instantiation-field-ok ok",
       "generic-instantiation-field-missing err missing generic field obligation",
       "0",

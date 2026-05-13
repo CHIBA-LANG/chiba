@@ -1,0 +1,5 @@
+namespace semantic.gates.type_generics
+
+def id[T](value: T): T = value
+
+def left[T](left: T, right) = left

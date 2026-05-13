@@ -892,6 +892,21 @@ def ast_ambiguous_ref_none_error(expr: AST): CirTypedSemanticCheck =
     if ast_expr_is_ref_new_none(expr) != 0 { cir_typed_semantic_err("Ref.new(None) requires explicit Option[T] annotation") }
     else { CirTypedSemanticCheckOk }
 
+def ast_expr_direct_param_type_name(expr: AST, params: AST): Str =
+    match expr {
+        Expr_IdentTail(name, IdentTail_None) => ast_param_type_name(params, name)
+        Expr_Name(name) => ast_param_type_name(params, name)
+        _ => mk_str("", 0)
+    }
+
+def ast_generic_return_mismatch(ret: AST, params: AST, body: AST, generics: AST): CirTypedSemanticCheck = {
+    let ret_name = ast_type_path_name(ret)
+    let body_name = ast_expr_direct_param_type_name(body, params)
+    if ret_name.len != 0 && body_name.len != 0 && ast_generic_has_name(generics, ret_name) != 0 && ast_generic_has_name(generics, body_name) != 0 && streq(ret_name, body_name) == 0 {
+        cir_typed_semantic_err("return type mismatch")
+    } else { CirTypedSemanticCheckOk }
+}
+
 def ast_let_type_check(ty: AST, value: AST, params: AST): CirTypedSemanticCheck = {
     let expected = ast_type_simple_kind(ty)
     let actual = ast_expr_simple_kind(value, params)
@@ -1071,7 +1086,7 @@ def ast_item_check_def(defn: AST, all_items: AST, attrs: AST, file_is_metal: i64
             let ref_check = if ast_type_is_path(ret, mk_str("Ref", 3)) != 0 && ast_attrs_has_world_local(attrs) == 0 { cir_typed_semantic_err("top-level Ref requires #[world_local]") } else { CirTypedSemanticCheckOk }
             let metal_check = if file_is_metal != 0 { ast_params_check_metal_raw_i64(params) } else { CirTypedSemanticCheckOk }
             let generic_check = ast_generics_check(generics)
-            let signature_check = if ast_expr_is_extern(body) != 0 { ast_extern_check(body, params, ret) } else { cir_typed_semantic_merge(ast_params_check_inference(params, body, generics), cir_typed_semantic_merge(ast_return_check_inference(ret, params, body, generics), ast_return_check_type(ret, params, body))) }
+            let signature_check = if ast_expr_is_extern(body) != 0 { ast_extern_check(body, params, ret) } else { cir_typed_semantic_merge(ast_params_check_inference(params, body, generics), cir_typed_semantic_merge(ast_return_check_inference(ret, params, body, generics), cir_typed_semantic_merge(ast_generic_return_mismatch(ret, params, body, generics), ast_return_check_type(ret, params, body)))) }
             cir_typed_semantic_merge(ref_check, cir_typed_semantic_merge(metal_check, cir_typed_semantic_merge(generic_check, cir_typed_semantic_merge(signature_check, cir_typed_semantic_merge(ast_type_check_atomic(ret), cir_typed_semantic_merge(ast_params_check_types(params), ast_expr_check(body, all_items, params, generics, 0)))))))
         }
         DefItem2(name_ast, rest) => {
@@ -1082,7 +1097,7 @@ def ast_item_check_def(defn: AST, all_items: AST, attrs: AST, file_is_metal: i64
             let ref_check = if ast_type_is_path(ret, mk_str("Ref", 3)) != 0 && ast_attrs_has_world_local(attrs) == 0 { cir_typed_semantic_err("top-level Ref requires #[world_local]") } else { CirTypedSemanticCheckOk }
             let metal_check = if file_is_metal != 0 { ast_params_check_metal_raw_i64(params) } else { CirTypedSemanticCheckOk }
             let generic_check = ast_generics_check(generics)
-            let signature_check = if ast_expr_is_extern(body) != 0 { ast_extern_check(body, params, ret) } else { cir_typed_semantic_merge(ast_params_check_inference(params, body, generics), cir_typed_semantic_merge(ast_return_check_inference(ret, params, body, generics), ast_return_check_type(ret, params, body))) }
+            let signature_check = if ast_expr_is_extern(body) != 0 { ast_extern_check(body, params, ret) } else { cir_typed_semantic_merge(ast_params_check_inference(params, body, generics), cir_typed_semantic_merge(ast_return_check_inference(ret, params, body, generics), cir_typed_semantic_merge(ast_generic_return_mismatch(ret, params, body, generics), ast_return_check_type(ret, params, body)))) }
             cir_typed_semantic_merge(ref_check, cir_typed_semantic_merge(metal_check, cir_typed_semantic_merge(generic_check, cir_typed_semantic_merge(signature_check, cir_typed_semantic_merge(ast_type_check_atomic(ret), cir_typed_semantic_merge(ast_params_check_types(params), ast_expr_check(body, all_items, params, generics, 0)))))))
         }
         _ => CirTypedSemanticCheckOk

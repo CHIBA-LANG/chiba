@@ -113,6 +113,25 @@ const CASES = [
     expect: ["L2TypeGeneralizeSmoke", "type-scheme", "scheme-vars-end"],
   },
   {
+    group: "generics",
+    name: "explicit generic typed golden dump",
+    args: ["typed", "supports/semantic-gates/type_generics.chiba"],
+    sha256: "951f5445dd653b6a73ea5ad14e9db2a780ff0d8c02e1ab1adce88fe36a471eb9",
+    expect: ["L2Module", "id", "type T", "left", "type T"],
+  },
+  {
+    group: "generics",
+    name: "rigid return mismatch",
+    args: ["check", "supports/semantic-gates/type_generics_invalid_return.chiba"],
+    expect: ["return type mismatch"],
+  },
+  {
+    group: "generics",
+    name: "duplicate generic parameter",
+    args: ["check", "supports/semantic-gates/type_generics_invalid_duplicate.chiba"],
+    expect: ["duplicate generic parameter"],
+  },
+  {
     group: "row",
     name: "row unification golden dump",
     args: ["type-row-smoke", SPEC],
@@ -162,8 +181,8 @@ const CASES = [
     group: "checked-template",
     name: "generic body golden dump",
     args: ["type-generic-body-smoke", SPEC],
-    sha256: "bca893bc7cbb6ec97dbf0c74aeeab231c771ea9a2b78a213cfa79a8fe6cfe404",
-    expect: ["generic-body concrete-error", "generic-body field-obligation", "generic-instantiation-field-missing"],
+    sha256: "9e2e5e5e6949da468e72a37ba7250de742380c0b6aed0037d372ce2e6b392eb8",
+    expect: ["generic-body concrete-error", "generic-body field-obligation", "generic-instantiation-field-missing", "specialization-key semantic.gates.type_generics::id[T]"],
   },
   {
     group: "method-operator",
