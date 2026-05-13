@@ -143,14 +143,16 @@
 
 ## 5. Method / Operator / Type 关系
 
-- [ ] **Method index**
+- [x] **Method index**
 	- **TODO**: 建立 nominal receiver method index：`def Type.method(self, ...)` 按 `(nominal_id, method_name)` 注册。
 	- **DESC**: 默认 method resolution 基于 nominal identity，不把 receiver 降成 structural receiver shape。
+	- **DONE**: `src/backend/cir/type_method.chiba` 已实现 nominal receiver method index、lookup、duplicate detection；key 使用 namespace-qualified `CirNominalId + method_name`。
 	- **验收**: 同 shape 不同 nominal type 调用各自 method；重复 method 定义报错；receiver 非 nominal 报错。
 
-- [ ] **Method call 三路径**
+- [x] **Method call 三路径**
 	- **TODO**: 固定并实现三路径：field-callable、nominal receiver method、qualified callee。
 	- **DESC**: `.method(call)` 要按 spec 的三种标准稳定选择，二义性必须可诊断。
+	- **DONE**: `CirMethodRoute` 固定 field-callable、nominal-receiver、qualified-callee 三路径；`type-method-smoke` 和 `supports/semantic-gates/method_resolution.chiba` 覆盖三路径。
 	- **验收**: 每条路径有 valid fixture；冲突/缺失/receiver 错误有 invalid fixture；dump 显示最终 candidate kind。
 
 - [x] **Operator obligation**

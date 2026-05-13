@@ -1,0 +1,102 @@
+namespace backend.cir.type_method
+use metalstd.str.*
+use backend.cir.ir.*
+use backend.cir.show.*
+use backend.cir.type_unify.*
+
+data CirMethodRoute {
+    CirMethodRouteFieldCallable,
+    CirMethodRouteNominalReceiver,
+    CirMethodRouteQualifiedCallee
+}
+
+type CirMethodEntry {
+    receiver: CirNominalId
+    method_name: Str
+    ty: CirType
+}
+
+data CirMethodIndex {
+    CirMethodIndexCons(CirMethodEntry, CirMethodIndex),
+    CirMethodIndexEnd
+}
+
+data CirMethodIndexResult {
+    CirMethodIndexOk(CirMethodIndex),
+    CirMethodIndexErr(Str)
+}
+
+data CirMethodLookup {
+    CirMethodLookupFound(CirMethodEntry),
+    CirMethodLookupMissing
+}
+
+def cir_method_entry_eq(a: CirMethodEntry, b: CirMethodEntry): i64 =
+    if cir_nominal_id_eq(a.receiver, b.receiver) != 0 && streq(a.method_name, b.method_name) != 0 { 1 } else { 0 }
+
+def cir_method_lookup(index: CirMethodIndex, receiver: CirNominalId, method_name: Str): CirMethodLookup =
+    match index {
+        CirMethodIndexEnd => CirMethodLookupMissing
+        CirMethodIndexCons(head, tail) =>
+            if cir_nominal_id_eq(head.receiver, receiver) != 0 && streq(head.method_name, method_name) != 0 {
+                CirMethodLookupFound(head)
+            } else { cir_method_lookup(tail, receiver, method_name) }
+    }
+
+def cir_method_index_insert(index: CirMethodIndex, entry: CirMethodEntry): CirMethodIndexResult =
+    match cir_method_lookup(index, entry.receiver, entry.method_name) {
+        CirMethodLookupFound(_) => CirMethodIndexErr(mk_str("duplicate method definition", 27))
+        CirMethodLookupMissing => CirMethodIndexOk(CirMethodIndexCons(entry, index))
+    }
+
+def cir_show_method_route(out: Str, depth: i64, route: CirMethodRoute): i64 =
+    match route {
+        CirMethodRouteFieldCallable => cir_show_line(out, depth, "method-route field-callable")
+        CirMethodRouteNominalReceiver => cir_show_line(out, depth, "method-route nominal-receiver")
+        CirMethodRouteQualifiedCallee => cir_show_line(out, depth, "method-route qualified-callee")
+    }
+
+def cir_show_method_entry(out: Str, depth: i64, entry: CirMethodEntry): i64 = {
+    let _ = cir_show_indent(out, depth)
+    let _ = str_push_cstr(out, "method-entry ")
+    let _ = cir_show_nominal_id(out, entry.receiver)
+    let _ = str_push_cstr(out, ".")
+    let _ = str_append(out, entry.method_name)
+    let _ = str_push_cstr(out, " ")
+    let _ = cir_show_type_inline(out, entry.ty)
+    str_push(out, 10)
+}
+
+def cir_type_method_smoke(): Str = {
+    let out = str_new()
+    let widget = CirNominalId { id: 30, module_name: mk_str("semantic.gates.method", 21), local_name: mk_str("Widget", 6) }
+    let size_entry = CirMethodEntry { receiver: widget, method_name: mk_str("size", 4), ty: CirTyFn(CirTypeCons(CirTyNominal(widget, CirTypeEnd), CirTypeEnd), CirTyI64) }
+    let origin_entry = CirMethodEntry { receiver: widget, method_name: mk_str("origin", 6), ty: CirTyFn(CirTypeEnd, CirTyI64) }
+    let index0 = CirMethodIndexEnd
+    let index1 = match cir_method_index_insert(index0, size_entry) {
+        CirMethodIndexOk(next) => next
+        CirMethodIndexErr(_) => index0
+    }
+    let index2 = match cir_method_index_insert(index1, origin_entry) {
+        CirMethodIndexOk(next) => next
+        CirMethodIndexErr(_) => index1
+    }
+    let _ = cir_show_line(out, 0, "L2TypeMethodSmoke")
+    let _ = cir_show_method_route(out, 1, CirMethodRouteFieldCallable)
+    let _ = cir_show_method_route(out, 1, CirMethodRouteNominalReceiver)
+    let _ = cir_show_method_route(out, 1, CirMethodRouteQualifiedCallee)
+    let _ = match cir_method_lookup(index2, widget, mk_str("size", 4)) {
+        CirMethodLookupFound(entry) => cir_show_method_entry(out, 1, entry)
+        CirMethodLookupMissing => cir_show_line(out, 1, "method-lookup-missing")
+    }
+    let _ = match cir_method_index_insert(index2, size_entry) {
+        CirMethodIndexOk(_) => cir_show_line(out, 1, "method-duplicate-unexpected-ok")
+        CirMethodIndexErr(message) => {
+            let _ = cir_show_indent(out, 1)
+            let _ = str_push_cstr(out, "method-duplicate-error ")
+            let _ = str_append(out, message)
+            str_push(out, 10)
+        }
+    }
+    out
+}

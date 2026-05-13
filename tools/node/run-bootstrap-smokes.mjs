@@ -133,7 +133,7 @@ const LEVEL1C_CASES = [
   {
     name: "level1c help",
     args: ["--help"],
-    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-generalize-smoke type-kind-smoke type-nominal-smoke type-row-smoke type-template-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
+    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-generalize-smoke type-kind-smoke type-method-smoke type-nominal-smoke type-row-smoke type-template-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
   },
   {
     name: "level1c parse grammar 01",
@@ -235,6 +235,19 @@ const LEVEL1C_CASES = [
       "type nominal#2 b.ns::User[]",
       "same-row-shape 1",
       "nominal-unify-error nominal mismatch",
+      "0",
+    ],
+  },
+  {
+    name: "level1c type method smoke",
+    args: ["type-method-smoke", "chiba-level1-grammar-spec/01-test.chiba"],
+    expect: [
+      "L2TypeMethodSmoke",
+      "method-route field-callable",
+      "method-route nominal-receiver",
+      "method-route qualified-callee",
+      "method-entry nominal#30 semantic.gates.method::Widget.size (nominal#30 semantic.gates.method::Widget[]) => i64",
+      "method-duplicate-error duplicate method definition",
       "0",
     ],
   },
