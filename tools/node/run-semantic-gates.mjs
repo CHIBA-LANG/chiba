@@ -375,7 +375,7 @@ function checkTypeInference() {
   const checkedValid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_inference.chiba")]);
   assert(name, checkedValid.status === 0 && checkedValid.stdout.includes("check ok"), checkedValid.stdout || checkedValid.stderr);
   const checkedInvalid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "type_inference_invalid.chiba")]);
-  assert(name, checkedInvalid.status === 0 && checkedInvalid.stderr.includes("generic parameter type requires annotation"), checkedInvalid.stdout || checkedInvalid.stderr);
+  assert(name, checkedInvalid.status === 0 && checkedInvalid.stderr.includes("Ref.new(None) requires explicit Option[T] annotation"), checkedInvalid.stdout || checkedInvalid.stderr);
   pass(name);
 }
 

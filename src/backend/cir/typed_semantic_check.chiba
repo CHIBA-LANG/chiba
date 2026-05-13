@@ -617,7 +617,7 @@ def ast_stmt_check(stmt: AST, all_items: AST, params: AST, generics: AST, unsafe
         Stmt_Expr(value) => ast_expr_check(value, all_items, params, generics, unsafe_depth)
         Stmt_Return(value) => ast_expr_check(value, all_items, params, generics, unsafe_depth)
         Stmt_Assign(lhs, rhs) => cir_typed_semantic_merge(ast_expr_check_assign(lhs, rhs, params), cir_typed_semantic_merge(ast_expr_check(lhs, all_items, params, generics, unsafe_depth), ast_expr_check(rhs, all_items, params, generics, unsafe_depth)))
-        Stmt_Let(_, value) => ast_expr_check(value, all_items, params, generics, unsafe_depth)
+        Stmt_Let(_, value) => cir_typed_semantic_merge(ast_ambiguous_ref_none_error(value), ast_expr_check(value, all_items, params, generics, unsafe_depth))
         Stmt_LetPattern(_, value) => ast_expr_check(value, all_items, params, generics, unsafe_depth)
         Stmt_LetPatternTyped(_, ty, value) => cir_typed_semantic_merge(ast_let_type_check(ty, value, params), cir_typed_semantic_merge(ast_type_check_atomic(ty), ast_expr_check(value, all_items, params, generics, unsafe_depth)))
         Stmt_For(_, cond, body) => cir_typed_semantic_merge(ast_expr_check(cond, all_items, params, generics, unsafe_depth), ast_expr_check(body, all_items, params, generics, unsafe_depth))
@@ -810,6 +810,49 @@ def ast_stmt_list_expr_tail_kind(stmts: AST, params: AST): i64 =
         _ => 4
     }
 
+def ast_expr_is_none(expr: AST): i64 =
+    match expr {
+        Expr_IdentTail(name, IdentTail_None) => streq(name, mk_str("None", 4))
+        Expr_Name(name) => streq(name, mk_str("None", 4))
+        _ => 0
+    }
+
+def ast_args_is_single_none(args: AST): i64 =
+    match args {
+        Arg_Cons(head, tail) =>
+            match tail {
+                Arg_End => ast_expr_is_none(head)
+                _ => 0
+            }
+        ExprList_Cons(head, tail) =>
+            match tail {
+                ExprList_End => ast_expr_is_none(head)
+                _ => 0
+            }
+        _ => 0
+    }
+
+def ast_expr_is_ref_new_none(expr: AST): i64 =
+    match expr {
+        Expr_Call(callee, args) =>
+            match callee {
+                Expr_Field(receiver, field) =>
+                    match receiver {
+                        Expr_IdentTail(name, IdentTail_None) =>
+                            if streq(name, mk_str("Ref", 3)) != 0 && streq(field, mk_str("new", 3)) != 0 { ast_args_is_single_none(args) } else { 0 }
+                        Expr_Name(name) =>
+                            if streq(name, mk_str("Ref", 3)) != 0 && streq(field, mk_str("new", 3)) != 0 { ast_args_is_single_none(args) } else { 0 }
+                        _ => 0
+                    }
+                _ => 0
+            }
+        _ => 0
+    }
+
+def ast_ambiguous_ref_none_error(expr: AST): CirTypedSemanticCheck =
+    if ast_expr_is_ref_new_none(expr) != 0 { cir_typed_semantic_err("Ref.new(None) requires explicit Option[T] annotation") }
+    else { CirTypedSemanticCheckOk }
+
 def ast_let_type_check(ty: AST, value: AST, params: AST): CirTypedSemanticCheck = {
     let expected = ast_type_simple_kind(ty)
     let actual = ast_expr_simple_kind(value, params)
@@ -846,9 +889,7 @@ def ast_params_check_inference(params: AST, body: AST, generics: AST): CirTypedS
             match head {
                 Param(name, ty) => {
                     let here = if ast_type_is_missing(ty) != 0 {
-                        if ast_generics_nonempty(generics) != 0 { cir_typed_semantic_err("generic parameter type requires annotation") }
-                        else if ast_expr_references_name(body, name) == 0 { cir_typed_semantic_err("parameter type could not be inferred") }
-                        else { CirTypedSemanticCheckOk }
+                        CirTypedSemanticCheckOk
                     } else { CirTypedSemanticCheckOk }
                     cir_typed_semantic_merge(here, ast_params_check_inference(tail, body, generics))
                 }
@@ -859,9 +900,9 @@ def ast_params_check_inference(params: AST, body: AST, generics: AST): CirTypedS
 
 def ast_return_check_inference(ret: AST, params: AST, body: AST, generics: AST): CirTypedSemanticCheck =
     if ast_type_is_missing(ret) == 0 { CirTypedSemanticCheckOk }
-    else if ast_generics_nonempty(generics) != 0 { cir_typed_semantic_err("generic return type requires annotation") }
+    else if ast_expr_is_ref_new_none(body) != 0 { cir_typed_semantic_err("Ref.new(None) requires explicit Option[T] annotation") }
     else if ast_expr_infers_known(body, params) != 0 { CirTypedSemanticCheckOk }
-    else { cir_typed_semantic_err("function return type could not be inferred") }
+    else { CirTypedSemanticCheckOk }
 
 def ast_return_check_type(ret: AST, params: AST, body: AST): CirTypedSemanticCheck = {
     let expected = ast_type_simple_kind(ret)

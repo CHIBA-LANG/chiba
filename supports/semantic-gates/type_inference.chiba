@@ -6,6 +6,12 @@ def infer_params(a, b) = a + b
 
 def infer_identity(value) = value
 
+def infer_unused(value) = 1
+
+def explicit_and_implicit[T](left, right: T) = left
+
+def generic_return_from_param[T](value) = value
+
 def infer_local(): i64 = {
     let value = 41
     value + 1

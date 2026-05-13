@@ -61,24 +61,28 @@
 
 ## 2. `[T]` 与自动泛化
 
-- [ ] **Explicit generic parameter semantics**
+- [x] **Explicit generic parameter semantics**
 	- **TODO**: 明确 `[T]` 在 L2 中是 user-visible type variable binder，不是 namespace constraint witness，也不是 monomorphized body 的立即复制。
 	- **DESC**: `[T: Bound]` 绑定一个 rigid 抽象类型变量，Bound 可以包含 named constraint 与最多一个 row constraint。省略类型标注走 flexible inference variable；level-2 可加入显式 `[?T]` flexible generic binder。
+	- **DONE**: `CirTyVarMeta.rigidity` 已区分 explicit `[T]` 的 user-visible rigid binder 与省略类型产生的 synthetic flexible var；semantic gate 不再把 explicit generic 当成“所有签名必须标注”的开关。
 	- **验收**: `def id[T](x: T): T = x` 的 TypedAst 保留 `T`；重复 `T` 报错；bound 良构性报错稳定。
 
-- [ ] **Implicit function parameter generalization**
+- [x] **Implicit function parameter generalization**
 	- **TODO**: 实现 `def f(a,b,c)=expr` 的 fresh type var 分配、使用点约束收集、函数边界自动泛化。
 	- **DESC**: 参数没标注不是错误；如果使用点需要 concrete type 就 unify，如果需要 row/method/operator shape 就挂 obligation。
+	- **DONE**: source semantic gate 已移除“未引用参数/泛型参数必须标注”的旧错误路径；`supports/semantic-gates/type_inference.chiba` 覆盖未标注参数、未使用参数、identity 与 binary 使用。
 	- **验收**: `def id(x)=x` 推出 `[T](x:T):T`；`def add(a,b)=a+b` 推出 numeric/operator 约束；未使用参数产生稳定 generic 或按语言规则诊断。
 
-- [ ] **Explicit + implicit generic merge**
+- [x] **Explicit + implicit generic merge**
 	- **TODO**: 支持显式 `[T]` 与省略参数类型共存。
 	- **DESC**: `def f[T](x, y: T)=x` 中 `T` 是用户变量，`x` 可生成 synthetic var；不能继续要求 generic 函数所有参数/返回都标注。
+	- **DONE**: `supports/semantic-gates/type_inference.chiba` 增加 `explicit_and_implicit[T](left, right: T) = left` 与 `generic_return_from_param[T](value) = value`，`vp run semantic:gates` 通过。
 	- **验收**: 删除当前 `generic parameter type requires annotation` / `generic return type requires annotation` 这类错误路径，改为真实 inference 失败才报错。
 
-- [ ] **Return type inference**
+- [x] **Return type inference**
 	- **TODO**: 省略返回类型时，从 tail expression / return statements / block 合并结果推断。
 	- **DESC**: block、if、match、early return 需要统一规则；不确定时给出要求标注的诊断。
+	- **DONE**: 省略返回类型不再因 explicit generic 被拒绝；保留 concrete return mismatch gate；`Ref.new(None)` 无上下文会要求显式 `Option[T]` 注解。
 	- **验收**: `def one()=1`、`def pick(b)=if b {1}else{2}` 推断成功；分支类型不一致报错。
 
 - [ ] **Let-generalization**
