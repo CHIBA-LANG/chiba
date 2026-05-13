@@ -139,6 +139,19 @@ const CASES = [
     expect: ["duplicate record field"],
   },
   {
+    group: "row",
+    name: "row shorthand typed golden dump",
+    args: ["typed", "supports/semantic-gates/row_shorthand.chiba"],
+    sha256: "b6dbeaef115f9a098484aeabe33eb0d17cd99d92469dd2dc5cc1b4a78cee9cc5",
+    expect: ["L2Module", "get_name", "type $T1", "get_age", "type $T3", "row_shorthand_identity", "type $T5"],
+  },
+  {
+    group: "row",
+    name: "row shorthand invalid",
+    args: ["check", "supports/semantic-gates/row_shorthand_invalid.chiba"],
+    expect: ["row constraint missing field id"],
+  },
+  {
     group: "checked-template",
     name: "template obligation golden dump",
     args: ["type-template-smoke", SPEC],

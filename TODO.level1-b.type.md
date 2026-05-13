@@ -236,11 +236,37 @@
 
 - [ ] `level1c.o check` 不再以 source-level pattern gate 作为主要类型系统实现。
 	- **PROGRESS**: `src/backend/cir/type_l2_check.chiba` 已作为 primary L2 checker 接入 `cir_typed_semantic_check`，先检查 `L2Module/L2OpTyped` 中可判断的 return/binary mismatch；source gate 暂时只补尚未 lowered 的 record/capability/extern/nominal 等规则。
+- [x] **Finish-A: row shorthand parser + TypedAst**
+	- **TODO**: grammar 支持 `def f(a: {r | ...})`；parser 只能通过 chibacc 生成，不能手改 generated parser。TypedAst 中 shorthand 与显式 `[T: {r|...}]` 产出同构 synthetic generic + row obligation。
+	- **DONE**: `src/frontend/chiba-level1.chibacc` 支持 `Type_Row(GenericRow(...))`，并通过 `chibacc.o` 重新生成 parser；新增 `supports/semantic-gates/row_shorthand*.chiba`，`semantic:gates` 和 `level1b:type-system` 覆盖 valid/invalid 与 typed golden。
+	- **验收**: 新 fixture parse/check/typed 通过；`type-template-smoke` 或 typed dump 能显示 synthetic row-bound；invalid missing field 有稳定诊断。
+- [ ] **Finish-B: rigid `[T]` binding in L2**
+	- **TODO**: 显式 `[T]` 进入 L2 item generic env，参数/返回 `T` 解析为同一个 user-visible rigid tyvar；未声明类型名和重复 generic 在 L2 报错。
+	- **验收**: `def id[T](x:T):T=x` dump 使用同一 rigid `T`；`def bad[T,F](x:T):F=x` 定义期报错；重复 `[T,T]` 报错。
+- [ ] **Finish-C: source gate migration**
+	- **TODO**: 将 return/binary/let、row field、method/operator、capability/ABI、nominal duplicate、record duplicate/update 逐步迁入 L2 check 或 L2 side table；source gate 只保留 parser/generated AST 完整性检查。
+	- **验收**: `cir_typed_semantic_check` 不再调用主要 `ast_*_check` 作为成功路径；每类规则有 L2 smoke/golden 和 source fixture 对拍。
+- [ ] **Finish-D: ConstraintSet solver integration**
+	- **TODO**: `cir_typed_module` 不只写 node type，还要输出/可 dump `ConstraintSet + ObligationIR`，并由 solver 统一处理 equality、row、capability、ABI。
+	- **验收**: `typed` 或新 `typed-facts` 命令能 dump TypedAst、ConstraintSet、ObligationIR；golden hash 稳定。
+- [ ] **Finish-E: checked template instantiation gate**
+	- **TODO**: generic body definition-time check 与 instantiation-time obligation 兑现接入真实 call site，不只 smoke。
+	- **验收**: 成功 specialization、定义期错误、实例化期 missing field/method/operator error 三组 fixture 全由 `level1c.o check` 判定。
+- [ ] **Finish-F: method/operator namespace resolution**
+	- **TODO**: method index 使用 namespace-qualified nominal id；`.method(call)` 三路径和 operator overload 进入 L2 resolution，不依赖 source pattern。
+	- **验收**: 两个 namespace 同名 nominal/method 不冲突；via/qualified path 行为可 dump；operator overload obligation/resolve 有 valid/invalid fixture。
+- [ ] **Finish-G: capability/unsafe/ABI fully typed**
+	- **TODO**: `Ref`/`UnsafeRef`/`Ptr`/`Atomic`、unsafe depth、Metal raw pointer audit、extern ABI signature 都进入 L2 facts/checker。
+	- **验收**: `vp run level1b:capability` 与 `level1b:type-system` 使用同一组 L2 diagnostics；source scanner 不再是唯一保护线。
+- [ ] **Finish-H: final typecheck audit**
+	- **TODO**: 跑 bootstrap、semantic gates、type-system、capability、all-wat；记录 seed hash、关键 dump hash；删除或标注所有临时 source fallback。
+	- **验收**: Pre-C03 可在 `TODO.md` 打勾。
 - [x] L2 pass 能输出稳定 `TypedAst + ConstraintSet + ObligationIR`。
 	- **DONE**: `vp run level1b:type-system` 对 `typed type_inference`、`type-smoke`、template/generic-body/method/capability/row/record dump 做 sha256 golden。
 - [x] `def f(a,b,c)=expr` 自动泛化符合 spec。
 	- **DONE**: `cir_typed_module` 现在为省略参数标注生成稳定 synthetic `CirTyVar` 并写入 L2 env；`typed supports/semantic-gates/type_inference.chiba` golden 覆盖 unannotated params、return inference、explicit+implicit generic、annotated generic。
-- [ ] `def f(a: {r | ...})` row shorthand 与显式 `[T: row]` 等价。
+- [x] `def f(a: {r | ...})` row shorthand 与显式 `[T: row]` 等价。
+	- **DONE**: shorthand 已进入 grammar/AST，typed pass 使用 synthetic `$T` 参数类型，field check 与显式 row bound 共享 `row constraint missing field id` diagnostic；`type-template-smoke` 固定同构 row-bound obligation 形态。
 - [ ] `[T]` 的语义、作用域、diagnostic、specialization identity 稳定。
 - [x] unification 有独立测试，不只通过 parser fixture 间接覆盖。
 	- **DONE**: `type-unify-smoke` 与 `level1b:type-system` unifier group 覆盖 var/fn/tuple/occurs/nominal mismatch/substitution dump。

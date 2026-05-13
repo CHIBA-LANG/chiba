@@ -269,6 +269,7 @@ def astwriteat(out: Str, ast: AST, depth: i64): i64 =
         Param_Cons(head, tail) => astnode2(out, depth, "Param_Cons", head, tail)
         Param_End => astleaf(out, "Param_End")
         Type_Path(name, tail) => aststr_ast(out, depth, "Type_Path", name, tail)
+        Type_Row(row) => astnode1(out, depth, "Type_Row", row)
         Type_Dyn(contract) => astnode1(out, depth, "Type_Dyn", contract)
         Type_Tail_Dot(rest) => astnode1(out, depth, "Type_Tail_Dot", rest)
         Type_Tail_Generic(args) => astnode1(out, depth, "Type_Tail_Generic", args)

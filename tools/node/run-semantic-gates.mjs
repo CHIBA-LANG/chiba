@@ -16,6 +16,8 @@ const GATE_FILES = [
   "row_shape_unify_invalid_update.chiba",
   "row_shape_unify_invalid_generic.chiba",
   "row_shape_unify_invalid_generic_name.chiba",
+  "row_shorthand.chiba",
+  "row_shorthand_invalid.chiba",
   "refs_atomic_valid.chiba",
   "refs_atomic_invalid.chiba",
   "type_inference.chiba",
@@ -216,6 +218,17 @@ function checkRowShapeUnify() {
   assert(name, badGeneric.status === 0 && badGeneric.stderr.includes("duplicate row field"), badGeneric.stdout || badGeneric.stderr);
   const badGenericName = run("./target/debug/level1c.o", ["check", path.join(ROOT, "row_shape_unify_invalid_generic_name.chiba")]);
   assert(name, badGenericName.status === 0 && badGenericName.stderr.includes("duplicate generic parameter"), badGenericName.stdout || badGenericName.stderr);
+  pass(name);
+}
+
+function checkRowShorthand() {
+  const name = "row shorthand gates";
+  const valid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "row_shorthand.chiba")]);
+  assert(name, valid.status === 0 && valid.stdout.includes("check ok"), valid.stdout || valid.stderr);
+  const invalid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "row_shorthand_invalid.chiba")]);
+  assert(name, invalid.status === 0 && invalid.stderr.includes("row constraint missing field id"), invalid.stdout || invalid.stderr);
+  const typed = run("./target/debug/level1c.o", ["typed", path.join(ROOT, "row_shorthand.chiba")]);
+  assert(name, typed.status === 0 && typed.stdout.includes("type $T"), typed.stdout || typed.stderr);
   pass(name);
 }
 
@@ -439,6 +452,7 @@ checkMethodResolutionCompilerGate();
 checkRowPoly();
 checkRowPolyCompilerGate();
 checkRowShapeUnify();
+checkRowShorthand();
 checkNamespaceMerge();
 checkStringSlice();
 checkMemory();

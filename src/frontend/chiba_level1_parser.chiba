@@ -79,6 +79,7 @@ use lexer.chiba_level1.*
         Param_End,
 
         Type_Path(Str, AST),
+        Type_Row(AST),
         Type_Dyn(AST),
         Type_Tail_Dot(AST),
         Type_Tail_Generic(AST),
@@ -6180,9 +6181,11 @@ def parse_rule_68_alt_0_step_2(tokens: Vec, pos: i64, recovered: i64, __v0: i64,
     ) as i64, pos, recovered)
 }
 
-def parse_rule_68_alt_1_item_0(tokens: Vec, pos: i64): MatchResult = match_token_KwDyn(tokens, pos)
+def parse_rule_68_alt_1_item_0(tokens: Vec, pos: i64): MatchResult = match_token_LBrace(tokens, pos)
 
-def parse_rule_68_alt_1_item_1(tokens: Vec, pos: i64): MatchResult = parse_rule_69(tokens, pos)
+def parse_rule_68_alt_1_item_1(tokens: Vec, pos: i64): MatchResult = parse_rule_59(tokens, pos)
+
+def parse_rule_68_alt_1_item_2(tokens: Vec, pos: i64): MatchResult = match_token_RBrace(tokens, pos)
 
 def parse_rule_68_alt_1(tokens: Vec, pos: i64): MatchResult = parse_rule_68_alt_1_step_0(tokens, pos, 0)
 
@@ -6195,18 +6198,33 @@ def parse_rule_68_alt_1_step_0(tokens: Vec, pos: i64, recovered: i64): MatchResu
 def parse_rule_68_alt_1_step_1(tokens: Vec, pos: i64, recovered: i64, __v0: i64): MatchResult =
     match parse_rule_68_alt_1_item_1(tokens, pos) {
         MatchOK(__v1, pos1, recovered1) => parse_rule_68_alt_1_step_2(tokens, pos1, recover_or(recovered, recovered1), __v0, __v1)
+        MatchFail(fail_pos) => {
+            let recover_pos = find_token_position(tokens, fail_pos, mk_str("RBrace", 6))
+            if recover_pos >= 0 {
+                match parse_rule_68_alt_1_step_2(tokens, recover_pos, recover_or(recovered, 1), __v0, 0) {
+                    MatchOK(ast, pos2, recovered2) => MatchOK(ast, pos2, recovered2)
+                    MatchFail(fail_pos1) => MatchFail(fail_pos1)
+                }
+            }
+            else { MatchFail(fail_pos) }
+        }
+    }
+
+def parse_rule_68_alt_1_step_2(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64): MatchResult =
+    match parse_rule_68_alt_1_item_2(tokens, pos) {
+        MatchOK(__v2, pos1, recovered1) => parse_rule_68_alt_1_step_3(tokens, pos1, recover_or(recovered, recovered1), __v0, __v1, __v2)
         MatchFail(fail_pos) => MatchFail(fail_pos)
     }
 
-def parse_rule_68_alt_1_step_2(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64): MatchResult = {
-    let contract: AST = __v1 as AST
-    MatchOK((Type_Dyn(contract)
+def parse_rule_68_alt_1_step_3(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64, __v2: i64): MatchResult = {
+    let row: AST = __v1 as AST
+    MatchOK((Type_Row(row)
     ) as i64, pos, recovered)
 }
 
-def parse_rule_68_alt_2_item_0(tokens: Vec, pos: i64): MatchResult = match_token_LParen(tokens, pos)
+def parse_rule_68_alt_2_item_0(tokens: Vec, pos: i64): MatchResult = match_token_KwDyn(tokens, pos)
 
-def parse_rule_68_alt_2_item_1(tokens: Vec, pos: i64): MatchResult = match_token_RParen(tokens, pos)
+def parse_rule_68_alt_2_item_1(tokens: Vec, pos: i64): MatchResult = parse_rule_69(tokens, pos)
 
 def parse_rule_68_alt_2(tokens: Vec, pos: i64): MatchResult = parse_rule_68_alt_2_step_0(tokens, pos, 0)
 
@@ -6223,11 +6241,14 @@ def parse_rule_68_alt_2_step_1(tokens: Vec, pos: i64, recovered: i64, __v0: i64)
     }
 
 def parse_rule_68_alt_2_step_2(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64): MatchResult = {
-    MatchOK((Type_Unit
+    let contract: AST = __v1 as AST
+    MatchOK((Type_Dyn(contract)
     ) as i64, pos, recovered)
 }
 
-def parse_rule_68_alt_3_item_0(tokens: Vec, pos: i64): MatchResult = match_token_Atom(tokens, pos)
+def parse_rule_68_alt_3_item_0(tokens: Vec, pos: i64): MatchResult = match_token_LParen(tokens, pos)
+
+def parse_rule_68_alt_3_item_1(tokens: Vec, pos: i64): MatchResult = match_token_RParen(tokens, pos)
 
 def parse_rule_68_alt_3(tokens: Vec, pos: i64): MatchResult = parse_rule_68_alt_3_step_0(tokens, pos, 0)
 
@@ -6237,7 +6258,28 @@ def parse_rule_68_alt_3_step_0(tokens: Vec, pos: i64, recovered: i64): MatchResu
         MatchFail(fail_pos) => MatchFail(fail_pos)
     }
 
-def parse_rule_68_alt_3_step_1(tokens: Vec, pos: i64, recovered: i64, __v0: i64): MatchResult = {
+def parse_rule_68_alt_3_step_1(tokens: Vec, pos: i64, recovered: i64, __v0: i64): MatchResult =
+    match parse_rule_68_alt_3_item_1(tokens, pos) {
+        MatchOK(__v1, pos1, recovered1) => parse_rule_68_alt_3_step_2(tokens, pos1, recover_or(recovered, recovered1), __v0, __v1)
+        MatchFail(fail_pos) => MatchFail(fail_pos)
+    }
+
+def parse_rule_68_alt_3_step_2(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64): MatchResult = {
+    MatchOK((Type_Unit
+    ) as i64, pos, recovered)
+}
+
+def parse_rule_68_alt_4_item_0(tokens: Vec, pos: i64): MatchResult = match_token_Atom(tokens, pos)
+
+def parse_rule_68_alt_4(tokens: Vec, pos: i64): MatchResult = parse_rule_68_alt_4_step_0(tokens, pos, 0)
+
+def parse_rule_68_alt_4_step_0(tokens: Vec, pos: i64, recovered: i64): MatchResult =
+    match parse_rule_68_alt_4_item_0(tokens, pos) {
+        MatchOK(__v0, pos1, recovered1) => parse_rule_68_alt_4_step_1(tokens, pos1, recover_or(recovered, recovered1), __v0)
+        MatchFail(fail_pos) => MatchFail(fail_pos)
+    }
+
+def parse_rule_68_alt_4_step_1(tokens: Vec, pos: i64, recovered: i64, __v0: i64): MatchResult = {
     let atom: Str = __v0 as Str
     MatchOK((Type_Atom(atom)
     ) as i64, pos, recovered)
@@ -6278,6 +6320,17 @@ def parse_rule_68_dispatch_2(tokens: Vec, pos: i64): MatchResult =
 
 def parse_rule_68_dispatch_3(tokens: Vec, pos: i64): MatchResult =
     match parse_rule_68_alt_3(tokens, pos) {
+        MatchOK(ast, pos1, recovered) => MatchOK(ast, pos1, recovered)
+        MatchFail(fail_pos) => {
+            if fail_pos > pos { MatchFail(fail_pos) }
+            else {
+                parse_rule_68_dispatch_4(tokens, pos)
+            }
+        }
+    }
+
+def parse_rule_68_dispatch_4(tokens: Vec, pos: i64): MatchResult =
+    match parse_rule_68_alt_4(tokens, pos) {
         MatchOK(ast, pos1, recovered) => MatchOK(ast, pos1, recovered)
         MatchFail(fail_pos) => MatchFail(fail_pos)
     }

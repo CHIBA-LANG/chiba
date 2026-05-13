@@ -334,6 +334,7 @@ rule param_type_opt ::=
 
 rule type_expr ::= 
     head:Ident tail:type_expr_tail => Type_Path(head, tail)
+    | LBrace row:generic_row_type RBrace => Type_Row(row)
     | KwDyn contract:dyn_type_contract_list => Type_Dyn(contract)
     | LParen RParen => Type_Unit
     | atom:Atom => Type_Atom(atom)
@@ -995,6 +996,7 @@ rule arg_tail ::=
         Param_End,
 
         Type_Path(Str, AST),
+        Type_Row(AST),
         Type_Dyn(AST),
         Type_Tail_Dot(AST),
         Type_Tail_Generic(AST),

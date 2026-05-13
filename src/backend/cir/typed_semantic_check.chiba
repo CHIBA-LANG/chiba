@@ -336,6 +336,17 @@ def ast_param_type_name(params: AST, param_name: Str): Str =
         _ => mk_str("", 0)
     }
 
+def ast_param_type_ast(params: AST, param_name: Str): AST =
+    match params {
+        Param_Cons(head, tail) =>
+            match head {
+                Param(name, ty) =>
+                    if streq(name, param_name) != 0 { ty } else { ast_param_type_ast(tail, param_name) }
+                _ => ast_param_type_ast(tail, param_name)
+            }
+        _ => Type_Path(mk_str("", 0), Type_Tail_End)
+    }
+
 def ast_param_simple_kind(params: AST, param_name: Str): i64 =
     match params {
         Param_Cons(head, tail) =>
@@ -417,6 +428,27 @@ def ast_generic_row_has_duplicate(fields: AST): i64 =
                 _ => ast_generic_row_has_duplicate(tail)
             }
         _ => 0
+    }
+
+def ast_type_row_has_field(ty: AST, field: Str): i64 =
+    match ty {
+        Type_Row(row) =>
+            match row {
+                GenericRow(_, fields) => ast_generic_row_has_field(fields, field)
+                _ => 0
+            }
+        _ => 0
+    }
+
+def ast_type_row_check(ty: AST): CirTypedSemanticCheck =
+    match ty {
+        Type_Row(row) =>
+            match row {
+                GenericRow(_, fields) =>
+                    if ast_generic_row_has_duplicate(fields) != 0 { cir_typed_semantic_err("duplicate row field") } else { CirTypedSemanticCheckOk }
+                _ => CirTypedSemanticCheckOk
+            }
+        _ => CirTypedSemanticCheckOk
     }
 
 def ast_generic_bound_check(bound: AST): CirTypedSemanticCheck =
@@ -526,8 +558,14 @@ def ast_expr_check_field(value: AST, field: Str, params: AST, generics: AST): Ci
     match value {
         Expr_IdentTail(name, IdentTail_None) => {
             let param_ty = ast_param_type_name(params, name)
+            let param_ty_ast = ast_param_type_ast(params, name)
             if param_ty.len != 0 && ast_generic_has_name(generics, param_ty) != 0 && ast_generic_has_row_field(generics, param_ty, field) == 0 {
                 cir_typed_semantic_err("row constraint missing field id")
+            } else if ast_type_row_has_field(param_ty_ast, field) == 0 {
+                match param_ty_ast {
+                    Type_Row(_) => cir_typed_semantic_err("row constraint missing field id")
+                    _ => CirTypedSemanticCheckOk
+                }
             } else { CirTypedSemanticCheckOk }
         }
         _ => CirTypedSemanticCheckOk
@@ -944,7 +982,7 @@ def ast_params_check_types(params: AST): CirTypedSemanticCheck =
     match params {
         Param_Cons(head, tail) =>
             match head {
-                Param(_, ty) => cir_typed_semantic_merge(ast_type_check_atomic(ty), ast_params_check_types(tail))
+                Param(_, ty) => cir_typed_semantic_merge(ast_type_check_atomic(ty), cir_typed_semantic_merge(ast_type_row_check(ty), ast_params_check_types(tail)))
                 _ => ast_params_check_types(tail)
             }
         _ => CirTypedSemanticCheckOk

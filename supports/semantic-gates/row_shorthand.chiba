@@ -1,0 +1,7 @@
+namespace semantic.gates.row_shorthand
+
+def get_name(value: {r | name: Str}) = value.name
+
+def get_age(value: {r | name: Str, age: i64}): i64 = value.age
+
+def row_shorthand_identity(value: {r | name: Str}) = value
