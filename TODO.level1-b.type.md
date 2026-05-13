@@ -59,7 +59,7 @@
 
 - [ ] **Explicit generic parameter semantics**
 	- **TODO**: 明确 `[T]` 在 L2 中是 user-visible type variable binder，不是 namespace constraint witness，也不是 monomorphized body 的立即复制。
-	- **DESC**: `[T: Bound]` 绑定一个抽象类型变量，Bound 可以包含 named constraint 与最多一个 row constraint。
+	- **DESC**: `[T: Bound]` 绑定一个 rigid 抽象类型变量，Bound 可以包含 named constraint 与最多一个 row constraint。省略类型标注走 flexible inference variable；level-2 可加入显式 `[?T]` flexible generic binder。
 	- **验收**: `def id[T](x: T): T = x` 的 TypedAst 保留 `T`；重复 `T` 报错；bound 良构性报错稳定。
 
 - [ ] **Implicit function parameter generalization**
@@ -139,9 +139,9 @@
 	- **验收**: 每条路径有 valid fixture；冲突/缺失/receiver 错误有 invalid fixture；dump 显示最终 candidate kind。
 
 - [ ] **Operator obligation**
-	- **TODO**: numeric builtin operator 直接 unify；abstract/generic receiver 生成 operator obligation。
-	- **DESC**: `i64 + i64` 定义期解决；`T + T` 在有抽象参数时保留 obligation。
-	- **验收**: `1 + true` 报错；`def add(a,b)=a+b` 产生 numeric/operator 推断；generic operator 实例化失败能定位 call site。
+	- **TODO**: numeric builtin operator 直接 unify；abstract/generic receiver 生成 structural operator obligation。
+	- **DESC**: `i64 + i64` 定义期解决；`T + T` 在有抽象参数时保留 `op_add` obligation，等价 contract 为 `T: {t | op_add: fn(Self, Self): Self}`，但不能把 row fact 当普通 nominal method 证据。
+	- **验收**: `1 + true` 报错；`def add(a,b)=a+b` 泛化为 `def add[T:{t|op_add: fn(Self, Self): Self}](a:T,b:T):T`；generic operator 实例化失败能定位 call site。
 
 - [ ] **Shape dispatch boundary**
 	- **TODO**: shape dispatch 只使用 row/shape facts 和 explicit dispatch syntax，不引入全局 witness search。

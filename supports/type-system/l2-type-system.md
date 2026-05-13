@@ -81,6 +81,16 @@ There are two important variable modes:
 
 So `[T]` participates in HM checking as a type variable, but it is not a flexible hole that the body may silently solve to a concrete type. This is the core of the checked-template model: definition-time HM checks the body under rigid abstract binders, and instantiation-time later substitutes concrete types and discharges obligations.
 
+Omitted annotations use flexible inference variables first. If they remain free at a generalization boundary and are legal to generalize, they become synthetic generic binders. If they remain free in a position that must be concrete, the checker reports that an annotation is required.
+
+Level-2 may add explicit flexible generic binders:
+
+```chiba
+def f[?T](value: ?T) = ...
+```
+
+`?T` means the source intentionally asks for a flexible generic variable during definition-time inference. This is not part of the level-1 core contract; level-1 only needs omitted annotations as flexible inference variables and `[T]` as rigid explicit generic binders.
+
 Examples:
 
 ```chiba
@@ -126,6 +136,8 @@ def f[T, F](value: T, convert: fn(T): F): F = convert(value)
 ```
 
 `TyNever` may flow into any return type for diverging expressions such as `panic()` or `todo()`, but that is a `Never` rule, not a generic escape hatch.
+
+Underconstrained constructors must not silently become globally polymorphic mutable values. For example, `Ref.new(None)` has shape `Ref[Option[T]]`; without an annotation or contextual use that fixes `T`, the checker must report an annotation-required error rather than generalizing the `Ref`.
 
 ## ConstraintSet
 
@@ -278,7 +290,7 @@ Method resolution is not row unification.
 The L2 pass should create a method index:
 
 ```text
-(nominal_id, method_name) -> method candidates
+(namespace_scope_or_behavior_source, nominal_id, method_name) -> method candidates
 ```
 
 Method-call resolution uses three paths:
@@ -289,7 +301,17 @@ Method-call resolution uses three paths:
 
 The chosen path must be recorded in TypedAst. If the receiver is abstract and cannot be decided yet, L2 records a `MethodObligation`.
 
-A row fact such as `{r | y: ty}` proves field availability only. It must not be used as proof that nominal method `def X.y(...)` exists. For `x.y`, the row fact is enough to type a field access. For `x.y(...)`, field-callable resolution may use the row fact if `y` has a function type; receiver-method resolution still requires a concrete nominal receiver id at definition time or a `MethodObligation` to be discharged at instantiation time.
+`MethodObligation` and `OperatorObligation` must reserve a behavior-source field even if level-1 only implements the default visible world:
+
+```text
+DefaultVisible
+ExplicitVia(namespace_id)
+QualifiedPath(symbol_id)
+```
+
+Level-2 `via` uses `ExplicitVia`. This field must enter specialization keys whenever it affects implementation choice.
+
+A row fact such as `{r | y: ty}` proves field availability only. It must not be used as proof that nominal method `def X.y(...)` exists. For `x.y`, the row fact is enough to type a field access. For `x.y(...)`, field-callable resolution may use the row fact if `y` has a function type; receiver-method resolution still requires a concrete nominal receiver id. A row-shaped value reaches nominal method resolution only through an explicit cast/checked conversion that produces a concrete nominal type.
 
 Method-style definitions bind `self` through the owner nominal type:
 
@@ -318,8 +340,17 @@ the method scope binds `Self := Box[T]` and `self : Box[T]`. `Self` is a special
 Operator checking:
 
 - concrete builtin numeric/bool operators unify immediately
-- abstract operands produce `OperatorObligation`
+- abstract operands produce structural operator obligations
 - invalid concrete combinations fail at definition time
+
+For homogeneous `+` on abstract operands, the default obligation is equivalent to:
+
+```chiba
+def add[T: {t | op_add: fn(Self, Self): Self}](a: T, b: T): T =
+    a.op_add(b)
+```
+
+This is a contract shape, not ordinary row-to-method resolution. `op_add` names the operator protocol entry. `Self` means the current `T` in that operator contract. At instantiation, the compiler discharges the operator obligation through the concrete operator implementation selected for the concrete nominal type and behavior source. The row fact alone never selects `def X.op_add`; a concrete nominal receiver, explicit cast, or explicit behavior source must provide the implementation.
 
 ## Capability And ABI Boundary
 
@@ -374,7 +405,10 @@ Known unsoundness risks and required guardrails:
 - **Unchecked templates**: deferring the whole generic body to instantiation hides definition errors. Guardrail: definition-time HM and well-formedness are mandatory.
 - **Method as field fallback ambiguity**: silently choosing field-callable or receiver method can change behavior. Guardrail: fixed candidate order and ambiguity diagnostics.
 - **Operator inference too eager**: defaulting unconstrained `+` to `i64` can reject valid generic code or hide operator obligations. Guardrail: concrete operands solve immediately; abstract operands produce obligations.
+- **Operator protocol treated as ordinary row method**: lowering `a + b` to `a.op_add(b)` too early would let row facts invoke nominal methods. Guardrail: `op_add` is an operator obligation contract; concrete implementation selection happens only after nominal/cast/behavior-source resolution.
 - **Synthetic generic leakage**: compiler-generated `$T0` names must not become stable user syntax. Guardrail: expose only in diagnostics/dumps, not in source namespaces.
+- **Underconstrained `Option` inside `Ref`**: `Ref.new(None)` creates `Ref[Option[T]]`; generalizing it would create polymorphic mutable state. Guardrail: value restriction plus annotation-required diagnostics for unsolved variables under mutable/capability constructors.
 - **ABI inference**: inferring extern signatures from call sites can produce wrong imports. Guardrail: extern requires explicit ABI types.
 - **Continuation generalization**: freely generalizing captured continuations can cross answer/world boundaries. Guardrail: continuation-bearing values are not freely generalized; later answer/control pass owns the detailed legality check.
 - **Unsafe capability leakage through annotations**: allowing ordinary signatures to mention `Ptr[T]` or `UnsafeRef[T]` without unsafe context makes unsafe values callable from safe code. Guardrail: annotations are checked as capability uses, and Metal still uses typed `Ptr[T]` rather than raw pointer-shaped `i64`.
+- **Behavior-source missing from specialization key**: `via ns1` and `via ns2` may select different implementations for the same nominal type and method/operator name. Guardrail: method/operator obligations carry behavior source and include it in specialization keys when used.

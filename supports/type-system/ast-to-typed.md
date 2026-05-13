@@ -141,6 +141,8 @@ The checker must not reject `y` just because the item has an explicit generic he
 
 Explicit generic binders are rigid while checking the body. They are not flexible inference variables.
 
+Omitted type annotations allocate flexible inference variables. If they survive to a legal generalization boundary, they become synthetic generic binders. Level-2 may add explicit flexible generic binders with `[?T]`; level-1 treats explicit `[T]` as rigid and omitted annotations as the flexible path.
+
 Input:
 
 ```chiba
@@ -362,12 +364,20 @@ Elaboration tries or records the three paths:
 If the receiver is abstract, emit:
 
 ```text
-MethodObligation(receiver_ty, method_name, arg_tys, result_ty, origin)
+MethodObligation(receiver_ty, method_name, arg_tys, result_ty, behavior_source, origin)
 ```
 
 If multiple concrete paths are valid at the same priority, report ambiguity. The chosen path must be stored in TypedAst.
 
 A row field fact does not prove a nominal method. If `receiver` has abstract type `$T0` and L2 knows only `{r | method: ty}`, then `receiver.method` is a field access. For `receiver.method(args...)`, it can become a field-callable call only if `ty` unifies with `fn(args...) -> result`. A receiver method `def X.method(self, ...)` is selected only when the receiver has concrete nominal id `X`, or when a `MethodObligation($T0, "method", ...)` is later discharged at an instantiation whose concrete receiver is `X`.
+
+If the source explicitly casts or performs a checked conversion to a nominal type, the converted expression may enter nominal method resolution:
+
+```text
+(receiver as X).method(args...)
+```
+
+Without such a nominal conversion, row facts remain field facts.
 
 ## Method-Style `def` And `Self`
 
@@ -426,8 +436,19 @@ bool + bool -> error
 Abstract cases:
 
 ```text
-OperatorObligation("+", [a_ty, b_ty], result_ty, origin)
+OperatorObligation("op_add", self=$T0, args=[$T0], result=$T0, origin)
 ```
+
+For homogeneous abstract `+`, the inferred scheme is equivalent to:
+
+```chiba
+def add[T: {t | op_add: fn(Self, Self): Self}](a: T, b: T): T =
+    a.op_add(b)
+```
+
+This is only an operator-contract shape. It does not mean ordinary row field lookup may call nominal methods. Concrete implementation selection happens when the operator obligation is discharged against a concrete nominal type, explicit cast, or explicit behavior source.
+
+`behavior_source` is `DefaultVisible` in level-1 unless the source uses a future explicit `via namespace` form. Level-2 `via` must enter method/operator obligations and specialization keys.
 
 The checker must not default abstract `+` to `i64` unless a concrete use forces that type.
 
@@ -600,8 +621,10 @@ Potential unsound edges in elaboration:
 - **Using "parameter referenced" as inference success**: this accepts underconstrained code without a real type scheme. Required fix: allocate type vars and generalize or diagnose after solving.
 - **Rejecting unannotated params in generic functions**: this contradicts automatic generalization and forces accidental annotations. Required fix: explicit and implicit binders must coexist.
 - **Defaulting abstract operators to numeric types**: this loses generic operator behavior. Required fix: abstract operands create operator obligations.
+- **Treating operator contracts as row methods**: this lets `{r | op_add: ...}` call `def X.op_add` without nominal evidence. Required fix: operator obligations are discharged through concrete nominal/cast/behavior-source resolution.
 - **Treating row shorthand as closed record**: this rejects valid nominal values with extra fields. Required fix: shorthand creates an open-row bound.
 - **Sharing synthetic row shorthand variables across parameters**: this wrongly forces two arguments to be the same type. Required fix: each shorthand gets a fresh synthetic binder unless source names one.
 - **Let-generalizing unsafe/capability values**: this can break mutation and world-boundary safety. Required fix: value restriction.
+- **Generalizing `Ref.new(None)`**: this creates polymorphic mutable `Ref[Option[T]]`. Required fix: unsolved variables under `Ref` require annotation or concrete context.
 - **Treating unsafe types as harmless annotations**: a non-Metal signature containing `Ptr[T]` or `UnsafeRef[T]` can leak unsafe capability without an unsafe context. Required fix: type annotations are checked as unsafe touches too.
 - **Choosing method fallback silently**: this changes behavior when a field and nominal method have the same name. Required fix: priority and ambiguity diagnostics are part of TypedAst.
