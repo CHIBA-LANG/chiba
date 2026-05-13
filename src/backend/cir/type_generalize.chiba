@@ -1,0 +1,102 @@
+namespace backend.cir.type_generalize
+use metalstd.str.*
+use backend.cir.ir.*
+use backend.cir.show.*
+
+def cir_type_has_capability_or_continuation_list(types: CirTypeList): i64 =
+    match types {
+        CirTypeEnd => 0
+        CirTypeCons(head, tail) =>
+            if cir_type_has_capability_or_continuation(head) != 0 { 1 } else { cir_type_has_capability_or_continuation_list(tail) }
+    }
+
+def cir_type_has_capability_or_continuation(ty: CirType): i64 =
+    match ty {
+        CirTyRef(_) => 1
+        CirTyUnsafeRef(_) => 1
+        CirTyPtr(_) => 1
+        CirTyAtomic(_) => 1
+        CirTyContinuation(_, _, _) => 1
+        CirTyApp(callee, args) =>
+            if cir_type_has_capability_or_continuation(callee) != 0 { 1 } else { cir_type_has_capability_or_continuation_list(args) }
+        CirTyFn(params, ret) =>
+            if cir_type_has_capability_or_continuation_list(params) != 0 { 1 } else { cir_type_has_capability_or_continuation(ret) }
+        CirTyTuple(items) => cir_type_has_capability_or_continuation_list(items)
+        CirTyNominal(_, args) => cir_type_has_capability_or_continuation_list(args)
+        CirTyData(_, args) => cir_type_has_capability_or_continuation_list(args)
+        CirTyUnion(_, args) => cir_type_has_capability_or_continuation_list(args)
+        _ => 0
+    }
+
+def cir_type_contains_var_list(types: CirTypeList, id: CirTyVarId): i64 =
+    match types {
+        CirTypeEnd => 0
+        CirTypeCons(head, tail) =>
+            if cir_type_contains_var(head, id) != 0 { 1 } else { cir_type_contains_var_list(tail, id) }
+    }
+
+def cir_type_contains_var(ty: CirType, id: CirTyVarId): i64 =
+    match ty {
+        CirTyVar(other) => if other.id == id.id { 1 } else { 0 }
+        CirTyApp(callee, args) =>
+            if cir_type_contains_var(callee, id) != 0 { 1 } else { cir_type_contains_var_list(args, id) }
+        CirTyFn(params, ret) =>
+            if cir_type_contains_var_list(params, id) != 0 { 1 } else { cir_type_contains_var(ret, id) }
+        CirTyTuple(items) => cir_type_contains_var_list(items, id)
+        CirTyNominal(_, args) => cir_type_contains_var_list(args, id)
+        CirTyData(_, args) => cir_type_contains_var_list(args, id)
+        CirTyUnion(_, args) => cir_type_contains_var_list(args, id)
+        CirTyRef(inner) => cir_type_contains_var(inner, id)
+        CirTyUnsafeRef(inner) => cir_type_contains_var(inner, id)
+        CirTyPtr(inner) => cir_type_contains_var(inner, id)
+        CirTyAtomic(inner) => cir_type_contains_var(inner, id)
+        CirTyContinuation(input, answer, _) =>
+            if cir_type_contains_var(input, id) != 0 { 1 } else { cir_type_contains_var(answer, id) }
+        _ => 0
+    }
+
+def cir_type_generalize_one(meta: CirTyVarMeta, ty: CirType, tail: CirTyVarMetaList): CirTyVarMetaList =
+    if cir_type_contains_var(ty, meta.id) != 0 { CirTyVarMetaCons(meta, tail) } else { tail }
+
+def cir_type_generalize_metas(candidates: CirTyVarMetaList, ty: CirType, allow_generalize: i64): CirTyVarMetaList =
+    if allow_generalize == 0 { CirTyVarMetaEnd }
+    else {
+        match candidates {
+            CirTyVarMetaEnd => CirTyVarMetaEnd
+            CirTyVarMetaCons(head, tail) => cir_type_generalize_one(head, ty, cir_type_generalize_metas(tail, ty, allow_generalize))
+        }
+    }
+
+def cir_type_generalize(candidates: CirTyVarMetaList, ty: CirType): CirTypeScheme = {
+    let allow = if cir_type_has_capability_or_continuation(ty) != 0 { 0 } else { 1 }
+    CirTypeScheme { vars: cir_type_generalize_metas(candidates, ty, allow), body: ty }
+}
+
+def cir_type_generalize_smoke(): Str = {
+    let out = str_new()
+    let t0_meta = CirTyVarMeta {
+        id: CirTyVarId { id: 0 },
+        level: 1,
+        scope: 1,
+        origin: CirTyOriginLet(mk_str("id", 2)),
+        kind: CirTyKindValue,
+        visibility: CirTyVisibleSynthetic,
+        rigidity: CirTyFlexible
+    }
+    let t1_meta = CirTyVarMeta {
+        id: CirTyVarId { id: 1 },
+        level: 1,
+        scope: 1,
+        origin: CirTyOriginLet(mk_str("ref_value", 9)),
+        kind: CirTyKindValue,
+        visibility: CirTyVisibleSynthetic,
+        rigidity: CirTyFlexible
+    }
+    let candidates = CirTyVarMetaCons(t0_meta, CirTyVarMetaCons(t1_meta, CirTyVarMetaEnd))
+    let pure_ty = CirTyFn(CirTypeCons(CirTyVar(CirTyVarId { id: 0 }), CirTypeEnd), CirTyVar(CirTyVarId { id: 0 }))
+    let ref_ty = CirTyRef(CirTyVar(CirTyVarId { id: 1 }))
+    let _ = cir_show_line(out, 0, "L2TypeGeneralizeSmoke")
+    let _ = cir_show_type_scheme(out, 1, cir_type_generalize(candidates, pure_ty))
+    let _ = cir_show_type_scheme(out, 1, cir_type_generalize(candidates, ref_ty))
+    out
+}

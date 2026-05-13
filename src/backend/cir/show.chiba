@@ -250,6 +250,21 @@ def cir_show_tyvar_meta(out: Str, depth: i64, meta: CirTyVarMeta): i64 = {
     str_push(out, 10)
 }
 
+def cir_show_tyvar_meta_list(out: Str, depth: i64, vars: CirTyVarMetaList): i64 =
+    match vars {
+        CirTyVarMetaEnd => cir_show_line(out, depth, "scheme-vars-end")
+        CirTyVarMetaCons(head, tail) => {
+            let _ = cir_show_tyvar_meta(out, depth, head)
+            cir_show_tyvar_meta_list(out, depth, tail)
+        }
+    }
+
+def cir_show_type_scheme(out: Str, depth: i64, scheme: CirTypeScheme): i64 = {
+    let _ = cir_show_line(out, depth, "type-scheme")
+    let _ = cir_show_tyvar_meta_list(out, depth + 1, scheme.vars)
+    cir_show_type(out, depth + 1, scheme.body)
+}
+
 def cir_show_row_field_list(out: Str, depth: i64, fields: CirRowFieldList): i64 =
     match fields {
         CirRowFieldEnd => cir_show_line(out, depth, "row-fields-end")

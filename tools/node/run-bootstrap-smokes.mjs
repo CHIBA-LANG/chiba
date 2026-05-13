@@ -133,7 +133,7 @@ const LEVEL1C_CASES = [
   {
     name: "level1c help",
     args: ["--help"],
-    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-kind-smoke type-nominal-smoke type-row-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
+    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-generalize-smoke type-kind-smoke type-nominal-smoke type-row-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
   },
   {
     name: "level1c parse grammar 01",
@@ -200,6 +200,18 @@ const LEVEL1C_CASES = [
       "kind-string-as-abi err not an ABI scalar type",
       "0",
     ],
+  },
+  {
+    name: "level1c type generalize smoke",
+    args: ["type-generalize-smoke", "chiba-level1-grammar-spec/01-test.chiba"],
+    expect: [
+      "L2TypeGeneralizeSmoke",
+      "tyvar-meta $T0 kind=value level=1 scope=1 visibility=synthetic rigidity=flexible origin=let id",
+      "type ($T0) => $T0",
+      "type Ref[$T1]",
+      "0",
+    ],
+    expectSequence: [["type ($T0) => $T0", "type-scheme", "scheme-vars-end", "type Ref[$T1]"]],
   },
   {
     name: "level1c type row smoke",

@@ -80,6 +80,16 @@ type CirTyVarMeta {
     rigidity: CirTyVarRigidity
 }
 
+data CirTyVarMetaList {
+    CirTyVarMetaCons(CirTyVarMeta, CirTyVarMetaList),
+    CirTyVarMetaEnd
+}
+
+type CirTypeScheme {
+    vars: CirTyVarMetaList
+    body: CirType
+}
+
 type CirRowField {
     field_name: Str
     ty: CirType

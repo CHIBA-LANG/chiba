@@ -85,9 +85,10 @@
 	- **DONE**: 省略返回类型不再因 explicit generic 被拒绝；保留 concrete return mismatch gate；`Ref.new(None)` 无上下文会要求显式 `Option[T]` 注解。
 	- **验收**: `def one()=1`、`def pick(b)=if b {1}else{2}` 推断成功；分支类型不一致报错。
 
-- [ ] **Let-generalization**
+- [x] **Let-generalization**
 	- **TODO**: 实现 HM let-generalization，带 value restriction。
 	- **DESC**: immutable pure value 可泛化；`Ref`、`UnsafeRef`、`Ptr`、`Atomic`、extern/unsafe/capability-bearing value、continuation-bearing value 保守不自由泛化。
+	- **DONE**: `CirTypeScheme` / `CirTyVarMetaList` 已进入 IR；`src/backend/cir/type_generalize.chiba` 已实现 candidate var generalization 与 capability/continuation value restriction；`level1c type-generalize-smoke` 验证 pure identity scheme 会泛化，`Ref[$T]` 不泛化。
 	- **验收**: polymorphic identity lambda 可多处实例化；`let r = ref(...)` 不被泛化；错误指向 let binder。
 
 ## 3. Unification 设计
