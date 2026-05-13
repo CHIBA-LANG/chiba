@@ -1,0 +1,83 @@
+namespace backend.cir.type_capability
+use metalstd.str.*
+use backend.cir.ir.*
+use backend.cir.show.*
+use backend.cir.type_kind.*
+use backend.cir.type_unify.*
+
+data CirCapabilityCheck {
+    CirCapabilityOk,
+    CirCapabilityErr(Str)
+}
+
+def cir_capability_check_ref_assign(lhs: CirType, rhs: CirType): CirCapabilityCheck =
+    match lhs {
+        CirTyRef(inner) =>
+            match cir_unify_type(inner, rhs, CirTypeSubstEnd) {
+                CirUnifyOk(_) => CirCapabilityOk
+                CirUnifyErr(_) => CirCapabilityErr(mk_str("Ref assignment type mismatch", 28))
+            }
+        _ => CirCapabilityErr(mk_str("assignment lhs must be Ref[T]", 28))
+    }
+
+def cir_capability_check_unsafe_type(ty: CirType, unsafe_depth: i64): CirCapabilityCheck =
+    match ty {
+        CirTyPtr(_) => if unsafe_depth > 0 { CirCapabilityOk } else { CirCapabilityErr(mk_str("Ptr requires unsafe block", 25)) }
+        CirTyUnsafeRef(_) => if unsafe_depth > 0 { CirCapabilityOk } else { CirCapabilityErr(mk_str("UnsafeRef requires unsafe block", 31)) }
+        _ => CirCapabilityOk
+    }
+
+def cir_capability_atomic_supported(ty: CirType): i64 =
+    match ty {
+        CirTyI32 => 1
+        CirTyI64 => 1
+        CirTyUsize => 1
+        CirTyBool => 1
+        CirTyPtr(_) => 1
+        _ => 0
+    }
+
+def cir_capability_check_atomic(ty: CirType): CirCapabilityCheck =
+    match ty {
+        CirTyAtomic(inner) =>
+            if cir_capability_atomic_supported(inner) != 0 { CirCapabilityOk }
+            else { CirCapabilityErr(mk_str("unsupported Atomic[T]", 21)) }
+        _ => CirCapabilityErr(mk_str("expected Atomic[T]", 18))
+    }
+
+def cir_capability_check_abi_type(ty: CirType): CirCapabilityCheck =
+    match cir_type_abi_scalar_kind(ty) {
+        CirTypeKindOk(_) => CirCapabilityOk
+        CirTypeKindErr(message) => CirCapabilityErr(message)
+    }
+
+def cir_capability_show(out: Str, depth: i64, label: i64, result: CirCapabilityCheck): i64 =
+    match result {
+        CirCapabilityOk => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, label)
+            let _ = str_push_cstr(out, " ok")
+            str_push(out, 10)
+        }
+        CirCapabilityErr(message) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, label)
+            let _ = str_push_cstr(out, " err ")
+            let _ = str_append(out, message)
+            str_push(out, 10)
+        }
+    }
+
+def cir_type_capability_smoke(): Str = {
+    let out = str_new()
+    let _ = cir_show_line(out, 0, "L2TypeCapabilitySmoke")
+    let _ = cir_capability_show(out, 1, "ref-assign-ok", cir_capability_check_ref_assign(CirTyRef(CirTyI64), CirTyI64))
+    let _ = cir_capability_show(out, 1, "ref-assign-bad", cir_capability_check_ref_assign(CirTyRef(CirTyI64), CirTyBool))
+    let _ = cir_capability_show(out, 1, "ptr-safe-error", cir_capability_check_unsafe_type(CirTyPtr(CirTyI64), 0))
+    let _ = cir_capability_show(out, 1, "ptr-unsafe-ok", cir_capability_check_unsafe_type(CirTyPtr(CirTyI64), 1))
+    let _ = cir_capability_show(out, 1, "atomic-ok", cir_capability_check_atomic(CirTyAtomic(CirTyPtr(CirTyI32))))
+    let _ = cir_capability_show(out, 1, "atomic-bad", cir_capability_check_atomic(CirTyAtomic(CirTyString)))
+    let _ = cir_capability_show(out, 1, "abi-ok", cir_capability_check_abi_type(CirTyI32))
+    let _ = cir_capability_show(out, 1, "abi-bad", cir_capability_check_abi_type(CirTyString))
+    out
+}

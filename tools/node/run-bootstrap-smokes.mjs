@@ -133,7 +133,7 @@ const LEVEL1C_CASES = [
   {
     name: "level1c help",
     args: ["--help"],
-    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-generalize-smoke type-kind-smoke type-method-smoke type-nominal-smoke type-row-smoke type-template-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
+    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-capability-smoke type-generalize-smoke type-kind-smoke type-method-smoke type-nominal-smoke type-row-smoke type-template-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
   },
   {
     name: "level1c parse grammar 01",
@@ -212,6 +212,22 @@ const LEVEL1C_CASES = [
       "0",
     ],
     expectSequence: [["type ($T0) => $T0", "type-scheme", "scheme-vars-end", "type Ref[$T1]"]],
+  },
+  {
+    name: "level1c type capability smoke",
+    args: ["type-capability-smoke", "chiba-level1-grammar-spec/01-test.chiba"],
+    expect: [
+      "L2TypeCapabilitySmoke",
+      "ref-assign-ok ok",
+      "ref-assign-bad err Ref assignment type mismatch",
+      "ptr-safe-error err Ptr requires unsafe block",
+      "ptr-unsafe-ok ok",
+      "atomic-ok ok",
+      "atomic-bad err unsupported Atomic[T]",
+      "abi-ok ok",
+      "abi-bad err not an ABI scalar type",
+      "0",
+    ],
   },
   {
     name: "level1c type row smoke",

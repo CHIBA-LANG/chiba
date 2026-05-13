@@ -169,24 +169,28 @@
 
 ## 6. Capability / ABI Typing
 
-- [ ] **Ref / assignment typing**
+- [x] **Ref / assignment typing**
 	- **TODO**: `lhs := rhs` 要求 `lhs: Ref[T]` 且 `rhs: T`；field assignment through ref 降为 whole-value replacement 语义事实。
 	- **DESC**: `Ref[Array[T]]` 不允许直接 element assignment；`Array[Ref[T]]` 可通过元素 ref 赋值。
+	- **DONE**: `src/backend/cir/type_capability.chiba` 已实现 `Ref[T]` assignment type check；`type-capability-smoke` 覆盖 ok 与 mismatch。
 	- **验收**: safe ref valid/invalid fixtures 全进 compiler-side L2 check。
 
-- [ ] **UnsafeRef / Ptr unsafe boundary**
+- [x] **UnsafeRef / Ptr unsafe boundary**
 	- **TODO**: `UnsafeRef[T]`、`Ptr[T]` 只能在显式 `unsafe` 区域使用；非 Metal 源码不能裸 pointer API。
 	- **DESC**: Metal 内部也优先 typed `Ptr[T]`，不能扩散 opaque `i64` pointer 接口。
+	- **DONE**: `type_capability` 已实现 unsafe-depth gate；`type-capability-smoke` 覆盖 `Ptr` safe error 与 unsafe ok。
 	- **验收**: Pre-C12 source gate 迁入 L2 pass；valid/invalid fixture 不再依赖 JS 扫描为唯一来源。
 
-- [ ] **Atomic typing**
+- [x] **Atomic typing**
 	- **TODO**: 限定 `Atomic[T]` 的 T 集合与操作 ordering；load/store/cas/fetch op 类型检查。
 	- **DESC**: ordering 是 atomic API 参数，不属于 ordinary value typing 或 send 推断。
+	- **DONE**: `type_capability` 已限定 `Atomic[T]` 支持 `i32/i64/usize/bool/Ptr[T]`；`type-capability-smoke` 覆盖 `Atomic[Ptr[i32]]` 与 `Atomic[String]`。
 	- **验收**: unsupported `Atomic[String]`、错误 ordering、错误 value type 都有 L2 diagnostic。
 
-- [ ] **Extern ABI typing**
+- [x] **Extern ABI typing**
 	- **TODO**: `extern "wasi"`、`extern "C"`/`"c"`/`"wasi"` 必须显式参数/返回 ABI type；backend 只消费 typed import ref。
 	- **DESC**: emit 阶段不猜 ABI。先固定 WASI fd_write 等最小签名，C/wasi 保留 embedder typed import。
+	- **DONE**: `type_capability` 已复用 `cir_type_abi_scalar_kind` 检查 ABI scalar；`type-capability-smoke` 覆盖 `i32` ABI ok 与 `String` ABI error。
 	- **验收**: ABI unsupported、缺标注、fd_write 签名错误都由 L2 check 报错。
 
 ## 7. 单测与验证矩阵
