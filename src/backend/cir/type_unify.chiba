@@ -1,0 +1,210 @@
+namespace backend.cir.type_unify
+use metalstd.str.*
+use backend.cir.ir.*
+use backend.cir.show.*
+
+data CirUnifyResult {
+    CirUnifyOk(CirTypeSubstList),
+    CirUnifyErr(Str)
+}
+
+def cir_tyvar_id_eq(a: CirTyVarId, b: CirTyVarId): i64 = a.id == b.id
+
+def cir_row_id_eq(a: CirRowId, b: CirRowId): i64 = a.id == b.id
+
+def cir_nominal_id_eq(a: CirNominalId, b: CirNominalId): i64 =
+    a.id == b.id && streq(a.module_name, b.module_name) != 0 && streq(a.local_name, b.local_name) != 0
+
+def cir_continuation_kind_eq(a: CirContinuationKind, b: CirContinuationKind): i64 =
+    match a {
+        CirContinuationLinear => match b { CirContinuationLinear => 1  _ => 0 }
+        CirContinuationMultiResume => match b { CirContinuationMultiResume => 1  _ => 0 }
+    }
+
+def cir_type_subst_lookup(substs: CirTypeSubstList, id: CirTyVarId): CirType =
+    match substs {
+        CirTypeSubstEnd => CirTyVar(id)
+        CirTypeSubstCons(head, tail) =>
+            if cir_tyvar_id_eq(head.var, id) != 0 { head.ty } else { cir_type_subst_lookup(tail, id) }
+    }
+
+def cir_type_subst_apply_list(types: CirTypeList, substs: CirTypeSubstList): CirTypeList =
+    match types {
+        CirTypeEnd => CirTypeEnd
+        CirTypeCons(head, tail) => CirTypeCons(cir_type_subst_apply(head, substs), cir_type_subst_apply_list(tail, substs))
+    }
+
+def cir_type_subst_apply(ty: CirType, substs: CirTypeSubstList): CirType =
+    match ty {
+        CirTyVar(id) => cir_type_subst_lookup(substs, id)
+        CirTyApp(callee, args) => CirTyApp(cir_type_subst_apply(callee, substs), cir_type_subst_apply_list(args, substs))
+        CirTyFn(params, ret) => CirTyFn(cir_type_subst_apply_list(params, substs), cir_type_subst_apply(ret, substs))
+        CirTyTuple(items) => CirTyTuple(cir_type_subst_apply_list(items, substs))
+        CirTyNominal(id, args) => CirTyNominal(id, cir_type_subst_apply_list(args, substs))
+        CirTyData(id, args) => CirTyData(id, cir_type_subst_apply_list(args, substs))
+        CirTyUnion(id, args) => CirTyUnion(id, cir_type_subst_apply_list(args, substs))
+        CirTyRef(inner) => CirTyRef(cir_type_subst_apply(inner, substs))
+        CirTyUnsafeRef(inner) => CirTyUnsafeRef(cir_type_subst_apply(inner, substs))
+        CirTyPtr(inner) => CirTyPtr(cir_type_subst_apply(inner, substs))
+        CirTyAtomic(inner) => CirTyAtomic(cir_type_subst_apply(inner, substs))
+        CirTyContinuation(input, answer, kind) => CirTyContinuation(cir_type_subst_apply(input, substs), cir_type_subst_apply(answer, substs), kind)
+        _ => ty
+    }
+
+def cir_type_occurs_in_list(id: CirTyVarId, types: CirTypeList): i64 =
+    match types {
+        CirTypeEnd => 0
+        CirTypeCons(head, tail) =>
+            if cir_type_occurs(id, head) != 0 { 1 } else { cir_type_occurs_in_list(id, tail) }
+    }
+
+def cir_type_occurs(id: CirTyVarId, ty: CirType): i64 =
+    match ty {
+        CirTyVar(other) => cir_tyvar_id_eq(id, other)
+        CirTyApp(callee, args) =>
+            if cir_type_occurs(id, callee) != 0 { 1 } else { cir_type_occurs_in_list(id, args) }
+        CirTyFn(params, ret) =>
+            if cir_type_occurs_in_list(id, params) != 0 { 1 } else { cir_type_occurs(id, ret) }
+        CirTyTuple(items) => cir_type_occurs_in_list(id, items)
+        CirTyNominal(_, args) => cir_type_occurs_in_list(id, args)
+        CirTyData(_, args) => cir_type_occurs_in_list(id, args)
+        CirTyUnion(_, args) => cir_type_occurs_in_list(id, args)
+        CirTyRef(inner) => cir_type_occurs(id, inner)
+        CirTyUnsafeRef(inner) => cir_type_occurs(id, inner)
+        CirTyPtr(inner) => cir_type_occurs(id, inner)
+        CirTyAtomic(inner) => cir_type_occurs(id, inner)
+        CirTyContinuation(input, answer, _) =>
+            if cir_type_occurs(id, input) != 0 { 1 } else { cir_type_occurs(id, answer) }
+        _ => 0
+    }
+
+def cir_type_bind_var(id: CirTyVarId, ty: CirType, substs: CirTypeSubstList): CirUnifyResult = {
+    let ty2 = cir_type_subst_apply(ty, substs)
+    match ty2 {
+        CirTyVar(other) =>
+            if cir_tyvar_id_eq(id, other) != 0 { CirUnifyOk(substs) }
+            else { CirUnifyOk(CirTypeSubstCons(CirTypeSubst { var: id, ty: ty2 }, substs)) }
+        _ =>
+            if cir_type_occurs(id, ty2) != 0 { CirUnifyErr(mk_str("occurs check failed", 19)) }
+            else { CirUnifyOk(CirTypeSubstCons(CirTypeSubst { var: id, ty: ty2 }, substs)) }
+    }
+}
+
+def cir_unify_type_list(lhs: CirTypeList, rhs: CirTypeList, substs: CirTypeSubstList): CirUnifyResult =
+    match lhs {
+        CirTypeEnd =>
+            match rhs {
+                CirTypeEnd => CirUnifyOk(substs)
+                _ => CirUnifyErr(mk_str("type list arity mismatch", 23))
+            }
+        CirTypeCons(lhead, ltail) =>
+            match rhs {
+                CirTypeCons(rhead, rtail) =>
+                    match cir_unify_type(lhead, rhead, substs) {
+                        CirUnifyOk(next) => cir_unify_type_list(ltail, rtail, next)
+                        CirUnifyErr(_) => cir_unify_type(lhead, rhead, substs)
+                    }
+                _ => CirUnifyErr(mk_str("type list arity mismatch", 23))
+            }
+    }
+
+def cir_unify_same_const(lhs: Str, rhs: Str, substs: CirTypeSubstList): CirUnifyResult =
+    if streq(lhs, rhs) != 0 { CirUnifyOk(substs) } else { CirUnifyErr(mk_str("type mismatch", 13)) }
+
+def cir_unify_type(lhs: CirType, rhs: CirType, substs: CirTypeSubstList): CirUnifyResult = {
+    let l = cir_type_subst_apply(lhs, substs)
+    let r = cir_type_subst_apply(rhs, substs)
+    match l {
+        CirTyVar(id) => cir_type_bind_var(id, r, substs)
+        CirTyUnknown => match r { CirTyUnknown => CirUnifyOk(substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyI64 => match r { CirTyI64 => CirUnifyOk(substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyI32 => match r { CirTyI32 => CirUnifyOk(substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyUsize => match r { CirTyUsize => CirUnifyOk(substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyBool => match r { CirTyBool => CirUnifyOk(substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyUnit => match r { CirTyUnit => CirUnifyOk(substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyNever => match r { CirTyNever => CirUnifyOk(substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyString => match r { CirTyString => CirUnifyOk(substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyStr => match r { CirTyStr => CirUnifyOk(substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTySliceU8 => match r { CirTySliceU8 => CirUnifyOk(substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyConst(name) => match r { CirTyConst(other) => cir_unify_same_const(name, other, substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyApp(callee, args) =>
+            match r {
+                CirTyApp(rcallee, rargs) =>
+                    match cir_unify_type(callee, rcallee, substs) {
+                        CirUnifyOk(next) => cir_unify_type_list(args, rargs, next)
+                        CirUnifyErr(_) => cir_unify_type(callee, rcallee, substs)
+                    }
+                _ => CirUnifyErr(mk_str("type mismatch", 13))
+            }
+        CirTyFn(params, ret) =>
+            match r {
+                CirTyFn(rparams, rret) =>
+                    match cir_unify_type_list(params, rparams, substs) {
+                        CirUnifyOk(next) => cir_unify_type(ret, rret, next)
+                        CirUnifyErr(_) => cir_unify_type_list(params, rparams, substs)
+                    }
+                _ => CirUnifyErr(mk_str("type mismatch", 13))
+            }
+        CirTyTuple(items) => match r { CirTyTuple(ritems) => cir_unify_type_list(items, ritems, substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyRow(id) => match r { CirTyRow(other) => if cir_row_id_eq(id, other) != 0 { CirUnifyOk(substs) } else { CirUnifyErr(mk_str("row mismatch", 12)) }  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyNominal(id, args) => match r { CirTyNominal(other, rargs) => if cir_nominal_id_eq(id, other) != 0 { cir_unify_type_list(args, rargs, substs) } else { CirUnifyErr(mk_str("nominal mismatch", 16)) }  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyData(id, args) => match r { CirTyData(other, rargs) => if cir_nominal_id_eq(id, other) != 0 { cir_unify_type_list(args, rargs, substs) } else { CirUnifyErr(mk_str("nominal mismatch", 16)) }  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyUnion(id, args) => match r { CirTyUnion(other, rargs) => if cir_nominal_id_eq(id, other) != 0 { cir_unify_type_list(args, rargs, substs) } else { CirUnifyErr(mk_str("nominal mismatch", 16)) }  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyRef(inner) => match r { CirTyRef(rinner) => cir_unify_type(inner, rinner, substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyUnsafeRef(inner) => match r { CirTyUnsafeRef(rinner) => cir_unify_type(inner, rinner, substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyPtr(inner) => match r { CirTyPtr(rinner) => cir_unify_type(inner, rinner, substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyAtomic(inner) => match r { CirTyAtomic(rinner) => cir_unify_type(inner, rinner, substs)  _ => CirUnifyErr(mk_str("type mismatch", 13)) }
+        CirTyContinuation(input, answer, kind) =>
+            match r {
+                CirTyContinuation(rinput, ranswer, rkind) =>
+                    if cir_continuation_kind_eq(kind, rkind) == 0 { CirUnifyErr(mk_str("continuation kind mismatch", 26)) }
+                    else {
+                        match cir_unify_type(input, rinput, substs) {
+                            CirUnifyOk(next) => cir_unify_type(answer, ranswer, next)
+                            CirUnifyErr(_) => cir_unify_type(input, rinput, substs)
+                        }
+                    }
+                _ => CirUnifyErr(mk_str("type mismatch", 13))
+            }
+    }
+}
+
+def cir_unify_expect_ok(out: Str, label: i64, result: CirUnifyResult): i64 =
+    match result {
+        CirUnifyOk(substs) => {
+            let _ = cir_show_line(out, 0, label)
+            cir_show_subst_list(out, 1, substs)
+        }
+        CirUnifyErr(message) => {
+            let _ = cir_show_line(out, 0, "unexpected-unify-error")
+            str_write_to(message, 1)
+        }
+    }
+
+def cir_unify_expect_err(out: Str, label: i64, result: CirUnifyResult): i64 =
+    match result {
+        CirUnifyOk(substs) => {
+            let _ = cir_show_line(out, 0, "unexpected-unify-ok")
+            cir_show_subst_list(out, 1, substs)
+        }
+        CirUnifyErr(message) => {
+            let _ = cir_show_line(out, 0, label)
+            let _ = cir_show_indent(out, 1)
+            let _ = str_append(out, message)
+            str_push(out, 10)
+        }
+    }
+
+def cir_type_unify_smoke(): Str = {
+    let out = str_new()
+    let t0 = CirTyVar(CirTyVarId { id: 0 })
+    let t1 = CirTyVar(CirTyVarId { id: 1 })
+    let user_a = CirNominalId { id: 1, module_name: mk_str("a", 1), local_name: mk_str("User", 4) }
+    let user_b = CirNominalId { id: 1, module_name: mk_str("b", 1), local_name: mk_str("User", 4) }
+    let _ = cir_unify_expect_ok(out, "unify-var-concrete", cir_unify_type(t0, CirTyI64, CirTypeSubstEnd))
+    let _ = cir_unify_expect_ok(out, "unify-fn", cir_unify_type(CirTyFn(CirTypeCons(t0, CirTypeEnd), t0), CirTyFn(CirTypeCons(CirTyBool, CirTypeEnd), CirTyBool), CirTypeSubstEnd))
+    let _ = cir_unify_expect_ok(out, "unify-tuple", cir_unify_type(CirTyTuple(CirTypeCons(CirTyI64, CirTypeCons(t1, CirTypeEnd))), CirTyTuple(CirTypeCons(CirTyI64, CirTypeCons(CirTyString, CirTypeEnd))), CirTypeSubstEnd))
+    let _ = cir_unify_expect_err(out, "unify-occurs-error", cir_unify_type(t0, CirTyRef(t0), CirTypeSubstEnd))
+    let _ = cir_unify_expect_err(out, "unify-nominal-namespace-error", cir_unify_type(CirTyNominal(user_a, CirTypeEnd), CirTyNominal(user_b, CirTypeEnd), CirTypeSubstEnd))
+    out
+}

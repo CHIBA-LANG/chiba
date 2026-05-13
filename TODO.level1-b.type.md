@@ -92,9 +92,10 @@
 
 ## 3. Unification 设计
 
-- [ ] **Unifier core**
+- [x] **Unifier core**
 	- **TODO**: 实现 substitution、occurs check、union/find 或等价结构、type level 管理。
 	- **DESC**: 需要支持一阶 HM，不做 higher-kinded type，不做全局 trait solver。
+	- **DONE**: `src/backend/cir/type_unify.chiba` 已实现 substitution apply/lookup、occurs check、var binding、一阶递归 unify；覆盖 function、tuple、type app、nominal namespace identity、Ref/Ptr/Atomic/continuation 等结构。`level1c type-unify-smoke` 已接入 bootstrap smoke。
 	- **验收**: 单测覆盖 var-var、var-concrete、fn-fn、tuple、type app、occurs check、错误路径。
 
 - [ ] **Kind / type family checks**

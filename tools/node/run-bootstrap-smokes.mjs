@@ -133,7 +133,7 @@ const LEVEL1C_CASES = [
   {
     name: "level1c help",
     args: ["--help"],
-    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke cps nanopass core-invalid-smoke cont-usage wat"],
+    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
   },
   {
     name: "level1c parse grammar 01",
@@ -166,6 +166,23 @@ const LEVEL1C_CASES = [
       "obligation method nominal#3 semantic.gates::User[].len() => usize source=qualified semantic.gates.User.len",
       "obligation continuation-capability Continuation[i64, i64, multi] multi",
       "subst $T1 := Ref[String]",
+      "0",
+    ],
+  },
+  {
+    name: "level1c type unifier smoke",
+    args: ["type-unify-smoke", "chiba-level1-grammar-spec/01-test.chiba"],
+    expect: [
+      "unify-var-concrete",
+      "subst $T0 := i64",
+      "unify-fn",
+      "subst $T0 := bool",
+      "unify-tuple",
+      "subst $T1 := String",
+      "unify-occurs-error",
+      "occurs check failed",
+      "unify-nominal-namespace-error",
+      "nominal mismatch",
       "0",
     ],
   },
