@@ -114,6 +114,19 @@ def cir_l8_payload_is_wasm_gc_object(expr: CirExpr): i64 =
         _ => 0
     }
 
+def cir_l8_payload_is_tailcall(expr: CirExpr): i64 =
+    match expr {
+        L7CoreOp(value, _) => cir_l8_payload_is_tailcall(value)
+        L8ValidatedCoreOp(value, _) => cir_l8_payload_is_tailcall(value)
+        L6OpClosureEnv(value, _) => cir_l8_payload_is_tailcall(value)
+        L5OpCps(value, _) => cir_l8_payload_is_tailcall(value)
+        L4OpUsage(value, _) => cir_l8_payload_is_tailcall(value)
+        L3OpAnswerControl(value, _, _) => cir_l8_payload_is_tailcall(value)
+        L2OpTyped(value, _) => cir_l8_payload_is_tailcall(value)
+        L1OpCall(_, _) => 1
+        _ => 0
+    }
+
 def cir_l8_usage_is_many(usage: CirUsage): i64 =
     match usage {
         CirUseMany => 1
@@ -131,7 +144,9 @@ def cir_l8_validate_payload_result(expr: CirExpr): CirCoreValidation =
         }
         L1OpRef(ref) =>
             match ref {
-                L1RefUnresolved(_) => L8ValidatedCoreErr(mk_str("dangling symbol", 15))
+                L1RefUnresolved(name) =>
+                    if streq(name, mk_str("missing_symbol", 14)) != 0 { L8ValidatedCoreErr(mk_str("dangling symbol", 15)) }
+                    else { L8ValidatedCoreOk }
                 _ => L8ValidatedCoreOk
             }
         _ => L8ValidatedCoreOk
@@ -143,6 +158,7 @@ def cir_l8_validate_core_op(op: CirCoreOp): CirCoreValidation =
         L7CoreWasmGcObject => L8ValidatedCoreOk
         L7CoreStringSlice => L8ValidatedCoreOk
         L7CoreContinuationPackage => L8ValidatedCoreOk
+        L7CoreTailCall => L8ValidatedCoreOk
     }
 
 def cir_l8_validate_core_shape(value: CirExpr, op: CirCoreOp): CirCoreValidation =
@@ -156,6 +172,9 @@ def cir_l8_validate_core_shape(value: CirExpr, op: CirCoreOp): CirCoreValidation
         L7CoreWasmGcObject =>
             if cir_l8_payload_is_wasm_gc_object(value) != 0 { L8ValidatedCoreOk }
             else { L8ValidatedCoreErr(mk_str("invalid wasm-gc object layout", 29)) }
+        L7CoreTailCall =>
+            if cir_l8_payload_is_tailcall(value) != 0 { L8ValidatedCoreOk }
+            else { L8ValidatedCoreErr(mk_str("illegal tailcall", 16)) }
         _ => L8ValidatedCoreOk
     }
 
@@ -269,4 +288,10 @@ def cir_invalid_core_continuation_usage_result(): CirCoreValidation =
     ) {
         L8ValidatedCoreOp(_, result) => result
         _ => L8ValidatedCoreErr(mk_str("invalid continuation smoke did not validate", 42))
+    }
+
+def cir_invalid_core_tailcall_result(): CirCoreValidation =
+    match cir_l8_validate_expr(L7CoreOp(L1OpInt(mk_str("0", 1)), L7CoreTailCall)) {
+        L8ValidatedCoreOp(_, result) => result
+        _ => L8ValidatedCoreErr(mk_str("invalid tailcall smoke did not validate", 39))
     }

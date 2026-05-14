@@ -36,9 +36,32 @@ def cir_l7_core_stmt(stmt: CirStmt): CirStmt =
         L2StmtLetPattern(pat, value) => L2StmtLetPattern(pat, cir_l7_core_expr(value))
         L2StmtAssign(lhs, rhs) => L2StmtAssign(cir_l7_core_expr(lhs), cir_l7_core_expr(rhs))
         L2StmtExpr(value) => L2StmtExpr(cir_l7_core_expr(value))
-        L2StmtReturn(value) => L2StmtReturn(cir_l7_core_expr(value))
+        L2StmtReturn(value) => L2StmtReturn(cir_l7_core_return_expr(value))
         L2StmtFor(label, cond, body) => L2StmtFor(label, cir_l7_core_expr(cond), cir_l7_core_expr(body))
         _ => stmt
+    }
+
+def cir_l7_core_return_expr(expr: CirExpr): CirExpr =
+    {
+        let payload = cir_l7_core_expr_payload(expr)
+        if cir_l7_core_payload_is_call(payload) != 0 {
+            L7CoreOp(payload, L7CoreTailCall)
+        } else {
+            L7CoreOp(payload, cir_l7_core_op(payload))
+        }
+    }
+
+def cir_l7_core_payload_is_call(expr: CirExpr): i64 =
+    match expr {
+        L7CoreOp(value, _) => cir_l7_core_payload_is_call(value)
+        L6OpClosureEnv(value, _) => cir_l7_core_payload_is_call(value)
+        L5OpContinuationPackage(_, _, value) => cir_l7_core_payload_is_call(value)
+        L5OpCps(value, _) => cir_l7_core_payload_is_call(value)
+        L4OpUsage(value, _) => cir_l7_core_payload_is_call(value)
+        L3OpAnswerControl(value, _, _) => cir_l7_core_payload_is_call(value)
+        L2OpTyped(value, _) => cir_l7_core_payload_is_call(value)
+        L1OpCall(_, _) => 1
+        _ => 0
     }
 
 def cir_l7_core_stmt_list(stmts: CirStmtList): CirStmtList =

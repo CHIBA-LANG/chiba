@@ -211,7 +211,8 @@ data CirCoreOp {
     L7CoreFunc,
     L7CoreWasmGcObject,
     L7CoreStringSlice,
-    L7CoreContinuationPackage
+    L7CoreContinuationPackage,
+    L7CoreTailCall
 }
 
 data CirCoreValidation {

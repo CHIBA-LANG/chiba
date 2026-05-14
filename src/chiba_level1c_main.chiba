@@ -366,6 +366,7 @@ def level1c_run_core_invalid_smoke(path: Str): i64 =
         let _ = level1c_write_core_validation(cir_invalid_core_dangling_result())
         let _ = level1c_write_core_validation(cir_invalid_core_string_layout_result())
         let _ = level1c_write_core_validation(cir_invalid_core_continuation_usage_result())
+        let _ = level1c_write_core_validation(cir_invalid_core_tailcall_result())
         0
     }
 

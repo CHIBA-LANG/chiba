@@ -501,6 +501,7 @@ def cir_show_core_op(out: Str, depth: i64, op: CirCoreOp): i64 =
         L7CoreWasmGcObject => cir_show_line(out, depth, "core-op wasm-gc-object")
         L7CoreStringSlice => cir_show_line(out, depth, "core-op string-slice")
         L7CoreContinuationPackage => cir_show_line(out, depth, "core-op continuation-package")
+        L7CoreTailCall => cir_show_line(out, depth, "core-op tailcall")
     }
 
 def cir_show_core_validation(out: Str, depth: i64, result: CirCoreValidation): i64 =
