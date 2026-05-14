@@ -152,6 +152,7 @@ function checkCompilerFixtures() {
   const invalid = [
     ["invalid_ptr_without_unsafe.chiba", "Ptr requires unsafe block"],
     ["invalid_unsaferef_without_unsafe.chiba", "UnsafeRef requires unsafe block"],
+    ["invalid_ref_without_world_local.chiba", "top-level Ref requires #[world_local]"],
     ["invalid_metal_raw_i64_pointer.chiba", "Metal pointer API must use Ptr[T]"],
   ];
 

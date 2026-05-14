@@ -247,7 +247,7 @@
 - [ ] **Finish-C: source gate migration**
 	- **TODO**: 将 return/binary/let、row field、method/operator、capability/ABI、nominal duplicate、record duplicate/update 逐步迁入 L2 check 或 L2 side table；source gate 只保留 parser/generated AST 完整性检查。
 	- **PROGRESS**: return/binary 已由 primary L2 checker 处理；extern ABI unsupported/fd_write signature、`Atomic[T]` well-formedness、`unsafe {}` depth、`as Ptr[T]` / `as UnsafeRef[T]` cast boundary 已迁入 `src/backend/cir/type_l2_check.chiba`，source fallback 不再是这些诊断的唯一入口。
-	- **REMAINING NODES**: record literal/update lowering、nominal/data/union item side table、method/operator call-site resolution、top-level item attrs (`#[world_local]` / `#![Metal]`) 仍需要 L2 side-table 或 CIR metadata 承载；这些完成前不能删除 `ast_items_check`。
+	- **REMAINING NODES**: record literal/update lowering、nominal/data/union item side table、method/operator call-site resolution 仍需要 L2 side-table 或 CIR metadata 承载；这些完成前不能删除 `ast_items_check`。
 	- **验收**: `cir_typed_semantic_check` 不再调用主要 `ast_*_check` 作为成功路径；每类规则有 L2 smoke/golden 和 source fixture 对拍。
 - [x] **Finish-D: ConstraintSet solver integration**
 	- **TODO**: `cir_typed_module` 不只写 node type，还要输出/可 dump `ConstraintSet + ObligationIR`，并由 solver 统一处理 equality、row、capability、ABI。
@@ -263,7 +263,7 @@
 	- **验收**: 两个 namespace 同名 nominal/method 不冲突；via/qualified path 行为可 dump；operator overload obligation/resolve 有 valid/invalid fixture。
 - [ ] **Finish-G: capability/unsafe/ABI fully typed**
 	- **TODO**: `Ref`/`UnsafeRef`/`Ptr`/`Atomic`、unsafe depth、Metal raw pointer audit、extern ABI signature 都进入 L2 facts/checker。
-	- **PROGRESS**: `Atomic[T]` supported set、extern ABI unsupported、WASI `fd_write` signature、`unsafe {}` depth、`as Ptr[T]` / `as UnsafeRef[T]` boundary 已进入 L2 checker；`type-l2-check-smoke` 固定 safe/unsafe cast golden；`vp run level1b:capability` 与 `level1b:type-system` 对应通过。Metal raw pointer audit、top-level `Ref` world-local 仍依赖 source/AST metadata，需继续 lowering attrs/unsafe facts。
+	- **PROGRESS**: `Atomic[T]` supported set、extern ABI unsupported、WASI `fd_write` signature、`unsafe {}` depth、`as Ptr[T]` / `as UnsafeRef[T]` boundary、top-level `Ref` `#[world_local]`、`#![Metal]` raw `i64` pointer API audit 已进入 L2 checker / AST side-table；`type-l2-check-smoke` 固定 safe/unsafe cast golden；`level1b:capability` 增加 isolated `invalid_ref_without_world_local.chiba`，避免被 `Atomic[Record]` 诊断遮挡。
 	- **验收**: `vp run level1b:capability` 与 `level1b:type-system` 使用同一组 L2 diagnostics；source scanner 不再是唯一保护线。
 - [ ] **Finish-H: final typecheck audit**
 	- **TODO**: 跑 bootstrap、semantic gates、type-system、capability、all-wat；记录 seed hash、关键 dump hash；删除或标注所有临时 source fallback。

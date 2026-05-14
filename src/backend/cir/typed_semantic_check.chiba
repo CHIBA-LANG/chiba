@@ -1272,7 +1272,7 @@ def cir_typed_semantic_check(ast: AST, module: CirModule): CirTypedSemanticCheck
     match module {
         L2Module(_, _) => {
             let items = ast_source_items(ast)
-            match cir_l2_type_check_module(module) {
+            match cir_l2_type_check_module_with_ast(module, ast) {
                 CirL2TypeCheckErr(message) => CirTypedSemanticCheckErr(message)
                 CirL2TypeCheckOk => ast_items_check(items, items, ast_attrs_has_metal(ast_source_file_attrs(ast)))
             }
