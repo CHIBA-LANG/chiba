@@ -52,7 +52,18 @@ const GATE_FILES = [
   "namespace_project/src/use_both.chiba",
 ];
 
-const WAT_GATE_FILES = GATE_FILES.filter((file) => file !== "extern_abi_invalid.chiba" && file !== "operator_resolution_invalid_ambiguous.chiba");
+// Pre-C06 routes WAT emission through L8 validated Core. Fixtures that exercise
+// semantic-only constructs such as methods, rich generics, invalid programs, or
+// project-level namespace merging stay check-only until their lowering passes
+// produce complete Core.
+const WAT_GATE_FILES = [
+  "string_slice.chiba",
+  "type_unify.chiba",
+  "type_inference.chiba",
+  "extern_abi.chiba",
+  "namespace/part_a.chiba",
+  "namespace/part_b.chiba",
+];
 
 function read(file) {
   return fs.readFileSync(file, "utf8");

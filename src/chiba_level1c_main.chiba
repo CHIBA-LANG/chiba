@@ -364,7 +364,10 @@ def level1c_run_core_invalid_smoke(path: Str): i64 =
         let _ = write_fd(1, "L8ValidatedCoreModule\n", 22)
         let _ = level1c_write_core_validation(cir_invalid_core_smoke_result())
         let _ = level1c_write_core_validation(cir_invalid_core_dangling_result())
+        let _ = level1c_write_core_validation(cir_valid_core_symbol_table_result())
         let _ = level1c_write_core_validation(cir_invalid_core_string_layout_result())
+        let _ = level1c_write_core_validation(cir_invalid_core_layout_ref_result())
+        let _ = level1c_write_core_validation(cir_invalid_core_layout_kind_result())
         let _ = level1c_write_core_validation(cir_invalid_core_continuation_usage_result())
         let _ = level1c_write_core_validation(cir_invalid_core_tailcall_result())
         let _ = level1c_write_core_validation(cir_invalid_core_world_thread_result())
@@ -416,10 +419,15 @@ def level1c_run_cont_usage(path: Str): i64 =
 def level1c_run_wat(path: Str): i64 =
     match level1c_parse_file(path) {
         OK(ast, _) => {
-            let l1 = alpha_module(cir_lower_module(ast as AST))
-            let rendered = wat_emit_module(l1)
-            let _ = str_write_to(rendered, 1)
-            0
+            let core = cir_nanopass_l8(ast as AST)
+            if wat_module_validated(core) == 0 {
+                let _ = write_fd(2, "validated Core required for wat emit\n", 37)
+                2
+            } else {
+                let rendered = wat_emit_module(core)
+                let _ = str_write_to(rendered, 1)
+                0
+            }
         }
         Err(_, _) => {
             let _ = write_fd(2, "parse failed\n", 13)

@@ -502,6 +502,24 @@ def cir_show_core_op(out: Str, depth: i64, op: CirCoreOp): i64 =
         L7CoreStringSlice => cir_show_line(out, depth, "core-op string-slice")
         L7CoreContinuationPackage => cir_show_line(out, depth, "core-op continuation-package")
         L7CoreTailCall => cir_show_line(out, depth, "core-op tailcall")
+        L7CoreLayoutObject(id) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "core-op layout-object layout#")
+            let _ = str_append_i64(out, id.id)
+            str_push(out, 10)
+        }
+        L7CoreStringSliceLayout(id) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "core-op string-slice layout#")
+            let _ = str_append_i64(out, id.id)
+            str_push(out, 10)
+        }
+        L7CoreContinuationPackageLayout(id) => {
+            let _ = cir_show_indent(out, depth)
+            let _ = str_push_cstr(out, "core-op continuation-package layout#")
+            let _ = str_append_i64(out, id.id)
+            str_push(out, 10)
+        }
     }
 
 def cir_show_core_validation(out: Str, depth: i64, result: CirCoreValidation): i64 =

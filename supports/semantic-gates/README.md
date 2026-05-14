@@ -19,7 +19,8 @@ apply spec-level checks that are stricter than the current bootstrap backend, so
 Second Bootstrap work has executable targets before the complete typed pipeline
 exists.
 
-Every fixture also emits a corresponding WAT file under
+Pre-C06 WAT emission is limited to fixtures that already lower to L8 validated
+Core without semantic fallback or env holes. Those WAT files are written under
 `.scratch/semantic-gates/wat/`. String and slice fixtures assert that the
 bootstrap Wasm-GC backend emits managed layouts: `String` as `$array_u8` and
 `str`/slice as a `$slice_u8` view over that backing array, rather than treating

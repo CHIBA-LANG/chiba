@@ -207,12 +207,52 @@ data CirUsage {
     CirUseUnknown
 }
 
+type CirCoreLayoutId {
+    id: i64
+}
+
+data CirCoreLayoutKind {
+    CirCoreLayoutStruct,
+    CirCoreLayoutArrayU8,
+    CirCoreLayoutSliceU8,
+    CirCoreLayoutClosureEnv,
+    CirCoreLayoutContinuationPackage
+}
+
+type CirCoreLayout {
+    id: CirCoreLayoutId
+    name: Str
+    kind: CirCoreLayoutKind
+}
+
+data CirCoreLayoutList {
+    CirCoreLayoutCons(CirCoreLayout, CirCoreLayoutList),
+    CirCoreLayoutEnd
+}
+
+type CirCoreSymbol {
+    name: Str
+}
+
+data CirCoreSymbolList {
+    CirCoreSymbolCons(CirCoreSymbol, CirCoreSymbolList),
+    CirCoreSymbolEnd
+}
+
+type CirCoreEnv {
+    symbols: CirCoreSymbolList
+    layouts: CirCoreLayoutList
+}
+
 data CirCoreOp {
     L7CoreFunc,
     L7CoreWasmGcObject,
     L7CoreStringSlice,
     L7CoreContinuationPackage,
-    L7CoreTailCall
+    L7CoreTailCall,
+    L7CoreLayoutObject(CirCoreLayoutId),
+    L7CoreStringSliceLayout(CirCoreLayoutId),
+    L7CoreContinuationPackageLayout(CirCoreLayoutId)
 }
 
 data CirCoreValidation {

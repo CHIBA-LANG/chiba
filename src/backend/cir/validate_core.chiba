@@ -3,6 +3,39 @@ use backend.cir.ir.*
 use metalstd.str.*
 use parser.chiba_level1.*
 
+def cir_core_layout_id(id: i64): CirCoreLayoutId =
+    CirCoreLayoutId { id: id }
+
+def cir_core_layout(id: i64, name: Str, kind: CirCoreLayoutKind): CirCoreLayout =
+    CirCoreLayout { id: cir_core_layout_id(id), name: name, kind: kind }
+
+def cir_core_symbol(name: Str): CirCoreSymbol =
+    CirCoreSymbol { name: name }
+
+def cir_l8_default_layouts(): CirCoreLayoutList =
+    CirCoreLayoutCons(
+        cir_core_layout(1, mk_str("array_u8", 8), CirCoreLayoutArrayU8),
+        CirCoreLayoutCons(
+            cir_core_layout(2, mk_str("slice_u8", 8), CirCoreLayoutSliceU8),
+            CirCoreLayoutCons(
+                cir_core_layout(3, mk_str("closure_env", 11), CirCoreLayoutClosureEnv),
+                CirCoreLayoutCons(
+                    cir_core_layout(4, mk_str("continuation_package", 20), CirCoreLayoutContinuationPackage),
+                    CirCoreLayoutEnd
+                )
+            )
+        )
+    )
+
+def cir_l8_empty_env(): CirCoreEnv =
+    CirCoreEnv { symbols: cir_l8_builtin_symbols(CirCoreSymbolEnd), layouts: cir_l8_default_layouts() }
+
+def cir_l8_env(symbols: CirCoreSymbolList): CirCoreEnv =
+    CirCoreEnv { symbols: cir_l8_builtin_symbols(symbols), layouts: cir_l8_default_layouts() }
+
+def cir_l8_builtin_symbols(tail: CirCoreSymbolList): CirCoreSymbolList =
+    CirCoreSymbolCons(cir_core_symbol(mk_str("__tuple", 7)), tail)
+
 def cir_l8_validation_merge(a: CirCoreValidation, b: CirCoreValidation): CirCoreValidation =
     match a {
         L8ValidatedCoreErr(_) => a
@@ -15,49 +48,126 @@ def cir_l8_expr_validation(expr: CirExpr): CirCoreValidation =
         _ => L8ValidatedCoreErr(mk_str("validator did not produce L8 op", 31))
     }
 
-def cir_l8_validate_expr_list(args: CirExprList): CirExprList =
-    match args {
-        CirExprEnd => CirExprEnd
-        CirExprCons(head, tail) => CirExprCons(cir_l8_validate_expr(head), cir_l8_validate_expr_list(tail))
+def cir_l8_symbol_list_contains(symbols: CirCoreSymbolList, name: Str): i64 =
+    match symbols {
+        CirCoreSymbolEnd => 0
+        CirCoreSymbolCons(head, tail) =>
+            if streq(head.name, name) != 0 { 1 }
+            else { cir_l8_symbol_list_contains(tail, name) }
     }
 
-def cir_l8_validate_stmt(stmt: CirStmt): CirStmt =
+def cir_l8_env_has_symbol(env: CirCoreEnv, name: Str): i64 =
+    cir_l8_symbol_list_contains(env.symbols, name)
+
+def cir_l8_layout_kind_eq(a: CirCoreLayoutKind, b: CirCoreLayoutKind): i64 =
+    match a {
+        CirCoreLayoutStruct =>
+            match b {
+                CirCoreLayoutStruct => 1
+                _ => 0
+            }
+        CirCoreLayoutArrayU8 =>
+            match b {
+                CirCoreLayoutArrayU8 => 1
+                _ => 0
+            }
+        CirCoreLayoutSliceU8 =>
+            match b {
+                CirCoreLayoutSliceU8 => 1
+                _ => 0
+            }
+        CirCoreLayoutClosureEnv =>
+            match b {
+                CirCoreLayoutClosureEnv => 1
+                _ => 0
+            }
+        CirCoreLayoutContinuationPackage =>
+            match b {
+                CirCoreLayoutContinuationPackage => 1
+                _ => 0
+            }
+    }
+
+def cir_l8_layout_list_has_kind(layouts: CirCoreLayoutList, id: CirCoreLayoutId, kind: CirCoreLayoutKind): i64 =
+    match layouts {
+        CirCoreLayoutEnd => 0
+        CirCoreLayoutCons(head, tail) =>
+            if head.id.id == id.id {
+                cir_l8_layout_kind_eq(head.kind, kind)
+            } else {
+                cir_l8_layout_list_has_kind(tail, id, kind)
+            }
+    }
+
+def cir_l8_layout_list_has_id(layouts: CirCoreLayoutList, id: CirCoreLayoutId): i64 =
+    match layouts {
+        CirCoreLayoutEnd => 0
+        CirCoreLayoutCons(head, tail) =>
+            if head.id.id == id.id { 1 }
+            else { cir_l8_layout_list_has_id(tail, id) }
+    }
+
+def cir_l8_env_has_layout_kind(env: CirCoreEnv, id: CirCoreLayoutId, kind: CirCoreLayoutKind): i64 =
+    cir_l8_layout_list_has_kind(env.layouts, id, kind)
+
+def cir_l8_env_has_layout_id(env: CirCoreEnv, id: CirCoreLayoutId): i64 =
+    cir_l8_layout_list_has_id(env.layouts, id)
+
+def cir_l8_validate_expr_list_with_env(env: CirCoreEnv, args: CirExprList): CirExprList =
+    match args {
+        CirExprEnd => CirExprEnd
+        CirExprCons(head, tail) => CirExprCons(cir_l8_validate_expr_with_env(env, head), cir_l8_validate_expr_list_with_env(env, tail))
+    }
+
+def cir_l8_validate_expr_list(args: CirExprList): CirExprList =
+    cir_l8_validate_expr_list_with_env(cir_l8_empty_env(), args)
+
+def cir_l8_validate_stmt_with_env(env: CirCoreEnv, stmt: CirStmt): CirStmt =
     match stmt {
-        L2StmtLet(binder, ty, value) => L2StmtLet(binder, ty, cir_l8_validate_expr(value))
-        L2StmtLetPattern(pat, value) => L2StmtLetPattern(pat, cir_l8_validate_expr(value))
-        L2StmtAssign(lhs, rhs) => L2StmtAssign(cir_l8_validate_expr(lhs), cir_l8_validate_expr(rhs))
-        L2StmtExpr(value) => L2StmtExpr(cir_l8_validate_expr(value))
-        L2StmtReturn(value) => L2StmtReturn(cir_l8_validate_expr(value))
-        L2StmtFor(label, cond, body) => L2StmtFor(label, cir_l8_validate_expr(cond), cir_l8_validate_expr(body))
+        L2StmtLet(binder, ty, value) => L2StmtLet(binder, ty, cir_l8_validate_expr_with_env(env, value))
+        L2StmtLetPattern(pat, value) => L2StmtLetPattern(pat, cir_l8_validate_expr_with_env(env, value))
+        L2StmtAssign(lhs, rhs) => L2StmtAssign(cir_l8_validate_expr_with_env(env, lhs), cir_l8_validate_expr_with_env(env, rhs))
+        L2StmtExpr(value) => L2StmtExpr(cir_l8_validate_expr_with_env(env, value))
+        L2StmtReturn(value) => L2StmtReturn(cir_l8_validate_expr_with_env(env, value))
+        L2StmtFor(label, cond, body) => L2StmtFor(label, cir_l8_validate_expr_with_env(env, cond), cir_l8_validate_expr_with_env(env, body))
         _ => stmt
     }
 
-def cir_l8_validate_stmt_list(stmts: CirStmtList): CirStmtList =
+def cir_l8_validate_stmt(stmt: CirStmt): CirStmt =
+    cir_l8_validate_stmt_with_env(cir_l8_empty_env(), stmt)
+
+def cir_l8_validate_stmt_list_with_env(env: CirCoreEnv, stmts: CirStmtList): CirStmtList =
     match stmts {
         CirStmtEnd => CirStmtEnd
-        CirStmtCons(stmt, rest) => CirStmtCons(cir_l8_validate_stmt(stmt), cir_l8_validate_stmt_list(rest))
+        CirStmtCons(stmt, rest) => CirStmtCons(cir_l8_validate_stmt_with_env(env, stmt), cir_l8_validate_stmt_list_with_env(env, rest))
+    }
+
+def cir_l8_validate_stmt_list(stmts: CirStmtList): CirStmtList =
+    cir_l8_validate_stmt_list_with_env(cir_l8_empty_env(), stmts)
+
+def cir_l8_validate_payload_with_env(env: CirCoreEnv, expr: CirExpr): CirExpr =
+    match expr {
+        L6OpClosureEnv(value, usage) => L6OpClosureEnv(cir_l8_validate_expr_with_env(env, value), usage)
+        L5OpContinuationPackage(binder, usage, value) => L5OpContinuationPackage(binder, usage, cir_l8_validate_expr_with_env(env, value))
+        L5OpCps(value, usage) => L5OpCps(cir_l8_validate_expr_with_env(env, value), usage)
+        L4OpUsage(value, usage) => L4OpUsage(cir_l8_validate_expr_with_env(env, value), usage)
+        L3OpAnswerControl(value, answer, boundary) => L3OpAnswerControl(cir_l8_validate_expr_with_env(env, value), answer, boundary)
+        L2OpTyped(value, ty) => L2OpTyped(cir_l8_validate_expr_with_env(env, value), ty)
+        L1OpBlock(stmts, tail) => L1OpBlock(cir_l8_validate_stmt_list_with_env(env, stmts), cir_l8_validate_expr_with_env(env, tail))
+        L1OpIf(cond, then_expr, else_expr) => L1OpIf(cir_l8_validate_expr_with_env(env, cond), cir_l8_validate_expr_with_env(env, then_expr), cir_l8_validate_expr_with_env(env, else_expr))
+        L1OpCall(callee, args) => L1OpCall(cir_l8_validate_expr_with_env(env, callee), cir_l8_validate_expr_list_with_env(env, args))
+        L1OpField(value, field) => L1OpField(cir_l8_validate_expr_with_env(env, value), field)
+        L1OpIndex(value, args) => L1OpIndex(cir_l8_validate_expr_with_env(env, value), cir_l8_validate_expr_list_with_env(env, args))
+        L1OpAssign(lhs, rhs) => L1OpAssign(cir_l8_validate_expr_with_env(env, lhs), cir_l8_validate_expr_with_env(env, rhs))
+        L1OpPrefix(op, value) => L1OpPrefix(op, cir_l8_validate_expr_with_env(env, value))
+        L1OpBinary(op, lhs, rhs) => L1OpBinary(op, cir_l8_validate_expr_with_env(env, lhs), cir_l8_validate_expr_with_env(env, rhs))
+        L1OpReset(label, body) => L1OpReset(label, cir_l8_validate_expr_with_env(env, body))
+        L1OpShift(label, binder, body) => L1OpShift(label, binder, cir_l8_validate_expr_with_env(env, body))
+        _ => expr
     }
 
 def cir_l8_validate_payload(expr: CirExpr): CirExpr =
-    match expr {
-        L6OpClosureEnv(value, usage) => L6OpClosureEnv(cir_l8_validate_expr(value), usage)
-        L5OpContinuationPackage(binder, usage, value) => L5OpContinuationPackage(binder, usage, cir_l8_validate_expr(value))
-        L5OpCps(value, usage) => L5OpCps(cir_l8_validate_expr(value), usage)
-        L4OpUsage(value, usage) => L4OpUsage(cir_l8_validate_expr(value), usage)
-        L3OpAnswerControl(value, answer, boundary) => L3OpAnswerControl(cir_l8_validate_expr(value), answer, boundary)
-        L2OpTyped(value, ty) => L2OpTyped(cir_l8_validate_expr(value), ty)
-        L1OpBlock(stmts, tail) => L1OpBlock(cir_l8_validate_stmt_list(stmts), cir_l8_validate_expr(tail))
-        L1OpIf(cond, then_expr, else_expr) => L1OpIf(cir_l8_validate_expr(cond), cir_l8_validate_expr(then_expr), cir_l8_validate_expr(else_expr))
-        L1OpCall(callee, args) => L1OpCall(cir_l8_validate_expr(callee), cir_l8_validate_expr_list(args))
-        L1OpField(value, field) => L1OpField(cir_l8_validate_expr(value), field)
-        L1OpIndex(value, args) => L1OpIndex(cir_l8_validate_expr(value), cir_l8_validate_expr_list(args))
-        L1OpAssign(lhs, rhs) => L1OpAssign(cir_l8_validate_expr(lhs), cir_l8_validate_expr(rhs))
-        L1OpPrefix(op, value) => L1OpPrefix(op, cir_l8_validate_expr(value))
-        L1OpBinary(op, lhs, rhs) => L1OpBinary(op, cir_l8_validate_expr(lhs), cir_l8_validate_expr(rhs))
-        L1OpReset(label, body) => L1OpReset(label, cir_l8_validate_expr(body))
-        L1OpShift(label, binder, body) => L1OpShift(label, binder, cir_l8_validate_expr(body))
-        _ => expr
-    }
+    cir_l8_validate_payload_with_env(cir_l8_empty_env(), expr)
 
 def cir_l8_type_is_string_slice(ty: CirType): i64 =
     match ty {
@@ -197,7 +307,54 @@ def cir_l8_usage_is_many(usage: CirUsage): i64 =
         _ => 0
     }
 
-def cir_l8_validate_payload_result(expr: CirExpr): CirCoreValidation =
+def cir_l8_validate_ref_result(env: CirCoreEnv, ref: CirRef): CirCoreValidation =
+    match ref {
+        L1RefGlobal(name) =>
+            if cir_l8_env_has_symbol(env, name) != 0 { L8ValidatedCoreOk }
+            else { L8ValidatedCoreErr(mk_str("dangling symbol", 15)) }
+        L1RefUnresolved(name) =>
+            if cir_l8_env_has_symbol(env, name) != 0 { L8ValidatedCoreOk }
+            else { L8ValidatedCoreErr(mk_str("dangling symbol", 15)) }
+        _ => L8ValidatedCoreOk
+    }
+
+def cir_l8_validate_expr_list_result(env: CirCoreEnv, args: CirExprList): CirCoreValidation =
+    match args {
+        CirExprEnd => L8ValidatedCoreOk
+        CirExprCons(head, tail) =>
+            cir_l8_validation_merge(
+                cir_l8_expr_validation(cir_l8_validate_expr_with_env(env, head)),
+                cir_l8_validate_expr_list_result(env, tail)
+            )
+    }
+
+def cir_l8_validate_stmt_result(env: CirCoreEnv, stmt: CirStmt): CirCoreValidation =
+    match stmt {
+        L2StmtLet(_, _, value) => cir_l8_expr_validation(cir_l8_validate_expr_with_env(env, value))
+        L2StmtLetPattern(_, value) => cir_l8_expr_validation(cir_l8_validate_expr_with_env(env, value))
+        L2StmtAssign(lhs, rhs) =>
+            cir_l8_validation_merge(
+                cir_l8_expr_validation(cir_l8_validate_expr_with_env(env, lhs)),
+                cir_l8_expr_validation(cir_l8_validate_expr_with_env(env, rhs))
+            )
+        L2StmtExpr(value) => cir_l8_expr_validation(cir_l8_validate_expr_with_env(env, value))
+        L2StmtReturn(value) => cir_l8_expr_validation(cir_l8_validate_expr_with_env(env, value))
+        L2StmtFor(_, cond, body) =>
+            cir_l8_validation_merge(
+                cir_l8_expr_validation(cir_l8_validate_expr_with_env(env, cond)),
+                cir_l8_expr_validation(cir_l8_validate_expr_with_env(env, body))
+            )
+        _ => L8ValidatedCoreOk
+    }
+
+def cir_l8_validate_stmt_list_result(env: CirCoreEnv, stmts: CirStmtList): CirCoreValidation =
+    match stmts {
+        CirStmtEnd => L8ValidatedCoreOk
+        CirStmtCons(stmt, rest) =>
+            cir_l8_validation_merge(cir_l8_validate_stmt_result(env, stmt), cir_l8_validate_stmt_list_result(env, rest))
+    }
+
+def cir_l8_validate_payload_result_with_env(env: CirCoreEnv, expr: CirExpr): CirCoreValidation =
     match expr {
         L8ValidatedCoreOp(_, result) => result
         L5OpContinuationPackage(_, usage, value) => {
@@ -206,15 +363,12 @@ def cir_l8_validate_payload_result(expr: CirExpr): CirCoreValidation =
                 else { L8ValidatedCoreErr(mk_str("illegal continuation package usage", 34)) }
             usage_check
         }
-        L1OpRef(ref) =>
-            match ref {
-                L1RefUnresolved(name) =>
-                    if streq(name, mk_str("missing_symbol", 14)) != 0 { L8ValidatedCoreErr(mk_str("dangling symbol", 15)) }
-                    else { L8ValidatedCoreOk }
-                _ => L8ValidatedCoreOk
-            }
+        L1OpRef(ref) => cir_l8_validate_ref_result(env, ref)
         _ => L8ValidatedCoreOk
     }
+
+def cir_l8_validate_payload_result(expr: CirExpr): CirCoreValidation =
+    cir_l8_validate_payload_result_with_env(cir_l8_empty_env(), expr)
 
 def cir_l8_validate_core_op(op: CirCoreOp): CirCoreValidation =
     match op {
@@ -223,51 +377,115 @@ def cir_l8_validate_core_op(op: CirCoreOp): CirCoreValidation =
         L7CoreStringSlice => L8ValidatedCoreOk
         L7CoreContinuationPackage => L8ValidatedCoreOk
         L7CoreTailCall => L8ValidatedCoreOk
+        L7CoreLayoutObject(_) => L8ValidatedCoreOk
+        L7CoreStringSliceLayout(_) => L8ValidatedCoreOk
+        L7CoreContinuationPackageLayout(_) => L8ValidatedCoreOk
     }
 
-def cir_l8_validate_core_shape(value: CirExpr, op: CirCoreOp): CirCoreValidation =
+def cir_l8_validate_layout_ref(env: CirCoreEnv, id: CirCoreLayoutId, kind: CirCoreLayoutKind): CirCoreValidation =
+    if cir_l8_env_has_layout_kind(env, id, kind) != 0 { L8ValidatedCoreOk }
+    else if cir_l8_env_has_layout_id(env, id) != 0 { L8ValidatedCoreErr(mk_str("layout kind mismatch", 20)) }
+    else { L8ValidatedCoreErr(mk_str("dangling layout ref", 19)) }
+
+def cir_l8_validate_core_shape_with_env(env: CirCoreEnv, value: CirExpr, op: CirCoreOp): CirCoreValidation =
     match op {
         L7CoreStringSlice =>
             if cir_l8_payload_is_string_slice(value) != 0 { L8ValidatedCoreOk }
             else { L8ValidatedCoreErr(mk_str("invalid string/slice layout", 27)) }
+        L7CoreStringSliceLayout(id) =>
+            cir_l8_validation_merge(
+                cir_l8_validate_layout_ref(env, id, CirCoreLayoutSliceU8),
+                if cir_l8_payload_is_string_slice(value) != 0 { L8ValidatedCoreOk }
+                else { L8ValidatedCoreErr(mk_str("invalid string/slice layout", 27)) }
+            )
         L7CoreContinuationPackage =>
             if cir_l8_payload_crosses_world_thread(value) != 0 { L8ValidatedCoreErr(mk_str("continuation crosses world/thread boundary", 42)) }
             else if cir_l8_payload_is_continuation(value) != 0 { L8ValidatedCoreOk }
             else { L8ValidatedCoreErr(mk_str("invalid continuation package", 28)) }
+        L7CoreContinuationPackageLayout(id) =>
+            cir_l8_validation_merge(
+                cir_l8_validate_layout_ref(env, id, CirCoreLayoutContinuationPackage),
+                if cir_l8_payload_crosses_world_thread(value) != 0 { L8ValidatedCoreErr(mk_str("continuation crosses world/thread boundary", 42)) }
+                else if cir_l8_payload_is_continuation(value) != 0 { L8ValidatedCoreOk }
+                else { L8ValidatedCoreErr(mk_str("invalid continuation package", 28)) }
+            )
         L7CoreWasmGcObject =>
             if cir_l8_payload_is_wasm_gc_object(value) != 0 { L8ValidatedCoreOk }
             else { L8ValidatedCoreErr(mk_str("invalid wasm-gc object layout", 29)) }
+        L7CoreLayoutObject(id) =>
+            cir_l8_validation_merge(
+                cir_l8_validate_layout_ref(env, id, CirCoreLayoutClosureEnv),
+                if cir_l8_payload_is_wasm_gc_object(value) != 0 { L8ValidatedCoreOk }
+                else { L8ValidatedCoreErr(mk_str("invalid wasm-gc object layout", 29)) }
+            )
         L7CoreTailCall =>
             if cir_l8_payload_is_tailcall(value) != 0 { L8ValidatedCoreOk }
             else { L8ValidatedCoreErr(mk_str("illegal tailcall", 16)) }
         _ => L8ValidatedCoreOk
     }
 
-def cir_l8_validate_expr(expr: CirExpr): CirExpr =
+def cir_l8_validate_core_shape(value: CirExpr, op: CirCoreOp): CirCoreValidation =
+    cir_l8_validate_core_shape_with_env(cir_l8_empty_env(), value, op)
+
+def cir_l8_validate_expr_with_env(env: CirCoreEnv, expr: CirExpr): CirExpr =
     match expr {
         L7CoreOp(value, op) => {
             let result = cir_l8_validation_merge(
                 cir_l8_validate_core_op(op),
-                cir_l8_validation_merge(cir_l8_validate_core_shape(value, op), cir_l8_validate_payload_result(value))
+                cir_l8_validation_merge(cir_l8_validate_core_shape_with_env(env, value, op), cir_l8_validate_payload_result_with_env(env, value))
             )
-            L8ValidatedCoreOp(L7CoreOp(cir_l8_validate_payload(value), op), result)
+            L8ValidatedCoreOp(L7CoreOp(cir_l8_validate_payload_with_env(env, value), op), result)
         }
         _ => L8ValidatedCoreOp(expr, L8ValidatedCoreErr(mk_str("missing L7CoreOp", 16)))
     }
 
-def cir_l8_items(items: CirItemList): CirItemList =
+def cir_l8_validate_expr(expr: CirExpr): CirExpr =
+    cir_l8_validate_expr_with_env(cir_l8_empty_env(), expr)
+
+def cir_l8_item_symbols(items: CirItemList): CirCoreSymbolList =
+    match items {
+        CirItemEnd => CirCoreSymbolEnd
+        CirItemCons(item, rest) => {
+            let tail = cir_l8_item_symbols(rest)
+            match item {
+                L7CoreItemDef(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), tail)
+                L7CoreItemExtern(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), tail)
+                _ => tail
+            }
+        }
+    }
+
+def cir_l8_param_symbols(params: CirParamList, tail: CirCoreSymbolList): CirCoreSymbolList =
+    match params {
+        CirParamEnd => tail
+        CirParamCons(param, rest) => {
+            let rest_symbols = cir_l8_param_symbols(rest, tail)
+            match param {
+                L1Param(binder, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), rest_symbols)
+                _ => rest_symbols
+            }
+        }
+    }
+
+def cir_l8_item_env(module_env: CirCoreEnv, params: CirParamList): CirCoreEnv =
+    CirCoreEnv { symbols: cir_l8_param_symbols(params, module_env.symbols), layouts: module_env.layouts }
+
+def cir_l8_items_with_env(env: CirCoreEnv, items: CirItemList): CirItemList =
     match items {
         CirItemEnd => CirItemEnd
         CirItemCons(item, rest) => {
             let item2 = match item {
-                L7CoreItemDef(binder, params, ret, body) => L8ValidatedCoreItemDef(binder, params, ret, cir_l8_validate_expr(body))
+                L7CoreItemDef(binder, params, ret, body) => L8ValidatedCoreItemDef(binder, params, ret, cir_l8_validate_expr_with_env(cir_l8_item_env(env, params), body))
                 L7CoreItemExtern(binder, params, ret, import) => L8ValidatedCoreItemExtern(binder, params, ret, import)
                 L7CoreItemUnsupported(ast, reason) => L8ValidatedCoreItemUnsupported(ast, reason)
                 _ => item
             }
-            CirItemCons(item2, cir_l8_items(rest))
+            CirItemCons(item2, cir_l8_items_with_env(env, rest))
         }
     }
+
+def cir_l8_items(items: CirItemList): CirItemList =
+    cir_l8_items_with_env(cir_l8_env(cir_l8_item_symbols(items)), items)
 
 def cir_validate_core_module(module: CirModule): CirModule =
     match module {
@@ -334,10 +552,31 @@ def cir_invalid_core_dangling_result(): CirCoreValidation =
         _ => L8ValidatedCoreErr(mk_str("invalid dangling smoke did not validate", 38))
     }
 
+def cir_valid_core_symbol_table_result(): CirCoreValidation =
+    match cir_l8_validate_expr_with_env(
+        cir_l8_env(CirCoreSymbolCons(cir_core_symbol(mk_str("present_symbol", 14)), CirCoreSymbolEnd)),
+        L7CoreOp(L1OpRef(L1RefUnresolved(mk_str("present_symbol", 14))), L7CoreFunc)
+    ) {
+        L8ValidatedCoreOp(_, result) => result
+        _ => L8ValidatedCoreErr(mk_str("valid symbol smoke did not validate", 35))
+    }
+
 def cir_invalid_core_string_layout_result(): CirCoreValidation =
     match cir_l8_validate_expr(L7CoreOp(L1OpInt(mk_str("1", 1)), L7CoreStringSlice)) {
         L8ValidatedCoreOp(_, result) => result
         _ => L8ValidatedCoreErr(mk_str("invalid string smoke did not validate", 36))
+    }
+
+def cir_invalid_core_layout_ref_result(): CirCoreValidation =
+    match cir_l8_validate_expr(L7CoreOp(L1OpString, L7CoreStringSliceLayout(cir_core_layout_id(404)))) {
+        L8ValidatedCoreOp(_, result) => result
+        _ => L8ValidatedCoreErr(mk_str("invalid layout smoke did not validate", 37))
+    }
+
+def cir_invalid_core_layout_kind_result(): CirCoreValidation =
+    match cir_l8_validate_expr(L7CoreOp(L1OpString, L7CoreStringSliceLayout(cir_core_layout_id(1)))) {
+        L8ValidatedCoreOp(_, result) => result
+        _ => L8ValidatedCoreErr(mk_str("invalid layout kind smoke did not validate", 42))
     }
 
 def cir_invalid_core_continuation_usage_result(): CirCoreValidation =
