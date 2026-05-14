@@ -9,6 +9,10 @@ const WAT_DIR = ".scratch/semantic-gates/wat";
 const GATE_FILES = [
   "method_resolution.chiba",
   "method_resolution_invalid.chiba",
+  "operator_resolution.chiba",
+  "operator_resolution_invalid_missing.chiba",
+  "operator_resolution_invalid_ambiguous.chiba",
+  "operator_resolution_invalid_operand.chiba",
   "row_poly.chiba",
   "row_poly_invalid.chiba",
   "row_shape_unify.chiba",
@@ -48,13 +52,16 @@ const GATE_FILES = [
   "namespace_project/src/use_both.chiba",
 ];
 
-const WAT_GATE_FILES = GATE_FILES.filter((file) => file !== "extern_abi_invalid.chiba");
+const WAT_GATE_FILES = GATE_FILES.filter((file) => file !== "extern_abi_invalid.chiba" && file !== "operator_resolution_invalid_ambiguous.chiba");
 
 function read(file) {
   return fs.readFileSync(file, "utf8");
 }
 
 function run(command, args) {
+  if (command === "./target/debug/level1c.o") {
+    return spawnSync("timeout", ["10", command, ...args], { encoding: "utf8" });
+  }
   return spawnSync(command, args, { encoding: "utf8" });
 }
 
@@ -170,6 +177,19 @@ function checkMethodResolutionCompilerGate() {
   assert(name, valid.status === 0 && valid.stdout.includes("check ok"), valid.stdout || valid.stderr);
   const invalid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "method_resolution_invalid.chiba")]);
   assert(name, invalid.status === 0 && invalid.stderr.includes("unresolved method missing for Widget"), invalid.stdout || invalid.stderr);
+  pass(name);
+}
+
+function checkOperatorResolutionCompilerGate() {
+  const name = "operator resolution compiler gate";
+  const valid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "operator_resolution.chiba")]);
+  assert(name, valid.status === 0 && valid.stdout.includes("check ok"), valid.stdout || valid.stderr);
+  const missing = run("./target/debug/level1c.o", ["check", path.join(ROOT, "operator_resolution_invalid_missing.chiba")]);
+  assert(name, missing.status === 0 && missing.stderr.includes("missing operator op_add for Scalar"), missing.stdout || missing.stderr);
+  const ambiguous = run("./target/debug/level1c.o", ["check", path.join(ROOT, "operator_resolution_invalid_ambiguous.chiba")]);
+  assert(name, ambiguous.status === 0 && ambiguous.stderr.includes("ambiguous operator op_add for Scalar"), ambiguous.stdout || ambiguous.stderr);
+  const operand = run("./target/debug/level1c.o", ["check", path.join(ROOT, "operator_resolution_invalid_operand.chiba")]);
+  assert(name, operand.status === 0 && operand.stderr.includes("operator operand type mismatch"), operand.stdout || operand.stderr);
   pass(name);
 }
 
@@ -476,6 +496,7 @@ parseAll();
 emitWatAll();
 checkMethodResolution();
 checkMethodResolutionCompilerGate();
+checkOperatorResolutionCompilerGate();
 checkRowPoly();
 checkRowPolyCompilerGate();
 checkRowShapeUnify();

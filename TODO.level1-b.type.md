@@ -267,12 +267,13 @@
 	- **验收**: `vp run level1b:capability` 与 `level1b:type-system` 使用同一组 L2 diagnostics；source scanner 不再是唯一保护线。
 - [x] **Finish-H: final typecheck audit**
 	- **TODO**: 跑 bootstrap、semantic gates、type-system、capability、all-wat；记录 seed hash、关键 dump hash；删除或标注所有临时 source fallback。
-	- **DONE**: 已跑 `vp run smoke:bootstrap`、`vp run semantic:gates`、`vp run level1b:type-system`、`vp run level1b:capability`、`vp run run:all-wat`；all-wat 结果为 `executed=38 instantiated=27`。
-	- **HASH**: seed `chibac_amd64-unknown-linux_chiba_dev.o` = `7a7744ab9ace3d8e13ede45f2e5978e56cc07f597884085a9c4886753f3e268d`；`target/debug/level1c.o` = `041b90752349387191adc858c8ae198080d7ed954a87add189ac14c39578bdb1`；`type-l2-check-smoke` = `3306dbc700701e4298635a81d6a1fab47458442d428f4b68aa316dd86be88021`；`type-facts-smoke` = `1d5cf786c3736fb5f89d7cec6a8243ac8ddb5c6438152c3a140b342eaa012812`；`type-method-smoke` = `72c85b49c9a92b134a77114fd044bf6089e73c1e86571747a6c4cce9a128cc79`。
+	- **DONE**: 已跑 `timeout 120 vp run smoke:bootstrap`、`semantic:gates`、`level1b:type-system`、`level1b:capability`、`run:all-wat`；type-system 与 semantic runner 内部 `level1c.o` 调用已套 `timeout 10`；all-wat 结果为 `executed=38 instantiated=30`。
+	- **HASH**: seed `chibac_amd64-unknown-linux_chiba_dev.o` = `7a7744ab9ace3d8e13ede45f2e5978e56cc07f597884085a9c4886753f3e268d`；`target/debug/level1c.o` = `5e9915a4012835d283b2bc3c688fee39909b8a2f30031a2ac177eaa3b13631cb`；`type_l2_check.chiba` = `0b9cb6903a7683678a3f66719140cf56698b55a94eab08c5db14821205065ff2`；`run-bootstrap-smokes.mjs` = `41dc8ef3887fcf0e545320049668b61d01746a5918041429d7d7f46fa87fe447`；`run-type-system-smokes.mjs` = `f4c25d97d08323a34d1ab3ea3c847d8d47a4b80e51aa0b336d79033db445017f`；`run-semantic-gates.mjs` = `d01a22b7d1d4741955bff52b7f6c611f981938e74fe2b9f0ac484c2fc70b77e8`。
 	- **验收**: Pre-C03 可在 `TODO.md` 打勾。
-- [ ] **Finish-I: operator call-site solver follow-up**
+- [x] **Finish-I: operator call-site solver follow-up**
 	- **TODO**: 为 concrete nominal operator、explicit behavior source / `via`、checked conversion 下的 operator candidate resolution 增加独立 valid/invalid fixture，并接入 L2 method-operator solver。
-	- **DESC**: 当前 Pre-C03 固定的是 operator obligation 生成与 dump，不把未实现的 overload candidate solver 假装完成。
+	- **DESC**: Pre-C03 已覆盖 concrete numeric、implicit/explicit generic operator obligation、nominal `op_add` lookup、missing operator、ambiguous duplicate operator、operand mismatch；`via` / checked conversion 的 richer behavior source 仍作为 level-2 扩展，不阻塞 level-1b。
+	- **DONE**: 新增 `supports/semantic-gates/operator_resolution*.chiba`；`src/backend/cir/type_l2_check.chiba` 的 AST side-table L2 checker 现在对 `Expr_Binary(OpAdd, lhs, rhs)` 执行 operator candidate gate：numeric 直接通过，省略类型或显式 generic 生成 obligation 路径，nominal receiver 要求唯一 `Type.op_add`，否则给出 missing/ambiguous/operand mismatch 诊断。`level1b:type-system` 和 `semantic:gates` 均覆盖 valid/invalid；重复 operator fixture 只参与 parse/check，不进入 WAT matrix。
 	- **验收**: `def add(a,b)=a+b` 的 implicit generic operator obligation、concrete numeric operator、nominal overloaded operator、ambiguous/missing operator diagnostic 都有独立 fixture。
 - [x] L2 pass 能输出稳定 `TypedAst + ConstraintSet + ObligationIR`。
 	- **DONE**: `vp run level1b:type-system` 对 `typed type_inference`、`type-smoke`、template/generic-body/method/capability/row/record dump 做 sha256 golden。

@@ -1,0 +1,9 @@
+namespace semantic.gates.operator.invalid_operand
+
+type Scalar {
+    value: i64,
+}
+
+def Scalar.op_add(self: Scalar, other: Scalar): Scalar = self
+
+def operand_mismatch(left: Scalar, right: i64): Scalar = left + right

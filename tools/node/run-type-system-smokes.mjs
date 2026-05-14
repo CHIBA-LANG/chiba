@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 const LEVEL1C = "./target/debug/level1c.o";
 
 function run(args) {
-  return spawnSync(LEVEL1C, args, {
+  return spawnSync("timeout", ["10", LEVEL1C, ...args], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -221,6 +221,30 @@ const CASES = [
     name: "source invalid",
     args: ["check", "supports/semantic-gates/method_resolution_invalid.chiba"],
     expect: ["unresolved method missing for Widget"],
+  },
+  {
+    group: "method-operator",
+    name: "operator source valid",
+    args: ["check", "supports/semantic-gates/operator_resolution.chiba"],
+    expect: ["check ok"],
+  },
+  {
+    group: "method-operator",
+    name: "operator missing",
+    args: ["check", "supports/semantic-gates/operator_resolution_invalid_missing.chiba"],
+    expect: ["missing operator op_add for Scalar"],
+  },
+  {
+    group: "method-operator",
+    name: "operator ambiguous",
+    args: ["check", "supports/semantic-gates/operator_resolution_invalid_ambiguous.chiba"],
+    expect: ["ambiguous operator op_add for Scalar"],
+  },
+  {
+    group: "method-operator",
+    name: "operator operand mismatch",
+    args: ["check", "supports/semantic-gates/operator_resolution_invalid_operand.chiba"],
+    expect: ["operator operand type mismatch"],
   },
   {
     group: "capability-abi",

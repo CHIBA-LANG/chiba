@@ -1,0 +1,12 @@
+namespace semantic.gates.operator
+
+type Scalar {
+    value: i64,
+}
+
+def Scalar.op_add(self: Scalar, other: Scalar): Scalar = self
+
+def concrete_numeric(left: i64, right: i64): i64 = left + right
+def implicit_operator(left, right) = left + right
+def explicit_generic_operator[T](left: T, right: T): T = left + right
+def nominal_operator(left: Scalar, right: Scalar): Scalar = left + right

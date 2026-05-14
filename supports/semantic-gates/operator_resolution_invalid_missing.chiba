@@ -1,0 +1,7 @@
+namespace semantic.gates.operator.invalid_missing
+
+type Scalar {
+    value: i64,
+}
+
+def missing_operator(left: Scalar, right: Scalar): Scalar = left + right

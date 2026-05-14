@@ -468,6 +468,14 @@ def cir_l2_ast_items_has_method(items: AST, type_name: Str, method: Str): i64 =
         _ => 0
     }
 
+def cir_l2_ast_items_method_count(items: AST, type_name: Str, method: Str): i64 =
+    match items {
+        Item_Cons(head, tail) =>
+            if cir_l2_ast_item_is_method(head, type_name, method) != 0 { 1 + cir_l2_ast_items_method_count(tail, type_name, method) }
+            else { cir_l2_ast_items_method_count(tail, type_name, method) }
+        _ => 0
+    }
+
 def cir_l2_ast_item_type_has_field(item: AST, type_name: Str, field: Str): i64 =
     match item {
         Item_WithAttrs(_, inner) => cir_l2_ast_item_type_has_field(inner, type_name, field)
@@ -485,6 +493,68 @@ def cir_l2_ast_items_type_has_field(items: AST, type_name: Str, field: Str): i64
         Item_Cons(head, tail) =>
             if cir_l2_ast_item_type_has_field(head, type_name, field) != 0 { 1 } else { cir_l2_ast_items_type_has_field(tail, type_name, field) }
         _ => 0
+    }
+
+def cir_l2_ast_operator_method_name(op: AST): Str =
+    match op {
+        OpAdd => mk_str("op_add", 6)
+        OpSub => mk_str("op_sub", 6)
+        OpMul => mk_str("op_mul", 6)
+        OpDiv => mk_str("op_div", 6)
+        OpMod => mk_str("op_mod", 6)
+        _ => mk_str("", 0)
+    }
+
+def cir_l2_ast_type_name_is_numeric(name: Str): i64 =
+    if streq(name, mk_str("i64", 3)) != 0 { 1 }
+    else if streq(name, mk_str("i32", 3)) != 0 { 1 }
+    else if streq(name, mk_str("usize", 5)) != 0 { 1 }
+    else { 0 }
+
+def cir_l2_ast_type_name_is_builtin_value(name: Str): i64 =
+    if cir_l2_ast_type_name_is_numeric(name) != 0 { 1 }
+    else if streq(name, mk_str("bool", 4)) != 0 { 1 }
+    else if streq(name, mk_str("String", 6)) != 0 { 1 }
+    else if streq(name, mk_str("Str", 3)) != 0 { 1 }
+    else { 0 }
+
+def cir_l2_ast_expr_type_name(expr: AST, params: AST): Str =
+    match expr {
+        Expr_Int(_) => mk_str("i64", 3)
+        Expr_Bool(_) => mk_str("bool", 4)
+        Expr_String => mk_str("String", 6)
+        Expr_IdentTail(name, IdentTail_None) => cir_l2_ast_param_type_name(params, name)
+        _ => mk_str("", 0)
+    }
+
+def cir_l2_ast_operator_error(message: i64, op_name: Str, type_name: Str): CirL2TypeCheck = {
+    let msg = str_new()
+    let _ = str_push_cstr(msg, message)
+    let _ = str_append(msg, op_name)
+    let _ = str_push_cstr(msg, " for ")
+    let _ = str_append(msg, type_name)
+    CirL2TypeCheckErr(msg)
+}
+
+def cir_l2_check_ast_operator_call(op: AST, lhs: AST, rhs: AST, all_items: AST, params: AST, generics: AST): CirL2TypeCheck =
+    {
+        let op_name = cir_l2_ast_operator_method_name(op)
+        if op_name.len == 0 { CirL2TypeCheckOk }
+        else {
+            let lhs_ty = cir_l2_ast_expr_type_name(lhs, params)
+            let rhs_ty = cir_l2_ast_expr_type_name(rhs, params)
+            if lhs_ty.len == 0 || rhs_ty.len == 0 { CirL2TypeCheckOk }
+            else if streq(lhs_ty, rhs_ty) == 0 { cir_l2_type_check_err("operator operand type mismatch") }
+            else if cir_l2_ast_type_name_is_numeric(lhs_ty) != 0 { CirL2TypeCheckOk }
+            else if cir_l2_ast_generic_has_name(generics, lhs_ty) != 0 { CirL2TypeCheckOk }
+            else if cir_l2_ast_type_name_is_builtin_value(lhs_ty) != 0 { cir_l2_ast_operator_error("missing operator ", op_name, lhs_ty) }
+            else {
+                let count = cir_l2_ast_items_method_count(all_items, lhs_ty, op_name)
+                if count == 0 { cir_l2_ast_operator_error("missing operator ", op_name, lhs_ty) }
+                else if count > 1 { cir_l2_ast_operator_error("ambiguous operator ", op_name, lhs_ty) }
+                else { CirL2TypeCheckOk }
+            }
+        }
     }
 
 def cir_l2_check_ast_method_call(callee: AST, all_items: AST, params: AST, unsafe_depth: i64): CirL2TypeCheck =
@@ -514,54 +584,58 @@ def cir_l2_check_ast_method_call(callee: AST, all_items: AST, params: AST, unsaf
         _ => CirL2TypeCheckOk
     }
 
-def cir_l2_check_ast_args_methods(args: AST, all_items: AST, params: AST, unsafe_depth: i64): CirL2TypeCheck =
+def cir_l2_check_ast_args_methods(args: AST, all_items: AST, params: AST, generics: AST, unsafe_depth: i64): CirL2TypeCheck =
     match args {
-        Arg_Cons(head, tail) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(head, all_items, params, unsafe_depth), cir_l2_check_ast_args_methods(tail, all_items, params, unsafe_depth))
-        ExprList_Cons(head, tail) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(head, all_items, params, unsafe_depth), cir_l2_check_ast_args_methods(tail, all_items, params, unsafe_depth))
+        Arg_Cons(head, tail) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(head, all_items, params, generics, unsafe_depth), cir_l2_check_ast_args_methods(tail, all_items, params, generics, unsafe_depth))
+        ExprList_Cons(head, tail) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(head, all_items, params, generics, unsafe_depth), cir_l2_check_ast_args_methods(tail, all_items, params, generics, unsafe_depth))
         _ => CirL2TypeCheckOk
     }
 
-def cir_l2_check_ast_stmt_methods(stmt: AST, all_items: AST, params: AST, unsafe_depth: i64): CirL2TypeCheck =
+def cir_l2_check_ast_stmt_methods(stmt: AST, all_items: AST, params: AST, generics: AST, unsafe_depth: i64): CirL2TypeCheck =
     match stmt {
-        Stmt_Expr(value) => cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth)
-        Stmt_Return(value) => cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth)
-        Stmt_Assign(lhs, rhs) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(lhs, all_items, params, unsafe_depth), cir_l2_check_ast_expr_methods(rhs, all_items, params, unsafe_depth))
-        Stmt_Let(_, value) => cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth)
-        Stmt_LetPattern(_, value) => cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth)
-        Stmt_LetPatternTyped(_, _, value) => cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth)
-        Stmt_For(_, cond, body) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(cond, all_items, params, unsafe_depth), cir_l2_check_ast_expr_methods(body, all_items, params, unsafe_depth))
-        Stmt_WithAttrs(_, inner) => cir_l2_check_ast_stmt_methods(inner, all_items, params, unsafe_depth)
+        Stmt_Expr(value) => cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth)
+        Stmt_Return(value) => cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth)
+        Stmt_Assign(lhs, rhs) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(lhs, all_items, params, generics, unsafe_depth), cir_l2_check_ast_expr_methods(rhs, all_items, params, generics, unsafe_depth))
+        Stmt_Let(_, value) => cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth)
+        Stmt_LetPattern(_, value) => cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth)
+        Stmt_LetPatternTyped(_, _, value) => cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth)
+        Stmt_For(_, cond, body) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(cond, all_items, params, generics, unsafe_depth), cir_l2_check_ast_expr_methods(body, all_items, params, generics, unsafe_depth))
+        Stmt_WithAttrs(_, inner) => cir_l2_check_ast_stmt_methods(inner, all_items, params, generics, unsafe_depth)
         _ => CirL2TypeCheckOk
     }
 
-def cir_l2_check_ast_stmts_methods(stmts: AST, all_items: AST, params: AST, unsafe_depth: i64): CirL2TypeCheck =
+def cir_l2_check_ast_stmts_methods(stmts: AST, all_items: AST, params: AST, generics: AST, unsafe_depth: i64): CirL2TypeCheck =
     match stmts {
-        Stmt_Cons(head, tail) => cir_l2_type_check_merge(cir_l2_check_ast_stmt_methods(head, all_items, params, unsafe_depth), cir_l2_check_ast_stmts_methods(tail, all_items, params, unsafe_depth))
+        Stmt_Cons(head, tail) => cir_l2_type_check_merge(cir_l2_check_ast_stmt_methods(head, all_items, params, generics, unsafe_depth), cir_l2_check_ast_stmts_methods(tail, all_items, params, generics, unsafe_depth))
         _ => CirL2TypeCheckOk
     }
 
-def cir_l2_check_ast_tail_methods(tail: AST, all_items: AST, params: AST, unsafe_depth: i64): CirL2TypeCheck =
+def cir_l2_check_ast_tail_methods(tail: AST, all_items: AST, params: AST, generics: AST, unsafe_depth: i64): CirL2TypeCheck =
     match tail {
-        TailExpr_Some(value) => cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth)
+        TailExpr_Some(value) => cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth)
         _ => CirL2TypeCheckOk
     }
 
-def cir_l2_check_ast_expr_methods(expr: AST, all_items: AST, params: AST, unsafe_depth: i64): CirL2TypeCheck =
+def cir_l2_check_ast_expr_methods(expr: AST, all_items: AST, params: AST, generics: AST, unsafe_depth: i64): CirL2TypeCheck =
     match expr {
-        Expr_Block(stmts, tail) => cir_l2_type_check_merge(cir_l2_check_ast_stmts_methods(stmts, all_items, params, unsafe_depth), cir_l2_check_ast_tail_methods(tail, all_items, params, unsafe_depth))
-        Expr_Call(callee, args) => cir_l2_type_check_merge(cir_l2_check_ast_method_call(callee, all_items, params, unsafe_depth), cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(callee, all_items, params, unsafe_depth), cir_l2_check_ast_args_methods(args, all_items, params, unsafe_depth)))
-        Expr_IdentTail(_, IdentTail_Call(args, _)) => cir_l2_check_ast_args_methods(args, all_items, params, unsafe_depth)
-        Expr_Field(value, _) => cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth)
-        Expr_Index(value, args) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth), cir_l2_check_ast_args_methods(args, all_items, params, unsafe_depth))
-        Expr_Assign(lhs, rhs) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(lhs, all_items, params, unsafe_depth), cir_l2_check_ast_expr_methods(rhs, all_items, params, unsafe_depth))
-        Expr_If(cond, then_expr, else_expr) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(cond, all_items, params, unsafe_depth), cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(then_expr, all_items, params, unsafe_depth), cir_l2_check_ast_expr_methods(else_expr, all_items, params, unsafe_depth)))
-        Expr_Match(value, _) => cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth)
-        Expr_Reset(_, body) => cir_l2_check_ast_expr_methods(body, all_items, params, unsafe_depth)
-        Expr_Shift(_, _, body) => cir_l2_check_ast_expr_methods(body, all_items, params, unsafe_depth)
-        Expr_Unsafe(body) => cir_l2_check_ast_expr_methods(body, all_items, params, unsafe_depth + 1)
-        Expr_Cast(value, _) => cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth)
-        Expr_Prefix(_, value) => cir_l2_check_ast_expr_methods(value, all_items, params, unsafe_depth)
-        Expr_Binary(_, lhs, rhs) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(lhs, all_items, params, unsafe_depth), cir_l2_check_ast_expr_methods(rhs, all_items, params, unsafe_depth))
+        Expr_Block(stmts, tail) => cir_l2_type_check_merge(cir_l2_check_ast_stmts_methods(stmts, all_items, params, generics, unsafe_depth), cir_l2_check_ast_tail_methods(tail, all_items, params, generics, unsafe_depth))
+        Expr_Call(callee, args) => cir_l2_type_check_merge(cir_l2_check_ast_method_call(callee, all_items, params, unsafe_depth), cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(callee, all_items, params, generics, unsafe_depth), cir_l2_check_ast_args_methods(args, all_items, params, generics, unsafe_depth)))
+        Expr_IdentTail(_, IdentTail_Call(args, _)) => cir_l2_check_ast_args_methods(args, all_items, params, generics, unsafe_depth)
+        Expr_Field(value, _) => cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth)
+        Expr_Index(value, args) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth), cir_l2_check_ast_args_methods(args, all_items, params, generics, unsafe_depth))
+        Expr_Assign(lhs, rhs) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(lhs, all_items, params, generics, unsafe_depth), cir_l2_check_ast_expr_methods(rhs, all_items, params, generics, unsafe_depth))
+        Expr_If(cond, then_expr, else_expr) => cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(cond, all_items, params, generics, unsafe_depth), cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(then_expr, all_items, params, generics, unsafe_depth), cir_l2_check_ast_expr_methods(else_expr, all_items, params, generics, unsafe_depth)))
+        Expr_Match(value, _) => cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth)
+        Expr_Reset(_, body) => cir_l2_check_ast_expr_methods(body, all_items, params, generics, unsafe_depth)
+        Expr_Shift(_, _, body) => cir_l2_check_ast_expr_methods(body, all_items, params, generics, unsafe_depth)
+        Expr_Unsafe(body) => cir_l2_check_ast_expr_methods(body, all_items, params, generics, unsafe_depth + 1)
+        Expr_Cast(value, _) => cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth)
+        Expr_Prefix(_, value) => cir_l2_check_ast_expr_methods(value, all_items, params, generics, unsafe_depth)
+        Expr_Binary(op, lhs, rhs) =>
+            cir_l2_type_check_merge(
+                cir_l2_check_ast_operator_call(op, lhs, rhs, all_items, params, generics),
+                cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(lhs, all_items, params, generics, unsafe_depth), cir_l2_check_ast_expr_methods(rhs, all_items, params, generics, unsafe_depth))
+            )
         _ => CirL2TypeCheckOk
     }
 
@@ -917,16 +991,16 @@ def cir_l2_check_ast_expr(expr: AST): CirL2TypeCheck =
 
 def cir_l2_check_ast_def(defn: AST, attrs: AST, file_is_metal: i64, all_items: AST): CirL2TypeCheck =
     match defn {
-        DefItem(_, generics, params, ret, body) => cir_l2_type_check_merge(cir_l2_check_ast_item_signature(params, ret, attrs, file_is_metal), cir_l2_type_check_merge(cir_l2_check_ast_expr(body), cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(body, all_items, params, 0), cir_l2_check_ast_expr_rows(body, all_items, params, generics))))
+        DefItem(_, generics, params, ret, body) => cir_l2_type_check_merge(cir_l2_check_ast_item_signature(params, ret, attrs, file_is_metal), cir_l2_type_check_merge(cir_l2_check_ast_expr(body), cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(body, all_items, params, generics, 0), cir_l2_check_ast_expr_rows(body, all_items, params, generics))))
         DefItem2(_, rest) =>
             match rest {
                 DefFun(_, params, ret, body) => {
                     let generics = cir_l2_ast_item_def_generics(defn)
-                    cir_l2_type_check_merge(cir_l2_check_ast_item_signature(params, ret, attrs, file_is_metal), cir_l2_type_check_merge(cir_l2_check_ast_expr(body), cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(body, all_items, params, 0), cir_l2_check_ast_expr_rows(body, all_items, params, generics))))
+                    cir_l2_type_check_merge(cir_l2_check_ast_item_signature(params, ret, attrs, file_is_metal), cir_l2_type_check_merge(cir_l2_check_ast_expr(body), cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(body, all_items, params, generics, 0), cir_l2_check_ast_expr_rows(body, all_items, params, generics))))
                 }
                 DefConst(ret, value) => {
                     let generics = cir_l2_ast_item_def_generics(defn)
-                    cir_l2_type_check_merge(cir_l2_check_ast_item_signature(Param_End, ret, attrs, file_is_metal), cir_l2_type_check_merge(cir_l2_check_ast_expr(value), cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(value, all_items, Param_End, 0), cir_l2_check_ast_expr_rows(value, all_items, Param_End, generics))))
+                    cir_l2_type_check_merge(cir_l2_check_ast_item_signature(Param_End, ret, attrs, file_is_metal), cir_l2_type_check_merge(cir_l2_check_ast_expr(value), cir_l2_type_check_merge(cir_l2_check_ast_expr_methods(value, all_items, Param_End, generics, 0), cir_l2_check_ast_expr_rows(value, all_items, Param_End, generics))))
                 }
                 _ => CirL2TypeCheckOk
             }

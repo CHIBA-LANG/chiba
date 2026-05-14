@@ -1,0 +1,10 @@
+namespace semantic.gates.operator.invalid_ambiguous
+
+type Scalar {
+    value: i64,
+}
+
+def Scalar.op_add(self: Scalar, other: Scalar): Scalar = self
+def Scalar.op_add(self: Scalar, other: Scalar): Scalar = other
+
+def ambiguous_operator(left: Scalar, right: Scalar): Scalar = left + right

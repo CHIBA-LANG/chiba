@@ -6,6 +6,13 @@ import process from "node:process";
 const WAT_DIR = ".scratch/bootstrap-smokes/wat";
 
 function run(command, args, options = {}) {
+  if (command === "./target/debug/level1c.o") {
+    return spawnSync("timeout", ["10", command, ...args], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      ...options,
+    });
+  }
   return spawnSync(command, args, {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
