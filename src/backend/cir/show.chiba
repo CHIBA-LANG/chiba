@@ -54,6 +54,20 @@ def cir_show_ref(out: Str, depth: i64, r: CirRef): i64 =
         L1RefUnresolved(name) => cir_show_str_line(out, depth, "L1RefUnresolved", name)
     }
 
+def cir_show_string_parts(out: Str, depth: i64, parts: CirStringPartList): i64 =
+    match parts {
+        CirStringPartEnd => cir_show_line(out, depth, "CirStringPartEnd")
+        CirStringPartChunk(chunk, rest) => {
+            let _ = cir_show_str_line(out, depth, "CirStringPartChunk", chunk)
+            cir_show_string_parts(out, depth, rest)
+        }
+        CirStringPartExpr(value, rest) => {
+            let _ = cir_show_line(out, depth, "CirStringPartExpr")
+            let _ = cir_show_expr(out, depth + 1, value)
+            cir_show_string_parts(out, depth, rest)
+        }
+    }
+
 def cir_show_tyvar_id(out: Str, id: CirTyVarId): i64 = {
     let _ = str_push_cstr(out, "$T")
     str_append_i64(out, id.id)
@@ -850,6 +864,16 @@ def cir_show_expr(out: Str, depth: i64, expr: CirExpr): i64 =
         }
         L0OpString => cir_show_line(out, depth, "L0OpString")
         L1OpString => cir_show_line(out, depth, "L1OpString")
+        L0OpStringBytes(bytes) => cir_show_str_line(out, depth, "L0OpStringBytes", bytes)
+        L1OpStringBytes(bytes) => cir_show_str_line(out, depth, "L1OpStringBytes", bytes)
+        L0OpStringInterp(parts) => {
+            let _ = cir_show_line(out, depth, "L0OpStringInterp")
+            cir_show_string_parts(out, depth + 1, parts)
+        }
+        L1OpStringInterp(parts) => {
+            let _ = cir_show_line(out, depth, "L1OpStringInterp")
+            cir_show_string_parts(out, depth + 1, parts)
+        }
         L0OpUnit => cir_show_line(out, depth, "L0OpUnit")
         L1OpUnit => cir_show_line(out, depth, "L1OpUnit")
         L2OpTyped(value, ty) => {

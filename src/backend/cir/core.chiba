@@ -16,6 +16,8 @@ def cir_l7_core_op(expr: CirExpr): CirCoreOp =
             _ => cir_l7_core_op(value)
         }
         L1OpString => L7CoreStringSlice
+        L1OpStringBytes(_) => L7CoreStringSlice
+        L1OpStringInterp(_) => L7CoreStringSlice
         L1OpIndex(_, _) => L7CoreStringSlice
         L1OpBlock(_, tail) => cir_l7_core_op(tail)
         L1OpIf(_, then_expr, _) => cir_l7_core_op(then_expr)

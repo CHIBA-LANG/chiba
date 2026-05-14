@@ -191,6 +191,10 @@ use lexer.chiba_level1.*
         Expr_Float(Str),
         Expr_Atom(Str),
         Expr_String,
+        Expr_StringLit(AST),
+        StringPart_Chunk(Str, AST),
+        StringPart_Expr(AST, AST),
+        StringPart_End,
         Expr_Bool(i64),
         Expr_Name(Str),
         Expr_IdentTail(Str, AST),
@@ -7845,8 +7849,8 @@ def parse_rule_91_alt_0_step_2(tokens: Vec, pos: i64, recovered: i64, __v0: i64,
     }
 
 def parse_rule_91_alt_0_step_3(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64, __v2: i64): MatchResult = {
-    let _: AST = __v1 as AST
-    MatchOK((Expr_String
+    let parts: AST = __v1 as AST
+    MatchOK((Expr_StringLit(parts)
     ) as i64, pos, recovered)
 }
 
@@ -7876,8 +7880,9 @@ def parse_rule_92_alt_0_step_1(tokens: Vec, pos: i64, recovered: i64, __v0: i64)
     }
 
 def parse_rule_92_alt_0_step_2(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64): MatchResult = {
+    let chunk: Str = __v0 as Str
     let rest: AST = __v1 as AST
-    MatchOK((0
+    MatchOK((StringPart_Chunk(chunk, rest)
     ) as i64, pos, recovered)
 }
 
@@ -7927,14 +7932,14 @@ def parse_rule_92_alt_1_step_3(tokens: Vec, pos: i64, recovered: i64, __v0: i64,
 def parse_rule_92_alt_1_step_4(tokens: Vec, pos: i64, recovered: i64, __v0: i64, __v1: i64, __v2: i64, __v3: i64): MatchResult = {
     let value: AST = __v1 as AST
     let rest: AST = __v3 as AST
-    MatchOK((0
+    MatchOK((StringPart_Expr(value, rest)
     ) as i64, pos, recovered)
 }
 
 def parse_rule_92_alt_2(tokens: Vec, pos: i64): MatchResult = parse_rule_92_alt_2_step_0(tokens, pos, 0)
 
 def parse_rule_92_alt_2_step_0(tokens: Vec, pos: i64, recovered: i64): MatchResult = {
-    MatchOK((0
+    MatchOK((StringPart_End
     ) as i64, pos, recovered)
 }
 

@@ -190,7 +190,9 @@
 - [ ] **Pre-C07: real String/Array/Slice runtime**
 	- **TODO**: 实现 `String == Array[u8]`、`str == Slice[u8]` 的真实 payload lowering 和 runtime helpers：literal bytes、interpolation concat、byte index、range slice、bounds check、`.char_at`、WASI encode/decode。
 	- **DESC**: 当前 string/slice 是 wasm-gc managed layout hole；C00 前至少要能支撑 lexer/parser 输入、source span、diagnostic 输出和 generated code 拼接。
-	- **BLOCKER**: 当前 parser AST 把 string 降成 payload-less `Expr_String`，string chunk/interpolation 内容没有进入 `lower_ast`；真实 byte payload 需要先在 grammar/parser AST 中保留 string pieces，再进入 CIR/Core。
+	- **PROGRESS**: parser AST 已保留 `StringPart_Chunk` / `StringPart_Expr` / `StringPart_End`，`lower_ast` 会把纯 chunk literal 合并为 `L0/L1OpStringBytes(Str)`，并把插值字符串保留为 `L0/L1OpStringInterp` 而不是静默降成空数组。WAT emitter 对纯 literal 输出真实 `array.new_fixed $array_u8 N` byte payload；raw string smoke 现在能看到 `raw ${text} stays raw` 的 21 字节 payload。typed `String` 参数上的 index/slice 和 interpolation concat 仍显式输出 pending unreachable，避免继续伪造 `array.new_fixed $array_u8 0` / 空 slice。
+	- **NEXT**: 给 Core/WAT 函数签名引入 String/Array/Slice 类型化参数和局部变量；实现 concat helper、bounds check、byte index、range slice view、`.char_at` UTF-8 decode；把 WASI read/write bridge 改成同一 Array/Slice contract。
+	- **TEST**: `timeout 10 ./chibacc.o src/frontend/chiba-level1.chibacc -o src/frontend/chiba_level1_parser.chiba`；`timeout 10 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1c_main.chiba --output level1c.o` phase1 guard；`timeout 120 ...` 完整编译成功；`timeout 10 ./target/debug/level1c.o parse|cir|wat supports/semantic-gates/string_slice.chiba`；`timeout 120 vp run semantic:gates`、`level1b:std-surface`、`smoke:bootstrap`、`run:all-wat`、`level1b:type-system`、`level1b:capability`、`level1b:smoke`、`level1b:namespace`。
 	- **验收**: string literal WAT 含真实 byte payload；`s[i]` 返回 byte/slice 语义；`s[a..b]` 不复制并保活 backing array；`.char_at(n)` 做显式 codepoint 访问；file read/stdout/lexer input 共用同一 contract。
 	- **并行**: 不并行。
 

@@ -1,4 +1,5 @@
 namespace backend.wasm.wat
+use metalstd.mem.*
 use metalstd.str.*
 use backend.cir.ir.*
 
@@ -22,6 +23,24 @@ def wat_line_str(out: Str, depth: i64, prefix: i64, value: Str): i64 = {
     let _ = wat_indent(out, depth)
     let _ = str_push_cstr(out, prefix)
     let _ = str_append(out, value)
+    str_push(out, 10)
+}
+
+def wat_emit_string_byte_consts(out: Str, depth: i64, bytes: Str, i: i64): i64 =
+    if i >= bytes.len { 0 }
+    else {
+        let _ = wat_indent(out, depth)
+        let _ = str_push_cstr(out, "i32.const ")
+        let _ = str_append_i64(out, load8(bytes.ptr, i))
+        let _ = str_push(out, 10)
+        wat_emit_string_byte_consts(out, depth, bytes, i + 1)
+    }
+
+def wat_emit_string_array(out: Str, depth: i64, bytes: Str): i64 = {
+    let _ = wat_emit_string_byte_consts(out, depth, bytes, 0)
+    let _ = wat_indent(out, depth)
+    let _ = str_push_cstr(out, "array.new_fixed $array_u8 ")
+    let _ = str_append_i64(out, bytes.len)
     str_push(out, 10)
 }
 
@@ -554,11 +573,35 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
             else if streq(field, mk_str("_2", 2)) != 0 { wat_line(out, depth, "struct.get $tuple2_i64 1") }
             else { wat_line(out, depth, "unreachable ;; field unsupported") }
         }
-        L1OpIndex(_, _) => {
-            let _ = wat_line(out, depth, "array.new_fixed $array_u8 0")
-            let _ = wat_line(out, depth, "i32.const 0")
-            let _ = wat_line(out, depth, "i32.const 0")
-            wat_line(out, depth, "struct.new $slice_u8")
+        L1OpIndex(value, args) => {
+            match wat_unwrap_pass_expr(value) {
+                L1OpStringBytes(bytes) =>
+                    match args {
+                        CirExprCons(index, CirExprEnd) =>
+                            match wat_unwrap_pass_expr(index) {
+                                L1OpBinary(op, start, end) =>
+                                    if streq(op, mk_str("..", 2)) != 0 {
+                                        let _ = wat_emit_string_array(out, depth, bytes)
+                                        let _ = wat_emit_expr(out, depth, start)
+                                        let _ = wat_line(out, depth, "i32.wrap_i64")
+                                        let _ = wat_emit_expr(out, depth, end)
+                                        let _ = wat_emit_expr(out, depth, start)
+                                        let _ = wat_line(out, depth, "i64.sub")
+                                        let _ = wat_line(out, depth, "i32.wrap_i64")
+                                        wat_line(out, depth, "struct.new $slice_u8")
+                                    } else { wat_line(out, depth, "unreachable ;; string index unsupported") }
+                                _ => {
+                                    let _ = wat_emit_string_array(out, depth, bytes)
+                                    let _ = wat_emit_expr(out, depth, index)
+                                    let _ = wat_line(out, depth, "i32.wrap_i64")
+                                    let _ = wat_line(out, depth, "array.get_u $array_u8")
+                                    wat_line(out, depth, "i64.extend_i32_u")
+                                }
+                            }
+                        _ => wat_line(out, depth, "unreachable ;; string index arity unsupported")
+                    }
+                _ => wat_line(out, depth, "unreachable ;; typed string index pending")
+            }
         }
         L1OpPrefix(op, value) => {
             if streq(op, mk_str("-", 1)) != 0 {
@@ -605,9 +648,9 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
             let _ = str_append_i64(out, v)
             str_push(out, 10)
         }
-        L1OpString => {
-            wat_line(out, depth, "array.new_fixed $array_u8 0")
-        }
+        L1OpString => wat_line(out, depth, "unreachable ;; legacy payloadless string unsupported")
+        L1OpStringBytes(bytes) => wat_emit_string_array(out, depth, bytes)
+        L1OpStringInterp(_) => wat_line(out, depth, "unreachable ;; string interpolation concat pending")
         L1OpUnit => wat_line(out, depth, "i64.const 0")
         L1OpReset(_, body) => wat_emit_expr(out, depth, body)
         L1OpShift(_, _, _) => wat_line(out, depth, "unreachable ;; shift requires cps lowering")

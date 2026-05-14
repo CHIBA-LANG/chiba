@@ -84,6 +84,13 @@ def alpha_expr_list(xs: CirExprList, ctx: AlphaCtx): CirExprList =
             CirExprCons(alpha_expr(head, ctx), alpha_expr_list(tail, ctx))
     }
 
+def alpha_string_parts(parts: CirStringPartList, ctx: AlphaCtx): CirStringPartList =
+    match parts {
+        CirStringPartEnd => CirStringPartEnd
+        CirStringPartChunk(chunk, rest) => CirStringPartChunk(chunk, alpha_string_parts(rest, ctx))
+        CirStringPartExpr(value, rest) => CirStringPartExpr(alpha_expr(value, ctx), alpha_string_parts(rest, ctx))
+    }
+
 def alpha_stmt_list(stmts: CirStmtList, tail: CirExpr, ctx: AlphaCtx): AlphaStmtResult =
     match stmts {
         CirStmtEnd => AlphaStmtResult(CirStmtEnd, alpha_expr(tail, ctx))
@@ -198,6 +205,8 @@ def alpha_expr(expr: CirExpr, ctx: AlphaCtx): CirExpr =
         L0OpAtom(atom) => L1OpAtom(atom)
         L0OpBool(v) => L1OpBool(v)
         L0OpString => L1OpString
+        L0OpStringBytes(bytes) => L1OpStringBytes(bytes)
+        L0OpStringInterp(parts) => L1OpStringInterp(alpha_string_parts(parts, ctx))
         L0OpUnit => L1OpUnit
         L0OpUnsupported(ast, reason) => L1OpUnsupported(ast, reason)
         _ => expr

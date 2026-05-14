@@ -288,8 +288,10 @@ function checkStringSlice() {
   const wat = read(path.join(WAT_DIR, "string_slice.wat"));
   assert(name, wat.includes("(type $array_u8 (array i8))"), "WAT backing byte array layout missing");
   assert(name, wat.includes("(type $slice_u8 (struct (field (ref $array_u8)) (field i32) (field i32)))"), "WAT slice layout missing");
-  assert(name, wat.includes("array.new_fixed $array_u8 0"), "String does not lower to managed Array[u8]");
-  assert(name, wat.includes("struct.new $slice_u8"), "str/slice expression does not lower to managed Slice[u8] view");
+  assert(name, wat.includes("array.new_fixed $array_u8 21"), "raw string literal does not lower to real Array[u8] payload");
+  assert(name, wat.includes("i32.const 114") && wat.includes("i32.const 119"), "raw string literal byte payload missing");
+  assert(name, wat.includes("string interpolation concat pending"), "interpolation must stay explicit until concat runtime lands");
+  assert(name, wat.includes("typed string index pending"), "typed String index/slice must not silently emit an empty slice");
   pass(name);
 }
 

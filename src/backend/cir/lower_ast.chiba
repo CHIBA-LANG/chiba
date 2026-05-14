@@ -7,6 +7,11 @@ data CirLowerBlockResult {
     CirLowerBlockResult(CirStmtList, CirExpr)
 }
 
+data CirLowerStringResult {
+    CirLowerStringBytes(Str),
+    CirLowerStringInterp(CirStringPartList)
+}
+
 def cir_lower_control_label(ast: AST): CirControlLabel =
     match ast {
         ControlLabel_Some => CirLabelImplicit
@@ -21,6 +26,39 @@ def cir_lower_expr_list(ast: AST): CirExprList =
         Arg_End => CirExprEnd
         Arg_Cons(head, tail) => CirExprCons(cir_lower_expr(head), cir_lower_expr_list(tail))
         _ => CirExprCons(cir_l0_unsupported(ast, mk_str("expr list unsupported", 21)), CirExprEnd)
+    }
+
+def cir_lower_string_parts_to_cir(ast: AST): CirStringPartList =
+    match ast {
+        StringPart_Chunk(chunk, rest) => CirStringPartChunk(chunk, cir_lower_string_parts_to_cir(rest))
+        StringPart_Expr(value, rest) => CirStringPartExpr(cir_lower_expr(value), cir_lower_string_parts_to_cir(rest))
+        StringPart_End => CirStringPartEnd
+        _ => CirStringPartEnd
+    }
+
+def cir_string_parts_has_expr(ast: AST): i64 =
+    match ast {
+        StringPart_Chunk(_, rest) => cir_string_parts_has_expr(rest)
+        StringPart_Expr(_, _) => 1
+        _ => 0
+    }
+
+def cir_string_parts_append_chunks(out: Str, ast: AST): i64 =
+    match ast {
+        StringPart_Chunk(chunk, rest) => {
+            let _ = str_append(out, chunk)
+            cir_string_parts_append_chunks(out, rest)
+        }
+        _ => 0
+    }
+
+def cir_lower_string_lit(parts: AST): CirLowerStringResult =
+    if cir_string_parts_has_expr(parts) != 0 {
+        CirLowerStringInterp(cir_lower_string_parts_to_cir(parts))
+    } else {
+        let out = str_new()
+        let _ = cir_string_parts_append_chunks(out, parts)
+        CirLowerStringBytes(out)
     }
 
 def cir_lower_params(ast: AST): CirParamList =
@@ -189,6 +227,11 @@ def cir_lower_expr(ast: AST): CirExpr =
         Expr_Atom(atom) => L0OpAtom(atom)
         Expr_Bool(v) => L0OpBool(v)
         Expr_String => L0OpString
+        Expr_StringLit(parts) =>
+            match cir_lower_string_lit(parts) {
+                CirLowerStringBytes(bytes) => L0OpStringBytes(bytes)
+                CirLowerStringInterp(parts2) => L0OpStringInterp(parts2)
+            }
         Expr_Name(name) => L0OpName(name)
         Expr_IdentTail(name, tail) => cir_lower_ident_tail(name, tail)
         Expr_Paren(values) => L0OpCall(L0OpName(mk_str("__tuple", 7)), cir_lower_expr_list(values))

@@ -875,6 +875,7 @@ def ast_expr_infers_known(expr: AST, params: AST): i64 =
         Expr_Int(_) => 1
         Expr_Bool(_) => 1
         Expr_String => 1
+        Expr_StringLit(_) => 1
         Expr_Name(name) => ast_params_has_name(params, name)
         Expr_IdentTail(name, IdentTail_None) =>
             ast_params_has_name(params, name)
@@ -901,6 +902,7 @@ def ast_expr_simple_kind(expr: AST, params: AST): i64 =
         Expr_Int(_) => 1
         Expr_Bool(_) => 2
         Expr_String => 3
+        Expr_StringLit(_) => 3
         Expr_Name(name) => ast_param_simple_kind(params, name)
         Expr_IdentTail(name, IdentTail_None) => ast_param_simple_kind(params, name)
         Expr_Field(value, _) => 0

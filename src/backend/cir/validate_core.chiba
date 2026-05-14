@@ -190,6 +190,8 @@ def cir_l8_payload_is_string_slice(expr: CirExpr): i64 =
         L2OpTyped(value, ty) =>
             if cir_l8_type_is_string_slice(ty) != 0 { 1 } else { cir_l8_payload_is_string_slice(value) }
         L1OpString => 1
+        L1OpStringBytes(_) => 1
+        L1OpStringInterp(_) => 1
         L1OpIndex(_, _) => 1
         _ => 0
     }

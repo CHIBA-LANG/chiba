@@ -452,13 +452,13 @@ rule loop_label_opt ::=
     ;
 
 rule string_lit ::= 
-    StringStart _:string_chunk_list StringEnd => Expr_String
+    StringStart parts:string_chunk_list StringEnd => Expr_StringLit(parts)
     ;
 
 rule string_chunk_list ::= 
-    StringChunk rest:string_chunk_list => 0
-    | StringExprStart value:expr StringExprEnd rest:string_chunk_list => 0
-    | => 0
+    chunk:StringChunk rest:string_chunk_list => StringPart_Chunk(chunk, rest)
+    | StringExprStart value:expr StringExprEnd rest:string_chunk_list => StringPart_Expr(value, rest)
+    | => StringPart_End
     ;
 
 rule closure_expr ::= 
@@ -1108,6 +1108,10 @@ rule arg_tail ::=
         Expr_Float(Str),
         Expr_Atom(Str),
         Expr_String,
+        Expr_StringLit(AST),
+        StringPart_Chunk(Str, AST),
+        StringPart_Expr(AST, AST),
+        StringPart_End,
         Expr_Bool(i64),
         Expr_Name(Str),
         Expr_IdentTail(Str, AST),

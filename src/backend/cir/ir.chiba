@@ -368,6 +368,12 @@ data CirExprList {
     CirExprEnd
 }
 
+data CirStringPartList {
+    CirStringPartChunk(Str, CirStringPartList),
+    CirStringPartExpr(CirExpr, CirStringPartList),
+    CirStringPartEnd
+}
+
 data CirMatchArmList {
     CirMatchArmCons(CirMatchArm, CirMatchArmList),
     CirMatchArmEnd
@@ -437,6 +443,10 @@ data CirExpr {
     L1OpBool(i64),
     L0OpString,
     L1OpString,
+    L0OpStringBytes(Str),
+    L1OpStringBytes(Str),
+    L0OpStringInterp(CirStringPartList),
+    L1OpStringInterp(CirStringPartList),
     L0OpUnit,
     L1OpUnit,
 

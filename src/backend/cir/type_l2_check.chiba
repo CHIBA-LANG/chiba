@@ -76,6 +76,8 @@ def cir_l2_expr_type(expr: CirExpr): CirType =
         L1OpInt(_) => CirTyI64
         L1OpBool(_) => CirTyBool
         L1OpString => CirTyString
+        L1OpStringBytes(_) => CirTyString
+        L1OpStringInterp(_) => CirTyString
         L1OpUnit => CirTyUnit
         _ => CirTyUnknown
     }
@@ -523,6 +525,7 @@ def cir_l2_ast_expr_type_name(expr: AST, params: AST): Str =
         Expr_Int(_) => mk_str("i64", 3)
         Expr_Bool(_) => mk_str("bool", 4)
         Expr_String => mk_str("String", 6)
+        Expr_StringLit(_) => mk_str("String", 6)
         Expr_IdentTail(name, IdentTail_None) => cir_l2_ast_param_type_name(params, name)
         _ => mk_str("", 0)
     }
