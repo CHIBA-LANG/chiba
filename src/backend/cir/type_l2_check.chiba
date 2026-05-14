@@ -272,6 +272,117 @@ def cir_l2_check_ast_record_body(body: AST): CirL2TypeCheck =
         _ => CirL2TypeCheckOk
     }
 
+def cir_l2_ast_nominal_fields_has(fields: AST, field: Str): i64 =
+    match fields {
+        NominalField_Cons(head, tail) =>
+            match head {
+                NominalField(name, _) =>
+                    if streq(name, field) != 0 { 1 } else { cir_l2_ast_nominal_fields_has(tail, field) }
+                _ => cir_l2_ast_nominal_fields_has(tail, field)
+            }
+        _ => 0
+    }
+
+def cir_l2_ast_nominal_fields_has_duplicate(fields: AST): i64 =
+    match fields {
+        NominalField_Cons(head, tail) =>
+            match head {
+                NominalField(name, _) =>
+                    if cir_l2_ast_nominal_fields_has(tail, name) != 0 { 1 } else { cir_l2_ast_nominal_fields_has_duplicate(tail) }
+                _ => cir_l2_ast_nominal_fields_has_duplicate(tail)
+            }
+        _ => 0
+    }
+
+def cir_l2_ast_union_fields_has(fields: AST, field: Str): i64 =
+    match fields {
+        UnionField_Cons(head, tail) =>
+            match head {
+                UnionField(name, _) =>
+                    if streq(name, field) != 0 { 1 } else { cir_l2_ast_union_fields_has(tail, field) }
+                _ => cir_l2_ast_union_fields_has(tail, field)
+            }
+        _ => 0
+    }
+
+def cir_l2_ast_union_fields_has_duplicate(fields: AST): i64 =
+    match fields {
+        UnionField_Cons(head, tail) =>
+            match head {
+                UnionField(name, _) =>
+                    if cir_l2_ast_union_fields_has(tail, name) != 0 { 1 } else { cir_l2_ast_union_fields_has_duplicate(tail) }
+                _ => cir_l2_ast_union_fields_has_duplicate(tail)
+            }
+        _ => 0
+    }
+
+def cir_l2_ast_variant_fields_has(fields: AST, field: Str): i64 =
+    match fields {
+        AdtVariantField_Cons(name, _, tail) =>
+            if streq(name, field) != 0 { 1 } else { cir_l2_ast_variant_fields_has(tail, field) }
+        _ => 0
+    }
+
+def cir_l2_ast_variant_fields_has_duplicate(fields: AST): i64 =
+    match fields {
+        AdtVariantField_Cons(name, _, tail) =>
+            if cir_l2_ast_variant_fields_has(tail, name) != 0 { 1 } else { cir_l2_ast_variant_fields_has_duplicate(tail) }
+        _ => 0
+    }
+
+def cir_l2_ast_variant_args_has_duplicate_field(args: AST): i64 =
+    match args {
+        AdtVariantArg_Field(_, fields) => cir_l2_ast_variant_fields_has_duplicate(fields)
+        _ => 0
+    }
+
+def cir_l2_ast_variants_has_name(variants: AST, name: Str): i64 =
+    match variants {
+        AdtVariant_Cons(head, tail) =>
+            match head {
+                AdtVariant(variant_name, _) =>
+                    if streq(variant_name, name) != 0 { 1 } else { cir_l2_ast_variants_has_name(tail, name) }
+                _ => cir_l2_ast_variants_has_name(tail, name)
+            }
+        _ => 0
+    }
+
+def cir_l2_ast_variants_has_duplicate(variants: AST): i64 =
+    match variants {
+        AdtVariant_Cons(head, tail) =>
+            match head {
+                AdtVariant(name, args) =>
+                    if cir_l2_ast_variants_has_name(tail, name) != 0 { 1 }
+                    else if cir_l2_ast_variant_args_has_duplicate_field(args) != 0 { 1 }
+                    else { cir_l2_ast_variants_has_duplicate(tail) }
+                _ => cir_l2_ast_variants_has_duplicate(tail)
+            }
+        _ => 0
+    }
+
+def cir_l2_check_ast_nominal_item(item: AST): CirL2TypeCheck =
+    match item {
+        TypeItem(_, _, fields) =>
+            if cir_l2_ast_nominal_fields_has_duplicate(fields) != 0 { cir_l2_type_check_err("duplicate nominal field") } else { CirL2TypeCheckOk }
+        _ => CirL2TypeCheckOk
+    }
+
+def cir_l2_check_ast_adt_item(item: AST): CirL2TypeCheck =
+    match item {
+        AdtRecordItem(_, _, fields) =>
+            if cir_l2_ast_nominal_fields_has_duplicate(fields) != 0 { cir_l2_type_check_err("duplicate data variant or field") } else { CirL2TypeCheckOk }
+        AdtItem(_, _, variants) =>
+            if cir_l2_ast_variants_has_duplicate(variants) != 0 { cir_l2_type_check_err("duplicate data variant or field") } else { CirL2TypeCheckOk }
+        _ => CirL2TypeCheckOk
+    }
+
+def cir_l2_check_ast_union_item(item: AST): CirL2TypeCheck =
+    match item {
+        UnionItem(_, fields) =>
+            if cir_l2_ast_union_fields_has_duplicate(fields) != 0 { cir_l2_type_check_err("duplicate union field") } else { CirL2TypeCheckOk }
+        _ => CirL2TypeCheckOk
+    }
+
 def cir_l2_check_ast_args(args: AST): CirL2TypeCheck =
     match args {
         Arg_Cons(head, tail) => cir_l2_type_check_merge(cir_l2_check_ast_expr(head), cir_l2_check_ast_args(tail))
@@ -368,6 +479,9 @@ def cir_l2_check_ast_item(item: AST, file_is_metal: i64): CirL2TypeCheck =
                 _ => cir_l2_check_ast_item(inner, file_is_metal)
             }
         Item_Def(defn) => cir_l2_check_ast_def(defn, Attr_End, file_is_metal)
+        Item_Type(ty) => cir_l2_check_ast_nominal_item(ty)
+        Item_Adt(adt) => cir_l2_check_ast_adt_item(adt)
+        Item_Union(un) => cir_l2_check_ast_union_item(un)
         _ => CirL2TypeCheckOk
     }
 

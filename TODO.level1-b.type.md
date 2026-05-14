@@ -246,8 +246,8 @@
 	- **验收**: `def id[T](x:T):T=x` dump 使用同一 rigid `T`；`def bad[T,F](x:T):F=x` 定义期报错；重复 `[T,T]` 报错。
 - [ ] **Finish-C: source gate migration**
 	- **TODO**: 将 return/binary/let、row field、method/operator、capability/ABI、nominal duplicate、record duplicate/update 逐步迁入 L2 check 或 L2 side table；source gate 只保留 parser/generated AST 完整性检查。
-	- **PROGRESS**: return/binary 已由 primary L2 checker 处理；extern ABI unsupported/fd_write signature、`Atomic[T]` well-formedness、`unsafe {}` depth、`as Ptr[T]` / `as UnsafeRef[T]` cast boundary、record literal/update duplicate field 检查已迁入 `src/backend/cir/type_l2_check.chiba`，source fallback 不再是这些诊断的唯一入口。
-	- **REMAINING NODES**: nominal/data/union item side table、method/operator call-site resolution 仍需要 L2 side-table 或 CIR metadata 承载；这些完成前不能删除 `ast_items_check`。
+	- **PROGRESS**: return/binary 已由 primary L2 checker 处理；extern ABI unsupported/fd_write signature、`Atomic[T]` well-formedness、`unsafe {}` depth、`as Ptr[T]` / `as UnsafeRef[T]` cast boundary、record literal/update duplicate field、nominal/data/union duplicate item 检查已迁入 `src/backend/cir/type_l2_check.chiba`，source fallback 不再是这些诊断的唯一入口。
+	- **REMAINING NODES**: method/operator call-site resolution 仍需要 L2 side-table 或 CIR metadata 承载；这些完成前不能删除 `ast_items_check`。
 	- **验收**: `cir_typed_semantic_check` 不再调用主要 `ast_*_check` 作为成功路径；每类规则有 L2 smoke/golden 和 source fixture 对拍。
 - [x] **Finish-D: ConstraintSet solver integration**
 	- **TODO**: `cir_typed_module` 不只写 node type，还要输出/可 dump `ConstraintSet + ObligationIR`，并由 solver 统一处理 equality、row、capability、ABI。
