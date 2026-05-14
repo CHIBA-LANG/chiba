@@ -294,6 +294,7 @@ function checkStringSlice() {
   assert(name, wat.includes("(param $v1 (ref $array_u8))"), "String parameter does not lower to Array[u8] ref");
   assert(name, wat.includes("array.get_u $array_u8"), "String byte index does not lower to array.get_u");
   assert(name, wat.includes("struct.new $slice_u8"), "String range slice does not lower to Slice[u8] view");
+  assert(name, wat.includes("call $__chiba_string_codepoint_at"), "char_at/codepoint_at does not lower to UTF-8 codepoint helper");
   pass(name);
 }
 

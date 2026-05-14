@@ -394,6 +394,11 @@ def wat_is_ref_name(ref: CirRef, want: Str): i64 =
         _ => 0
     }
 
+def wat_is_string_char_method(field: Str): i64 =
+    if streq(field, mk_str("char_at", 7)) != 0 { 1 }
+    else if streq(field, mk_str("codepoint_at", 12)) != 0 { 1 }
+    else { 0 }
+
 def wat_unwrap_pass_expr(expr: CirExpr): CirExpr =
     match expr {
         L8ValidatedCoreOp(value, _) => wat_unwrap_pass_expr(value)
@@ -436,6 +441,16 @@ def wat_emit_expr_list(out: Str, depth: i64, args: CirExprList): i64 =
             let _ = wat_emit_expr(out, depth, head)
             wat_emit_expr_list(out, depth, tail)
         }
+    }
+
+def wat_emit_string_char_method_call(out: Str, depth: i64, value: CirExpr, args: CirExprList): i64 =
+    match args {
+        CirExprCons(index, CirExprEnd) => {
+            let _ = wat_emit_expr(out, depth, value)
+            let _ = wat_emit_expr(out, depth, index)
+            wat_line(out, depth, "call $__chiba_string_codepoint_at")
+        }
+        _ => wat_line(out, depth, "unreachable ;; char_at arity unsupported")
     }
 
 def wat_emit_stmt_list(out: Str, depth: i64, stmts: CirStmtList): i64 =
@@ -590,6 +605,10 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
         }
         L1OpCall(callee, args) => {
             match wat_unwrap_pass_expr(callee) {
+                L1OpField(value, field) =>
+                    if wat_is_string_char_method(field) != 0 && wat_expr_is_string_array(value) != 0 {
+                        wat_emit_string_char_method_call(out, depth, value, args)
+                    } else { wat_line(out, depth, "unreachable ;; method call unsupported") }
                 L1OpRef(ref) =>
                     if wat_is_ref_name(ref, mk_str("__tuple", 7)) != 0 {
                         let _ = wat_emit_expr_list(out, depth, args)
@@ -876,11 +895,147 @@ def wat_emit_module(module: CirModule): Str = {
     let _ = match module {
         L1Module(_, items) => {
             let _ = wat_emit_imports(out, items)
-            let _ = wat_emit_env_hole_imports(out, items)
+            wat_emit_env_hole_imports(out, items)
+        }
+        L8ValidatedCoreModule(_, items) => wat_emit_imports(out, items)
+        _ => 0
+    }
+    let _ = str_push_cstr(out, "  (func $__chiba_string_utf8_width (param $b i32) (result i32)\n")
+    let _ = str_push_cstr(out, "    local.get $b\n")
+    let _ = str_push_cstr(out, "    i32.const 128\n")
+    let _ = str_push_cstr(out, "    i32.lt_u\n")
+    let _ = str_push_cstr(out, "    if (result i32)\n")
+    let _ = str_push_cstr(out, "      i32.const 1\n")
+    let _ = str_push_cstr(out, "    else\n")
+    let _ = str_push_cstr(out, "      local.get $b\n")
+    let _ = str_push_cstr(out, "      i32.const 224\n")
+    let _ = str_push_cstr(out, "      i32.lt_u\n")
+    let _ = str_push_cstr(out, "      if (result i32)\n")
+    let _ = str_push_cstr(out, "        i32.const 2\n")
+    let _ = str_push_cstr(out, "      else\n")
+    let _ = str_push_cstr(out, "        local.get $b\n")
+    let _ = str_push_cstr(out, "        i32.const 240\n")
+    let _ = str_push_cstr(out, "        i32.lt_u\n")
+    let _ = str_push_cstr(out, "        if (result i32)\n")
+    let _ = str_push_cstr(out, "          i32.const 3\n")
+    let _ = str_push_cstr(out, "        else\n")
+    let _ = str_push_cstr(out, "          i32.const 4\n")
+    let _ = str_push_cstr(out, "        end\n")
+    let _ = str_push_cstr(out, "      end\n")
+    let _ = str_push_cstr(out, "    end)\n")
+    let _ = str_push_cstr(out, "  (func $__chiba_string_codepoint_at (param $a (ref $array_u8)) (param $idx i64) (result i64)\n")
+    let _ = str_push_cstr(out, "    (local $off i32) (local $i i64) (local $b0 i32) (local $b1 i32) (local $b2 i32) (local $b3 i32)\n")
+    let _ = str_push_cstr(out, "    block $done\n")
+    let _ = str_push_cstr(out, "      loop $scan\n")
+    let _ = str_push_cstr(out, "        local.get $i\n")
+    let _ = str_push_cstr(out, "        local.get $idx\n")
+    let _ = str_push_cstr(out, "        i64.ge_u\n")
+    let _ = str_push_cstr(out, "        br_if $done\n")
+    let _ = str_push_cstr(out, "        local.get $off\n")
+    let _ = str_push_cstr(out, "        local.get $a\n")
+    let _ = str_push_cstr(out, "        local.get $off\n")
+    let _ = str_push_cstr(out, "        array.get_u $array_u8\n")
+    let _ = str_push_cstr(out, "        call $__chiba_string_utf8_width\n")
+    let _ = str_push_cstr(out, "        i32.add\n")
+    let _ = str_push_cstr(out, "        local.set $off\n")
+    let _ = str_push_cstr(out, "        local.get $i\n")
+    let _ = str_push_cstr(out, "        i64.const 1\n")
+    let _ = str_push_cstr(out, "        i64.add\n")
+    let _ = str_push_cstr(out, "        local.set $i\n")
+    let _ = str_push_cstr(out, "        br $scan\n")
+    let _ = str_push_cstr(out, "      end\n")
+    let _ = str_push_cstr(out, "    end\n")
+    let _ = str_push_cstr(out, "    local.get $a\n")
+    let _ = str_push_cstr(out, "    local.get $off\n")
+    let _ = str_push_cstr(out, "    array.get_u $array_u8\n")
+    let _ = str_push_cstr(out, "    local.tee $b0\n")
+    let _ = str_push_cstr(out, "    i32.const 128\n")
+    let _ = str_push_cstr(out, "    i32.lt_u\n")
+    let _ = str_push_cstr(out, "    if (result i32)\n")
+    let _ = str_push_cstr(out, "      local.get $b0\n")
+    let _ = str_push_cstr(out, "    else\n")
+    let _ = str_push_cstr(out, "      local.get $a\n")
+    let _ = str_push_cstr(out, "      local.get $off\n")
+    let _ = str_push_cstr(out, "      i32.const 1\n")
+    let _ = str_push_cstr(out, "      i32.add\n")
+    let _ = str_push_cstr(out, "      array.get_u $array_u8\n")
+    let _ = str_push_cstr(out, "      local.set $b1\n")
+    let _ = str_push_cstr(out, "      local.get $b0\n")
+    let _ = str_push_cstr(out, "      i32.const 224\n")
+    let _ = str_push_cstr(out, "      i32.lt_u\n")
+    let _ = str_push_cstr(out, "      if (result i32)\n")
+    let _ = str_push_cstr(out, "        local.get $b0\n")
+    let _ = str_push_cstr(out, "        i32.const 31\n")
+    let _ = str_push_cstr(out, "        i32.and\n")
+    let _ = str_push_cstr(out, "        i32.const 6\n")
+    let _ = str_push_cstr(out, "        i32.shl\n")
+    let _ = str_push_cstr(out, "        local.get $b1\n")
+    let _ = str_push_cstr(out, "        i32.const 63\n")
+    let _ = str_push_cstr(out, "        i32.and\n")
+    let _ = str_push_cstr(out, "        i32.or\n")
+    let _ = str_push_cstr(out, "      else\n")
+    let _ = str_push_cstr(out, "        local.get $a\n")
+    let _ = str_push_cstr(out, "        local.get $off\n")
+    let _ = str_push_cstr(out, "        i32.const 2\n")
+    let _ = str_push_cstr(out, "        i32.add\n")
+    let _ = str_push_cstr(out, "        array.get_u $array_u8\n")
+    let _ = str_push_cstr(out, "        local.set $b2\n")
+    let _ = str_push_cstr(out, "        local.get $b0\n")
+    let _ = str_push_cstr(out, "        i32.const 240\n")
+    let _ = str_push_cstr(out, "        i32.lt_u\n")
+    let _ = str_push_cstr(out, "        if (result i32)\n")
+    let _ = str_push_cstr(out, "          local.get $b0\n")
+    let _ = str_push_cstr(out, "          i32.const 15\n")
+    let _ = str_push_cstr(out, "          i32.and\n")
+    let _ = str_push_cstr(out, "          i32.const 12\n")
+    let _ = str_push_cstr(out, "          i32.shl\n")
+    let _ = str_push_cstr(out, "          local.get $b1\n")
+    let _ = str_push_cstr(out, "          i32.const 63\n")
+    let _ = str_push_cstr(out, "          i32.and\n")
+    let _ = str_push_cstr(out, "          i32.const 6\n")
+    let _ = str_push_cstr(out, "          i32.shl\n")
+    let _ = str_push_cstr(out, "          i32.or\n")
+    let _ = str_push_cstr(out, "          local.get $b2\n")
+    let _ = str_push_cstr(out, "          i32.const 63\n")
+    let _ = str_push_cstr(out, "          i32.and\n")
+    let _ = str_push_cstr(out, "          i32.or\n")
+    let _ = str_push_cstr(out, "        else\n")
+    let _ = str_push_cstr(out, "          local.get $a\n")
+    let _ = str_push_cstr(out, "          local.get $off\n")
+    let _ = str_push_cstr(out, "          i32.const 3\n")
+    let _ = str_push_cstr(out, "          i32.add\n")
+    let _ = str_push_cstr(out, "          array.get_u $array_u8\n")
+    let _ = str_push_cstr(out, "          local.set $b3\n")
+    let _ = str_push_cstr(out, "          local.get $b0\n")
+    let _ = str_push_cstr(out, "          i32.const 7\n")
+    let _ = str_push_cstr(out, "          i32.and\n")
+    let _ = str_push_cstr(out, "          i32.const 18\n")
+    let _ = str_push_cstr(out, "          i32.shl\n")
+    let _ = str_push_cstr(out, "          local.get $b1\n")
+    let _ = str_push_cstr(out, "          i32.const 63\n")
+    let _ = str_push_cstr(out, "          i32.and\n")
+    let _ = str_push_cstr(out, "          i32.const 12\n")
+    let _ = str_push_cstr(out, "          i32.shl\n")
+    let _ = str_push_cstr(out, "          i32.or\n")
+    let _ = str_push_cstr(out, "          local.get $b2\n")
+    let _ = str_push_cstr(out, "          i32.const 63\n")
+    let _ = str_push_cstr(out, "          i32.and\n")
+    let _ = str_push_cstr(out, "          i32.const 6\n")
+    let _ = str_push_cstr(out, "          i32.shl\n")
+    let _ = str_push_cstr(out, "          i32.or\n")
+    let _ = str_push_cstr(out, "          local.get $b3\n")
+    let _ = str_push_cstr(out, "          i32.const 63\n")
+    let _ = str_push_cstr(out, "          i32.and\n")
+    let _ = str_push_cstr(out, "          i32.or\n")
+    let _ = str_push_cstr(out, "        end\n")
+    let _ = str_push_cstr(out, "      end\n")
+    let _ = str_push_cstr(out, "    end\n")
+    let _ = str_push_cstr(out, "    i64.extend_i32_u)\n")
+    let _ = match module {
+        L1Module(_, items) => {
             wat_emit_items(out, items, 0)
         }
         L8ValidatedCoreModule(_, items) => {
-            let _ = wat_emit_imports(out, items)
             wat_emit_items(out, items, 0)
         }
         _ => 0
