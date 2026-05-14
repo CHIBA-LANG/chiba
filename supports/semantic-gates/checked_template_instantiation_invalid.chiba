@@ -1,0 +1,5 @@
+namespace semantic.gates.checked_template_instantiation.invalid
+
+def get_name[T: {r| name: Str}](value: T): Str = value.name
+
+def call_bad(): Str = get_name({ id: 1 })

@@ -192,6 +192,18 @@ const CASES = [
     expect: ["generic-body concrete-error", "generic-body field-obligation", "generic-instantiation-field-missing", "specialization-key semantic.gates.type_generics::id[T]"],
   },
   {
+    group: "checked-template",
+    name: "instantiation valid",
+    args: ["check", "supports/semantic-gates/checked_template_instantiation.chiba"],
+    expect: ["check ok"],
+  },
+  {
+    group: "checked-template",
+    name: "instantiation missing field",
+    args: ["check", "supports/semantic-gates/checked_template_instantiation_invalid.chiba"],
+    expect: ["generic instantiation missing field name"],
+  },
+  {
     group: "method-operator",
     name: "method routes golden dump",
     args: ["type-method-smoke", SPEC],

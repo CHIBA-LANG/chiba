@@ -252,8 +252,9 @@
 	- **TODO**: `cir_typed_module` 不只写 node type，还要输出/可 dump `ConstraintSet + ObligationIR`，并由 solver 统一处理 equality、row、capability、ABI。
 	- **DONE**: 新增 `src/backend/cir/type_facts.chiba` 与 `type-facts-smoke`，稳定 dump `TypedAst result + ConstraintSet + ObligationIR`，并纳入 bootstrap/type-system golden。真实 solver 仍按各 L2 checker 模块分阶段兑现，后续迁移 source fallback 时统一接入该 facts 入口。
 	- **验收**: `typed` 或新 `typed-facts` 命令能 dump TypedAst、ConstraintSet、ObligationIR；golden hash 稳定。
-- [ ] **Finish-E: checked template instantiation gate**
+- [x] **Finish-E: checked template instantiation gate**
 	- **TODO**: generic body definition-time check 与 instantiation-time obligation 兑现接入真实 call site，不只 smoke。
+	- **DONE**: 新增 `checked_template_instantiation*.chiba`，`level1c.o check` 在 generic row-bound function 的 record literal call site 兑现 field obligation，缺字段报 `generic instantiation missing field name`；semantic/type-system runners 均覆盖。
 	- **验收**: 成功 specialization、定义期错误、实例化期 missing field/method/operator error 三组 fixture 全由 `level1c.o check` 判定。
 - [ ] **Finish-F: method/operator namespace resolution**
 	- **TODO**: method index 使用 namespace-qualified nominal id；`.method(call)` 三路径和 operator overload 进入 L2 resolution，不依赖 source pattern。

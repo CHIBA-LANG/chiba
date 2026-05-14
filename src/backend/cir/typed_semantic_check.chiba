@@ -190,6 +190,20 @@ def ast_item_def_name(ast: AST): Str =
         _ => mk_str("", 0)
     }
 
+def ast_item_def_generics(ast: AST): AST =
+    match ast {
+        DefItem(_, generics, _, _, _) => generics
+        DefItem2(name_ast, _) => ast_def_generics_from_name(name_ast)
+        _ => Generic_End
+    }
+
+def ast_item_def_params_from_defn(ast: AST): AST =
+    match ast {
+        DefItem(_, _, params, _, _) => params
+        DefItem2(_, rest) => ast_def_params(rest)
+        _ => Param_End
+    }
+
 def ast_item_method_name(ast: AST): Str =
     match ast {
         DefItem2(name_ast, _) =>
@@ -651,6 +665,108 @@ def ast_record_body_check(body: AST, all_items: AST, params: AST, generics: AST,
         _ => CirTypedSemanticCheckOk
     }
 
+def ast_record_body_has_field(body: AST, field: Str): i64 =
+    match body {
+        Record_First(first, tail) =>
+            if streq(first, field) != 0 { 1 } else { ast_record_fields_has(ast_record_tail_fields(tail), field) }
+        Record_Update(_, fields) => ast_record_fields_has(fields, field)
+        Record_Fields(fields) => ast_record_fields_has(fields, field)
+        _ => 0
+    }
+
+def ast_generic_row_fields_satisfied(fields: AST, record_body: AST): CirTypedSemanticCheck =
+    match fields {
+        GenericRowField_Cons(head, tail) =>
+            match head {
+                GenericRowField(name, _) =>
+                    if ast_record_body_has_field(record_body, name) == 0 { cir_typed_semantic_err("generic instantiation missing field name") }
+                    else { ast_generic_row_fields_satisfied(tail, record_body) }
+                _ => ast_generic_row_fields_satisfied(tail, record_body)
+            }
+        _ => CirTypedSemanticCheckOk
+    }
+
+def ast_generic_bound_record_satisfied(bound: AST, record_body: AST): CirTypedSemanticCheck =
+    match bound {
+        GenericBound_Cons(head, tail) => {
+            let here = match head {
+                GenericBound_Row(row) =>
+                    match row {
+                        GenericRow(_, fields) => ast_generic_row_fields_satisfied(fields, record_body)
+                        _ => CirTypedSemanticCheckOk
+                    }
+                _ => CirTypedSemanticCheckOk
+            }
+            cir_typed_semantic_merge(here, ast_generic_bound_record_satisfied(tail, record_body))
+        }
+        _ => CirTypedSemanticCheckOk
+    }
+
+def ast_generics_record_satisfied(generics: AST, generic_name: Str, record_body: AST): CirTypedSemanticCheck =
+    match generics {
+        Generic_Cons(head, tail) =>
+            match head {
+                GenericParam(name, bound) =>
+                    if streq(name, generic_name) != 0 { ast_generic_bound_record_satisfied(bound, record_body) }
+                    else { ast_generics_record_satisfied(tail, generic_name, record_body) }
+                _ => ast_generics_record_satisfied(tail, generic_name, record_body)
+            }
+        _ => CirTypedSemanticCheckOk
+    }
+
+def ast_first_param_type_name(params: AST): Str =
+    match params {
+        Param_Cons(head, _) =>
+            match head {
+                Param(_, ty) => ast_type_path_name(ty)
+                _ => mk_str("", 0)
+            }
+        _ => mk_str("", 0)
+    }
+
+def ast_item_check_record_instantiation(item: AST, callee: Str, record_body: AST): CirTypedSemanticCheck =
+    match item {
+        Item_WithAttrs(_, inner) => ast_item_check_record_instantiation(inner, callee, record_body)
+        Item_Def(defn) => {
+            let name = ast_item_def_name(defn)
+            if streq(name, callee) != 0 {
+                let generic_name = ast_first_param_type_name(ast_item_def_params_from_defn(defn))
+                ast_generics_record_satisfied(ast_item_def_generics(defn), generic_name, record_body)
+            } else { CirTypedSemanticCheckOk }
+        }
+        _ => CirTypedSemanticCheckOk
+    }
+
+def ast_items_check_record_instantiation(items: AST, callee: Str, record_body: AST): CirTypedSemanticCheck =
+    match items {
+        Item_Cons(head, tail) => cir_typed_semantic_merge(ast_item_check_record_instantiation(head, callee, record_body), ast_items_check_record_instantiation(tail, callee, record_body))
+        _ => CirTypedSemanticCheckOk
+    }
+
+def ast_args_first_record(args: AST): AST =
+    match args {
+        Arg_Cons(head, _) =>
+            match head {
+                Expr_Record(body) => body
+                _ => Record_Fields(RecordField_End)
+            }
+        _ => Record_Fields(RecordField_End)
+    }
+
+def ast_args_first_is_record(args: AST): i64 =
+    match args {
+        Arg_Cons(head, _) =>
+            match head {
+                Expr_Record(_) => 1
+                _ => 0
+            }
+        _ => 0
+    }
+
+def ast_expr_check_template_instantiation(callee_name: Str, args: AST, all_items: AST): CirTypedSemanticCheck =
+    if ast_args_first_is_record(args) != 0 { ast_items_check_record_instantiation(all_items, callee_name, ast_args_first_record(args)) }
+    else { CirTypedSemanticCheckOk }
+
 def ast_stmt_check(stmt: AST, all_items: AST, params: AST, generics: AST, unsafe_depth: i64): CirTypedSemanticCheck =
     match stmt {
         Stmt_Expr(value) => ast_expr_check(value, all_items, params, generics, unsafe_depth)
@@ -972,7 +1088,7 @@ def ast_expr_check(expr: AST, all_items: AST, params: AST, generics: AST, unsafe
         Expr_Unsafe(body) => ast_expr_check(body, all_items, params, generics, unsafe_depth + 1)
         Expr_Block(stmts, tail) => cir_typed_semantic_merge(ast_stmt_list_check(stmts, all_items, params, generics, unsafe_depth), ast_expr_check(tail, all_items, params, generics, unsafe_depth))
         Expr_Call(callee, args) => cir_typed_semantic_merge(ast_expr_check_atomic_call(callee, args), cir_typed_semantic_merge(ast_expr_check_method_call(callee, args, all_items, params, generics, unsafe_depth), cir_typed_semantic_merge(ast_expr_check(callee, all_items, params, generics, unsafe_depth), ast_expr_check_args(args, all_items, params, generics, unsafe_depth))))
-        Expr_IdentTail(name, IdentTail_Call(args, _)) => ast_expr_check_args(args, all_items, params, generics, unsafe_depth)
+        Expr_IdentTail(name, IdentTail_Call(args, _)) => cir_typed_semantic_merge(ast_expr_check_template_instantiation(name, args, all_items), ast_expr_check_args(args, all_items, params, generics, unsafe_depth))
         Expr_Record(body) => ast_record_body_check(body, all_items, params, generics, unsafe_depth)
         Expr_Field(value, field) => cir_typed_semantic_merge(ast_expr_check_field(value, field, params, generics), ast_expr_check(value, all_items, params, generics, unsafe_depth))
         Expr_Index(value, args) => cir_typed_semantic_merge(ast_expr_check(value, all_items, params, generics, unsafe_depth), ast_expr_check_args(args, all_items, params, generics, unsafe_depth))

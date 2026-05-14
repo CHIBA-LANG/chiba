@@ -1,0 +1,5 @@
+namespace semantic.gates.checked_template_instantiation
+
+def get_name[T: {r| name: Str}](value: T): Str = value.name
+
+def call_ok(): Str = get_name({ name: "ok" })
