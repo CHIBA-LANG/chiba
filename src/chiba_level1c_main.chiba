@@ -362,9 +362,25 @@ def level1c_run_nanopass(path: Str): i64 =
 def level1c_run_core_invalid_smoke(path: Str): i64 =
     {
         let _ = write_fd(1, "L8ValidatedCoreModule\n", 22)
-        let _ = write_fd(1, "L8ValidatedCoreOp\n", 18)
-        let _ = write_fd(1, "  validation err(\"missing L7CoreOp\")\n", 37)
+        let _ = level1c_write_core_validation(cir_invalid_core_smoke_result())
+        let _ = level1c_write_core_validation(cir_invalid_core_dangling_result())
+        let _ = level1c_write_core_validation(cir_invalid_core_string_layout_result())
+        let _ = level1c_write_core_validation(cir_invalid_core_continuation_usage_result())
         0
+    }
+
+def level1c_write_core_validation(result: CirCoreValidation): i64 =
+    match result {
+        L8ValidatedCoreOk => {
+            let _ = write_fd(1, "L8ValidatedCoreOp\n", 18)
+            write_fd(1, "  validation ok\n", 16)
+        }
+        L8ValidatedCoreErr(message) => {
+            let _ = write_fd(1, "L8ValidatedCoreOp\n", 18)
+            let _ = write_fd(1, "  validation err(\"", 18)
+            let _ = str_write_to(message, 1)
+            write_fd(1, "\")\n", 3)
+        }
     }
 
 def level1c_run_cps(path: Str): i64 =

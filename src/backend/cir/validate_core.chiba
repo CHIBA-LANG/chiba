@@ -3,6 +3,18 @@ use backend.cir.ir.*
 use metalstd.str.*
 use parser.chiba_level1.*
 
+def cir_l8_validation_merge(a: CirCoreValidation, b: CirCoreValidation): CirCoreValidation =
+    match a {
+        L8ValidatedCoreErr(_) => a
+        L8ValidatedCoreOk => b
+    }
+
+def cir_l8_expr_validation(expr: CirExpr): CirCoreValidation =
+    match cir_l8_validate_expr(expr) {
+        L8ValidatedCoreOp(_, result) => result
+        _ => L8ValidatedCoreErr(mk_str("validator did not produce L8 op", 31))
+    }
+
 def cir_l8_validate_expr_list(args: CirExprList): CirExprList =
     match args {
         CirExprEnd => CirExprEnd
@@ -47,6 +59,84 @@ def cir_l8_validate_payload(expr: CirExpr): CirExpr =
         _ => expr
     }
 
+def cir_l8_type_is_string_slice(ty: CirType): i64 =
+    match ty {
+        CirTyString => 1
+        CirTyStr => 1
+        CirTySliceU8 => 1
+        _ => 0
+    }
+
+def cir_l8_payload_is_string_slice(expr: CirExpr): i64 =
+    match expr {
+        L7CoreOp(value, _) => cir_l8_payload_is_string_slice(value)
+        L8ValidatedCoreOp(value, _) => cir_l8_payload_is_string_slice(value)
+        L6OpClosureEnv(value, _) => cir_l8_payload_is_string_slice(value)
+        L5OpContinuationPackage(_, _, value) => cir_l8_payload_is_string_slice(value)
+        L5OpCps(value, _) => cir_l8_payload_is_string_slice(value)
+        L4OpUsage(value, _) => cir_l8_payload_is_string_slice(value)
+        L3OpAnswerControl(value, answer, _) =>
+            if cir_l8_type_is_string_slice(answer) != 0 { 1 } else { cir_l8_payload_is_string_slice(value) }
+        L2OpTyped(value, ty) =>
+            if cir_l8_type_is_string_slice(ty) != 0 { 1 } else { cir_l8_payload_is_string_slice(value) }
+        L1OpString => 1
+        L1OpIndex(_, _) => 1
+        _ => 0
+    }
+
+def cir_l8_payload_is_continuation(expr: CirExpr): i64 =
+    match expr {
+        L7CoreOp(value, _) => cir_l8_payload_is_continuation(value)
+        L8ValidatedCoreOp(value, _) => cir_l8_payload_is_continuation(value)
+        L6OpClosureEnv(_, _) => 1
+        L5OpContinuationPackage(_, _, _) => 1
+        L5OpCps(_, _) => 1
+        L4OpUsage(_, _) => 1
+        L3OpAnswerControl(_, _, _) => 1
+        L2OpTyped(_, _) => 1
+        L1OpBlock(_, _) => 1
+        L1OpIf(_, _, _) => 1
+        L1OpCall(_, _) => 1
+        L1OpReset(_, _) => 1
+        L1OpShift(_, _, _) => 1
+        _ => 0
+    }
+
+def cir_l8_payload_is_wasm_gc_object(expr: CirExpr): i64 =
+    match expr {
+        L7CoreOp(value, _) => cir_l8_payload_is_wasm_gc_object(value)
+        L8ValidatedCoreOp(value, _) => cir_l8_payload_is_wasm_gc_object(value)
+        L6OpClosureEnv(_, _) => 1
+        L5OpCps(value, _) => cir_l8_payload_is_wasm_gc_object(value)
+        L4OpUsage(value, _) => cir_l8_payload_is_wasm_gc_object(value)
+        L3OpAnswerControl(value, _, _) => cir_l8_payload_is_wasm_gc_object(value)
+        L2OpTyped(value, _) => cir_l8_payload_is_wasm_gc_object(value)
+        _ => 0
+    }
+
+def cir_l8_usage_is_many(usage: CirUsage): i64 =
+    match usage {
+        CirUseMany => 1
+        _ => 0
+    }
+
+def cir_l8_validate_payload_result(expr: CirExpr): CirCoreValidation =
+    match expr {
+        L8ValidatedCoreOp(_, result) => result
+        L5OpContinuationPackage(_, usage, value) => {
+            let usage_check =
+                if cir_l8_usage_is_many(usage) != 0 { L8ValidatedCoreOk }
+                else { L8ValidatedCoreErr(mk_str("illegal continuation package usage", 34)) }
+            usage_check
+        }
+        L1OpRef(ref) =>
+            match ref {
+                L1RefUnresolved(_) => L8ValidatedCoreErr(mk_str("dangling symbol", 15))
+                _ => L8ValidatedCoreOk
+            }
+        _ => L8ValidatedCoreOk
+    }
+
 def cir_l8_validate_core_op(op: CirCoreOp): CirCoreValidation =
     match op {
         L7CoreFunc => L8ValidatedCoreOk
@@ -55,10 +145,30 @@ def cir_l8_validate_core_op(op: CirCoreOp): CirCoreValidation =
         L7CoreContinuationPackage => L8ValidatedCoreOk
     }
 
+def cir_l8_validate_core_shape(value: CirExpr, op: CirCoreOp): CirCoreValidation =
+    match op {
+        L7CoreStringSlice =>
+            if cir_l8_payload_is_string_slice(value) != 0 { L8ValidatedCoreOk }
+            else { L8ValidatedCoreErr(mk_str("invalid string/slice layout", 27)) }
+        L7CoreContinuationPackage =>
+            if cir_l8_payload_is_continuation(value) != 0 { L8ValidatedCoreOk }
+            else { L8ValidatedCoreErr(mk_str("invalid continuation package", 28)) }
+        L7CoreWasmGcObject =>
+            if cir_l8_payload_is_wasm_gc_object(value) != 0 { L8ValidatedCoreOk }
+            else { L8ValidatedCoreErr(mk_str("invalid wasm-gc object layout", 29)) }
+        _ => L8ValidatedCoreOk
+    }
+
 def cir_l8_validate_expr(expr: CirExpr): CirExpr =
     match expr {
-        L7CoreOp(value, op) => L8ValidatedCoreOp(L7CoreOp(cir_l8_validate_payload(value), op), cir_l8_validate_core_op(op))
-        _ => L8ValidatedCoreOp(expr, L8ValidatedCoreErr("missing L7CoreOp"))
+        L7CoreOp(value, op) => {
+            let result = cir_l8_validation_merge(
+                cir_l8_validate_core_op(op),
+                cir_l8_validation_merge(cir_l8_validate_core_shape(value, op), cir_l8_validate_payload_result(value))
+            )
+            L8ValidatedCoreOp(L7CoreOp(cir_l8_validate_payload(value), op), result)
+        }
+        _ => L8ValidatedCoreOp(expr, L8ValidatedCoreErr(mk_str("missing L7CoreOp", 16)))
     }
 
 def cir_l8_items(items: CirItemList): CirItemList =
@@ -91,7 +201,40 @@ def cir_invalid_core_smoke_module(header: AST): CirModule =
                 header,
                 cir_l8_validate_expr(L1OpInt(mk_str("0", 1)))
             ),
-            CirItemEnd
+            CirItemCons(
+                L8ValidatedCoreItemDef(
+                    cir_binder(1, mk_str("invalid_dangling", 16)),
+                    CirParamEnd,
+                    header,
+                    cir_l8_validate_expr(L7CoreOp(L1OpRef(L1RefUnresolved(mk_str("missing_symbol", 14))), L7CoreFunc))
+                ),
+                CirItemCons(
+                    L8ValidatedCoreItemDef(
+                        cir_binder(2, mk_str("invalid_string_layout", 21)),
+                        CirParamEnd,
+                        header,
+                        cir_l8_validate_expr(L7CoreOp(L1OpInt(mk_str("1", 1)), L7CoreStringSlice))
+                    ),
+                    CirItemCons(
+                        L8ValidatedCoreItemDef(
+                            cir_binder(3, mk_str("invalid_continuation", 20)),
+                            CirParamEnd,
+                            header,
+                            cir_l8_validate_expr(
+                                L7CoreOp(
+                                    L5OpContinuationPackage(
+                                        cir_binder(-2, mk_str("bad-cont", 8)),
+                                        CirUseOne,
+                                        L7CoreOp(L1OpInt(mk_str("0", 1)), L7CoreFunc)
+                                    ),
+                                    L7CoreContinuationPackage
+                                )
+                            )
+                        ),
+                        CirItemEnd
+                    )
+                )
+            )
         )
     )
 
@@ -99,4 +242,31 @@ def cir_invalid_core_smoke_result(): CirCoreValidation =
     match cir_l8_validate_expr(L1OpInt(mk_str("0", 1))) {
         L8ValidatedCoreOp(_, result) => result
         _ => L8ValidatedCoreErr(mk_str("invalid core smoke did not validate", 35))
+    }
+
+def cir_invalid_core_dangling_result(): CirCoreValidation =
+    match cir_l8_validate_expr(L7CoreOp(L1OpRef(L1RefUnresolved(mk_str("missing_symbol", 14))), L7CoreFunc)) {
+        L8ValidatedCoreOp(_, result) => result
+        _ => L8ValidatedCoreErr(mk_str("invalid dangling smoke did not validate", 38))
+    }
+
+def cir_invalid_core_string_layout_result(): CirCoreValidation =
+    match cir_l8_validate_expr(L7CoreOp(L1OpInt(mk_str("1", 1)), L7CoreStringSlice)) {
+        L8ValidatedCoreOp(_, result) => result
+        _ => L8ValidatedCoreErr(mk_str("invalid string smoke did not validate", 36))
+    }
+
+def cir_invalid_core_continuation_usage_result(): CirCoreValidation =
+    match cir_l8_validate_expr(
+        L7CoreOp(
+            L5OpContinuationPackage(
+                cir_binder(-2, mk_str("bad-cont", 8)),
+                CirUseOne,
+                L7CoreOp(L1OpInt(mk_str("0", 1)), L7CoreFunc)
+            ),
+            L7CoreContinuationPackage
+        )
+    ) {
+        L8ValidatedCoreOp(_, result) => result
+        _ => L8ValidatedCoreErr(mk_str("invalid continuation smoke did not validate", 42))
     }

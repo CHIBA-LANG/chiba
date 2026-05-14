@@ -409,7 +409,14 @@ const LEVEL1C_CASES = [
   {
     name: "level1c core validator rejects invalid core",
     args: ["core-invalid-smoke", "chiba-level1-grammar-spec/01-test.chiba"],
-    expect: ["L8ValidatedCoreModule", "L8ValidatedCoreOp", "validation err(\"missing L7CoreOp\")"],
+    expect: [
+      "L8ValidatedCoreModule",
+      "L8ValidatedCoreOp",
+      "validation err(\"missing L7CoreOp\")",
+      "validation err(\"dangling symbol\")",
+      "validation err(\"invalid string/slice layout\")",
+      "validation err(\"illegal continuation package usage\")",
+    ],
   },
   {
     name: "level1c cps continuation multi resume",
