@@ -291,7 +291,9 @@ function checkStringSlice() {
   assert(name, wat.includes("array.new_fixed $array_u8 21"), "raw string literal does not lower to real Array[u8] payload");
   assert(name, wat.includes("i32.const 114") && wat.includes("i32.const 119"), "raw string literal byte payload missing");
   assert(name, wat.includes("string interpolation concat pending"), "interpolation must stay explicit until concat runtime lands");
-  assert(name, wat.includes("typed string index pending"), "typed String index/slice must not silently emit an empty slice");
+  assert(name, wat.includes("(param $v1 (ref $array_u8))"), "String parameter does not lower to Array[u8] ref");
+  assert(name, wat.includes("array.get_u $array_u8"), "String byte index does not lower to array.get_u");
+  assert(name, wat.includes("struct.new $slice_u8"), "String range slice does not lower to Slice[u8] view");
   pass(name);
 }
 

@@ -92,7 +92,9 @@ fs.writeFileSync(path.join(WAT_DIR, "string_slice.wat"), wat.stdout);
 if (!wat.stdout.includes("(type $array_u8 (array i8))")) fail("String backing Array[u8] layout missing from Pre-C01 WAT");
 if (!wat.stdout.includes("(type $slice_u8 (struct (field (ref $array_u8)) (field i32) (field i32)))")) fail("str Slice[u8] layout missing from Pre-C01 WAT");
 if (!wat.stdout.includes("array.new_fixed $array_u8 21")) fail("String literal does not lower real Array[u8] payload in Pre-C01 WAT");
-if (!wat.stdout.includes("typed string index pending")) fail("typed String index/slice should remain explicit until typed WAT params land");
+if (!wat.stdout.includes("(param $v1 (ref $array_u8))")) fail("String parameter does not lower to Array[u8] ref");
+if (!wat.stdout.includes("array.get_u $array_u8")) fail("String byte index does not lower to array.get_u");
+if (!wat.stdout.includes("struct.new $slice_u8")) fail("String range slice does not lower to Slice[u8] view");
 
 const validRefs = fs.readFileSync(path.join(SMOKE_ROOT, "refs_atomic_valid.chiba"), "utf8");
 const invalidRefs = fs.readFileSync(path.join(SMOKE_ROOT, "refs_atomic_invalid.chiba"), "utf8");

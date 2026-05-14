@@ -1,6 +1,7 @@
 namespace backend.wasm.wat
 use metalstd.mem.*
 use metalstd.str.*
+use parser.chiba_level1.*
 use backend.cir.ir.*
 
 def wat_indent_loop(out: Str, i: i64, depth: i64): i64 =
@@ -54,22 +55,47 @@ def wat_func_name(out: Str, name: Str): i64 = {
     str_append(out, name)
 }
 
-def wat_emit_local_decl(out: Str, id: i64): i64 = {
+def wat_valtype_from_cir(ty: CirType): i64 =
+    match ty {
+        CirTyString => "(ref $array_u8)"
+        CirTyStr => "(ref $slice_u8)"
+        CirTySliceU8 => "(ref $slice_u8)"
+        _ => "i64"
+    }
+
+def wat_valtype_from_ast(ty: AST): i64 =
+    match ty {
+        Type_Path(name, _) =>
+            if streq(name, mk_str("String", 6)) != 0 { "(ref $array_u8)" }
+            else if streq(name, mk_str("str", 3)) != 0 { "(ref $slice_u8)" }
+            else if streq(name, mk_str("Slice", 5)) != 0 { "(ref $slice_u8)" }
+            else { "i64" }
+        _ => "i64"
+    }
+
+def wat_emit_local_decl_with_type(out: Str, id: i64, value_type: i64): i64 = {
     let _ = str_push_cstr(out, "    (local ")
     let _ = wat_local_name(out, id)
-    let _ = str_push_cstr(out, " i64)")
+    let _ = str_push(out, 32)
+    let _ = str_push_cstr(out, value_type)
+    let _ = str_push(out, 41)
     str_push(out, 10)
 }
+
+def wat_emit_local_decl(out: Str, id: i64): i64 =
+    wat_emit_local_decl_with_type(out, id, "i64")
 
 def wat_emit_params(out: Str, params: CirParamList): i64 =
     match params {
         CirParamEnd => 0
         CirParamCons(param, rest) => {
             let _ = match param {
-                L1Param(binder, _) => {
+                L1Param(binder, ty) => {
                     let _ = str_push_cstr(out, " (param ")
                     let _ = wat_local_name(out, binder.id)
-                    str_push_cstr(out, " i64)")
+                    let _ = str_push(out, 32)
+                    let _ = str_push_cstr(out, wat_valtype_from_ast(ty))
+                    str_push(out, 41)
                 }
                 L0Param(_, _) => 0
             }
@@ -317,8 +343,8 @@ def wat_collect_stmt_locals(out: Str, stmts: CirStmtList): i64 =
                     let _ = wat_collect_expr_locals(out, cond)
                     wat_collect_expr_locals(out, body)
                 }
-                L2StmtLet(binder, _, value) => {
-                    let _ = wat_emit_local_decl(out, binder.id)
+                L2StmtLet(binder, ty, value) => {
+                    let _ = wat_emit_local_decl_with_type(out, binder.id, wat_valtype_from_cir(ty))
                     wat_collect_expr_locals(out, value)
                 }
                 L2StmtLetPattern(_, value) => wat_collect_expr_locals(out, value)
@@ -379,6 +405,28 @@ def wat_unwrap_pass_expr(expr: CirExpr): CirExpr =
         L3OpAnswerControl(value, _, _) => wat_unwrap_pass_expr(value)
         L2OpTyped(value, _) => wat_unwrap_pass_expr(value)
         _ => expr
+    }
+
+def wat_expr_is_string_array(expr: CirExpr): i64 =
+    match expr {
+        L8ValidatedCoreOp(value, _) => wat_expr_is_string_array(value)
+        L7CoreOp(value, _) => wat_expr_is_string_array(value)
+        L6OpClosureEnv(value, _) => wat_expr_is_string_array(value)
+        L5OpContinuationPackage(_, _, value) => wat_expr_is_string_array(value)
+        L5OpCps(value, _) => wat_expr_is_string_array(value)
+        L4OpUsage(value, _) => wat_expr_is_string_array(value)
+        L3OpAnswerControl(value, answer, _) =>
+            match answer {
+                CirTyString => 1
+                _ => wat_expr_is_string_array(value)
+            }
+        L2OpTyped(value, ty) =>
+            match ty {
+                CirTyString => 1
+                _ => wat_expr_is_string_array(value)
+            }
+        L1OpStringBytes(_) => 1
+        _ => 0
     }
 
 def wat_emit_expr_list(out: Str, depth: i64, args: CirExprList): i64 =
@@ -574,33 +622,33 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
             else { wat_line(out, depth, "unreachable ;; field unsupported") }
         }
         L1OpIndex(value, args) => {
-            match wat_unwrap_pass_expr(value) {
-                L1OpStringBytes(bytes) =>
-                    match args {
-                        CirExprCons(index, CirExprEnd) =>
-                            match wat_unwrap_pass_expr(index) {
-                                L1OpBinary(op, start, end) =>
-                                    if streq(op, mk_str("..", 2)) != 0 {
-                                        let _ = wat_emit_string_array(out, depth, bytes)
-                                        let _ = wat_emit_expr(out, depth, start)
-                                        let _ = wat_line(out, depth, "i32.wrap_i64")
-                                        let _ = wat_emit_expr(out, depth, end)
-                                        let _ = wat_emit_expr(out, depth, start)
-                                        let _ = wat_line(out, depth, "i64.sub")
-                                        let _ = wat_line(out, depth, "i32.wrap_i64")
-                                        wat_line(out, depth, "struct.new $slice_u8")
-                                    } else { wat_line(out, depth, "unreachable ;; string index unsupported") }
-                                _ => {
-                                    let _ = wat_emit_string_array(out, depth, bytes)
-                                    let _ = wat_emit_expr(out, depth, index)
+            if wat_expr_is_string_array(value) != 0 {
+                match args {
+                    CirExprCons(index, CirExprEnd) =>
+                        match wat_unwrap_pass_expr(index) {
+                            L1OpBinary(op, start, end) =>
+                                if streq(op, mk_str("..", 2)) != 0 {
+                                    let _ = wat_emit_expr(out, depth, value)
+                                    let _ = wat_emit_expr(out, depth, start)
                                     let _ = wat_line(out, depth, "i32.wrap_i64")
-                                    let _ = wat_line(out, depth, "array.get_u $array_u8")
-                                    wat_line(out, depth, "i64.extend_i32_u")
-                                }
+                                    let _ = wat_emit_expr(out, depth, end)
+                                    let _ = wat_emit_expr(out, depth, start)
+                                    let _ = wat_line(out, depth, "i64.sub")
+                                    let _ = wat_line(out, depth, "i32.wrap_i64")
+                                    wat_line(out, depth, "struct.new $slice_u8")
+                                } else { wat_line(out, depth, "unreachable ;; string index unsupported") }
+                            _ => {
+                                let _ = wat_emit_expr(out, depth, value)
+                                let _ = wat_emit_expr(out, depth, index)
+                                let _ = wat_line(out, depth, "i32.wrap_i64")
+                                let _ = wat_line(out, depth, "array.get_u $array_u8")
+                                wat_line(out, depth, "i64.extend_i32_u")
                             }
-                        _ => wat_line(out, depth, "unreachable ;; string index arity unsupported")
-                    }
-                _ => wat_line(out, depth, "unreachable ;; typed string index pending")
+                        }
+                    _ => wat_line(out, depth, "unreachable ;; string index arity unsupported")
+                }
+            } else {
+                wat_line(out, depth, "unreachable ;; typed string index pending")
             }
         }
         L1OpPrefix(op, value) => {
