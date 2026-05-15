@@ -39,6 +39,7 @@ const GATE_FILES = [
   "extern_abi_invalid.chiba",
   "extern_abi_invalid_signature.chiba",
   "nominal_row_data_union.chiba",
+  "compile_if_invalid.chiba",
   "nominal_row_data_union_invalid.chiba",
   "nominal_row_data_union_invalid_data.chiba",
   "nominal_row_data_union_invalid_union.chiba",
@@ -526,8 +527,13 @@ function checkExternAbi() {
 
 function checkNominalRowDataUnion() {
   const name = "nominal row data union gates";
+  const parsed = run("./target/debug/level1c.o", ["parse", path.join(ROOT, "nominal_row_data_union.chiba")]);
+  assert(name, parsed.status === 0 && parsed.stdout.includes("AttrArgIdentCall"), parsed.stdout || parsed.stderr);
+  assert(name, parsed.stdout.includes('"all"') && parsed.stdout.includes('"not"') && parsed.stdout.includes('"or"'), "compile_if boolean predicates must remain structured in parser AST");
   const checkedValid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "nominal_row_data_union.chiba")]);
   assert(name, checkedValid.status === 0 && checkedValid.stdout.includes("check ok"), checkedValid.stdout || checkedValid.stderr);
+  const invalidCompileIf = run("./target/debug/level1c.o", ["check", path.join(ROOT, "compile_if_invalid.chiba")]);
+  assert(name, invalidCompileIf.status === 0 && invalidCompileIf.stderr.includes("unknown compile_if predicate"), invalidCompileIf.stdout || invalidCompileIf.stderr);
   const badType = run("./target/debug/level1c.o", ["check", path.join(ROOT, "nominal_row_data_union_invalid.chiba")]);
   assert(name, badType.status === 0 && badType.stderr.includes("duplicate nominal field"), badType.stdout || badType.stderr);
   const badData = run("./target/debug/level1c.o", ["check", path.join(ROOT, "nominal_row_data_union_invalid_data.chiba")]);

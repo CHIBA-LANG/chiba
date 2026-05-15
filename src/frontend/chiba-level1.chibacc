@@ -56,17 +56,24 @@ rule attr_body_after_ident ::=
     ;
 
 rule attr_arg_list_opt ::= 
-    StringStart value:StringChunk StringEnd _:trivia_list tail:attr_arg_tail => AttrArgString_Cons(value, tail)
-    | name:Ident _:trivia_list Eq _:trivia_list StringStart value:StringChunk StringEnd _:trivia_list tail:attr_arg_tail => AttrArgNamedString_Cons(name, value, tail)
-    | name:Ident _:trivia_list tail:attr_arg_tail => AttrArg_Cons(name, tail)
+    head:attr_arg_expr tail:attr_arg_tail => AttrArgExpr_Cons(head, tail)
     | => AttrArg_End
     ;
 
 rule attr_arg_tail ::= 
-    Comma _:trivia_list StringStart value:StringChunk StringEnd _:trivia_list tail:attr_arg_tail => AttrArgString_Cons(value, tail)
-    | Comma _:trivia_list name:Ident _:trivia_list Eq _:trivia_list StringStart value:StringChunk StringEnd _:trivia_list tail:attr_arg_tail => AttrArgNamedString_Cons(name, value, tail)
-    | Comma _:trivia_list name:Ident _:trivia_list tail:attr_arg_tail => AttrArg_Cons(name, tail)
+    Comma _:trivia_list head:attr_arg_expr tail:attr_arg_tail => AttrArgExpr_Cons(head, tail)
     | => AttrArg_End
+    ;
+
+rule attr_arg_expr ::=
+    StringStart value:StringChunk StringEnd => AttrArgString(value)
+    | name:Ident _:trivia_list tail:attr_arg_ident_tail => AttrArgIdent(name, tail)
+    ;
+
+rule attr_arg_ident_tail ::=
+    LParen _:trivia_list args:attr_arg_list_opt _:trivia_list RParen => AttrArgIdentCall(args)
+    | Eq _:trivia_list StringStart value:StringChunk StringEnd => AttrArgIdentNamedString(value)
+    | => AttrArgIdentName
     ;
 
 rule namespace_decl ::= 
@@ -957,9 +964,12 @@ rule arg_tail ::=
         FileAttr(AST),
         ItemAttr(AST),
         Attr(Str, AST),
-        AttrArg_Cons(Str, AST),
-        AttrArgString_Cons(Str, AST),
-        AttrArgNamedString_Cons(Str, Str, AST),
+        AttrArgExpr_Cons(AST, AST),
+        AttrArgString(Str),
+        AttrArgIdent(Str, AST),
+        AttrArgIdentName,
+        AttrArgIdentNamedString(Str),
+        AttrArgIdentCall(AST),
         AttrArg_End,
 
         Path_Cons(Str, AST),

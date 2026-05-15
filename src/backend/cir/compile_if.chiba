@@ -1,0 +1,244 @@
+namespace backend.cir.compile_if
+use metalstd.mem.*
+use metalstd.str.*
+use parser.chiba_level1.*
+
+// `compile_if` runs before item collection. The parser preserves predicates as
+// attribute AST, and this pass removes disabled items before semantic/lowering.
+data CirCompileIfTarget {
+    CirCompileIfTarget(Str, Str)
+}
+
+data CirCompileIfEval {
+    CirCompileIfBool(i64),
+    CirCompileIfErr(Str)
+}
+
+data CirCompileIfCheck {
+    CirCompileIfCheckOk,
+    CirCompileIfCheckErr(Str)
+}
+
+def cir_compile_if_default_target(): CirCompileIfTarget =
+    CirCompileIfTarget(mk_str("wasm", 4), mk_str("wasm-unknown-wasi", 17))
+
+def cir_compile_if_err(text: i64): CirCompileIfEval =
+    CirCompileIfErr(mk_str(text, strlen(text)))
+
+def cir_compile_if_check_err(text: i64): CirCompileIfCheck =
+    CirCompileIfCheckErr(mk_str(text, strlen(text)))
+
+def cir_compile_if_eval_named(name: Str, value: Str, target: CirCompileIfTarget): CirCompileIfEval =
+    match target {
+        CirCompileIfTarget(backend, triple) =>
+            if streq(name, mk_str("backend", 7)) != 0 {
+                CirCompileIfBool(streq(value, backend))
+            } else if streq(name, mk_str("target", 6)) != 0 {
+                CirCompileIfBool(streq(value, triple))
+            } else {
+                cir_compile_if_err("unknown compile_if key")
+            }
+    }
+
+def cir_compile_if_eval_all(args: AST, target: CirCompileIfTarget): CirCompileIfEval =
+    match args {
+        AttrArg_End => cir_compile_if_err("compile_if all requires at least one argument")
+        AttrArgExpr_Cons(head, tail) =>
+            match cir_compile_if_eval_pred(head, target) {
+                CirCompileIfErr(_) => cir_compile_if_eval_pred(head, target)
+                CirCompileIfBool(ok) =>
+                    match tail {
+                        AttrArg_End => CirCompileIfBool(ok)
+                        _ =>
+                            match cir_compile_if_eval_all_tail(tail, target) {
+                                CirCompileIfErr(_) => cir_compile_if_eval_all_tail(tail, target)
+                                CirCompileIfBool(rest) => CirCompileIfBool(if ok != 0 && rest != 0 { 1 } else { 0 })
+                            }
+                    }
+            }
+        _ => cir_compile_if_err("invalid compile_if all arguments")
+    }
+
+def cir_compile_if_eval_all_tail(args: AST, target: CirCompileIfTarget): CirCompileIfEval =
+    match args {
+        AttrArg_End => CirCompileIfBool(1)
+        AttrArgExpr_Cons(head, tail) =>
+            match cir_compile_if_eval_pred(head, target) {
+                CirCompileIfErr(_) => cir_compile_if_eval_pred(head, target)
+                CirCompileIfBool(ok) =>
+                    match cir_compile_if_eval_all_tail(tail, target) {
+                        CirCompileIfErr(_) => cir_compile_if_eval_all_tail(tail, target)
+                        CirCompileIfBool(rest) => CirCompileIfBool(if ok != 0 && rest != 0 { 1 } else { 0 })
+                    }
+            }
+        _ => cir_compile_if_err("invalid compile_if all arguments")
+    }
+
+def cir_compile_if_eval_or(args: AST, target: CirCompileIfTarget): CirCompileIfEval =
+    match args {
+        AttrArg_End => cir_compile_if_err("compile_if or requires at least one argument")
+        AttrArgExpr_Cons(head, tail) =>
+            match cir_compile_if_eval_pred(head, target) {
+                CirCompileIfErr(_) => cir_compile_if_eval_pred(head, target)
+                CirCompileIfBool(ok) =>
+                    match tail {
+                        AttrArg_End => CirCompileIfBool(ok)
+                        _ =>
+                            match cir_compile_if_eval_or_tail(tail, target) {
+                                CirCompileIfErr(_) => cir_compile_if_eval_or_tail(tail, target)
+                                CirCompileIfBool(rest) => CirCompileIfBool(if ok != 0 || rest != 0 { 1 } else { 0 })
+                            }
+                    }
+            }
+        _ => cir_compile_if_err("invalid compile_if or arguments")
+    }
+
+def cir_compile_if_eval_or_tail(args: AST, target: CirCompileIfTarget): CirCompileIfEval =
+    match args {
+        AttrArg_End => CirCompileIfBool(0)
+        AttrArgExpr_Cons(head, tail) =>
+            match cir_compile_if_eval_pred(head, target) {
+                CirCompileIfErr(_) => cir_compile_if_eval_pred(head, target)
+                CirCompileIfBool(ok) =>
+                    match cir_compile_if_eval_or_tail(tail, target) {
+                        CirCompileIfErr(_) => cir_compile_if_eval_or_tail(tail, target)
+                        CirCompileIfBool(rest) => CirCompileIfBool(if ok != 0 || rest != 0 { 1 } else { 0 })
+                    }
+            }
+        _ => cir_compile_if_err("invalid compile_if or arguments")
+    }
+
+def cir_compile_if_eval_not(args: AST, target: CirCompileIfTarget): CirCompileIfEval =
+    match args {
+        AttrArgExpr_Cons(head, AttrArg_End) =>
+            match cir_compile_if_eval_pred(head, target) {
+                CirCompileIfErr(_) => cir_compile_if_eval_pred(head, target)
+                CirCompileIfBool(ok) => CirCompileIfBool(if ok == 0 { 1 } else { 0 })
+            }
+        _ => cir_compile_if_err("compile_if not requires exactly one argument")
+    }
+
+def cir_compile_if_eval_call(name: Str, args: AST, target: CirCompileIfTarget): CirCompileIfEval =
+    if streq(name, mk_str("all", 3)) != 0 {
+        cir_compile_if_eval_all(args, target)
+    } else if streq(name, mk_str("or", 2)) != 0 {
+        cir_compile_if_eval_or(args, target)
+    } else if streq(name, mk_str("not", 3)) != 0 {
+        cir_compile_if_eval_not(args, target)
+    } else {
+        cir_compile_if_err("unknown compile_if predicate")
+    }
+
+def cir_compile_if_eval_pred(ast: AST, target: CirCompileIfTarget): CirCompileIfEval =
+    match ast {
+        AttrArgIdent(name, tail) =>
+            match tail {
+                AttrArgIdentNamedString(value) => cir_compile_if_eval_named(name, value, target)
+                AttrArgIdentCall(args) => cir_compile_if_eval_call(name, args, target)
+                _ => cir_compile_if_err("invalid compile_if predicate")
+            }
+        _ => cir_compile_if_err("invalid compile_if predicate")
+    }
+
+def cir_compile_if_eval_args(args: AST, target: CirCompileIfTarget): CirCompileIfEval =
+    match args {
+        AttrArgExpr_Cons(head, AttrArg_End) => cir_compile_if_eval_pred(head, target)
+        _ => cir_compile_if_err("compile_if requires exactly one predicate")
+    }
+
+def cir_compile_if_attr_eval(attr: AST, target: CirCompileIfTarget): CirCompileIfEval =
+    match attr {
+        ItemAttr(Attr(name, args)) =>
+            if streq(name, mk_str("compile_if", 10)) != 0 { cir_compile_if_eval_args(args, target) } else { CirCompileIfBool(1) }
+        FileAttr(Attr(name, args)) =>
+            if streq(name, mk_str("compile_if", 10)) != 0 { cir_compile_if_eval_args(args, target) } else { CirCompileIfBool(1) }
+        _ => CirCompileIfBool(1)
+    }
+
+def cir_compile_if_attrs_enabled(attrs: AST, target: CirCompileIfTarget): CirCompileIfEval =
+    match attrs {
+        Attr_End => CirCompileIfBool(1)
+        Attr_Cons(head, tail) =>
+            match cir_compile_if_attr_eval(head, target) {
+                CirCompileIfErr(_) => cir_compile_if_attr_eval(head, target)
+                CirCompileIfBool(ok) =>
+                    match cir_compile_if_attrs_enabled(tail, target) {
+                        CirCompileIfErr(_) => cir_compile_if_attrs_enabled(tail, target)
+                        CirCompileIfBool(rest) => CirCompileIfBool(if ok != 0 && rest != 0 { 1 } else { 0 })
+                    }
+            }
+        _ => CirCompileIfBool(1)
+    }
+
+def cir_compile_if_item_enabled(item: AST, target: CirCompileIfTarget): i64 =
+    match item {
+        Item_WithAttrs(attrs, _) =>
+            match cir_compile_if_attrs_enabled(attrs, target) {
+                CirCompileIfBool(ok) => ok
+                CirCompileIfErr(_) => 0
+            }
+        _ => 1
+    }
+
+def cir_compile_if_filter_items(items: AST, target: CirCompileIfTarget): AST =
+    match items {
+        Item_End => Item_End
+        Item_Cons(head, tail) =>
+            if cir_compile_if_item_enabled(head, target) != 0 {
+                Item_Cons(head, cir_compile_if_filter_items(tail, target))
+            } else {
+                cir_compile_if_filter_items(tail, target)
+            }
+        _ => items
+    }
+
+def cir_compile_if_filter_source(ast: AST, target: CirCompileIfTarget): AST =
+    match ast {
+        SourceFile(attrs, ns, items) =>
+            match cir_compile_if_attrs_enabled(attrs, target) {
+                CirCompileIfBool(ok) =>
+                    if ok != 0 {
+                        SourceFile(attrs, ns, cir_compile_if_filter_items(items, target))
+                    } else {
+                        SourceFile(attrs, ns, Item_End)
+                    }
+                CirCompileIfErr(_) => SourceFile(attrs, ns, Item_End)
+            }
+        _ => ast
+    }
+
+def cir_compile_if_check_attrs(attrs: AST, target: CirCompileIfTarget): CirCompileIfCheck =
+    match attrs {
+        Attr_End => CirCompileIfCheckOk
+        Attr_Cons(head, tail) =>
+            match cir_compile_if_attr_eval(head, target) {
+                CirCompileIfErr(message) => CirCompileIfCheckErr(message)
+                CirCompileIfBool(_) => cir_compile_if_check_attrs(tail, target)
+            }
+        _ => CirCompileIfCheckOk
+    }
+
+def cir_compile_if_check_items(items: AST, target: CirCompileIfTarget): CirCompileIfCheck =
+    match items {
+        Item_End => CirCompileIfCheckOk
+        Item_Cons(head, tail) =>
+            match head {
+                Item_WithAttrs(attrs, _) =>
+                    match cir_compile_if_check_attrs(attrs, target) {
+                        CirCompileIfCheckErr(_) => cir_compile_if_check_attrs(attrs, target)
+                        CirCompileIfCheckOk => cir_compile_if_check_items(tail, target)
+                    }
+                _ => cir_compile_if_check_items(tail, target)
+            }
+        _ => CirCompileIfCheckOk
+    }
+
+def cir_compile_if_check_source(ast: AST, target: CirCompileIfTarget): CirCompileIfCheck =
+    match ast {
+        SourceFile(attrs, _, items) =>
+            match cir_compile_if_check_attrs(attrs, target) {
+                CirCompileIfCheckErr(_) => cir_compile_if_check_attrs(attrs, target)
+                CirCompileIfCheckOk => cir_compile_if_check_items(items, target)
+            }
+        _ => CirCompileIfCheckOk
+    }

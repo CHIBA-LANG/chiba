@@ -1,0 +1,4 @@
+namespace semantic.gates.compile_if.invalid
+
+#[compile_if(xor(backend="wasm", backend="native"))]
+def bad_predicate(): i64 = 1

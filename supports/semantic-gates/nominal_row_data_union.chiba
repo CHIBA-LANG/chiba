@@ -22,6 +22,15 @@ type CUnderscoreField {
     field: i64,
 }
 
+#[compile_if(all(backend="native", not(target="wasm-unknown-wasi")))]
+def native_only_marker(): i64 = 1
+
+#[compile_if(or(backend="wasm", backend="native"))]
+def backend_marker(): i64 = 1
+
+#[compile_if(backend="native")]
+def native_only_bad_global_ref: Ref[i64] = Ref.new(0)
+
 data Span {
     start: i64,
     end: i64,
