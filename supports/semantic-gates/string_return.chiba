@@ -2,8 +2,12 @@ namespace semantic.gates.string_return
 
 def string_return_smoke(): i64 = {
     let s = string_return_value()
-    s[0]
+    let t = string_return_inferred()
+    s[0] + t[0]
 }
 
 def string_return_value(): String =
     "AZ"
+
+def string_return_inferred() =
+    "BC"

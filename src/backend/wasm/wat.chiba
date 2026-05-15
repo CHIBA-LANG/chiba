@@ -95,17 +95,24 @@ def wat_valtype_from_ast(ty: AST): i64 =
         _ => "i64"
     }
 
+def wat_valtype_from_expr(expr: CirExpr): i64 =
+    match expr {
+        L8ValidatedCoreOp(value, _) => wat_valtype_from_expr(value)
+        L7CoreOp(value, _) => wat_valtype_from_expr(value)
+        L6OpClosureEnv(value, _) => wat_valtype_from_expr(value)
+        L5OpContinuationPackage(_, _, value) => wat_valtype_from_expr(value)
+        L5OpCps(value, _) => wat_valtype_from_expr(value)
+        L4OpUsage(value, _) => wat_valtype_from_expr(value)
+        L3OpAnswerControl(_, ty, _) => wat_valtype_from_cir(ty)
+        L2OpTyped(_, ty) => wat_valtype_from_cir(ty)
+        _ => "i64"
+    }
+
 def wat_result_valtype(ret: AST, body: CirExpr): i64 =
     match ret {
         Type_Path(name, _) =>
             if name.len != 0 { wat_valtype_from_ast(ret) }
-            else {
-                match body {
-                    L2OpTyped(_, ty) => wat_valtype_from_cir(ty)
-                    L3OpAnswerControl(_, ty, _) => wat_valtype_from_cir(ty)
-                    _ => "i64"
-                }
-            }
+            else { wat_valtype_from_expr(body) }
         _ => wat_valtype_from_ast(ret)
     }
 

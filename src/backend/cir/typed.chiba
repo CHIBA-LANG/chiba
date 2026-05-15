@@ -109,6 +109,32 @@ def cir_global_type_env_from_items(items: CirItemList): CirGlobalTypeEnv =
         }
     }
 
+def cir_typed_ret_has_annotation(ret: AST): i64 =
+    match ret {
+        Type_Path(name, _) => name.len != 0
+        Type_Unit => 1
+        Type_Atom(_) => 1
+        _ => 0
+    }
+
+def cir_typed_item_return(ret: AST, inferred: CirType): CirType =
+    if cir_typed_ret_has_annotation(ret) != 0 { cir_typed_type_from_ast(ret, CirTyUnknown) } else { inferred }
+
+def cir_global_type_env_from_typed_items(items: CirItemList, fallback: CirGlobalTypeEnv): CirGlobalTypeEnv =
+    match items {
+        CirItemEnd => fallback
+        CirItemCons(item, rest) => {
+            let tail = cir_global_type_env_from_typed_items(rest, fallback)
+            match item {
+                L2ItemDef(binder, _, ret, body) =>
+                    cir_global_type_env_add(tail, binder.name, cir_typed_item_return(ret, cir_typed_expr_type(body)))
+                L2ItemExtern(binder, _, ret, _) =>
+                    cir_global_type_env_add(tail, binder.name, cir_typed_type_from_ast(ret, CirTyUnknown))
+                _ => tail
+            }
+        }
+    }
+
 def cir_type_is_i64(ty: CirType): i64 =
     match ty {
         CirTyI64 => 1
@@ -328,7 +354,12 @@ def cir_typed_items_g(items: CirItemList, globals: CirGlobalTypeEnv): CirItemLis
     }
 
 def cir_typed_items(items: CirItemList): CirItemList =
-    cir_typed_items_g(items, cir_global_type_env_from_items(items))
+    {
+        let declared = cir_global_type_env_from_items(items)
+        let first = cir_typed_items_g(items, declared)
+        let inferred = cir_global_type_env_from_typed_items(first, declared)
+        cir_typed_items_g(items, inferred)
+    }
 
 def cir_typed_module(module: CirModule): CirModule =
     match module {

@@ -306,8 +306,10 @@ function checkStringReturnAbi() {
   const name = "string result ABI gates";
   const wat = read(path.join(WAT_DIR, "string_return.wat"));
   assert(name, wat.includes("(func $string_return_value (result (ref $array_u8))"), "String-returning function does not use Array[u8] result ABI");
+  assert(name, wat.includes("(func $string_return_inferred (result (ref $array_u8))"), "Inferred String-returning function does not use Array[u8] result ABI");
   assert(name, /\(local \$v[0-9]+ \(ref \$array_u8\)\)/.test(wat), "String-returning call result does not bind to Array[u8] local");
   assert(name, wat.includes("call $string_return_value"), "String-returning helper call missing");
+  assert(name, wat.includes("call $string_return_inferred"), "Inferred String-returning helper call missing");
   assert(name, wat.includes("call $__chiba_string_byte_at"), "String-returning local cannot be byte-indexed through helper");
   pass(name);
 }
