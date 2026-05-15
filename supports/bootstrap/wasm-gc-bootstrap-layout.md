@@ -112,7 +112,11 @@ array. `cstr` is an ABI boundary view and is not the ordinary managed string
 representation.
 
 File read, stdout/stderr write, lexer input, parser source span, and WASI
-boundary helpers must use this same string/slice contract.
+boundary helpers must use this same string/slice contract. WASI preview1 still
+reads and writes through linear-memory `iovec` buffers at the ABI boundary, but
+the bridge is not a language-level string representation: `fd_read` bytes are
+copied into `$array_u8`, exposed to lexer/parser code as `$slice_u8`, and copied
+back to linear memory only at `fd_write`/FFI boundary calls.
 
 ## Closure, Function, and Continuation
 

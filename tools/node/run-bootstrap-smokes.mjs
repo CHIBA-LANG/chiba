@@ -118,6 +118,11 @@ const WAT_CASES = [
     expect: ["66"],
   },
   {
+    name: "wasi array slice io bridge",
+    file: "supports/bootstrap/wat-wasi-array-slice-io-smoke.wat",
+    expect: ["B04 file read ok", "66"],
+  },
+  {
     name: "wasi args env",
     file: "supports/bootstrap/wat-wasi-args-env-smoke.wat",
     args: ["--arg", "alpha", "--arg", "beta", "--env", "CHIBA_WASI_SMOKE=ok"],

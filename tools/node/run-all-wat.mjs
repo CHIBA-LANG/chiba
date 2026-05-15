@@ -30,6 +30,7 @@ function expectedFor(file) {
   }
   if (file.includes("wat-wasi-import-smoke.wat")) return { status: 0, includes: ["B04 wasi smoke ok", "0"] };
   if (file.includes("wat-wasi-file-read-smoke.wat")) return { status: 0, includes: ["66"] };
+  if (file.includes("wat-wasi-array-slice-io-smoke.wat")) return { status: 0, includes: ["B04 file read ok", "66"] };
   if (file.includes("wat-start-smoke.wat")) return { status: 0, includes: ["12"] };
   if (file.includes("wat-env-import-smoke.wat")) return { status: 0, includes: ["env.js_log 41", "9"] };
   if (file.includes("wat-extern-env-smoke.wat")) return { status: 0, includes: ["env.js_log 41", "9"] };
