@@ -93,8 +93,10 @@ if (!wat.stdout.includes("(type $array_u8 (array (mut i8)))")) fail("String back
 if (!wat.stdout.includes("(type $slice_u8 (struct (field (ref $array_u8)) (field i32) (field i32)))")) fail("str Slice[u8] layout missing from Pre-C01 WAT");
 if (!wat.stdout.includes("array.new_fixed $array_u8 21")) fail("String literal does not lower real Array[u8] payload in Pre-C01 WAT");
 if (!wat.stdout.includes("(param $v1 (ref $array_u8))")) fail("String parameter does not lower to Array[u8] ref");
-if (!wat.stdout.includes("array.get_u $array_u8")) fail("String byte index does not lower to array.get_u");
-if (!wat.stdout.includes("struct.new $slice_u8")) fail("String range slice does not lower to Slice[u8] view");
+if (!wat.stdout.includes("call $__chiba_string_byte_at")) fail("String byte index does not lower through bounds helper");
+if (!wat.stdout.includes("call $__chiba_string_slice")) fail("String range slice does not lower through bounds helper");
+if (!wat.stdout.includes("array.get_u $array_u8")) fail("String byte helper does not read Array[u8]");
+if (!wat.stdout.includes("struct.new $slice_u8")) fail("String range helper does not build Slice[u8] view");
 if (!wat.stdout.includes("call $__chiba_string_codepoint_at")) fail("char_at/codepoint_at does not lower to UTF-8 codepoint helper");
 
 const validRefs = fs.readFileSync(path.join(SMOKE_ROOT, "refs_atomic_valid.chiba"), "utf8");

@@ -102,10 +102,13 @@ String literals produce `$array_u8` values, and interpolation concatenates
 existing `$array_u8` parts into a new `$array_u8`. The bootstrap array type is
 mutable so builders and concat helpers can fill fresh arrays; ordinary `String`
 surface operations still expose byte-array semantics, not arbitrary mutation.
-Index and range operations produce or consume `$slice_u8` view values.
+Index and range operations produce or consume `$slice_u8` view values through
+bootstrap helper functions that explicitly trap on negative indexes, out of
+range byte access, reversed ranges, and ranges past the backing array length.
 `String[index]` follows `Slice[u8]` byte-index semantics. Character/codepoint
-access is not implicit indexing; use an explicit method such as `.char_at(n)`.
-`cstr` is an ABI boundary view and is not the ordinary managed string
+access is not implicit indexing; use an explicit method such as `.char_at(n)`;
+the bootstrap codepoint helper also traps before reading outside the backing
+array. `cstr` is an ABI boundary view and is not the ordinary managed string
 representation.
 
 File read, stdout/stderr write, lexer input, parser source span, and WASI

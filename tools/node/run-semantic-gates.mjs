@@ -292,8 +292,10 @@ function checkStringSlice() {
   assert(name, wat.includes("i32.const 114") && wat.includes("i32.const 119"), "raw string literal byte payload missing");
   assert(name, wat.includes("call $__chiba_string_concat2"), "string interpolation does not call concat runtime");
   assert(name, wat.includes("(param $v1 (ref $array_u8))"), "String parameter does not lower to Array[u8] ref");
-  assert(name, wat.includes("array.get_u $array_u8"), "String byte index does not lower to array.get_u");
-  assert(name, wat.includes("struct.new $slice_u8"), "String range slice does not lower to Slice[u8] view");
+  assert(name, wat.includes("call $__chiba_string_byte_at"), "String byte index does not lower through bounds helper");
+  assert(name, wat.includes("call $__chiba_string_slice"), "String range slice does not lower through bounds helper");
+  assert(name, wat.includes("array.get_u $array_u8"), "String byte helper does not read Array[u8]");
+  assert(name, wat.includes("struct.new $slice_u8"), "String range helper does not build Slice[u8] view");
   assert(name, wat.includes("call $__chiba_string_codepoint_at"), "char_at/codepoint_at does not lower to UTF-8 codepoint helper");
   pass(name);
 }
