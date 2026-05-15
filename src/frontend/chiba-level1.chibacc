@@ -77,11 +77,6 @@ rule path_name ::=
     name:Ident => name
     ;
 
-rule weak_ident ::=
-    name:Ident => name
-    | Underscore => mk_str("_", 1)
-    ;
-
 rule path_tail ::= 
     Dot rest:path => rest
     | => Path_End
@@ -324,11 +319,12 @@ rule param_tail ::=
     ;
 
 rule param ::= 
-    name:param_name ty:param_type_opt => Param(name, ty)
+    Underscore ty:param_type_opt => ParamDiscard(ty)
+    | name:param_name ty:param_type_opt => Param(name, ty)
     ;
 
 rule param_name ::= 
-    name:weak_ident => name
+    name:Ident => name
     | KwSelf => mk_str("self", 4)
     ;
 
@@ -481,7 +477,8 @@ rule closure_param_list ::=
     ;
 
 rule closure_param ::= 
-    name:param_name ty:closure_param_type => Param(name, ty)
+    Underscore ty:closure_param_type => ParamDiscard(ty)
+    | name:param_name ty:closure_param_type => Param(name, ty)
     ;
 
 rule closure_param_type ::= 
@@ -631,7 +628,8 @@ rule asm_string_list ::=
     ;
 
 rule pattern ::= 
-    name:weak_ident rest:pattern_after_ident => Pattern_IdentStart(name, rest)
+    Underscore => Pattern_Wildcard
+    | name:Ident rest:pattern_after_ident => Pattern_IdentStart(name, rest)
     | atom:pattern_atom_no_ident => atom
     ;
 
@@ -641,7 +639,8 @@ rule pattern_after_ident ::=
     ;
 
 rule pattern_atom ::= 
-    name:weak_ident rest:pattern_after_ident => Pattern_IdentStart(name, rest)
+    Underscore => Pattern_Wildcard
+    | name:Ident rest:pattern_after_ident => Pattern_IdentStart(name, rest)
     | atom:pattern_atom_no_ident => atom
     ;
 
@@ -833,7 +832,7 @@ rule expr ::= pratt {
         KwTrue => Expr_Bool(1) ;
         KwFalse => Expr_Bool(0) ;
         KwSelf => Expr_Name(mk_str("self", 4)) ;
-        Underscore => Expr_IdentTail(mk_str("_", 1), IdentTail_None) ;
+        Underscore => Expr_PipeHole ;
         p:paren_expr => p ;
         l:list_expr => l ;
         r:record_expr => r ;
@@ -998,6 +997,7 @@ rule arg_tail ::=
         GenericRowField_End,
         GenericRowField(Str, AST),
         Param(Str, AST),
+        ParamDiscard(AST),
         Param_Cons(AST, AST),
         Param_End,
 
@@ -1055,6 +1055,7 @@ rule arg_tail ::=
         AsmString_Cons(AST, AST),
         AsmString_End,
         Pattern_IdentStart(Str, AST),
+        Pattern_Wildcard,
         PatternAfterIdent_Bind(AST),
         PatternAfterIdent_Atom(AST),
         PatternIdent_Call(AST),
@@ -1121,6 +1122,7 @@ rule arg_tail ::=
         Expr_Bool(i64),
         Expr_Name(Str),
         Expr_IdentTail(Str, AST),
+        Expr_PipeHole,
         IdentTail_Call(AST, AST),
         IdentTail_None,
         IdentCallClosure_Some(AST, AST),

@@ -321,7 +321,9 @@ function checkPipeLowering() {
   const file = path.join(ROOT, "pipe.chiba");
   const parsed = run("./target/debug/level1c.o", ["parse", file]);
   assert(name, parsed.status === 0 && parsed.stdout.includes("OpPipeGt"), parsed.stdout || parsed.stderr);
-  assert(name, /Expr_IdentTail\(\s+"_"/.test(parsed.stdout), "underscore must remain a weak ident in the parser AST");
+  assert(name, parsed.stdout.includes("Expr_PipeHole"), "pipe placeholder must parse as Expr_PipeHole");
+  assert(name, parsed.stdout.includes("ParamDiscard"), "wildcard parameter must parse as ParamDiscard");
+  assert(name, parsed.stdout.includes("Pattern_Wildcard"), "let wildcard must parse as Pattern_Wildcard");
 
   const cir = run("./target/debug/level1c.o", ["cir", file]);
   assert(name, cir.status === 0, cir.stdout || cir.stderr);

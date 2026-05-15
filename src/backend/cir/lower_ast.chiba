@@ -34,15 +34,13 @@ def cir_lower_expr_list(ast: AST): CirExprList =
 
 def cir_ast_is_pipe_hole(ast: AST): i64 =
     match ast {
-        Expr_IdentTail(name, IdentTail_None) => streq(name, mk_str("_", 1))
-        Expr_Name(name) => streq(name, mk_str("_", 1))
+        Expr_PipeHole => 1
         _ => 0
     }
 
 def cir_ast_pipe_holes(ast: AST): i64 =
     match ast {
-        Expr_IdentTail(name, IdentTail_None) => streq(name, mk_str("_", 1))
-        Expr_Name(name) => streq(name, mk_str("_", 1))
+        Expr_PipeHole => 1
         Expr_Binary(_, lhs, rhs) => cir_ast_pipe_holes(lhs) + cir_ast_pipe_holes(rhs)
         Expr_Call(callee, args) => cir_ast_pipe_holes(callee) + cir_ast_pipe_holes(args)
         Expr_Field(value, _) => cir_ast_pipe_holes(value)
@@ -128,6 +126,7 @@ def cir_lower_params(ast: AST): CirParamList =
         Param_Cons(head, tail) =>
             match head {
                 Param(name, ty) => CirParamCons(L0Param(name, ty), cir_lower_params(tail))
+                ParamDiscard(ty) => CirParamCons(L0Param(mk_str("_", 1), ty), cir_lower_params(tail))
                 _ => CirParamCons(L0Param(mk_str("_unsupported", 12), head), cir_lower_params(tail))
             }
         _ => CirParamEnd
@@ -173,10 +172,11 @@ def cir_lower_block_parts_no_tail(stmts: AST): CirLowerBlockResult =
 
 def cir_lower_pattern_let(pat: AST, value: CirExpr): CirStmt =
     match pat {
+        Pattern_Wildcard => L0StmtExpr(value)
         Pattern_IdentStart(name, PatternAfterIdent_Atom(PatternIdent_Name)) =>
-            if streq(name, mk_str("_", 1)) != 0 { L0StmtExpr(value) } else { L0StmtLet(name, value) }
+            L0StmtLet(name, value)
         Pattern_IdentStart(name, PatternAfterIdent_Bind(PatternIdent_Name)) =>
-            if streq(name, mk_str("_", 1)) != 0 { L0StmtExpr(value) } else { L0StmtLet(name, value) }
+            L0StmtLet(name, value)
         _ => L0StmtLetPattern(pat, value)
     }
 
@@ -326,6 +326,7 @@ def cir_lower_expr(ast: AST): CirExpr =
             }
         Expr_Name(name) => L0OpName(name)
         Expr_IdentTail(name, tail) => cir_lower_ident_tail(name, tail)
+        Expr_PipeHole => cir_l0_unsupported(ast, mk_str("pipe placeholder outside pipe", 29))
         Expr_Paren(values) => L0OpCall(L0OpName(mk_str("__tuple", 7)), cir_lower_expr_list(values))
         Expr_List(values) => L0OpCall(L0OpName(mk_str("__list", 6)), cir_lower_expr_list(values))
         _ => cir_l0_unsupported(ast, mk_str("expr unsupported", 16))
