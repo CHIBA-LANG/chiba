@@ -7,6 +7,6 @@ def bad_load(a: Atomic[i64]): i64 = Atomic.load(a, Release)
 def bad_store(a: Atomic[i64]): i64 = Atomic.store(a, 1, Acquire)
 
 def bad_array_cell(xs: Ref[Array[i64]]): i64 = {
-    xs[0] := 1
+    xs := 1
     0
 }

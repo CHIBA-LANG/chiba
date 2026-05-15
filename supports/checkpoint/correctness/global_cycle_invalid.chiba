@@ -1,0 +1,5 @@
+namespace checkpoint.correctness.global_cycle_invalid
+
+def A: i64 = B
+def B: i64 = A
+

@@ -49,6 +49,7 @@ def cir_ast_pipe_holes(ast: AST): i64 =
         Expr_Prefix(_, value) => cir_ast_pipe_holes(value)
         Expr_IdentTail(_, tail) => cir_ast_pipe_holes(tail)
         IdentTail_Call(args, _) => cir_ast_pipe_holes(args)
+        IdentTail_GenericCall(_, args) => cir_ast_pipe_holes(args)
         ExprList_Cons(head, tail) => cir_ast_pipe_holes(head) + cir_ast_pipe_holes(tail)
         Arg_Cons(head, tail) => cir_ast_pipe_holes(head) + cir_ast_pipe_holes(tail)
         _ => 0
@@ -83,8 +84,7 @@ def cir_pipe_call_args(lhs: AST, rhs: AST, args: AST): CirExprList =
     match cir_lower_pipe_args(lhs, args) {
         CirPipeArgsResult(args2, holes) =>
             if holes == 0 { CirExprCons(cir_lower_expr(lhs), args2) }
-            else if holes == 1 { args2 }
-            else { CirExprCons(cir_l0_unsupported(rhs, mk_str("pipe placeholder repeated", 25)), CirExprEnd) }
+            else { args2 }
     }
 
 def cir_lower_string_parts_to_cir(ast: AST): CirStringPartList =
@@ -227,6 +227,7 @@ def cir_lower_ident_tail(name: Str, tail: AST): CirExpr =
         IdentTail_Call(args, IdentCallClosure_None) => L0OpCall(L0OpName(name), cir_lower_expr_list(args))
         IdentTail_Call(args, IdentCallClosure_Some(_, closure)) =>
             L0OpCall(L0OpName(name), CirExprCons(cir_lower_expr(closure), cir_lower_expr_list(args)))
+        IdentTail_GenericCall(_, args) => L0OpCall(L0OpName(name), cir_lower_expr_list(args))
         _ => cir_l0_unsupported(tail, mk_str("ident tail unsupported", 22))
     }
 
@@ -279,6 +280,8 @@ def cir_lower_pipe_expr(lhs: AST, rhs: AST): CirExpr =
         Expr_Name(name) =>
             L0OpCall(L0OpName(name), CirExprCons(cir_lower_expr(lhs), CirExprEnd))
         Expr_IdentTail(name, IdentTail_Call(args, IdentCallClosure_None)) =>
+            L0OpCall(L0OpName(name), cir_pipe_call_args(lhs, rhs, args))
+        Expr_IdentTail(name, IdentTail_GenericCall(_, args)) =>
             L0OpCall(L0OpName(name), cir_pipe_call_args(lhs, rhs, args))
         Expr_Call(callee, args) =>
             if cir_ast_pipe_holes(callee) != 0 {

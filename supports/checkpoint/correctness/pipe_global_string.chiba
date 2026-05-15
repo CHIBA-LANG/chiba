@@ -1,0 +1,21 @@
+namespace checkpoint.correctness.pipe_global_string
+
+def main(): i64 = pipe_value(4) + interpolation_byte()
+
+def one(): i64 = 1
+
+def inc(value: i64): i64 = value + 1
+
+def add3(a: i64, b: i64, c: i64): i64 = a + b + c
+
+def finish(value: i64): i64 = value * 2
+
+def string_value(): String = "x"
+
+def pipe_value(seed: i64): i64 =
+    seed |> inc |> add3(one(), _, _) |> finish
+
+def interpolation_byte(): i64 = {
+    let text = "a ${string_value()} b"
+    120
+}

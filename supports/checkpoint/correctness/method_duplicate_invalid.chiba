@@ -1,0 +1,9 @@
+namespace checkpoint.correctness.method_duplicate_invalid
+
+type Widget {
+    value: i64,
+}
+
+def Widget.get(self: Widget): i64 = self.value
+def Widget.get(self: Widget): i64 = self.value + 1
+

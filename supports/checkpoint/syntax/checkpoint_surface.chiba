@@ -1,0 +1,53 @@
+namespace checkpoint.syntax.surface
+
+type Box[T] {
+    x: T,
+}
+
+type Widget {
+    value: i64,
+}
+
+def Widget.value(self: Widget): i64 = self.value
+
+def Box[T].update_x(self: Self, new_x: T): Self = ({ self | x: new_x })
+
+def id(x) = x
+
+def add3(a: i64, b: i64, c: i64): i64 = a + b + c
+
+def explicit_generic_call(v: i64): i64 = id[i64](v)
+
+def row_returns_tail(value: {r | y: i64}): r = value
+
+def pipe_default(a: i64): i64 = a |> id
+
+def pipe_chain(a: i64): i64 = a |> id |> id
+
+def pipe_multi_hole(a: i64, b: i64): i64 = a |> add3(b, _, _)
+
+def string_interpolation(name: String): String = "a ${name} b"
+
+def fetch(v: i64): i64 = v
+
+def deep_pattern_match(value: Option[X]): i64 =
+    match value {
+        Some((x, { y: z })) => x
+        None => 0
+    }
+
+def deep_if_let(value: i64): i64 =
+    if let Some((x, { y: z })) = fetch(value) {
+        x
+    } else {
+        0
+    }
+
+def tuple_to_adt_surface(value: String): HttpResult[String] =
+    tuple_to_adt[HttpResult[String]]((:http_ok, value))
+
+def adt_to_tuple_surface(value: HttpResult[String]): Tuple[Symbol, u8, String] =
+    adt_to_tuple[Tuple[Symbol, u8, String]](HttpError(400, "nope"))
+
+def name(Some(x): Option[X]): Y = x
+def name(None: Option[X]): Y = default_y()

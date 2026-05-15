@@ -1,0 +1,8 @@
+namespace checkpoint.correctness.method_user
+
+type Remote {
+    value: i64,
+}
+
+def call_missing(remote: Remote): i64 = remote.secret()
+

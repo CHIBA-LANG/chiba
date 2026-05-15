@@ -1,0 +1,5 @@
+namespace checkpoint.correctness.pattern_clauses
+
+def name(Some(x): Option[X]): Y = x
+def name(None: Option[X]): Y = default_y()
+

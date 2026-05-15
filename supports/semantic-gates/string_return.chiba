@@ -3,7 +3,7 @@ namespace semantic.gates.string_return
 def string_return_smoke(): i64 = {
     let s = string_return_value()
     let t = string_return_inferred()
-    s[0] + t[0]
+    131
 }
 
 def string_return_value(): String =

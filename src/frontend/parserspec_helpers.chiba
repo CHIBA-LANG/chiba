@@ -421,6 +421,7 @@ def astwriteat(out: Str, ast: AST, depth: i64): i64 =
         Expr_IdentTail(name, tail) => aststr_ast(out, depth, "Expr_IdentTail", name, tail)
         Expr_PipeHole => astleaf(out, "Expr_PipeHole")
         IdentTail_Call(args, closure) => astnode2(out, depth, "IdentTail_Call", args, closure)
+        IdentTail_GenericCall(types, args) => astnode2(out, depth, "IdentTail_GenericCall", types, args)
         IdentTail_None => astleaf(out, "IdentTail_None")
         IdentCallClosure_Some(attrs, value) => astnode2(out, depth, "IdentCallClosure_Some", attrs, value)
         IdentCallClosure_None => astleaf(out, "IdentCallClosure_None")

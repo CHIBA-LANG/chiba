@@ -83,6 +83,7 @@ run("lexer compare", process.execPath, ["tools/node/run-lexer-compare.mjs"]);
 run("parser compare", process.execPath, ["tools/node/run-parser-compare.mjs"]);
 run("parser error smoke", process.execPath, ["tools/node/run-parser-error-smoke.mjs"]);
 run("semantic gates", process.execPath, ["tools/node/run-semantic-gates.mjs"]);
+run("checkpoint gates", process.execPath, ["tools/node/run-checkpoint-gates.mjs"]);
 run("level-1b smoke", process.execPath, ["tools/node/run-level1b-smoke.mjs"]);
 run("level-1b namespace", process.execPath, ["tools/node/run-level1b-namespace-smoke.mjs"]);
 run("level-1b chibalex mini", process.execPath, ["tools/node/run-level1b-chibalex-mini.mjs"]);

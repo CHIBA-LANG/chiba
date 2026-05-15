@@ -1,0 +1,14 @@
+namespace checkpoint.correctness.index_operator_surface
+
+type Bag {
+    value: i64,
+}
+
+def Bag.op_index(self: Bag, index: i64): i64 = self.value + index
+
+def Bag.op_index_slice(self: Bag, range: Range[i64]): Bag = self
+
+def index_one(bag: Bag): i64 = bag[0]
+
+def index_slice(bag: Bag): Bag = bag[0..4]
+

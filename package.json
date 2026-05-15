@@ -19,6 +19,7 @@
     "smoke:bootstrap": "node tools/node/run-bootstrap-smokes.mjs",
     "smoke:bootstrap:opt": "node tools/node/run-bootstrap-smokes.mjs --opt",
     "semantic:gates": "node tools/node/run-semantic-gates.mjs",
+    "checkpoint:gates": "node tools/node/run-checkpoint-gates.mjs",
     "smoke:lexer-compare": "node tools/node/run-lexer-compare.mjs",
     "smoke:parser-compare": "node tools/node/run-parser-compare.mjs",
     "smoke:parser-errors": "node tools/node/run-parser-error-smoke.mjs"

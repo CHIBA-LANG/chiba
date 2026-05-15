@@ -1,0 +1,14 @@
+namespace checkpoint.correctness.method_surface
+
+type Widget {
+    value: i64,
+}
+
+def Widget.get(self: Widget): i64 = self.value
+
+def Widget.bump(self: Widget): i64 = self.value + 1
+
+def call_get(widget: Widget): i64 = widget.get()
+
+def call_qualified(): i64 = Widget.bump({ value: 41 })
+

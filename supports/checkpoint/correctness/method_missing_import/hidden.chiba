@@ -1,0 +1,8 @@
+namespace checkpoint.correctness.hidden_methods
+
+type Remote {
+    value: i64,
+}
+
+def Remote.secret(self: Remote): i64 = self.value
+
