@@ -120,6 +120,13 @@ def cir_lower_string_lit(parts: AST): CirLowerStringResult =
         CirLowerStringBytes(out)
     }
 
+def cir_param_pattern_name(pat: AST): Str =
+    match pat {
+        Pattern_IdentStart(name, PatternAfterIdent_Atom(PatternIdent_Name)) => name
+        Pattern_Wildcard => mk_str("_", 1)
+        _ => mk_str("_pattern", 8)
+    }
+
 def cir_lower_params(ast: AST): CirParamList =
     match ast {
         Param_End => CirParamEnd
@@ -127,6 +134,7 @@ def cir_lower_params(ast: AST): CirParamList =
             match head {
                 Param(name, ty) => CirParamCons(L0Param(name, ty), cir_lower_params(tail))
                 ParamDiscard(ty) => CirParamCons(L0Param(mk_str("_", 1), ty), cir_lower_params(tail))
+                ParamPattern(pat, ty) => CirParamCons(L0Param(cir_param_pattern_name(pat), ty), cir_lower_params(tail))
                 _ => CirParamCons(L0Param(mk_str("_unsupported", 12), head), cir_lower_params(tail))
             }
         _ => CirParamEnd

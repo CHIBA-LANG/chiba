@@ -47,6 +47,7 @@ const GATE_FILES = [
   "string_slice.chiba",
   "string_return.chiba",
   "pipe.chiba",
+  "pattern_params.chiba",
   "namespace/part_a.chiba",
   "namespace/part_b.chiba",
   "namespace/use_both.chiba",
@@ -323,7 +324,7 @@ function checkPipeLowering() {
   const parsed = run("./target/debug/level1c.o", ["parse", file]);
   assert(name, parsed.status === 0 && parsed.stdout.includes("OpPipeGt"), parsed.stdout || parsed.stderr);
   assert(name, parsed.stdout.includes("Expr_PipeHole"), "pipe placeholder must parse as Expr_PipeHole");
-  assert(name, parsed.stdout.includes("ParamDiscard"), "wildcard parameter must parse as ParamDiscard");
+  assert(name, parsed.stdout.includes("ParamPattern") && parsed.stdout.includes("Pattern_Wildcard"), "wildcard parameter must parse as a pattern parameter");
   assert(name, parsed.stdout.includes("Pattern_Wildcard"), "let wildcard must parse as Pattern_Wildcard");
 
   const cir = run("./target/debug/level1c.o", ["cir", file]);
@@ -341,6 +342,17 @@ function checkPipeLowering() {
 
   const runWat = run(process.execPath, ["tools/node/run-wat.mjs", path.join(WAT_DIR, "pipe.wat"), "--invoke", "main"]);
   assert(name, runWat.status === 0 && runWat.stdout.trim() === "36", runWat.stdout || runWat.stderr);
+  pass(name);
+}
+
+function checkPatternParams() {
+  const name = "pattern parameter parser gates";
+  const parsed = run("./target/debug/level1c.o", ["parse", path.join(ROOT, "pattern_params.chiba")]);
+  assert(name, parsed.status === 0, parsed.stdout || parsed.stderr);
+  assert(name, parsed.stdout.includes("ParamPattern"), "parameters must parse as ParamPattern");
+  assert(name, parsed.stdout.includes("Pattern_Wildcard"), "wildcard parameter must remain a wildcard pattern");
+  assert(name, parsed.stdout.includes('"Some"') && parsed.stdout.includes("PatternIdent_Call") && parsed.stdout.includes('"None"'), "constructor parameters must remain patterns");
+  assert(name, !parsed.stdout.includes("ParamDiscard"), "function parameters must not use the legacy ParamDiscard AST");
   pass(name);
 }
 
@@ -573,6 +585,7 @@ checkNamespaceMerge();
 checkStringSlice();
 checkStringReturnAbi();
 checkPipeLowering();
+checkPatternParams();
 checkMemory();
 checkTypeInference();
 checkTypeGenerics();

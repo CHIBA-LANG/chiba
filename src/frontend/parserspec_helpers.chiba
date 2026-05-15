@@ -290,6 +290,7 @@ def astwriteat(out: Str, ast: AST, depth: i64): i64 =
         GenericRowField(name, ty) => aststr_ast(out, depth, "GenericRowField", name, ty)
         Param(name, ty) => aststr_ast(out, depth, "Param", name, ty)
         ParamDiscard(ty) => astnode1(out, depth, "ParamDiscard", ty)
+        ParamPattern(pat, ty) => astnode2(out, depth, "ParamPattern", pat, ty)
         Param_Cons(head, tail) => astnode2(out, depth, "Param_Cons", head, tail)
         Param_End => astleaf(out, "Param_End")
         Type_Path(name, tail) => aststr_ast(out, depth, "Type_Path", name, tail)

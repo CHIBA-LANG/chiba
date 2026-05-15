@@ -1,0 +1,9 @@
+namespace semantic.gates.pattern_params
+
+def plain(a: i64): i64 = a
+
+def discard(_: i64): i64 = 1
+
+def option_some(Some(x): Option[X]): i64 = 1
+
+def option_none(None: Option[X]): i64 = 0

@@ -363,51 +363,52 @@ def ast_variants_has_duplicate(variants: AST): i64 =
         _ => 0
     }
 
+def ast_param_pattern_binding_name(pat: AST): Str =
+    match pat {
+        Pattern_IdentStart(name, PatternAfterIdent_Atom(PatternIdent_Name)) => name
+        _ => mk_str("", 0)
+    }
+
+def ast_param_head_binding_name(param: AST): Str =
+    match param {
+        Param(name, _) => name
+        ParamPattern(pat, _) => ast_param_pattern_binding_name(pat)
+        _ => mk_str("", 0)
+    }
+
+def ast_param_head_type(param: AST): AST =
+    match param {
+        Param(_, ty) => ty
+        ParamDiscard(ty) => ty
+        ParamPattern(_, ty) => ty
+        _ => Type_Path(mk_str("", 0), Type_Tail_End)
+    }
+
 def ast_param_type_name(params: AST, param_name: Str): Str =
     match params {
         Param_Cons(head, tail) =>
-            match head {
-                Param(name, ty) =>
-                    if streq(name, param_name) != 0 { ast_type_path_name(ty) } else { ast_param_type_name(tail, param_name) }
-                ParamDiscard(_) => ast_param_type_name(tail, param_name)
-                _ => ast_param_type_name(tail, param_name)
-            }
+            if streq(ast_param_head_binding_name(head), param_name) != 0 { ast_type_path_name(ast_param_head_type(head)) } else { ast_param_type_name(tail, param_name) }
         _ => mk_str("", 0)
     }
 
 def ast_param_type_ast(params: AST, param_name: Str): AST =
     match params {
         Param_Cons(head, tail) =>
-            match head {
-                Param(name, ty) =>
-                    if streq(name, param_name) != 0 { ty } else { ast_param_type_ast(tail, param_name) }
-                ParamDiscard(_) => ast_param_type_ast(tail, param_name)
-                _ => ast_param_type_ast(tail, param_name)
-            }
+            if streq(ast_param_head_binding_name(head), param_name) != 0 { ast_param_head_type(head) } else { ast_param_type_ast(tail, param_name) }
         _ => Type_Path(mk_str("", 0), Type_Tail_End)
     }
 
 def ast_param_simple_kind(params: AST, param_name: Str): i64 =
     match params {
         Param_Cons(head, tail) =>
-            match head {
-                Param(name, ty) =>
-                    if streq(name, param_name) != 0 { ast_type_simple_kind(ty) } else { ast_param_simple_kind(tail, param_name) }
-                ParamDiscard(_) => ast_param_simple_kind(tail, param_name)
-                _ => ast_param_simple_kind(tail, param_name)
-            }
+            if streq(ast_param_head_binding_name(head), param_name) != 0 { ast_type_simple_kind(ast_param_head_type(head)) } else { ast_param_simple_kind(tail, param_name) }
         _ => 0
     }
 
 def ast_params_has_name(params: AST, param_name: Str): i64 =
     match params {
         Param_Cons(head, tail) =>
-            match head {
-                Param(name, _) =>
-                    if streq(name, param_name) != 0 { 1 } else { ast_params_has_name(tail, param_name) }
-                ParamDiscard(_) => ast_params_has_name(tail, param_name)
-                _ => ast_params_has_name(tail, param_name)
-            }
+            if streq(ast_param_head_binding_name(head), param_name) != 0 { 1 } else { ast_params_has_name(tail, param_name) }
         _ => 0
     }
 
@@ -748,6 +749,7 @@ def ast_first_param_type_name(params: AST): Str =
             match head {
                 Param(_, ty) => ast_type_path_name(ty)
                 ParamDiscard(ty) => ast_type_path_name(ty)
+                ParamPattern(_, ty) => ast_type_path_name(ty)
                 _ => mk_str("", 0)
             }
         _ => mk_str("", 0)
@@ -824,6 +826,10 @@ def ast_param_type_is_ref_array(params: AST, name: Str): i64 =
                         ast_type_is_path(ast_type_first_arg(ty), mk_str("Array", 5))
                     } else { ast_param_type_is_ref_array(tail, name) }
                 ParamDiscard(_) => ast_param_type_is_ref_array(tail, name)
+                ParamPattern(pat, ty) =>
+                    if streq(ast_param_pattern_binding_name(pat), name) != 0 && ast_type_is_path(ty, mk_str("Ref", 3)) != 0 {
+                        ast_type_is_path(ast_type_first_arg(ty), mk_str("Array", 5))
+                    } else { ast_param_type_is_ref_array(tail, name) }
                 _ => ast_param_type_is_ref_array(tail, name)
             }
         _ => 0
@@ -1101,6 +1107,12 @@ def ast_params_check_inference(params: AST, body: AST, generics: AST): CirTypedS
                     } else { CirTypedSemanticCheckOk }
                     cir_typed_semantic_merge(here, ast_params_check_inference(tail, body, generics))
                 }
+                ParamPattern(_, ty) => {
+                    let here = if ast_type_is_missing(ty) != 0 {
+                        CirTypedSemanticCheckOk
+                    } else { CirTypedSemanticCheckOk }
+                    cir_typed_semantic_merge(here, ast_params_check_inference(tail, body, generics))
+                }
                 _ => ast_params_check_inference(tail, body, generics)
             }
         _ => CirTypedSemanticCheckOk
@@ -1153,6 +1165,7 @@ def ast_params_check_types(params: AST): CirTypedSemanticCheck =
             match head {
                 Param(_, ty) => cir_typed_semantic_merge(ast_type_check_atomic(ty), cir_typed_semantic_merge(ast_type_row_check(ty), ast_params_check_types(tail)))
                 ParamDiscard(ty) => cir_typed_semantic_merge(ast_type_check_atomic(ty), cir_typed_semantic_merge(ast_type_row_check(ty), ast_params_check_types(tail)))
+                ParamPattern(_, ty) => cir_typed_semantic_merge(ast_type_check_atomic(ty), cir_typed_semantic_merge(ast_type_row_check(ty), ast_params_check_types(tail)))
                 _ => ast_params_check_types(tail)
             }
         _ => CirTypedSemanticCheckOk
@@ -1172,6 +1185,8 @@ def ast_params_all_i64(params: AST): i64 =
                     if ast_type_is_i64(ty) != 0 { ast_params_all_i64(tail) } else { 0 }
                 ParamDiscard(ty) =>
                     if ast_type_is_i64(ty) != 0 { ast_params_all_i64(tail) } else { 0 }
+                ParamPattern(_, ty) =>
+                    if ast_type_is_i64(ty) != 0 { ast_params_all_i64(tail) } else { 0 }
                 _ => 0
             }
         _ => 1
@@ -1184,6 +1199,8 @@ def ast_params_no_missing_types(params: AST): i64 =
                 Param(_, ty) =>
                     if ast_type_is_missing(ty) != 0 { 0 } else { ast_params_no_missing_types(tail) }
                 ParamDiscard(ty) =>
+                    if ast_type_is_missing(ty) != 0 { 0 } else { ast_params_no_missing_types(tail) }
+                ParamPattern(_, ty) =>
                     if ast_type_is_missing(ty) != 0 { 0 } else { ast_params_no_missing_types(tail) }
                 _ => 0
             }
@@ -1235,6 +1252,9 @@ def ast_params_check_metal_raw_i64(params: AST): CirTypedSemanticCheck =
                     if ast_param_is_pointer_named_i64(name, ty) != 0 { cir_typed_semantic_err("Metal pointer API must use Ptr[T]") }
                     else { ast_params_check_metal_raw_i64(tail) }
                 ParamDiscard(_) => ast_params_check_metal_raw_i64(tail)
+                ParamPattern(pat, ty) =>
+                    if ast_param_is_pointer_named_i64(ast_param_pattern_binding_name(pat), ty) != 0 { cir_typed_semantic_err("Metal pointer API must use Ptr[T]") }
+                    else { ast_params_check_metal_raw_i64(tail) }
                 _ => ast_params_check_metal_raw_i64(tail)
             }
         _ => CirTypedSemanticCheckOk

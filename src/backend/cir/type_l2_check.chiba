@@ -233,6 +233,27 @@ def cir_l2_ast_param_is_pointer_named_i64(name: Str, ty: AST): i64 =
     else if streq(name, mk_str("p", 1)) != 0 { 1 }
     else { 0 }
 
+def cir_l2_ast_param_pattern_binding_name(pat: AST): Str =
+    match pat {
+        Pattern_IdentStart(name, PatternAfterIdent_Atom(PatternIdent_Name)) => name
+        _ => mk_str("", 0)
+    }
+
+def cir_l2_ast_param_head_binding_name(param: AST): Str =
+    match param {
+        Param(name, _) => name
+        ParamPattern(pat, _) => cir_l2_ast_param_pattern_binding_name(pat)
+        _ => mk_str("", 0)
+    }
+
+def cir_l2_ast_param_head_type(param: AST): AST =
+    match param {
+        Param(_, ty) => ty
+        ParamDiscard(ty) => ty
+        ParamPattern(_, ty) => ty
+        _ => Type_Path(mk_str("", 0), Type_Tail_End)
+    }
+
 def cir_l2_check_metal_params(params: AST): CirL2TypeCheck =
     match params {
         Param_Cons(head, tail) =>
@@ -241,6 +262,9 @@ def cir_l2_check_metal_params(params: AST): CirL2TypeCheck =
                     if cir_l2_ast_param_is_pointer_named_i64(name, ty) != 0 { cir_l2_type_check_err("Metal pointer API must use Ptr[T]") }
                     else { cir_l2_check_metal_params(tail) }
                 ParamDiscard(_) => cir_l2_check_metal_params(tail)
+                ParamPattern(pat, ty) =>
+                    if cir_l2_ast_param_is_pointer_named_i64(cir_l2_ast_param_pattern_binding_name(pat), ty) != 0 { cir_l2_type_check_err("Metal pointer API must use Ptr[T]") }
+                    else { cir_l2_check_metal_params(tail) }
                 _ => cir_l2_check_metal_params(tail)
             }
         _ => CirL2TypeCheckOk
@@ -442,18 +466,13 @@ def cir_l2_check_ast_union_item(item: AST): CirL2TypeCheck =
 def cir_l2_ast_param_type_name(params: AST, param_name: Str): Str =
     match params {
         Param_Cons(head, tail) =>
-            match head {
-                Param(name, ty) =>
-                    if streq(name, param_name) != 0 {
-                        match ty {
-                            Type_Path(type_name, _) => type_name
-                            Type_Atom(type_name) => type_name
-                            _ => mk_str("", 0)
-                        }
-                    } else { cir_l2_ast_param_type_name(tail, param_name) }
-                ParamDiscard(_) => cir_l2_ast_param_type_name(tail, param_name)
-                _ => cir_l2_ast_param_type_name(tail, param_name)
-            }
+            if streq(cir_l2_ast_param_head_binding_name(head), param_name) != 0 {
+                match cir_l2_ast_param_head_type(head) {
+                    Type_Path(type_name, _) => type_name
+                    Type_Atom(type_name) => type_name
+                    _ => mk_str("", 0)
+                }
+            } else { cir_l2_ast_param_type_name(tail, param_name) }
         _ => mk_str("", 0)
     }
 
@@ -678,12 +697,7 @@ def cir_l2_ast_type_path_name(ty: AST): Str =
 def cir_l2_ast_param_type_ast(params: AST, param_name: Str): AST =
     match params {
         Param_Cons(head, tail) =>
-            match head {
-                Param(name, ty) =>
-                    if streq(name, param_name) != 0 { ty } else { cir_l2_ast_param_type_ast(tail, param_name) }
-                ParamDiscard(_) => cir_l2_ast_param_type_ast(tail, param_name)
-                _ => cir_l2_ast_param_type_ast(tail, param_name)
-            }
+            if streq(cir_l2_ast_param_head_binding_name(head), param_name) != 0 { cir_l2_ast_param_head_type(head) } else { cir_l2_ast_param_type_ast(tail, param_name) }
         _ => Type_Path(mk_str("", 0), Type_Tail_End)
     }
 
@@ -819,6 +833,7 @@ def cir_l2_ast_first_param_type_name(params: AST): Str =
             match head {
                 Param(_, ty) => cir_l2_ast_type_path_name(ty)
                 ParamDiscard(ty) => cir_l2_ast_type_path_name(ty)
+                ParamPattern(_, ty) => cir_l2_ast_type_path_name(ty)
                 _ => mk_str("", 0)
             }
         _ => mk_str("", 0)

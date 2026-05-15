@@ -342,8 +342,7 @@ rule param_tail ::=
     ;
 
 rule param ::= 
-    Underscore ty:param_type_opt => ParamDiscard(ty)
-    | name:param_name ty:param_type_opt => Param(name, ty)
+    pat:pattern ty:param_type_opt => ParamPattern(pat, ty)
     ;
 
 rule param_name ::= 
@@ -500,8 +499,7 @@ rule closure_param_list ::=
     ;
 
 rule closure_param ::= 
-    Underscore ty:closure_param_type => ParamDiscard(ty)
-    | name:param_name ty:closure_param_type => Param(name, ty)
+    pat:pattern ty:closure_param_type => ParamPattern(pat, ty)
     ;
 
 rule closure_param_type ::= 
@@ -652,6 +650,7 @@ rule asm_string_list ::=
 
 rule pattern ::= 
     Underscore => Pattern_Wildcard
+    | KwSelf => Pattern_IdentStart(mk_str("self", 4), PatternAfterIdent_Atom(PatternIdent_Name))
     | name:Ident rest:pattern_after_ident => Pattern_IdentStart(name, rest)
     | atom:pattern_atom_no_ident => atom
     ;
@@ -663,6 +662,7 @@ rule pattern_after_ident ::=
 
 rule pattern_atom ::= 
     Underscore => Pattern_Wildcard
+    | KwSelf => Pattern_IdentStart(mk_str("self", 4), PatternAfterIdent_Atom(PatternIdent_Name))
     | name:Ident rest:pattern_after_ident => Pattern_IdentStart(name, rest)
     | atom:pattern_atom_no_ident => atom
     ;
@@ -1030,6 +1030,7 @@ rule arg_tail ::=
         GenericRowField(Str, AST),
         Param(Str, AST),
         ParamDiscard(AST),
+        ParamPattern(AST, AST),
         Param_Cons(AST, AST),
         Param_End,
 
