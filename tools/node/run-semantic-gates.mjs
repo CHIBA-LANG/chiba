@@ -44,6 +44,7 @@ const GATE_FILES = [
   "nominal_row_data_union_invalid_union.chiba",
   "continuation_scheme_multi.chiba",
   "string_slice.chiba",
+  "string_return.chiba",
   "namespace/part_a.chiba",
   "namespace/part_b.chiba",
   "namespace/use_both.chiba",
@@ -58,6 +59,7 @@ const GATE_FILES = [
 // produce complete Core.
 const WAT_GATE_FILES = [
   "string_slice.chiba",
+  "string_return.chiba",
   "type_unify.chiba",
   "type_inference.chiba",
   "extern_abi.chiba",
@@ -300,6 +302,16 @@ function checkStringSlice() {
   pass(name);
 }
 
+function checkStringReturnAbi() {
+  const name = "string result ABI gates";
+  const wat = read(path.join(WAT_DIR, "string_return.wat"));
+  assert(name, wat.includes("(func $string_return_value (result (ref $array_u8))"), "String-returning function does not use Array[u8] result ABI");
+  assert(name, /\(local \$v[0-9]+ \(ref \$array_u8\)\)/.test(wat), "String-returning call result does not bind to Array[u8] local");
+  assert(name, wat.includes("call $string_return_value"), "String-returning helper call missing");
+  assert(name, wat.includes("call $__chiba_string_byte_at"), "String-returning local cannot be byte-indexed through helper");
+  pass(name);
+}
+
 function extractNamespace(source) {
   const match = source.match(/\bnamespace\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/);
   return match ? match[1] : "";
@@ -522,6 +534,7 @@ checkRowShorthand();
 checkCheckedTemplateInstantiation();
 checkNamespaceMerge();
 checkStringSlice();
+checkStringReturnAbi();
 checkMemory();
 checkTypeInference();
 checkTypeGenerics();

@@ -1,4 +1,5 @@
 namespace backend.cir.core
+use metalstd.str.*
 use backend.cir.ir.*
 
 def cir_l7_core_op(expr: CirExpr): CirCoreOp =
@@ -18,12 +19,30 @@ def cir_l7_core_op(expr: CirExpr): CirCoreOp =
         L1OpString => L7CoreStringSlice
         L1OpStringBytes(_) => L7CoreStringSlice
         L1OpStringInterp(_) => L7CoreStringSlice
-        L1OpIndex(_, _) => L7CoreStringSlice
+        L1OpIndex(_, args) =>
+            if cir_l7_index_is_range(args) != 0 { L7CoreStringSlice } else { L7CoreFunc }
         L1OpBlock(_, tail) => cir_l7_core_op(tail)
         L1OpIf(_, then_expr, _) => cir_l7_core_op(then_expr)
         L1OpReset(_, _) => L7CoreContinuationPackage
         L1OpShift(_, _, _) => L7CoreContinuationPackage
         _ => L7CoreFunc
+    }
+
+def cir_l7_index_is_range(args: CirExprList): i64 =
+    match args {
+        CirExprCons(head, CirExprEnd) =>
+            match head {
+                L7CoreOp(value, _) => cir_l7_index_is_range(CirExprCons(value, CirExprEnd))
+                L6OpClosureEnv(value, _) => cir_l7_index_is_range(CirExprCons(value, CirExprEnd))
+                L5OpContinuationPackage(_, _, value) => cir_l7_index_is_range(CirExprCons(value, CirExprEnd))
+                L5OpCps(value, _) => cir_l7_index_is_range(CirExprCons(value, CirExprEnd))
+                L4OpUsage(value, _) => cir_l7_index_is_range(CirExprCons(value, CirExprEnd))
+                L3OpAnswerControl(value, _, _) => cir_l7_index_is_range(CirExprCons(value, CirExprEnd))
+                L2OpTyped(value, _) => cir_l7_index_is_range(CirExprCons(value, CirExprEnd))
+                L1OpBinary(op, _, _) => streq(op, mk_str("..", 2))
+                _ => 0
+            }
+        _ => 0
     }
 
 def cir_l7_core_expr_list(args: CirExprList): CirExprList =

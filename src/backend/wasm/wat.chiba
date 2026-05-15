@@ -95,6 +95,20 @@ def wat_valtype_from_ast(ty: AST): i64 =
         _ => "i64"
     }
 
+def wat_result_valtype(ret: AST, body: CirExpr): i64 =
+    match ret {
+        Type_Path(name, _) =>
+            if name.len != 0 { wat_valtype_from_ast(ret) }
+            else {
+                match body {
+                    L2OpTyped(_, ty) => wat_valtype_from_cir(ty)
+                    L3OpAnswerControl(_, ty, _) => wat_valtype_from_cir(ty)
+                    _ => "i64"
+                }
+            }
+        _ => wat_valtype_from_ast(ret)
+    }
+
 def wat_emit_local_decl_with_type(out: Str, id: i64, value_type: i64): i64 = {
     let _ = str_push_cstr(out, "    (local ")
     let _ = wat_local_name(out, id)
@@ -142,7 +156,7 @@ def wat_params_empty(params: CirParamList): i64 =
 
 def wat_emit_import(out: Str, item: CirItem): i64 =
     match item {
-        L1ItemExtern(binder, params, _, import) => {
+        L1ItemExtern(binder, params, ret, import) => {
             let _ = str_push_cstr(out, "  (import \"")
             let _ = str_append(out, import.module_name)
             let _ = str_push_cstr(out, "\" \"")
@@ -150,10 +164,12 @@ def wat_emit_import(out: Str, item: CirItem): i64 =
             let _ = str_push_cstr(out, "\" (func ")
             let _ = wat_func_name(out, binder.name)
             let _ = wat_emit_import_params(out, params)
-            let _ = str_push_cstr(out, " (result i64)))")
+            let _ = str_push_cstr(out, " (result ")
+            let _ = str_push_cstr(out, wat_valtype_from_ast(ret))
+            let _ = str_push_cstr(out, ")))")
             str_push(out, 10)
         }
-        L8ValidatedCoreItemExtern(binder, params, _, import) => {
+        L8ValidatedCoreItemExtern(binder, params, ret, import) => {
             let _ = str_push_cstr(out, "  (import \"")
             let _ = str_append(out, import.module_name)
             let _ = str_push_cstr(out, "\" \"")
@@ -161,7 +177,9 @@ def wat_emit_import(out: Str, item: CirItem): i64 =
             let _ = str_push_cstr(out, "\" (func ")
             let _ = wat_func_name(out, binder.name)
             let _ = wat_emit_import_params(out, params)
-            let _ = str_push_cstr(out, " (result i64)))")
+            let _ = str_push_cstr(out, " (result ")
+            let _ = str_push_cstr(out, wat_valtype_from_ast(ret))
+            let _ = str_push_cstr(out, ")))")
             str_push(out, 10)
         }
         _ => 0
@@ -743,11 +761,13 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
 
 def wat_emit_func(out: Str, item: CirItem, export_main: i64): i64 =
     match item {
-        L1ItemDef(binder, params, _, body) => {
+        L1ItemDef(binder, params, ret, body) => {
             let _ = str_push_cstr(out, "  (func ")
             let _ = wat_func_name(out, binder.name)
             let _ = wat_emit_params(out, params)
-            let _ = str_push_cstr(out, " (result i64)")
+            let _ = str_push_cstr(out, " (result ")
+            let _ = str_push_cstr(out, wat_result_valtype(ret, body))
+            let _ = str_push(out, 41)
             let _ = str_push(out, 10)
             let _ = wat_collect_expr_locals(out, body)
             let _ = wat_emit_expr(out, 2, body)
@@ -768,11 +788,13 @@ def wat_emit_func(out: Str, item: CirItem, export_main: i64): i64 =
                 str_push(out, 10)
             } else { 0 }
         }
-        L8ValidatedCoreItemDef(binder, params, _, body) => {
+        L8ValidatedCoreItemDef(binder, params, ret, body) => {
             let _ = str_push_cstr(out, "  (func ")
             let _ = wat_func_name(out, binder.name)
             let _ = wat_emit_params(out, params)
-            let _ = str_push_cstr(out, " (result i64)")
+            let _ = str_push_cstr(out, " (result ")
+            let _ = str_push_cstr(out, wat_result_valtype(ret, body))
+            let _ = str_push(out, 41)
             let _ = str_push(out, 10)
             let _ = wat_collect_expr_locals(out, body)
             let _ = wat_emit_expr(out, 2, body)

@@ -8,6 +8,11 @@ data CirTypeEnv {
     CirTypeEnvCons(i64, CirType, CirTypeEnv)
 }
 
+data CirGlobalTypeEnv {
+    CirGlobalTypeEnvEnd,
+    CirGlobalTypeEnvCons(Str, CirType, CirGlobalTypeEnv)
+}
+
 type CirTypedStmtResult {
     stmt: CirStmt
     env: CirTypeEnv
@@ -27,6 +32,16 @@ def cir_type_env_lookup(env: CirTypeEnv, id: i64): CirType =
 
 def cir_type_env_add(env: CirTypeEnv, binder: CirBinder, ty: CirType): CirTypeEnv =
     CirTypeEnvCons(binder.id, ty, env)
+
+def cir_global_type_env_lookup(env: CirGlobalTypeEnv, name: Str): CirType =
+    match env {
+        CirGlobalTypeEnvEnd => CirTyUnknown
+        CirGlobalTypeEnvCons(entry_name, ty, rest) =>
+            if streq(entry_name, name) != 0 { ty } else { cir_global_type_env_lookup(rest, name) }
+    }
+
+def cir_global_type_env_add(env: CirGlobalTypeEnv, name: Str, ty: CirType): CirGlobalTypeEnv =
+    CirGlobalTypeEnvCons(name, ty, env)
 
 def cir_typed_type_from_ast(ty: AST, fallback: CirType): CirType =
     match ty {
@@ -79,6 +94,21 @@ def cir_type_env_from_params(params: CirParamList): CirTypeEnv =
             }
     }
 
+def cir_global_type_env_from_items(items: CirItemList): CirGlobalTypeEnv =
+    match items {
+        CirItemEnd => CirGlobalTypeEnvEnd
+        CirItemCons(item, rest) => {
+            let tail = cir_global_type_env_from_items(rest)
+            match item {
+                L1ItemDef(binder, _, ret, _) =>
+                    cir_global_type_env_add(tail, binder.name, cir_typed_type_from_ast(ret, CirTyUnknown))
+                L1ItemExtern(binder, _, ret, _) =>
+                    cir_global_type_env_add(tail, binder.name, cir_typed_type_from_ast(ret, CirTyUnknown))
+                _ => tail
+            }
+        }
+    }
+
 def cir_type_is_i64(ty: CirType): i64 =
     match ty {
         CirTyI64 => 1
@@ -122,27 +152,71 @@ def cir_typed_expr_type(expr: CirExpr): CirType =
         _ => CirTyUnknown
     }
 
+def cir_typed_callee_result(callee: CirExpr, globals: CirGlobalTypeEnv): CirType =
+    match callee {
+        L2OpTyped(inner, ty) =>
+            match inner {
+                L1OpRef(ref) =>
+                    match ref {
+                        L1RefGlobal(name) => cir_global_type_env_lookup(globals, name)
+                        L1RefUnresolved(name) => cir_global_type_env_lookup(globals, name)
+                        _ => ty
+                    }
+                _ => ty
+            }
+        L1OpRef(ref) =>
+            match ref {
+                L1RefGlobal(name) => cir_global_type_env_lookup(globals, name)
+                L1RefUnresolved(name) => cir_global_type_env_lookup(globals, name)
+                _ => CirTyUnknown
+            }
+        _ => CirTyUnknown
+    }
+
+def cir_typed_index_result(args: CirExprList): CirType =
+    match args {
+        CirExprCons(head, CirExprEnd) =>
+            match head {
+                L2OpTyped(inner, _) =>
+                    match inner {
+                        L1OpBinary(op, _, _) =>
+                            if streq(op, mk_str("..", 2)) != 0 { CirTySliceU8 } else { CirTyI64 }
+                        _ => CirTyI64
+                    }
+                L1OpBinary(op, _, _) =>
+                    if streq(op, mk_str("..", 2)) != 0 { CirTySliceU8 } else { CirTyI64 }
+                _ => CirTyI64
+            }
+        _ => CirTyUnknown
+    }
+
 def cir_typed_expr_list(args: CirExprList): CirExprList =
     match args {
         CirExprEnd => CirExprEnd
         CirExprCons(head, tail) => CirExprCons(cir_typed_expr_in(head, CirTypeEnvEnd), cir_typed_expr_list(tail))
     }
 
-def cir_typed_expr_list_in(args: CirExprList, env: CirTypeEnv): CirExprList =
+def cir_typed_expr_list_in_g(args: CirExprList, env: CirTypeEnv, globals: CirGlobalTypeEnv): CirExprList =
     match args {
         CirExprEnd => CirExprEnd
-        CirExprCons(head, tail) => CirExprCons(cir_typed_expr_in(head, env), cir_typed_expr_list_in(tail, env))
+        CirExprCons(head, tail) => CirExprCons(cir_typed_expr_in_g(head, env, globals), cir_typed_expr_list_in_g(tail, env, globals))
     }
 
-def cir_typed_stmt_list_in(stmts: CirStmtList, env: CirTypeEnv): CirTypedStmtListResult =
+def cir_typed_expr_list_in(args: CirExprList, env: CirTypeEnv): CirExprList =
+    cir_typed_expr_list_in_g(args, env, CirGlobalTypeEnvEnd)
+
+def cir_typed_stmt_list_in_g(stmts: CirStmtList, env: CirTypeEnv, globals: CirGlobalTypeEnv): CirTypedStmtListResult =
     match stmts {
         CirStmtEnd => CirTypedStmtListResult { stmts: CirStmtEnd, env: env }
         CirStmtCons(stmt, rest) => {
-            let head = cir_typed_stmt_in(stmt, env)
-            let tail = cir_typed_stmt_list_in(rest, head.env)
+            let head = cir_typed_stmt_in_g(stmt, env, globals)
+            let tail = cir_typed_stmt_list_in_g(rest, head.env, globals)
             CirTypedStmtListResult { stmts: CirStmtCons(head.stmt, tail.stmts), env: tail.env }
         }
     }
+
+def cir_typed_stmt_list_in(stmts: CirStmtList, env: CirTypeEnv): CirTypedStmtListResult =
+    cir_typed_stmt_list_in_g(stmts, env, CirGlobalTypeEnvEnd)
 
 def cir_typed_stmt_list(stmts: CirStmtList): CirStmtList =
     cir_typed_stmt_list_in(stmts, CirTypeEnvEnd).stmts
@@ -150,65 +224,76 @@ def cir_typed_stmt_list(stmts: CirStmtList): CirStmtList =
 def cir_typed_stmt(stmt: CirStmt): CirStmt =
     cir_typed_stmt_in(stmt, CirTypeEnvEnd).stmt
 
-def cir_typed_stmt_in(stmt: CirStmt, env: CirTypeEnv): CirTypedStmtResult =
+def cir_typed_stmt_in_g(stmt: CirStmt, env: CirTypeEnv, globals: CirGlobalTypeEnv): CirTypedStmtResult =
     match stmt {
         L1StmtLet(binder, value) => {
-            let value2 = cir_typed_expr_in(value, env)
+            let value2 = cir_typed_expr_in_g(value, env, globals)
             let ty = cir_typed_expr_type(value2)
             CirTypedStmtResult { stmt: L2StmtLet(binder, ty, value2), env: cir_type_env_add(env, binder, ty) }
         }
-        L1StmtLetPattern(pat, value) => CirTypedStmtResult { stmt: L2StmtLetPattern(pat, cir_typed_expr_in(value, env)), env: env }
-        L1StmtAssign(lhs, rhs) => CirTypedStmtResult { stmt: L2StmtAssign(cir_typed_expr_in(lhs, env), cir_typed_expr_in(rhs, env)), env: env }
-        L1StmtExpr(value) => CirTypedStmtResult { stmt: L2StmtExpr(cir_typed_expr_in(value, env)), env: env }
-        L1StmtReturn(value) => CirTypedStmtResult { stmt: L2StmtReturn(cir_typed_expr_in(value, env)), env: env }
-        L1StmtFor(label, cond, body) => CirTypedStmtResult { stmt: L2StmtFor(label, cir_typed_expr_in(cond, env), cir_typed_expr_in(body, env)), env: env }
+        L1StmtLetPattern(pat, value) => CirTypedStmtResult { stmt: L2StmtLetPattern(pat, cir_typed_expr_in_g(value, env, globals)), env: env }
+        L1StmtAssign(lhs, rhs) => CirTypedStmtResult { stmt: L2StmtAssign(cir_typed_expr_in_g(lhs, env, globals), cir_typed_expr_in_g(rhs, env, globals)), env: env }
+        L1StmtExpr(value) => CirTypedStmtResult { stmt: L2StmtExpr(cir_typed_expr_in_g(value, env, globals)), env: env }
+        L1StmtReturn(value) => CirTypedStmtResult { stmt: L2StmtReturn(cir_typed_expr_in_g(value, env, globals)), env: env }
+        L1StmtFor(label, cond, body) => CirTypedStmtResult { stmt: L2StmtFor(label, cir_typed_expr_in_g(cond, env, globals), cir_typed_expr_in_g(body, env, globals)), env: env }
         L1StmtUnsupported(ast, reason) => CirTypedStmtResult { stmt: L2StmtUnsupported(ast, reason), env: env }
         _ => CirTypedStmtResult { stmt: stmt, env: env }
     }
 
+def cir_typed_stmt_in(stmt: CirStmt, env: CirTypeEnv): CirTypedStmtResult =
+    cir_typed_stmt_in_g(stmt, env, CirGlobalTypeEnvEnd)
+
 def cir_typed_expr(expr: CirExpr): CirExpr =
     cir_typed_expr_in(expr, CirTypeEnvEnd)
 
-def cir_typed_expr_in(expr: CirExpr, env: CirTypeEnv): CirExpr =
+def cir_typed_expr_in_g(expr: CirExpr, env: CirTypeEnv, globals: CirGlobalTypeEnv): CirExpr =
     match expr {
         L1OpBlock(stmts, tail) => {
-            let stmts2 = cir_typed_stmt_list_in(stmts, env)
-            let tail2 = cir_typed_expr_in(tail, stmts2.env)
+            let stmts2 = cir_typed_stmt_list_in_g(stmts, env, globals)
+            let tail2 = cir_typed_expr_in_g(tail, stmts2.env, globals)
             L2OpTyped(L1OpBlock(stmts2.stmts, tail2), cir_typed_expr_type(tail2))
         }
         L1OpIf(cond, then_expr, else_expr) => {
-            let then2 = cir_typed_expr_in(then_expr, env)
-            L2OpTyped(L1OpIf(cir_typed_expr_in(cond, env), then2, cir_typed_expr_in(else_expr, env)), cir_typed_expr_type(then2))
+            let then2 = cir_typed_expr_in_g(then_expr, env, globals)
+            L2OpTyped(L1OpIf(cir_typed_expr_in_g(cond, env, globals), then2, cir_typed_expr_in_g(else_expr, env, globals)), cir_typed_expr_type(then2))
         }
-        L1OpMatch(value, arms) => L2OpTyped(L1OpMatch(cir_typed_expr_in(value, env), arms), CirTyUnknown)
-        L1OpClosure(params, body) => L2OpTyped(L1OpClosure(params, cir_typed_expr_in(body, env)), CirTyUnknown)
+        L1OpMatch(value, arms) => L2OpTyped(L1OpMatch(cir_typed_expr_in_g(value, env, globals), arms), CirTyUnknown)
+        L1OpClosure(params, body) => L2OpTyped(L1OpClosure(params, cir_typed_expr_in_g(body, env, globals)), CirTyUnknown)
         L1OpReset(label, body) => {
-            let body2 = cir_typed_expr_in(body, env)
+            let body2 = cir_typed_expr_in_g(body, env, globals)
             L2OpTyped(L1OpReset(label, body2), cir_typed_expr_type(body2))
         }
-        L1OpShift(label, binder, body) => L2OpTyped(L1OpShift(label, binder, cir_typed_expr_in(body, env)), CirTyUnknown)
-        L1OpCall(callee, args) => L2OpTyped(L1OpCall(cir_typed_expr_in(callee, env), cir_typed_expr_list_in(args, env)), CirTyUnknown)
-        L1OpField(value, field) => L2OpTyped(L1OpField(cir_typed_expr_in(value, env), field), CirTyUnknown)
-        L1OpIndex(value, args) => L2OpTyped(L1OpIndex(cir_typed_expr_in(value, env), cir_typed_expr_list_in(args, env)), CirTySliceU8)
+        L1OpShift(label, binder, body) => L2OpTyped(L1OpShift(label, binder, cir_typed_expr_in_g(body, env, globals)), CirTyUnknown)
+        L1OpCall(callee, args) => {
+            let callee2 = cir_typed_expr_in_g(callee, env, globals)
+            L2OpTyped(L1OpCall(callee2, cir_typed_expr_list_in_g(args, env, globals)), cir_typed_callee_result(callee2, globals))
+        }
+        L1OpField(value, field) => L2OpTyped(L1OpField(cir_typed_expr_in_g(value, env, globals), field), CirTyUnknown)
+        L1OpIndex(value, args) => {
+            let args2 = cir_typed_expr_list_in_g(args, env, globals)
+            L2OpTyped(L1OpIndex(cir_typed_expr_in_g(value, env, globals), args2), cir_typed_index_result(args2))
+        }
         L1OpAssign(lhs, rhs) => {
-            let rhs2 = cir_typed_expr_in(rhs, env)
-            L2OpTyped(L1OpAssign(cir_typed_expr_in(lhs, env), rhs2), cir_typed_expr_type(rhs2))
+            let rhs2 = cir_typed_expr_in_g(rhs, env, globals)
+            L2OpTyped(L1OpAssign(cir_typed_expr_in_g(lhs, env, globals), rhs2), cir_typed_expr_type(rhs2))
         }
         L1OpUnsafe(body) => {
-            let body2 = cir_typed_expr_in(body, env)
+            let body2 = cir_typed_expr_in_g(body, env, globals)
             L2OpTyped(L1OpUnsafe(body2), cir_typed_expr_type(body2))
         }
         L1OpCast(value, ty) =>
-            L2OpTyped(L1OpCast(cir_typed_expr_in(value, env), ty), cir_typed_type_from_ast(ty, CirTyUnknown))
-        L1OpPrefix(op, value) => L2OpTyped(L1OpPrefix(op, cir_typed_expr_in(value, env)), CirTyI64)
+            L2OpTyped(L1OpCast(cir_typed_expr_in_g(value, env, globals), ty), cir_typed_type_from_ast(ty, CirTyUnknown))
+        L1OpPrefix(op, value) => L2OpTyped(L1OpPrefix(op, cir_typed_expr_in_g(value, env, globals)), CirTyI64)
         L1OpBinary(op, lhs, rhs) => {
-            let lhs2 = cir_typed_expr_in(lhs, env)
-            let rhs2 = cir_typed_expr_in(rhs, env)
+            let lhs2 = cir_typed_expr_in_g(lhs, env, globals)
+            let rhs2 = cir_typed_expr_in_g(rhs, env, globals)
             L2OpTyped(L1OpBinary(op, lhs2, rhs2), cir_type_of_binary(op, cir_typed_expr_type(lhs2), cir_typed_expr_type(rhs2)))
         }
         L1OpRef(ref) => {
             let ty = match ref {
                 L1RefLocal(id, _) => cir_type_env_lookup(env, id)
+                L1RefGlobal(name) => cir_global_type_env_lookup(globals, name)
+                L1RefUnresolved(name) => cir_global_type_env_lookup(globals, name)
                 _ => CirTyUnknown
             }
             L2OpTyped(expr, ty)
@@ -225,19 +310,25 @@ def cir_typed_expr_in(expr: CirExpr, env: CirTypeEnv): CirExpr =
         _ => expr
     }
 
-def cir_typed_items(items: CirItemList): CirItemList =
+def cir_typed_expr_in(expr: CirExpr, env: CirTypeEnv): CirExpr =
+    cir_typed_expr_in_g(expr, env, CirGlobalTypeEnvEnd)
+
+def cir_typed_items_g(items: CirItemList, globals: CirGlobalTypeEnv): CirItemList =
     match items {
         CirItemEnd => CirItemEnd
         CirItemCons(item, rest) => {
             let item2 = match item {
-                L1ItemDef(binder, params, ret, body) => L2ItemDef(binder, params, ret, cir_typed_expr_in(body, cir_type_env_from_params(params)))
+                L1ItemDef(binder, params, ret, body) => L2ItemDef(binder, params, ret, cir_typed_expr_in_g(body, cir_type_env_from_params(params), globals))
                 L1ItemExtern(binder, params, ret, import) => L2ItemExtern(binder, params, ret, import)
                 L1ItemUnsupported(ast, reason) => L2ItemUnsupported(ast, reason)
                 _ => item
             }
-            CirItemCons(item2, cir_typed_items(rest))
+            CirItemCons(item2, cir_typed_items_g(rest, globals))
         }
     }
+
+def cir_typed_items(items: CirItemList): CirItemList =
+    cir_typed_items_g(items, cir_global_type_env_from_items(items))
 
 def cir_typed_module(module: CirModule): CirModule =
     match module {

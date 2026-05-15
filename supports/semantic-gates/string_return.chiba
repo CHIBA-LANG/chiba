@@ -1,0 +1,9 @@
+namespace semantic.gates.string_return
+
+def string_return_smoke(): i64 = {
+    let s = string_return_value()
+    s[0]
+}
+
+def string_return_value(): String =
+    "AZ"
