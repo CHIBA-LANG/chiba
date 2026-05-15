@@ -145,7 +145,7 @@ const LEVEL1C_CASES = [
   {
     name: "level1c help",
     args: ["--help"],
-    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project cir typed type-smoke type-capability-smoke type-facts-smoke type-generalize-smoke type-generic-body-smoke type-kind-smoke type-l2-check-smoke type-method-smoke type-nominal-smoke type-record-smoke type-row-smoke type-template-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
+    expect: ["Usage: level1c <command> <file>", "Commands: lex parse check check-project wat-project cir typed type-smoke type-capability-smoke type-facts-smoke type-generalize-smoke type-generic-body-smoke type-kind-smoke type-l2-check-smoke type-method-smoke type-nominal-smoke type-record-smoke type-row-smoke type-template-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat"],
   },
   {
     name: "level1c parse grammar 01",

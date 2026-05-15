@@ -196,10 +196,10 @@
 	- **验收**: string literal WAT 含真实 byte payload；`s[i]` 返回 byte/slice 语义；`s[a..b]` 不复制并保活 backing array；`.char_at(n)` 做显式 codepoint 访问；file read/stdout/lexer input 共用同一 contract。
 	- **并行**: 不并行。
 
-- [ ] **Pre-C08: namespace/project driver**
+- [x] **Pre-C08: namespace/project driver**
 	- **TODO**: 实现 level-1b project scan、namespace summary、multi-file merge、entry selection、dependency ordering、diagnostic ordering。
 	- **DESC**: chibalex/chibacc/metalstd/compiler 不会是单文件；C00 前必须能稳定处理多个文件、同 namespace 多 fragment 和第三方 consumer。
-	- **PROGRESS**: 已新增 `level-1b/supports/namespace-project` 多文件 smoke 和 `vp run level1b:namespace`，覆盖两个文件同 namespace + consumer 编译与 WAT/node 运行；runner 现在写出稳定 project summary 并断言 summary hash。诊断排序和真正 project-aware level1c driver 仍未完成。
+	- **PROGRESS**: 已新增 `level-1b/supports/namespace-project` 多文件 smoke 和 `vp run level1b:namespace`，覆盖两个文件同 namespace + consumer 编译与 WAT/node 运行；runner 现在写出稳定 project summary 并断言 summary hash。`level1c wat-project` 会解析固定 project contract，先跑 namespace merge check，再把三个 AST item list 合并进同一个 nanopass/Core/WAT module；`level1b:namespace` 会执行生成的 `.scratch/level-1b/namespace/use_both.wat`。missing-file diagnostic 已固定为 `part_a`、`part_b`、`use_both` 的稳定顺序。
 	- **验收**: 两个文件同 namespace + 第三个 consumer 的 wasm/Core path 通过；summary hash 稳定；错误输出不依赖文件系统遍历顺序。
 	- **并行**: 暂不并行；接口为后续 namespace 并行预留。
 

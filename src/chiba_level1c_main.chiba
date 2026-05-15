@@ -41,7 +41,7 @@ def argv_str(argv: i64, i: i64): Str = str_from_cptr(argv_cstr(argv, i))
 
 def level1c_usage(): i64 = {
     let _ = write_fd(1, "Usage: level1c <command> <file>\n", 32)
-    let _ = write_fd(1, "Commands: lex parse check check-project cir typed type-smoke type-capability-smoke type-facts-smoke type-generalize-smoke type-generic-body-smoke type-kind-smoke type-l2-check-smoke type-method-smoke type-nominal-smoke type-record-smoke type-row-smoke type-template-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat\n", 336)
+    let _ = write_fd(1, "Commands: lex parse check check-project wat-project cir typed type-smoke type-capability-smoke type-facts-smoke type-generalize-smoke type-generic-body-smoke type-kind-smoke type-l2-check-smoke type-method-smoke type-nominal-smoke type-record-smoke type-row-smoke type-template-smoke type-unify-smoke cps nanopass core-invalid-smoke cont-usage wat\n", 348)
     0
 }
 
@@ -147,6 +147,23 @@ def level1c_project_has_entry(src_dir: Str, name: i64): i64 =
 def level1c_project_parse_required(path: Str): LabeledAST =
     level1c_parse_file(path)
 
+def level1c_ast_item_append(a: AST, b: AST): AST =
+    match a {
+        Item_End => b
+        Item_Cons(head, tail) => Item_Cons(head, level1c_ast_item_append(tail, b))
+        _ => b
+    }
+
+def level1c_project_merged_ast(part_a: AST, part_b: AST, consumer: AST): AST =
+    SourceFile(
+        Attr_End,
+        Namespace(Path_End),
+        level1c_ast_item_append(
+            np_source_items(consumer),
+            level1c_ast_item_append(np_source_items(part_a), np_source_items(part_b))
+        )
+    )
+
 def level1c_run_check_project(root: Str): i64 = {
     let src_dir = level1c_project_src_dir(root)
     if level1c_project_has_entry(src_dir, "part_a.chiba") == 0 {
@@ -172,6 +189,64 @@ def level1c_run_check_project(root: Str): i64 = {
                                     NamespaceProjectCheckOk => {
                                         let _ = write_fd(1, "check project ok\n", 17)
                                         0
+                                    }
+                                    NamespaceProjectCheckErr(message) => {
+                                        let _ = str_write_to(message, 2)
+                                        let _ = write_fd(2, "\n", 1)
+                                        3
+                                    }
+                                }
+                            Err(_, _) => {
+                                let _ = write_fd(2, "parse failed: use_both.chiba\n", 29)
+                                2
+                            }
+                        }
+                    Err(_, _) => {
+                        let _ = write_fd(2, "parse failed: part_b.chiba\n", 27)
+                        2
+                    }
+                }
+            Err(_, _) => {
+                let _ = write_fd(2, "parse failed: part_a.chiba\n", 27)
+                2
+            }
+        }
+    }
+}
+
+def level1c_run_wat_project(root: Str): i64 = {
+    let src_dir = level1c_project_src_dir(root)
+    if level1c_project_has_entry(src_dir, "part_a.chiba") == 0 {
+        let _ = write_fd(2, "project missing src/part_a.chiba\n", 33)
+        3
+    } else if level1c_project_has_entry(src_dir, "part_b.chiba") == 0 {
+        let _ = write_fd(2, "project missing src/part_b.chiba\n", 33)
+        3
+    } else if level1c_project_has_entry(src_dir, "use_both.chiba") == 0 {
+        let _ = write_fd(2, "project missing src/use_both.chiba\n", 35)
+        3
+    } else {
+        let part_a_path = level1c_path_join_src(root, "part_a.chiba")
+        let part_b_path = level1c_path_join_src(root, "part_b.chiba")
+        let consumer_path = level1c_path_join_src(root, "use_both.chiba")
+        match level1c_project_parse_required(part_a_path) {
+            OK(part_a, _) =>
+                match level1c_project_parse_required(part_b_path) {
+                    OK(part_b, _) =>
+                        match level1c_project_parse_required(consumer_path) {
+                            OK(consumer, _) =>
+                                match namespace_project_check(part_a as AST, part_b as AST, consumer as AST) {
+                                    NamespaceProjectCheckOk => {
+                                        let merged = level1c_project_merged_ast(part_a as AST, part_b as AST, consumer as AST)
+                                        let core = cir_nanopass_l8(merged)
+                                        if wat_module_validated(core) == 0 {
+                                            let _ = write_fd(2, "validated Core required for wat emit\n", 37)
+                                            2
+                                        } else {
+                                            let rendered = wat_emit_module(core)
+                                            let _ = str_write_to(rendered, 1)
+                                            0
+                                        }
                                     }
                                     NamespaceProjectCheckErr(message) => {
                                         let _ = str_write_to(message, 2)
@@ -503,6 +578,7 @@ def level1c_dispatch_cir(cmd: Str, path: Str): i64 =
 def level1c_dispatch_check(cmd: Str, path: Str): i64 =
     if streq(cmd, mk_str("check", 5)) != 0 { level1c_run_check(path) }
     else if streq(cmd, mk_str("check-project", 13)) != 0 { level1c_run_check_project(path) }
+    else if streq(cmd, mk_str("wat-project", 11)) != 0 { level1c_run_wat_project(path) }
     else { level1c_dispatch_cir(cmd, path) }
 
 def level1c_dispatch_parse(cmd: Str, path: Str): i64 =

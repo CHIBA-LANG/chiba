@@ -78,4 +78,48 @@ run("level-1b namespace seed compile", "timeout", [
   "namespace-smoke.o",
 ]);
 
-console.log("[PASS] level-1b namespace wat deferred until Pre-C08 project driver");
+const nativeRun = run("level-1b namespace native run", "timeout", [
+  "10",
+  path.join(PROJECT, "target/debug/namespace-smoke.o"),
+]);
+if (!nativeRun.stdout.includes("42")) {
+  console.error("[FAIL] level-1b namespace native output");
+  console.error(nativeRun.stdout || nativeRun.stderr);
+  process.exit(1);
+}
+
+const missingProject = path.join(".scratch", "level-1b", "namespace-missing");
+const missingSrc = path.join(missingProject, "src");
+fs.rmSync(missingProject, { recursive: true, force: true });
+fs.mkdirSync(missingSrc, { recursive: true });
+fs.copyFileSync(path.join(PROJECT, "src", "use_both.chiba"), path.join(missingSrc, "use_both.chiba"));
+const missing = spawnSync("timeout", ["10", "./target/debug/level1c.o", "check-project", missingProject], {
+  encoding: "utf8",
+  maxBuffer: 64 * 1024 * 1024,
+});
+if (!missing.stderr.startsWith("project missing src/part_a.chiba")) {
+  console.error("[FAIL] level-1b namespace deterministic diagnostic");
+  console.error(`${missing.stdout || ""}${missing.stderr || ""}`);
+  process.exit(1);
+}
+console.log("[PASS] level-1b namespace deterministic diagnostic order");
+
+const projectWat = run("level-1b namespace project wat emit", "timeout", [
+  "10",
+  "./target/debug/level1c.o",
+  "wat-project",
+  PROJECT,
+]);
+fs.writeFileSync(WAT, projectWat.stdout);
+const watRun = run("level-1b namespace project wat run", "timeout", [
+  "10",
+  process.execPath,
+  "--no-warnings",
+  "tools/node/run-wat.mjs",
+  WAT,
+]);
+if (!watRun.stdout.includes("42")) {
+  console.error("[FAIL] level-1b namespace project wat output");
+  console.error(watRun.stdout || watRun.stderr);
+  process.exit(1);
+}
