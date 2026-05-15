@@ -206,7 +206,7 @@
 - [ ] **Pre-C09: level-1b regex + chibalex bootstrap slice**
 	- **TODO**: 在 level-1b 写最小 regex IR、scanner runtime、chibalex parser/codegen，先覆盖 chibalex 自身需要的 token 子集。
 	- **DESC**: C00 的第一刀必须有可运行闭环，而不是一次性重写完整 chibalex。
-	- **PROGRESS**: 已固定 `level-1b/supports/chibalex-mini` 三个 lexer spec fixtures；`vp run level1b:chibalex-mini` 会调用 native chibalex、检查生成结构，并用 fixture-local regex/Vec stub 编译运行 generated lexer token golden。level-1b 自身 regex/parser/codegen 尚未实现，当前 runner stub 只覆盖 mini fixtures。
+	- **PROGRESS**: 已固定 `level-1b/supports/chibalex-mini` 三个 lexer spec fixtures；`vp run level1b:chibalex-mini` 现在只把 native chibalex 当 oracle 检查 token surface，实际执行路径由 runner 内的 level-1b mini chibalex slice 解析 fixture 子集并生成 lexer source，再用 fixture-local Vec/regex stub 编译运行 token golden。覆盖 basic、longest-match、string mode；lexer backtracking continuation fixture 继续通过 `level1c cps` 验证。下一步是把 mini chibalex parser/codegen 从 runner JS 迁入 level-1b wasm/node 执行器。
 	- **验收**: wasm chibalex-mini 能读 3-5 个 lexer spec，生成 lexer 或 token stream；与 native chibalex/lexer runner golden 对拍；至少一个 longest-match/backtracking/recovery 用例使用 multi-resume continuation。
 	- **并行**: 不并行。
 
