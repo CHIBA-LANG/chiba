@@ -5,6 +5,7 @@ import process from "node:process";
 import { compileWat } from "./wat-compile.mjs";
 
 const REGEX_ROOT = "level-1b/std/regex";
+const MIGRATION = "level-1b/std/FRONTEND_MIGRATION.md";
 const GOLDEN = "level-1b/supports/regex/regex-golden.json";
 const WAT = "level-1b/tests/wasmtime/regex-c04-smoke.wat";
 const WASM = ".scratch/level-1b/regex-c04-smoke.wasm";
@@ -18,6 +19,12 @@ const REQUIRED_TEXT = [
   "type RegexMatch",
   "def RegexProgram.longest_at",
   "def str.next_char_offset",
+];
+const FORBIDDEN_UTF8_BUILTINS = [
+  "std.str_is_char_boundary",
+  "std.str_next_char_offset",
+  "std.str_prev_char_offset",
+  "std.regex_cursor_advance",
 ];
 
 function fail(message) {
@@ -77,6 +84,11 @@ function checkSource(file, source) {
   }
   if (/\bOP_[A-Z0-9_]+\b/.test(code)) errors.push(`${rel}: regex uses numeric opcode constants`);
   if (/\b(ptr|pointer|addr|raw)\w*\s*:\s*i64\b/i.test(code)) errors.push(`${rel}: regex uses opaque i64 pointer field`);
+  for (const builtin of FORBIDDEN_UTF8_BUILTINS) {
+    if (code.includes(`__compiler_builtin("${builtin}")`)) {
+      errors.push(`${rel}: UTF-8 boundary helper must be level-1b source, not ${builtin}`);
+    }
+  }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
       errors.push(`${rel}:${i + 1}: public item is missing /// doc comment`);
@@ -113,6 +125,14 @@ function runWasmtimeSmoke() {
 
 function main() {
   const files = listChiba(REGEX_ROOT);
+  const migration = read(MIGRATION);
+  for (const needle of [
+    "| UTF-8 byte boundary helpers | `std/regex/utf8.chiba` | rewritten |",
+    "| Regex cursor advance | `std/regex/parser.chiba` | rewritten |",
+    "| Unicode XID property tables | `std/regex/utf8.chiba` plus generated data | contract only |",
+  ]) {
+    if (!migration.includes(needle)) fail(`frontend migration map missing: ${needle}`);
+  }
   const seen = new Set(files.map((file) => path.basename(file)));
   const missing = REQUIRED_FILES.filter((file) => !seen.has(file));
   if (missing.length !== 0) fail(`missing regex source files:\n${missing.join("\n")}`);

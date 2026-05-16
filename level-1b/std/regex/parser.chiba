@@ -6,6 +6,7 @@
 namespace std.regex.parser
 
 use std.regex.ast.*
+use std.regex.utf8.*
 
 /// Parser cursor over a pattern string.
 type RegexCursor {
@@ -40,7 +41,8 @@ def RegexCursor.peek(self): Option[Char] =
     if self.at_end() { None } else { Some(self.pattern.char_at(self.offset)) }
 
 /// Advance by one UTF-8/WTF-8 codepoint.
-def RegexCursor.advance(self): RegexCursor = __compiler_builtin("std.regex_cursor_advance")
+def RegexCursor.advance(self): RegexCursor =
+    RegexCursor { pattern: self.pattern, offset: self.pattern.next_char_offset(self.offset) }
 
 /// Parse a complete regex pattern.
 def parse_regex(pattern: str): RegexParseResult = __compiler_builtin("std.regex_parse")
