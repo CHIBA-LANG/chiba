@@ -1,5 +1,5 @@
 /// UTF-8/WTF-8 helpers used by the regex parser and matcher.
-namespace level1b.compiler.regex.utf8
+namespace level1b.std.regex.utf8
 
 /// Return true when `offset` is at a codepoint boundary.
 def str.is_char_boundary(self, offset: usize): bool = __compiler_builtin("std.str_is_char_boundary")

@@ -1,7 +1,7 @@
 /// Chibacc code generation contract.
-namespace level1b.compiler.chibacc.codegen
+namespace level1b.std.chibacc.codegen
 
-use level1b.compiler.chibacc.ir.*
+use level1b.std.chibacc.ir.*
 
 /// Generated parser source.
 type GeneratedParser {

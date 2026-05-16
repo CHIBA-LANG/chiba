@@ -1,7 +1,7 @@
 /// Parser contract for `.chibacc` grammar files.
-namespace level1b.compiler.chibacc.parser
+namespace level1b.std.chibacc.parser
 
-use level1b.compiler.chibacc.ast.*
+use level1b.std.chibacc.ast.*
 
 /// Diagnostic produced while parsing `.chibacc`.
 type ChibaccParseError {

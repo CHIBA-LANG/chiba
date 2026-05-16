@@ -2,10 +2,10 @@
 ///
 /// The IR stores typed regex programs and stable rule order. Longest-match
 /// tie-breaking always prefers the earliest rule in source order.
-namespace level1b.compiler.chibalex.ir
+namespace level1b.std.chibalex.ir
 
-use level1b.compiler.chibalex.ast.*
-use level1b.compiler.regex.program.*
+use level1b.std.chibalex.ast.*
+use level1b.std.regex.program.*
 
 /// Stable rule identifier.
 type LexRuleId {

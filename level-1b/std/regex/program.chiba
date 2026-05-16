@@ -2,9 +2,9 @@
 ///
 /// The program is still a typed ADT. Numeric backend opcodes are introduced
 /// only after validation when emitting target-specific code.
-namespace level1b.compiler.regex.program
+namespace level1b.std.regex.program
 
-use level1b.compiler.regex.ast.*
+use level1b.std.regex.ast.*
 
 /// Program label used by branch instructions.
 type RegexLabel {

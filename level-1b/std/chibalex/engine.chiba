@@ -2,10 +2,10 @@
 ///
 /// This module expresses speculative rule choice with `reset` / `shift` so the
 /// same surface can lower to one-pass CPS and later direct code.
-namespace level1b.compiler.chibalex.engine
+namespace level1b.std.chibalex.engine
 
-use level1b.compiler.chibalex.ir.*
-use level1b.compiler.regex.matcher.*
+use level1b.std.chibalex.ir.*
+use level1b.std.regex.matcher.*
 
 /// Candidate match for one rule.
 type LexCandidate {

@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 
-const ROOT = "level-1b/compiler/chibalex";
+const ROOT = "level-1b/std/chibalex";
 const CONT = "level-1b/supports/chibalex-continuation/backtracking.chiba";
 const MINI_ROOT = "level-1b/supports/chibalex-mini";
 const REQUIRED_FILES = ["ast.chiba", "codegen.chiba", "engine.chiba", "ir.chiba", "parser.chiba"];
@@ -106,6 +106,12 @@ function run(command, args) {
 }
 
 function main() {
+  for (const file of listChiba(ROOT)) {
+    if (/\bcli\b/i.test(file) || /\bmain\.chiba$/i.test(file)) {
+      fail(`std.chibalex must not contain CLI entry source: ${file}`);
+    }
+  }
+
   const files = listChiba(ROOT);
   const seen = new Set(files.map((file) => path.basename(file)));
   const missing = REQUIRED_FILES.filter((file) => !seen.has(file));

@@ -3,7 +3,7 @@
 /// This tree is value-oriented: no opcodes are encoded as `i64`, and no parser
 /// state stores raw pointers. UTF-8/WTF-8 indexing follows `str` byte offsets
 /// plus explicit `.char_at`.
-namespace level1b.compiler.regex.ast
+namespace level1b.std.regex.ast
 
 /// Regex character represented by Unicode codepoint.
 type RegexChar {

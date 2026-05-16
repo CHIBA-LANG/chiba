@@ -1,10 +1,10 @@
 /// Chibalex source AST for level-1b.
 ///
 /// This is the `.chibalex` front surface. Regex bodies are parsed by
-/// [compiler.regex.parser], and modes are explicit nominal values.
-namespace level1b.compiler.chibalex.ast
+/// [std.regex.parser], and modes are explicit nominal values.
+namespace level1b.std.chibalex.ast
 
-use level1b.compiler.regex.ast.*
+use level1b.std.regex.ast.*
 
 /// Lexer mode name.
 type LexMode {

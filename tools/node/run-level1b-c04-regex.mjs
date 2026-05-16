@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 import { compileWat } from "./wat-compile.mjs";
 
-const REGEX_ROOT = "level-1b/compiler/regex";
+const REGEX_ROOT = "level-1b/std/regex";
 const GOLDEN = "level-1b/supports/regex/regex-golden.json";
 const WAT = "level-1b/tests/wasmtime/regex-c04-smoke.wat";
 const WASM = ".scratch/level-1b/regex-c04-smoke.wasm";

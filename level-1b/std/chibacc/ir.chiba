@@ -1,7 +1,7 @@
 /// Lowered chibacc grammar IR.
-namespace level1b.compiler.chibacc.ir
+namespace level1b.std.chibacc.ir
 
-use level1b.compiler.chibacc.ast.*
+use level1b.std.chibacc.ast.*
 
 /// Stable parser state identifier.
 type ParserStateId {

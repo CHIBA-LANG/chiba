@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 
-const ROOT = "level-1b/compiler/chibacc";
+const ROOT = "level-1b/std/chibacc";
 const CONT = "level-1b/supports/chibacc-continuation/alternative_recovery.chiba";
 const MINI_ROOT = "level-1b/supports/chibacc-mini";
 const REQUIRED_FILES = ["ast.chiba", "codegen.chiba", "engine.chiba", "ir.chiba", "parser.chiba"];
@@ -102,6 +102,12 @@ function run(command, args) {
 }
 
 function main() {
+  for (const file of listChiba(ROOT)) {
+    if (/\bcli\b/i.test(file) || /\bmain\.chiba$/i.test(file)) {
+      fail(`std.chibacc must not contain CLI entry source: ${file}`);
+    }
+  }
+
   const files = listChiba(ROOT);
   const seen = new Set(files.map((file) => path.basename(file)));
   const missing = REQUIRED_FILES.filter((file) => !seen.has(file));

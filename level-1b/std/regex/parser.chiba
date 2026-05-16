@@ -3,9 +3,9 @@
 /// The parser consumes managed `str` values and returns a typed AST or a stable
 /// diagnostic. Backtracking is represented with ordinary values and can later
 /// be optimized by usage/CPS passes.
-namespace level1b.compiler.regex.parser
+namespace level1b.std.regex.parser
 
-use level1b.compiler.regex.ast.*
+use level1b.std.regex.ast.*
 
 /// Parser cursor over a pattern string.
 type RegexCursor {

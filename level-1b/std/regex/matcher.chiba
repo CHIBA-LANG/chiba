@@ -2,9 +2,9 @@
 ///
 /// Matching works over managed `str` values. Longest-match behavior is explicit
 /// because chibalex depends on deterministic tie-breaking.
-namespace level1b.compiler.regex.matcher
+namespace level1b.std.regex.matcher
 
-use level1b.compiler.regex.program.*
+use level1b.std.regex.program.*
 
 /// Captured byte range.
 type RegexCaptureRange {
@@ -28,5 +28,5 @@ def RegexProgram.find(self, input: str): Option[RegexMatch] = __compiler_builtin
 /// Find the longest match beginning at `start`.
 def RegexProgram.longest_at(self, input: str, start: usize): Option[RegexMatch] = __compiler_builtin("std.regex_longest_at")
 
-/// Pipe-friendly form of [compiler.regex.matcher.RegexProgram.find].
+/// Pipe-friendly form of [std.regex.matcher.RegexProgram.find].
 def regex_find(program: RegexProgram, input: str): Option[RegexMatch] = program.find(input)

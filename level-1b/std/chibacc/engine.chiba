@@ -2,9 +2,9 @@
 ///
 /// Alternatives use `reset` / `shift` so parser retry and diagnostic recovery
 /// stay explicit in source before CPS/directification.
-namespace level1b.compiler.chibacc.engine
+namespace level1b.std.chibacc.engine
 
-use level1b.compiler.chibacc.ir.*
+use level1b.std.chibacc.ir.*
 
 /// Token stream position.
 type ParsePosition {

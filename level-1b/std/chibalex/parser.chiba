@@ -1,7 +1,7 @@
 /// Parser contract for `.chibalex` files.
-namespace level1b.compiler.chibalex.parser
+namespace level1b.std.chibalex.parser
 
-use level1b.compiler.chibalex.ast.*
+use level1b.std.chibalex.ast.*
 
 /// Diagnostic produced while parsing a `.chibalex` file.
 type ChibalexParseError {

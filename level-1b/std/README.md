@@ -14,3 +14,13 @@ Managed storage follows the level-1b Wasm-GC contract:
 
 String indexing and slicing are byte/slice operations. Character inspection is
 explicit through `.char_at(index)`.
+
+Compiler-adjacent reusable libraries also live in `std`:
+
+- `std.regex`: regex AST/parser/program/matcher for UTF-8/WTF-8 byte strings.
+- `std.chibalex`: `.chibalex` parser, lexer IR, engine, and codegen library.
+- `std.chibacc`: `.chibacc` meta-parser, grammar IR, Pratt/recovery engine, and
+  codegen library.
+
+Their command-line tools are not part of `std`; CLI entry points belong under
+`compiler` / tools and depend on these std libraries.
