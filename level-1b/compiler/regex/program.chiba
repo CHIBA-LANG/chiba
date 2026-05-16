@@ -1,0 +1,40 @@
+/// Regex program IR for level-1b.
+///
+/// The program is still a typed ADT. Numeric backend opcodes are introduced
+/// only after validation when emitting target-specific code.
+namespace level1b.compiler.regex.program
+
+use level1b.compiler.regex.ast.*
+
+/// Program label used by branch instructions.
+type RegexLabel {
+    index: usize,
+}
+
+/// Typed regex instruction.
+data RegexInstruction {
+    RegexAccept,
+    RegexMatchLiteral(RegexChar),
+    RegexMatchAny,
+    RegexMatchClass(RegexClass),
+    RegexJump(RegexLabel),
+    RegexSplit(RegexLabel, RegexLabel, RegexQuantMode),
+    RegexEnterCapture(usize),
+    RegexExitCapture(usize),
+    RegexAssertInstruction(RegexAssertion),
+}
+
+/// Compiled regex program.
+type RegexProgram {
+    instructions: Array[RegexInstruction],
+    capture_count: usize,
+}
+
+/// Compile a regex AST into the typed program IR.
+def compile_regex(ast: RegexAst): RegexProgram = extern "std" "regex_compile"
+
+/// Return the number of instructions.
+def RegexProgram.len(self): usize = self.instructions.len()
+
+/// Return true when a program has no captures.
+def RegexProgram.has_no_capture(self): bool = self.capture_count == 0

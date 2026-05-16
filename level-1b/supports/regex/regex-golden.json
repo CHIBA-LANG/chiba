@@ -1,0 +1,11 @@
+[
+  { "name": "literal", "pattern": "abc", "input": "zabcq", "expected": "abc" },
+  { "name": "class", "pattern": "[a-c]+", "input": "zzabca", "expected": "abca" },
+  { "name": "repeat", "pattern": "ab{2,3}", "input": "abbb", "expected": "abbb" },
+  { "name": "capture", "pattern": "(ab)+", "input": "zzabab", "expected": "abab" },
+  { "name": "lookahead", "pattern": "foo(?=bar)", "input": "xxfoobar", "expected": "foo" },
+  { "name": "lookbehind", "pattern": "(?<=foo)bar", "input": "xxfoobar", "expected": "bar" },
+  { "name": "lookaround-negative", "pattern": "foo(?!bar)", "input": "xxfoobaz", "expected": "foo" },
+  { "name": "utf8-boundary", "pattern": "é+", "input": "aééz", "expected": "éé" },
+  { "name": "longest", "pattern": "==|=", "input": "==", "expected": "==" }
+]

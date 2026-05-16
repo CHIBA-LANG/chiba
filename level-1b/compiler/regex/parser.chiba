@@ -1,0 +1,58 @@
+/// Regex parser contract for level-1b.
+///
+/// The parser consumes managed `str` values and returns a typed AST or a stable
+/// diagnostic. Backtracking is represented with ordinary values and can later
+/// be optimized by usage/CPS passes.
+namespace level1b.compiler.regex.parser
+
+use level1b.compiler.regex.ast.*
+
+/// Parser cursor over a pattern string.
+type RegexCursor {
+    pattern: str,
+    offset: usize,
+}
+
+/// Regex parse diagnostic.
+type RegexParseError {
+    offset: usize,
+    message: String,
+}
+
+/// Successful parse with the final cursor.
+type RegexParseOk {
+    ast: RegexAst,
+    cursor: RegexCursor,
+}
+
+/// Parse result.
+type RegexParseResult = Result[RegexParseOk, RegexParseError]
+
+/// Create a cursor at the beginning of a pattern.
+def RegexCursor.new(pattern: str): RegexCursor =
+    RegexCursor { pattern: pattern, offset: 0 }
+
+/// Return true when the cursor reached the end of the pattern.
+def RegexCursor.at_end(self): bool = self.offset >= self.pattern.len()
+
+/// Peek the next codepoint without advancing.
+def RegexCursor.peek(self): Option[Char] =
+    if self.at_end() { None } else { Some(self.pattern.char_at(self.offset)) }
+
+/// Advance by one UTF-8/WTF-8 codepoint.
+def RegexCursor.advance(self): RegexCursor = extern "std" "regex_cursor_advance"
+
+/// Parse a complete regex pattern.
+def parse_regex(pattern: str): RegexParseResult = extern "std" "regex_parse"
+
+/// Parse one alternation expression.
+def parse_alternative(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] =
+    extern "std" "regex_parse_alternative"
+
+/// Parse one quantified atom.
+def parse_quantified(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] =
+    extern "std" "regex_parse_quantified"
+
+/// Parse a character class.
+def parse_class(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] =
+    extern "std" "regex_parse_class"

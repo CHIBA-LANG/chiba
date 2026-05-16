@@ -1,0 +1,34 @@
+/// Regex matcher contract for level-1b.
+///
+/// Matching works over managed `str` values. Longest-match behavior is explicit
+/// because chibalex depends on deterministic tie-breaking.
+namespace level1b.compiler.regex.matcher
+
+use level1b.compiler.regex.program.*
+
+/// Captured byte range.
+type RegexCaptureRange {
+    start: usize,
+    end: usize,
+}
+
+/// Successful match result.
+type RegexMatch {
+    start: usize,
+    end: usize,
+    captures: Array[RegexCaptureRange],
+}
+
+/// Match a regex at exactly `start`.
+def RegexProgram.match_at(self, input: str, start: usize): Option[RegexMatch] =
+    extern "std" "regex_match_at"
+
+/// Find the first match in `input`.
+def RegexProgram.find(self, input: str): Option[RegexMatch] = extern "std" "regex_find"
+
+/// Find the longest match beginning at `start`.
+def RegexProgram.longest_at(self, input: str, start: usize): Option[RegexMatch] =
+    extern "std" "regex_longest_at"
+
+/// Pipe-friendly form of [compiler.regex.matcher.RegexProgram.find].
+def regex_find(program: RegexProgram, input: str): Option[RegexMatch] = program.find(input)
