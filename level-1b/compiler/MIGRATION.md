@@ -17,7 +17,7 @@ below must have a level-1b owner before Second Bootstrap validation.
 | `typed_semantic_check.chiba` | `compiler/semantic/driver.chiba`, `compiler/semantic/typed_elaboration.chiba` | contract only |
 | `type_kind.chiba` | `compiler/semantic/type_kind.chiba` | rewritten |
 | `type_l2_check.chiba` | `compiler/semantic/type_infer.chiba` | contract only |
-| `type_unify.chiba` | `compiler/semantic/type_unify.chiba` | contract only |
+| `type_unify.chiba` | `compiler/semantic/type_unify.chiba` | rewritten |
 | `type_row.chiba` | `compiler/semantic/type_row.chiba` | contract only |
 | `type_record.chiba` | `compiler/semantic/type_record.chiba`, `compiler/semantic/type_row.chiba` | contract only |
 | `type_nominal.chiba` | `compiler/semantic/type_nominal.chiba` | contract only |

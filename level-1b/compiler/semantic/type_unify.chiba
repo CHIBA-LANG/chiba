@@ -15,10 +15,167 @@ type UnifyResult {
     substitutions: Array[TypeSubstitution],
 }
 
+/// Build a stable semantic diagnostic for type unification failures.
+def unify_diagnostic(message: String): SemanticDiagnostic =
+    SemanticDiagnostic { file: "<type-unify>", line: 0, column: 0, message: message }
+
+/// Return an empty substitution array.
+def empty_substitutions(): Array[TypeSubstitution] =
+    Vec[TypeSubstitution].new().freeze()
+
+/// Append a substitution while preserving the old substitution order.
+def append_substitution(substitutions: Array[TypeSubstitution], item: TypeSubstitution): Array[TypeSubstitution] =
+    append_substitution_loop(substitutions, Vec[TypeSubstitution].new(), 0).push(item).freeze()
+
+/// Copy substitutions into a builder.
+def append_substitution_loop(substitutions: Array[TypeSubstitution], out: Vec[TypeSubstitution], index: usize): Vec[TypeSubstitution] =
+    if index == substitutions.len() { out }
+    else { append_substitution_loop(substitutions, out.push(substitutions.get(index)), index + 1) }
+
+/// Look up a type variable in a substitution array.
+def lookup_substitution(substitutions: Array[TypeSubstitution], var: TypeVar, index: usize): Option[SemType] =
+    if index == substitutions.len() { None }
+    else {
+        let item = substitutions.get(index)
+        if item.var.eq(var) { Some(item.ty) }
+        else { lookup_substitution(substitutions, var, index + 1) }
+    }
+
+/// Apply substitutions to an array of types.
+def apply_type_array(items: Array[SemType], substitutions: Array[TypeSubstitution], index: usize, out: Vec[SemType]): Array[SemType] =
+    if index == items.len() { out.freeze() }
+    else { apply_type_array(items, substitutions, index + 1, out.push(items.get(index).apply(substitutions))) }
+
+/// Apply substitutions recursively to a type.
+def SemType.apply(self, substitutions: Array[TypeSubstitution]): SemType =
+    match self {
+        TyVar(var) =>
+            match lookup_substitution(substitutions, var, 0) {
+                Some(ty) => ty
+                None => self
+            }
+        TyFunction(params, ret) => TyFunction(apply_type_array(params, substitutions, 0, Vec[SemType].new()), ret.apply(substitutions))
+        TyRow(fields, tail) => TyRow(fields, tail)
+        TyArray(inner) => TyArray(inner.apply(substitutions))
+        TySlice(inner) => TySlice(inner.apply(substitutions))
+        TyRef(inner) => TyRef(inner.apply(substitutions))
+        TyUnsafeRef(inner) => TyUnsafeRef(inner.apply(substitutions))
+        TyPtr(inner) => TyPtr(inner.apply(substitutions))
+        TyAtomic(inner) => TyAtomic(inner.apply(substitutions))
+        TyNominal(_) => self
+    }
+
+/// Check whether a type variable occurs in any type from an array.
+def TypeVar.occurs_in_array(self, items: Array[SemType], index: usize): bool =
+    if index == items.len() { false }
+    else if self.occurs_in(items.get(index)) { true }
+    else { self.occurs_in_array(items, index + 1) }
+
 /// Unify two semantic types.
 def unify(left: SemType, right: SemType): Result[UnifyResult, SemanticDiagnostic] =
-    __compiler_builtin("std.semantic_unify")
+    match unify_with_substitutions(left, right, empty_substitutions()) {
+        Ok(substitutions) => Ok(UnifyResult { ty: left.apply(substitutions), substitutions: substitutions })
+        Err(error) => Err(error)
+    }
 
 /// Check whether a type variable occurs inside a type.
 def TypeVar.occurs_in(self, ty: SemType): bool =
-    __compiler_builtin("std.semantic_type_var_occurs_in")
+    match ty {
+        TyVar(other) => self.eq(other)
+        TyFunction(params, ret) =>
+            if self.occurs_in_array(params, 0) { true } else { self.occurs_in(ret) }
+        TyRow(_, tail) =>
+            match tail {
+                Some(other) => self.eq(other)
+                None => false
+            }
+        TyArray(inner) => self.occurs_in(inner)
+        TySlice(inner) => self.occurs_in(inner)
+        TyRef(inner) => self.occurs_in(inner)
+        TyUnsafeRef(inner) => self.occurs_in(inner)
+        TyPtr(inner) => self.occurs_in(inner)
+        TyAtomic(inner) => self.occurs_in(inner)
+        TyNominal(_) => false
+    }
+
+/// Bind a type variable after applying current substitutions and running occurs check.
+def bind_type_var(var: TypeVar, ty: SemType, substitutions: Array[TypeSubstitution]): Result[Array[TypeSubstitution], SemanticDiagnostic] = {
+    let applied = ty.apply(substitutions)
+    match applied {
+        TyVar(other) =>
+            if var.eq(other) { Ok(substitutions) }
+            else { Ok(append_substitution(substitutions, TypeSubstitution { var: var, ty: applied })) }
+        _ =>
+            if var.occurs_in(applied) { Err(unify_diagnostic("occurs check failed")) }
+            else { Ok(append_substitution(substitutions, TypeSubstitution { var: var, ty: applied })) }
+    }
+}
+
+/// Unify two type arrays in order.
+def unify_type_arrays(left: Array[SemType], right: Array[SemType], substitutions: Array[TypeSubstitution], index: usize): Result[Array[TypeSubstitution], SemanticDiagnostic] =
+    if left.len() != right.len() { Err(unify_diagnostic("type list arity mismatch")) }
+    else if index == left.len() { Ok(substitutions) }
+    else {
+        match unify_with_substitutions(left.get(index), right.get(index), substitutions) {
+            Ok(next) => unify_type_arrays(left, right, next, index + 1)
+            Err(error) => Err(error)
+        }
+    }
+
+/// Return true when row field arrays contain the same canonical field ids.
+def row_fields_same(left: Array[RowFieldId], right: Array[RowFieldId], index: usize): bool =
+    if left.len() != right.len() { false }
+    else if index == left.len() { true }
+    else if left.get(index).eq(right.get(index)) { row_fields_same(left, right, index + 1) }
+    else { false }
+
+/// Return true when optional row tails are the same type variable shape.
+def row_tail_same(left: Option[TypeVar], right: Option[TypeVar]): bool =
+    match left {
+        None => match right { None => true  Some(_) => false }
+        Some(var) => match right { Some(other) => var.eq(other)  None => false }
+    }
+
+/// Unify two types under an existing substitution set.
+def unify_with_substitutions(left: SemType, right: SemType, substitutions: Array[TypeSubstitution]): Result[Array[TypeSubstitution], SemanticDiagnostic] = {
+    let l = left.apply(substitutions)
+    let r = right.apply(substitutions)
+    match l {
+        TyVar(var) => bind_type_var(var, r, substitutions)
+        TyNominal(id) =>
+            match r {
+                TyNominal(other) =>
+                    if id.eq(other) { Ok(substitutions) }
+                    else { Err(unify_diagnostic("nominal mismatch")) }
+                _ => Err(unify_diagnostic("type mismatch"))
+            }
+        TyFunction(params, ret) =>
+            match r {
+                TyFunction(rparams, rret) =>
+                    match unify_type_arrays(params, rparams, substitutions, 0) {
+                        Ok(next) => unify_with_substitutions(ret, rret, next)
+                        Err(error) => Err(error)
+                    }
+                _ => Err(unify_diagnostic("type mismatch"))
+            }
+        TyRow(fields, tail) =>
+            match r {
+                TyRow(rfields, rtail) =>
+                    if row_fields_same(fields, rfields, 0) && row_tail_same(tail, rtail) { Ok(substitutions) }
+                    else { Err(unify_diagnostic("row mismatch")) }
+                _ => Err(unify_diagnostic("type mismatch"))
+            }
+        TyArray(inner) =>
+            match r { TyArray(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+        TySlice(inner) =>
+            match r { TySlice(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+        TyRef(inner) =>
+            match r { TyRef(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+        TyUnsafeRef(inner) =>
+            match r { TyUnsafeRef(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+        TyPtr(inner) =>
+            match r { TyPtr(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+        TyAtomic(inner) =>
+            match r { TyAtomic(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+    }
+}
