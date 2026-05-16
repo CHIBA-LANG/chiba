@@ -7,13 +7,27 @@ use compiler.backend.core.*
 use compiler.backend.validate_core.*
 use compiler.backend.wat_emit.*
 
+/// Convert a Core validation error into a stable semantic diagnostic.
+def core_validation_diagnostic(error: CoreValidationError): SemanticDiagnostic =
+    match error {
+        CoreDanglingLayout(message) => SemanticDiagnostic("<backend>", 0, 0, message)
+        CoreDanglingSymbol(message) => SemanticDiagnostic("<backend>", 0, 0, message)
+        CoreIllegalTailCall(message) => SemanticDiagnostic("<backend>", 0, 0, message)
+        CoreIllegalContinuationPackage(message) => SemanticDiagnostic("<backend>", 0, 0, message)
+    }
+
+/// Convert Core validation errors to the ordinary semantic diagnostic channel.
+def core_validation_diagnostics(errors: Array[CoreValidationError], index: usize, out: Vec[SemanticDiagnostic]): SemanticDiagnostics =
+    if index == errors.len() { SemanticDiagnostics(out.freeze()) }
+    else { core_validation_diagnostics(errors, index + 1, out.push(core_validation_diagnostic(errors.get(index)))) }
+
 /// Run closure lowering, Wasm-GC Core lowering, Core validation, and WAT emit.
 def run_wasm_gc_wat(module: TypedModule): Result[WatModule, SemanticDiagnostics] =
     match run_closure_package(module) {
         Ok(closure) =>
             match validate_wasm_gc_core(lower_wasm_gc_core(closure)) {
                 Ok(validated) => Ok(emit_wat(validated))
-                Err(_) => Err(__compiler_builtin("std.backend_core_validation_diagnostics"))
+                Err(errors) => Err(core_validation_diagnostics(errors, 0, Vec[SemanticDiagnostic].new()))
             }
         Err(errors) => Err(errors)
     }
