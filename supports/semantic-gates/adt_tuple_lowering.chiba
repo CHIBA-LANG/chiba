@@ -1,0 +1,21 @@
+namespace semantic.gates.adt_tuple_lowering
+
+data HttpResult[T] {
+    HttpOk(T)
+    HttpError(u8, String)
+}
+
+def HttpResult[T].adt_to_tuple(self): Tuple[Symbol, u8, String] = adt_to_tuple[Tuple[Symbol, u8, String]](self)
+
+def Tuple[Symbol, String].tuple_to_http_ok(self): HttpResult[String] = tuple_to_adt[HttpResult[String]](self)
+
+def Tuple[Symbol, u8, String].tuple_to_http_error(self): HttpResult[String] = tuple_to_adt[HttpResult[String]](self)
+
+def lower_error(): Tuple[Symbol, u8, String] =
+    HttpError(400, "missing").adt_to_tuple()
+
+def raise_error(): HttpResult[String] =
+    (:http_error, 400, "missing").tuple_to_http_error()
+
+def raise_ok(): HttpResult[String] =
+    (:http_ok, "done").tuple_to_http_ok()

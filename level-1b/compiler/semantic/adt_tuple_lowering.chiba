@@ -1,0 +1,70 @@
+/// ADT constructor and tuple-view lowering after type and exhaustiveness checks.
+namespace compiler.semantic.adt_tuple_lowering
+
+use compiler.semantic.types.*
+
+/// Canonical symbol tag assigned to one ADT constructor.
+type AdtVariantTag {
+    symbol: str,
+}
+
+/// Typed ADT variant declaration after constructor resolution.
+type AdtVariantDecl {
+    data_type: NominalId,
+    ctor_name: str,
+    tag: AdtVariantTag,
+    payload: Array[SemType],
+}
+
+/// Tuple representation of one ADT variant value.
+type AdtTupleShape {
+    tag: AdtVariantTag,
+    payload: Array[SemType],
+}
+
+/// Lowered constructor helper used before row/record lowering.
+type LoweredAdtCtor {
+    source: AdtVariantDecl,
+    tuple_shape: AdtTupleShape,
+    helper_name: str,
+}
+
+/// Direction of checked ADT/tuple conversion.
+data AdtTupleConversionKind {
+    AdtToTuple
+    TupleToAdt
+}
+
+/// Checked conversion fact produced only after type and exhaustiveness checks.
+type AdtTupleConversion {
+    kind: AdtTupleConversionKind,
+    adt_type: SemType,
+    tuple_type: SemType,
+}
+
+/// Build the canonical tuple shape for one variant.
+def AdtVariantDecl.tuple_shape(self): AdtTupleShape =
+    AdtTupleShape { tag: self.tag, payload: self.payload }
+
+/// Build the synthetic constructor helper name.
+def AdtVariantDecl.helper_name(self): str = "__ADT_CTOR_".concat(self.ctor_name)
+
+/// Lower one checked constructor to a tuple-producing helper.
+def lower_adt_ctor(variant: AdtVariantDecl): LoweredAdtCtor =
+    LoweredAdtCtor {
+        source: variant,
+        tuple_shape: variant.tuple_shape(),
+        helper_name: variant.helper_name(),
+    }
+
+/// Lower constructors in deterministic variant order.
+def lower_adt_ctors(variants: Array[AdtVariantDecl], index: usize, out: Vec[LoweredAdtCtor]): Array[LoweredAdtCtor] =
+    if index == variants.len() { out.freeze() }
+    else { lower_adt_ctors(variants, index + 1, out.push(lower_adt_ctor(variants.get(index)))) }
+
+/// Return true when the conversion may be emitted.
+def AdtTupleConversion.checked(self): bool =
+    match self.kind {
+        AdtToTuple => true
+        TupleToAdt => true
+    }

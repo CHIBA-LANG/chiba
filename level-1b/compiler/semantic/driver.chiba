@@ -18,6 +18,7 @@ use compiler.semantic.template.*
 use compiler.semantic.generic_body.*
 use compiler.semantic.method_operator.*
 use compiler.semantic.abi_capability.*
+use compiler.semantic.adt_tuple_lowering.*
 
 /// Semantic diagnostic with stable ordering key.
 type SemanticDiagnostic {

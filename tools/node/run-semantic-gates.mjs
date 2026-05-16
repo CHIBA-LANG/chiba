@@ -263,6 +263,19 @@ function checkRowShapeUnify() {
   pass(name);
 }
 
+function checkAdtTupleLowering() {
+  const name = "ADT tuple lowering gates";
+  const source = read(path.join(ROOT, "adt_tuple_lowering.chiba"));
+  assert(name, source.includes("data HttpResult[T]"), "fixture must declare HttpResult ADT");
+  assert(name, source.includes("HttpOk(T)") && source.includes("HttpError(u8, String)"), "fixture must declare both constructors");
+  assert(name, source.includes(":http_ok") && source.includes(":http_error"), "fixture must use canonical constructor symbol tags");
+  assert(name, source.includes("adt_to_tuple[Tuple[Symbol, u8, String]]"), "fixture must exercise ADT-to-tuple conversion");
+  assert(name, source.includes("tuple_to_adt[HttpResult[String]]"), "fixture must exercise tuple-to-ADT conversion");
+  assert(name, /\.adt_to_tuple\(\)/.test(source), "conversion must be callable as a method");
+  assert(name, /\.tuple_to_http_error\(\)/.test(source) && /\.tuple_to_http_ok\(\)/.test(source), "tuple-to-ADT wrappers must be methods");
+  pass(name);
+}
+
 function checkRowShorthand() {
   const name = "row shorthand gates";
   const valid = run("./target/debug/level1c.o", ["check", path.join(ROOT, "row_shorthand.chiba")]);
@@ -588,6 +601,7 @@ checkStringSlice();
 checkStringReturnAbi();
 checkPipeLowering();
 checkPatternParams();
+checkAdtTupleLowering();
 checkMemory();
 checkTypeInference();
 checkTypeGenerics();

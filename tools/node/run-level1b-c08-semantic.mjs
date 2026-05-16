@@ -6,6 +6,7 @@ import process from "node:process";
 const ROOT = "level-1b/compiler/semantic";
 const REQUIRED_FILES = [
   "abi_capability.chiba",
+  "adt_tuple_lowering.chiba",
   "alpha.chiba",
   "capability_rules.chiba",
   "driver.chiba",
@@ -56,6 +57,11 @@ const REQUIRED_TEXT = [
   "data CapabilityUse",
   "def check_extern_abi",
   "def check_capabilities",
+  "type AdtVariantTag",
+  "type AdtTupleShape",
+  "data AdtTupleConversionKind",
+  "def lower_adt_ctor",
+  "def lower_adt_ctors",
   "def run_typed_semantics",
   "stable_sort",
 ];
