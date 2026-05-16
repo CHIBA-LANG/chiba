@@ -12,46 +12,46 @@ namespace level1b.metalstd.pointer
 /// Safety:
 /// The caller must not load from, store to, or pass the returned pointer to an
 /// ABI that requires a non-null address.
-def Ptr[T].null(): Ptr[T] = extern "metal" "ptr_null"
+def Ptr[T].null(): Ptr[T] = __metal_intrinsic("ptr_null")
 
 /// Return the target address value for diagnostics or ABI bookkeeping.
 ///
 /// Safety:
 /// The returned integer is not a Chiba pointer. It must not be stored as a
 /// capability substitute or round-tripped outside a Metal boundary.
-def Ptr[T].addr(self): usize = extern "metal" "ptr_addr"
+def Ptr[T].addr(self): usize = __metal_intrinsic("ptr_addr")
 
 /// Offset a pointer by a byte count.
 ///
 /// Safety:
 /// The caller must prove that the resulting address remains inside the ABI
 /// object or scratch region required by the target operation.
-def Ptr[T].byte_offset(self, offset: usize): Ptr[u8] = extern "metal" "ptr_byte_offset"
+def Ptr[T].byte_offset(self, offset: usize): Ptr[u8] = __metal_intrinsic("ptr_byte_offset")
 
 /// Load one byte from a pointer.
 ///
 /// Safety:
 /// The caller must prove that `self + offset` is readable for one byte and that
 /// the read obeys the active aliasing protocol.
-def Ptr[u8].load8(self, offset: usize): u8 = extern "metal" "ptr_load8"
+def Ptr[u8].load8(self, offset: usize): u8 = __metal_intrinsic("ptr_load8")
 
 /// Store one byte through a pointer.
 ///
 /// Safety:
 /// The caller must prove that `self + offset` is writable for one byte and that
 /// the write obeys the active aliasing protocol.
-def Ptr[u8].store8(self, offset: usize, value: u8): () = extern "metal" "ptr_store8"
+def Ptr[u8].store8(self, offset: usize, value: u8): () = __metal_intrinsic("ptr_store8")
 
 /// Read the value behind an unsafe shared handle.
 ///
 /// Safety:
 /// The caller must provide the synchronization and lifetime protocol for the
 /// shared handle. Chiba does not infer data-race safety for `UnsafeRef[T]`.
-def UnsafeRef[T].get(self): T = extern "metal" "unsaferef_get"
+def UnsafeRef[T].get(self): T = __metal_intrinsic("unsaferef_get")
 
 /// Replace the value behind an unsafe shared handle.
 ///
 /// Safety:
 /// The caller must provide exclusive access or another valid synchronization
 /// protocol for the write.
-def UnsafeRef[T].set(self, value: T): () = extern "metal" "unsaferef_set"
+def UnsafeRef[T].set(self, value: T): () = __metal_intrinsic("unsaferef_set")

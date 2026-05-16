@@ -35,9 +35,7 @@ def retry_alternative[T](candidate: ParseCandidate[T]): ParseCandidate[T] = rese
 }
 
 /// Apply a recovery action at a failed position.
-def recover(action: RecoveryAction, failure: ParseFailure): ParseFailure =
-    extern "std" "chibacc_recover"
+def recover(action: RecoveryAction, failure: ParseFailure): ParseFailure = __compiler_builtin("std.chibacc_recover")
 
 /// Parse a Pratt expression at a binding power.
-def parse_pratt_at(rule: LoweredRule, position: ParsePosition, min_bp: usize): ParseResult[T] =
-    extern "std" "chibacc_parse_pratt_at"
+def parse_pratt_at(rule: LoweredRule, position: ParsePosition, min_bp: usize): ParseResult[T] = __compiler_builtin("std.chibacc_parse_pratt_at")

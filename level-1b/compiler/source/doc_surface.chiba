@@ -14,5 +14,4 @@ type DocPath {
 }
 
 /// Attach namespace documentation from comment and attribute facts.
-def attach_namespace_doc(name: str, comment: Option[DocCommentBlock], doc_path: Option[DocPath]): NamespaceSurface =
-    extern "std" "source_attach_namespace_doc"
+def attach_namespace_doc(name: str, comment: Option[DocCommentBlock], doc_path: Option[DocPath]): NamespaceSurface = __compiler_builtin("std.source_attach_namespace_doc")

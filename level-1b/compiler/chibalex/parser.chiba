@@ -10,13 +10,10 @@ type ChibalexParseError {
 }
 
 /// Parse a `.chibalex` source file.
-def parse_chibalex(source: str): Result[ChibalexSpec, ChibalexParseError] =
-    extern "std" "chibalex_parse"
+def parse_chibalex(source: str): Result[ChibalexSpec, ChibalexParseError] = __compiler_builtin("std.chibalex_parse")
 
 /// Parse a regex definition line.
-def parse_regex_def(source: str): Result[LexRegexDef, ChibalexParseError] =
-    extern "std" "chibalex_parse_regex_def"
+def parse_regex_def(source: str): Result[LexRegexDef, ChibalexParseError] = __compiler_builtin("std.chibalex_parse_regex_def")
 
 /// Parse a token rule line.
-def parse_rule(source: str, mode: LexMode): Result[LexRule, ChibalexParseError] =
-    extern "std" "chibalex_parse_rule"
+def parse_rule(source: str, mode: LexMode): Result[LexRule, ChibalexParseError] = __compiler_builtin("std.chibalex_parse_rule")

@@ -7,11 +7,10 @@ type DiagnosticBuilder {
 }
 
 /// Create an empty diagnostic builder.
-def DiagnosticBuilder.new(): DiagnosticBuilder = extern "std" "diagnostic_builder_new"
+def DiagnosticBuilder.new(): DiagnosticBuilder = __compiler_builtin("std.diagnostic_builder_new")
 
 /// Append a string slice to the builder.
-def DiagnosticBuilder.push_str(self, text: str): DiagnosticBuilder =
-    extern "std" "diagnostic_builder_push_str"
+def DiagnosticBuilder.push_str(self, text: str): DiagnosticBuilder = __compiler_builtin("std.diagnostic_builder_push_str")
 
 /// Freeze a diagnostic builder into an owned string.
-def DiagnosticBuilder.finish(self): String = extern "std" "diagnostic_builder_finish"
+def DiagnosticBuilder.finish(self): String = __compiler_builtin("std.diagnostic_builder_finish")

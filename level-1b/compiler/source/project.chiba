@@ -33,8 +33,7 @@ type ProjectSurface {
 }
 
 /// Load project files in deterministic path order.
-def load_project(inputs: Array[String], includes: Array[IncludeDir]): ProjectSurface =
-    extern "std" "source_load_project"
+def load_project(inputs: Array[String], includes: Array[IncludeDir]): ProjectSurface = __compiler_builtin("std.source_load_project")
 
 /// Return namespaces sorted by file path and source span.
 def ProjectSurface.sorted_namespaces(self): Array[NamespaceSurface] = self.namespaces

@@ -23,7 +23,7 @@ type UsageFact {
 }
 
 /// Analyze binder, lambda, closure, and continuation usage.
-def analyze_usage(module: AnswerControlModule): UsageModule = extern "std" "control_analyze_usage"
+def analyze_usage(module: AnswerControlModule): UsageModule = __compiler_builtin("std.control_analyze_usage")
 
 /// Module annotated with usage facts.
 type UsageModule {

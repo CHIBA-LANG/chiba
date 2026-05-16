@@ -40,9 +40,7 @@ def choose_with_backtracking(candidate: LexCandidate): LexCandidate = reset {
 }
 
 /// Find the best rule at the current state.
-def find_best_rule(lexer: LoweredLexer, input: str, state: LexState): Option[LexCandidate] =
-    extern "std" "chibalex_find_best_rule"
+def find_best_rule(lexer: LoweredLexer, input: str, state: LexState): Option[LexCandidate] = __compiler_builtin("std.chibalex_find_best_rule")
 
 /// Advance lexer state after a chosen match.
-def LexState.advance(self, input: str, end: usize): LexState =
-    extern "std" "chibalex_state_advance"
+def LexState.advance(self, input: str, end: usize): LexState = __compiler_builtin("std.chibalex_state_advance")

@@ -26,25 +26,25 @@ data AtomicExchange[T] {
 /// Safety:
 /// `T` must be one of the level-1b atomic-capable types: `i32`, `i64`, `usize`,
 /// `bool`, or `Ptr[U]`.
-def Atomic[T].new(value: T): Atomic[T] = extern "metal" "atomic_new"
+def Atomic[T].new(value: T): Atomic[T] = __metal_intrinsic("atomic_new")
 
 /// Load from an atomic cell with an explicit ordering.
 ///
 /// Safety:
 /// `order` must be legal for an atomic load.
-def Atomic[T].load(self, order: AtomicOrdering): T = extern "metal" "atomic_load"
+def Atomic[T].load(self, order: AtomicOrdering): T = __metal_intrinsic("atomic_load")
 
 /// Store to an atomic cell with an explicit ordering.
 ///
 /// Safety:
 /// `order` must be legal for an atomic store.
-def Atomic[T].store(self, value: T, order: AtomicOrdering): () = extern "metal" "atomic_store"
+def Atomic[T].store(self, value: T, order: AtomicOrdering): () = __metal_intrinsic("atomic_store")
 
 /// Swap an atomic cell and return the previous value.
 ///
 /// Safety:
 /// `T` must be supported by the target atomic lowering.
-def Atomic[T].swap(self, value: T, order: AtomicOrdering): T = extern "metal" "atomic_swap"
+def Atomic[T].swap(self, value: T, order: AtomicOrdering): T = __metal_intrinsic("atomic_swap")
 
 /// Compare and exchange an atomic cell.
 ///
@@ -56,16 +56,16 @@ def Atomic[T].compare_exchange(
     replacement: T,
     success: AtomicOrdering,
     failure: AtomicOrdering,
-): AtomicExchange[T] = extern "metal" "atomic_compare_exchange"
+): AtomicExchange[T] = __metal_intrinsic("atomic_compare_exchange")
 
 /// Add to an integer atomic cell and return the previous value.
 ///
 /// Safety:
 /// `T` must be `i32`, `i64`, or `usize`.
-def Atomic[T].fetch_add(self, value: T, order: AtomicOrdering): T = extern "metal" "atomic_fetch_add"
+def Atomic[T].fetch_add(self, value: T, order: AtomicOrdering): T = __metal_intrinsic("atomic_fetch_add")
 
 /// Subtract from an integer atomic cell and return the previous value.
 ///
 /// Safety:
 /// `T` must be `i32`, `i64`, or `usize`.
-def Atomic[T].fetch_sub(self, value: T, order: AtomicOrdering): T = extern "metal" "atomic_fetch_sub"
+def Atomic[T].fetch_sub(self, value: T, order: AtomicOrdering): T = __metal_intrinsic("atomic_fetch_sub")

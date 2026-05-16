@@ -9,7 +9,7 @@ type GeneratedParser {
 }
 
 /// Generate Chiba source for a lowered parser.
-def generate_parser(parser: LoweredParser): GeneratedParser = extern "std" "chibacc_generate"
+def generate_parser(parser: LoweredParser): GeneratedParser = __compiler_builtin("std.chibacc_generate")
 
 /// Return the generated source text.
 def GeneratedParser.text(self): String = self.source

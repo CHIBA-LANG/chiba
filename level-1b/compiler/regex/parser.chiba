@@ -40,19 +40,16 @@ def RegexCursor.peek(self): Option[Char] =
     if self.at_end() { None } else { Some(self.pattern.char_at(self.offset)) }
 
 /// Advance by one UTF-8/WTF-8 codepoint.
-def RegexCursor.advance(self): RegexCursor = extern "std" "regex_cursor_advance"
+def RegexCursor.advance(self): RegexCursor = __compiler_builtin("std.regex_cursor_advance")
 
 /// Parse a complete regex pattern.
-def parse_regex(pattern: str): RegexParseResult = extern "std" "regex_parse"
+def parse_regex(pattern: str): RegexParseResult = __compiler_builtin("std.regex_parse")
 
 /// Parse one alternation expression.
-def parse_alternative(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] =
-    extern "std" "regex_parse_alternative"
+def parse_alternative(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] = __compiler_builtin("std.regex_parse_alternative")
 
 /// Parse one quantified atom.
-def parse_quantified(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] =
-    extern "std" "regex_parse_quantified"
+def parse_quantified(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] = __compiler_builtin("std.regex_parse_quantified")
 
 /// Parse a character class.
-def parse_class(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] =
-    extern "std" "regex_parse_class"
+def parse_class(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] = __compiler_builtin("std.regex_parse_class")

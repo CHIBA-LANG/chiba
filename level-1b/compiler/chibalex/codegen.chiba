@@ -12,7 +12,7 @@ type GeneratedLexer {
 }
 
 /// Generate Chiba source for a lowered lexer.
-def generate_lexer(lexer: LoweredLexer): GeneratedLexer = extern "std" "chibalex_generate"
+def generate_lexer(lexer: LoweredLexer): GeneratedLexer = __compiler_builtin("std.chibalex_generate")
 
 /// Return the generated source text.
 def GeneratedLexer.text(self): String = self.source

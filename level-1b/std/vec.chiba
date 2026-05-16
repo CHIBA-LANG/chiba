@@ -10,16 +10,16 @@ type Vec[T] {
 }
 
 /// Create an empty vector builder.
-def Vec[T].new(): Vec[T] = extern "std" "vec_new"
+def Vec[T].new(): Vec[T] = __compiler_builtin("std.vec_new")
 
 /// Return the number of initialized elements.
-def Vec[T].len(self): usize = extern "std" "vec_len"
+def Vec[T].len(self): usize = __compiler_builtin("std.vec_len")
 
 /// Append a value and return the updated builder.
-def Vec[T].push(self, value: T): Vec[T] = extern "std" "vec_push"
+def Vec[T].push(self, value: T): Vec[T] = __compiler_builtin("std.vec_push")
 
 /// Freeze the builder into an immutable managed array.
-def Vec[T].freeze(self): Array[T] = extern "std" "vec_freeze"
+def Vec[T].freeze(self): Array[T] = __compiler_builtin("std.vec_freeze")
 
 /// Pipe-friendly form of [std.vec.Vec.push].
 def vec_push[T](vec: Vec[T], value: T): Vec[T] = vec.push(value)

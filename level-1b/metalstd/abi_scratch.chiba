@@ -17,16 +17,16 @@ type AbiScratch {
 /// Safety:
 /// The returned region is valid only until the matching ABI boundary completes.
 /// It must not be stored in ordinary Chiba values or used as managed storage.
-def abi_scratch_borrow(len: usize): AbiScratch = extern "metal" "abi_scratch_borrow"
+def abi_scratch_borrow(len: usize): AbiScratch = __metal_intrinsic("abi_scratch_borrow")
 
 /// Return the base pointer for a scratch region.
 ///
 /// Safety:
 /// The pointer must not escape the ABI boundary associated with `self`.
-def AbiScratch.ptr(self): Ptr[u8] = extern "metal" "abi_scratch_ptr"
+def AbiScratch.ptr(self): Ptr[u8] = __metal_intrinsic("abi_scratch_ptr")
 
 /// Return the byte length for a scratch region.
 ///
 /// Safety:
 /// `self` must still denote a live ABI scratch borrow.
-def AbiScratch.len(self): usize = extern "metal" "abi_scratch_len"
+def AbiScratch.len(self): usize = __metal_intrinsic("abi_scratch_len")

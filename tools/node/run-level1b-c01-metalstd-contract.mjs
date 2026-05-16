@@ -116,6 +116,8 @@ function checkSource(file, source) {
   if (pointerLikeI64.test(code)) errors.push(`${rel}: pointer/resource parameter uses i64`);
   if (i64PointerReturn.test(code)) errors.push(`${rel}: pointer/resource return uses i64`);
 
+  if (/\bextern\s+"metal"/.test(code)) errors.push(`${rel}: metal intrinsics must not be modeled as extern \"metal\" ABI`);
+  if (/\bextern\s+"std"/.test(code)) errors.push(`${rel}: std is not an extern ABI`);
   if (/\bheap_alloc\s*\(/.test(code)) errors.push(`${rel}: heap_alloc cannot be the ordinary heap`);
   if (/\blinear_(alloc|heap)\b/.test(code)) errors.push(`${rel}: linear memory allocator cannot be default heap`);
 

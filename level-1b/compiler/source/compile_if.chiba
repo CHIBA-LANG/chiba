@@ -16,8 +16,7 @@ data CompileIfPredicate {
 }
 
 /// Evaluate a compile_if predicate against target facts.
-def CompileIfPredicate.eval(self, facts: CompileTargetFacts): bool =
-    extern "std" "compile_if_eval"
+def CompileIfPredicate.eval(self, facts: CompileTargetFacts): bool = __compiler_builtin("std.compile_if_eval")
 
 /// Return the level-1b wasm target facts.
 def wasm_gc_wasi_facts(): CompileTargetFacts =

@@ -31,7 +31,7 @@ type RegexProgram {
 }
 
 /// Compile a regex AST into the typed program IR.
-def compile_regex(ast: RegexAst): RegexProgram = extern "std" "regex_compile"
+def compile_regex(ast: RegexAst): RegexProgram = __compiler_builtin("std.regex_compile")
 
 /// Return the number of instructions.
 def RegexProgram.len(self): usize = self.instructions.len()

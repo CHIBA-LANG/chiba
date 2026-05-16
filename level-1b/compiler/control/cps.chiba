@@ -16,7 +16,7 @@ type CpsModule {
 }
 
 /// Transform a replay-safe module to CPS while beta-reducing administrative continuations.
-def one_pass_cps(module: ReplaySafeModule): CpsModule = extern "std" "control_one_pass_cps"
+def one_pass_cps(module: ReplaySafeModule): CpsModule = __compiler_builtin("std.control_one_pass_cps")
 
 /// Return true when a continuation must materialize as a package.
 def CpsContinuation.materialized(self): bool =

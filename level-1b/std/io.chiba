@@ -15,16 +15,16 @@ type Print {
 }
 
 /// Read a file into an owned byte string.
-def File.read(path: str): Result[String, IoError] = extern "std" "file_read"
+def File.read(path: str): Result[String, IoError] = __compiler_builtin("std.file_read")
 
 /// Write an owned byte string to a file.
-def File.write(path: str, contents: String): Result[(), IoError] = extern "std" "file_write"
+def File.write(path: str, contents: String): Result[(), IoError] = __compiler_builtin("std.file_write")
 
 /// Write bytes to stdout.
-def Print.stdout(contents: str): Result[(), IoError] = extern "std" "stdout_write"
+def Print.stdout(contents: str): Result[(), IoError] = __compiler_builtin("std.stdout_write")
 
 /// Write bytes to stderr.
-def Print.stderr(contents: str): Result[(), IoError] = extern "std" "stderr_write"
+def Print.stderr(contents: str): Result[(), IoError] = __compiler_builtin("std.stderr_write")
 
 /// IO error reported by the user-facing std facade.
 type IoError {

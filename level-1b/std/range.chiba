@@ -1,4 +1,7 @@
 /// Range values for iteration and slicing.
+///
+/// The range expression `a..b` lowers to `range(a, b)` and produces the
+/// half-open range `[a, b)`.
 namespace level1b.std.range
 
 /// Half-open range `[start, end)`.

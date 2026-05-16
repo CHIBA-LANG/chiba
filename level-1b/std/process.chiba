@@ -7,10 +7,10 @@ type Process {
 }
 
 /// Return one process argument as an owned string.
-def Process.argv(index: usize): Option[String] = extern "std" "process_argv"
+def Process.argv(index: usize): Option[String] = __compiler_builtin("std.process_argv")
 
 /// Return one process environment value as an owned string.
-def Process.env(name: str): Option[String] = extern "std" "process_env"
+def Process.env(name: str): Option[String] = __compiler_builtin("std.process_env")
 
 /// Exit the current process with a status code.
-def Process.exit(status: i32): () = extern "std" "process_exit"
+def Process.exit(status: i32): () = __compiler_builtin("std.process_exit")

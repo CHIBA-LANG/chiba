@@ -2,16 +2,16 @@
 namespace level1b.compiler.regex.utf8
 
 /// Return true when `offset` is at a codepoint boundary.
-def str.is_char_boundary(self, offset: usize): bool = extern "std" "str_is_char_boundary"
+def str.is_char_boundary(self, offset: usize): bool = __compiler_builtin("std.str_is_char_boundary")
 
 /// Return the next codepoint byte offset.
-def str.next_char_offset(self, offset: usize): usize = extern "std" "str_next_char_offset"
+def str.next_char_offset(self, offset: usize): usize = __compiler_builtin("std.str_next_char_offset")
 
 /// Return the previous codepoint byte offset.
-def str.prev_char_offset(self, offset: usize): usize = extern "std" "str_prev_char_offset"
+def str.prev_char_offset(self, offset: usize): usize = __compiler_builtin("std.str_prev_char_offset")
 
 /// Return true when a character can start an identifier.
-def Char.is_xid_start(self): bool = extern "std" "char_is_xid_start"
+def Char.is_xid_start(self): bool = __compiler_builtin("std.char_is_xid_start")
 
 /// Return true when a character can continue an identifier.
-def Char.is_xid_continue(self): bool = extern "std" "char_is_xid_continue"
+def Char.is_xid_continue(self): bool = __compiler_builtin("std.char_is_xid_continue")

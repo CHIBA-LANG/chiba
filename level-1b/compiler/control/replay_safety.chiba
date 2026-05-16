@@ -17,8 +17,7 @@ type ReplaySafetyFact {
 }
 
 /// Check multi-shot replay-safety and world/thread boundaries.
-def check_replay_safety(module: UsageModule): Result[ReplaySafeModule, SemanticDiagnostics] =
-    extern "std" "control_check_replay_safety"
+def check_replay_safety(module: UsageModule): Result[ReplaySafeModule, SemanticDiagnostics] = __compiler_builtin("std.control_check_replay_safety")
 
 /// Module whose continuations are legal for lowering.
 type ReplaySafeModule {

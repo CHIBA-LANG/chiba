@@ -39,9 +39,7 @@ type UnifyResult {
 }
 
 /// Unify two semantic types.
-def unify(left: SemType, right: SemType): Result[UnifyResult, SemanticDiagnostic] =
-    extern "std" "semantic_unify"
+def unify(left: SemType, right: SemType): Result[UnifyResult, SemanticDiagnostic] = __compiler_builtin("std.semantic_unify")
 
 /// Infer HM + row types for an alpha-renamed module.
-def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule, SemanticDiagnostics] =
-    extern "std" "semantic_infer_types"
+def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule, SemanticDiagnostics] = __compiler_builtin("std.semantic_infer_types")

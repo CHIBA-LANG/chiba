@@ -27,9 +27,7 @@ type TypedModule {
 }
 
 /// Run alpha, pattern, inference, template, method/operator, ABI, and capability passes.
-def run_typed_semantics(project: ProjectSurface): Result[TypedModule, SemanticDiagnostics] =
-    extern "std" "semantic_run_typed"
+def run_typed_semantics(project: ProjectSurface): Result[TypedModule, SemanticDiagnostics] = __compiler_builtin("std.semantic_run_typed")
 
 /// Sort semantic diagnostics deterministically.
-def SemanticDiagnostics.stable_sort(self): SemanticDiagnostics =
-    extern "std" "semantic_diagnostics_stable_sort"
+def SemanticDiagnostics.stable_sort(self): SemanticDiagnostics = __compiler_builtin("std.semantic_diagnostics_stable_sort")

@@ -12,22 +12,22 @@ type StrMap[V] {
 }
 
 /// Create an empty deterministic map.
-def Map[K, V].new(): Map[K, V] = extern "std" "map_new"
+def Map[K, V].new(): Map[K, V] = __compiler_builtin("std.map_new")
 
 /// Insert a key/value pair and return the updated map.
-def Map[K, V].insert(self, key: K, value: V): Map[K, V] = extern "std" "map_insert"
+def Map[K, V].insert(self, key: K, value: V): Map[K, V] = __compiler_builtin("std.map_insert")
 
 /// Look up a key.
-def Map[K, V].get(self, key: K): Option[V] = extern "std" "map_get"
+def Map[K, V].get(self, key: K): Option[V] = __compiler_builtin("std.map_get")
 
 /// Create an empty deterministic string map.
-def StrMap[V].new(): StrMap[V] = extern "std" "strmap_new"
+def StrMap[V].new(): StrMap[V] = __compiler_builtin("std.strmap_new")
 
 /// Insert a string key/value pair and return the updated map.
-def StrMap[V].insert(self, key: str, value: V): StrMap[V] = extern "std" "strmap_insert"
+def StrMap[V].insert(self, key: str, value: V): StrMap[V] = __compiler_builtin("std.strmap_insert")
 
 /// Look up a string key.
-def StrMap[V].get(self, key: str): Option[V] = extern "std" "strmap_get"
+def StrMap[V].get(self, key: str): Option[V] = __compiler_builtin("std.strmap_get")
 
 /// Pipe-friendly form of [std.map.Map.get].
 def map_get[K, V](map: Map[K, V], key: K): Option[V] = map.get(key)

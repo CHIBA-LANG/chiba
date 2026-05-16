@@ -20,15 +20,13 @@ type RegexMatch {
 }
 
 /// Match a regex at exactly `start`.
-def RegexProgram.match_at(self, input: str, start: usize): Option[RegexMatch] =
-    extern "std" "regex_match_at"
+def RegexProgram.match_at(self, input: str, start: usize): Option[RegexMatch] = __compiler_builtin("std.regex_match_at")
 
 /// Find the first match in `input`.
-def RegexProgram.find(self, input: str): Option[RegexMatch] = extern "std" "regex_find"
+def RegexProgram.find(self, input: str): Option[RegexMatch] = __compiler_builtin("std.regex_find")
 
 /// Find the longest match beginning at `start`.
-def RegexProgram.longest_at(self, input: str, start: usize): Option[RegexMatch] =
-    extern "std" "regex_longest_at"
+def RegexProgram.longest_at(self, input: str, start: usize): Option[RegexMatch] = __compiler_builtin("std.regex_longest_at")
 
 /// Pipe-friendly form of [compiler.regex.matcher.RegexProgram.find].
 def regex_find(program: RegexProgram, input: str): Option[RegexMatch] = program.find(input)

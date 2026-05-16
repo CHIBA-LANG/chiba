@@ -11,11 +11,11 @@ namespace level1b.metalstd.trap
 /// Safety:
 /// Calling this function never returns and must be used only at an explicit
 /// fatal boundary.
-def metal_trap(): () = extern "metal" "trap"
+def metal_trap(): () = __metal_intrinsic("trap")
 
 /// Abort execution with a byte message stored in ABI memory.
 ///
 /// Safety:
 /// `message` must point to readable ABI memory for `len` bytes. The message is
 /// not a managed `str` and must not be retained by the host after the trap.
-def metal_panic(message: Ptr[u8], len: usize): () = extern "metal" "panic"
+def metal_panic(message: Ptr[u8], len: usize): () = __metal_intrinsic("panic")

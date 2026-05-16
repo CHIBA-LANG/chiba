@@ -17,5 +17,4 @@ type CheckedTemplate {
 }
 
 /// Check a generic body under abstract parameters.
-def check_template(module: TypedModule): Result[Array[CheckedTemplate], SemanticDiagnostics] =
-    extern "std" "semantic_check_template"
+def check_template(module: TypedModule): Result[Array[CheckedTemplate], SemanticDiagnostics] = __compiler_builtin("std.semantic_check_template")

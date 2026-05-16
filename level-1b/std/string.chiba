@@ -10,31 +10,31 @@ type Char {
 }
 
 /// Return the byte length of an owned string.
-def String.len(self): usize = extern "std" "string_len"
+def String.len(self): usize = __compiler_builtin("std.string_len")
 
 /// Return the byte at an index with bounds checking.
-def String.byte_at(self, index: usize): u8 = extern "std" "string_byte_at"
+def String.byte_at(self, index: usize): u8 = __compiler_builtin("std.string_byte_at")
 
 /// Return a managed byte view over an owned string.
-def String.slice(self, offset: usize, len: usize): str = extern "std" "string_slice"
+def String.slice(self, offset: usize, len: usize): str = __compiler_builtin("std.string_slice")
 
 /// Decode a codepoint beginning at a byte index.
-def String.char_at(self, index: usize): Char = extern "std" "string_char_at"
+def String.char_at(self, index: usize): Char = __compiler_builtin("std.string_char_at")
 
 /// Return the byte length of a string slice.
-def str.len(self): usize = extern "std" "str_len"
+def str.len(self): usize = __compiler_builtin("std.str_len")
 
 /// Return the byte at an index with bounds checking.
-def str.byte_at(self, index: usize): u8 = extern "std" "str_byte_at"
+def str.byte_at(self, index: usize): u8 = __compiler_builtin("std.str_byte_at")
 
 /// Return a managed byte subview.
-def str.slice(self, offset: usize, len: usize): str = extern "std" "str_slice"
+def str.slice(self, offset: usize, len: usize): str = __compiler_builtin("std.str_slice")
 
 /// Decode a codepoint beginning at a byte index.
-def str.char_at(self, index: usize): Char = extern "std" "str_char_at"
+def str.char_at(self, index: usize): Char = __compiler_builtin("std.str_char_at")
 
 /// Concatenate two owned strings.
-def String.concat(self, other: String): String = extern "std" "string_concat"
+def String.concat(self, other: String): String = __compiler_builtin("std.string_concat")
 
 /// Pipe-friendly form of [std.string.String.char_at].
 def string_char_at(value: String, index: usize): Char = value.char_at(index)

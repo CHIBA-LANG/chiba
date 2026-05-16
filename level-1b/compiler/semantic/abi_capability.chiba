@@ -17,9 +17,7 @@ data CapabilityUse {
 }
 
 /// Check extern ABI signatures after type inference.
-def check_extern_abi(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
-    extern "std" "semantic_check_extern_abi"
+def check_extern_abi(module: TypedModule): Result[TypedModule, SemanticDiagnostics] = __compiler_builtin("std.semantic_check_extern_abi")
 
 /// Check Ref/UnsafeRef/Ptr/Atomic capability rules.
-def check_capabilities(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
-    extern "std" "semantic_check_capabilities"
+def check_capabilities(module: TypedModule): Result[TypedModule, SemanticDiagnostics] = __compiler_builtin("std.semantic_check_capabilities")

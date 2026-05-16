@@ -26,18 +26,17 @@ type WasmGcContinuationType {
 /// Safety:
 /// The layout descriptor must come from the validated Wasm-GC Core table for
 /// the current module.
-def wasm_gc_struct_new(layout: WasmGcStructType): UnsafeRef[T] = extern "metal" "wasm_gc_struct_new"
+def wasm_gc_struct_new(layout: WasmGcStructType): UnsafeRef[T] = __metal_intrinsic("wasm_gc_struct_new")
 
 /// Allocate a Wasm-GC array object from a validated layout descriptor.
 ///
 /// Safety:
 /// The element type and length must match the validated array layout.
-def wasm_gc_array_new(layout: WasmGcArrayType, len: usize): UnsafeRef[T] = extern "metal" "wasm_gc_array_new"
+def wasm_gc_array_new(layout: WasmGcArrayType, len: usize): UnsafeRef[T] = __metal_intrinsic("wasm_gc_array_new")
 
 /// Allocate a Wasm-GC continuation package from a validated frame layout.
 ///
 /// Safety:
 /// The frame layout must match answer type and replay rules already checked by
 /// the continuation pass.
-def wasm_gc_continuation_new(layout: WasmGcContinuationType): UnsafeRef[T] =
-    extern "metal" "wasm_gc_continuation_new"
+def wasm_gc_continuation_new(layout: WasmGcContinuationType): UnsafeRef[T] = __metal_intrinsic("wasm_gc_continuation_new")

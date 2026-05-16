@@ -14,4 +14,4 @@ type PatternFacts {
 }
 
 /// Elaborate parameter, `let`, and match patterns after alpha conversion.
-def elaborate_patterns(module: AlphaModule): PatternFacts = extern "std" "semantic_elaborate_patterns"
+def elaborate_patterns(module: AlphaModule): PatternFacts = __compiler_builtin("std.semantic_elaborate_patterns")

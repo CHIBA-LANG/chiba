@@ -26,8 +26,7 @@ type DriverInput {
 }
 
 /// Run source loading and header filtering.
-def run_source_driver(input: DriverInput): Result[ProjectSurface, DriverDiagnostics] =
-    extern "std" "driver_run_source"
+def run_source_driver(input: DriverInput): Result[ProjectSurface, DriverDiagnostics] = __compiler_builtin("std.driver_run_source")
 
 /// Sort diagnostics by file, line, column, then message.
-def DriverDiagnostics.stable_sort(self): DriverDiagnostics = extern "std" "driver_diagnostics_stable_sort"
+def DriverDiagnostics.stable_sort(self): DriverDiagnostics = __compiler_builtin("std.driver_diagnostics_stable_sort")

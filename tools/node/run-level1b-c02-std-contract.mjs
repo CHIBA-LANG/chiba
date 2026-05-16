@@ -34,6 +34,7 @@ const REQUIRED_SYMBOLS = [
   "type Map[K, V]",
   "type StrMap[V]",
   "type Range[T]",
+  "a..b",
   "type DiagnosticBuilder",
   "def File.read",
   "def Process.argv",
@@ -101,7 +102,7 @@ function checkSource(file, source) {
 
   if (source.includes("#![Metal]")) errors.push(`${rel}: std source must not be Metal`);
   if (/\/\*/.test(source) || /\*\//.test(source)) errors.push(`${rel}: block comments are not allowed`);
-  if (/\b(metalstd|Ptr\s*\[|UnsafeRef\s*\[|extern\s+"metal"|extern\s+"wasi"|unsafe\s*\{)/.test(code)) {
+  if (/\b(metalstd|Ptr\s*\[|UnsafeRef\s*\[|extern\s+"metal"|extern\s+"std"|extern\s+"wasi"|unsafe\s*\{)/.test(code)) {
     errors.push(`${rel}: std public source leaks Metal or ABI capability`);
   }
   if (/\b(heap_alloc|load(?:8|16|32|64)|store(?:8|16|32|64))\s*\(/.test(code)) {

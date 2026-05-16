@@ -19,9 +19,6 @@ const REQUIRED_PRELUDE = [
   "def println",
   "def panic",
   "def assert",
-  "def map",
-  "def filter",
-  "def fold",
 ];
 
 function fail(message) {
@@ -98,6 +95,9 @@ function main() {
   const preludeCode = stripLineComments(prelude);
   if (preludeCode.includes("#![Metal]") || /\bmetalstd\b|extern\s+"metal"|extern\s+"wasi"|Ptr\s*\[|UnsafeRef\s*\[/.test(preludeCode)) {
     fail("prelude must not depend on metalstd or expose Metal capability");
+  }
+  if (/\bdef\s+(map|filter|fold)\s*\[/.test(preludeCode)) {
+    fail("prelude must not define naked map/filter/fold; use receiver methods");
   }
 
   const policyNeedles = [

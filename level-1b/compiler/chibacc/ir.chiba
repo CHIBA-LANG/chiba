@@ -45,4 +45,4 @@ type LoweredParser {
 }
 
 /// Lower parsed chibacc source into typed parser IR.
-def lower_chibacc(spec: ChibaccSpec): LoweredParser = extern "std" "chibacc_lower"
+def lower_chibacc(spec: ChibaccSpec): LoweredParser = __compiler_builtin("std.chibacc_lower")

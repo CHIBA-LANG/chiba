@@ -21,5 +21,27 @@ def List[T].fold[U](self, init: U, f: (U, T) => U): U =
         ListCons(head, tail) => tail.fold(f(init, head), f)
     }
 
+/// Transform every element in a persistent list.
+def List[T].map[U](self, f: (T) => U): List[U] =
+    match self {
+        ListNil => ListNil
+        ListCons(head, tail) => ListCons(f(head), tail.map(f))
+    }
+
+/// Keep only elements accepted by a predicate.
+def List[T].filter(self, keep: (T) => bool): List[T] =
+    match self {
+        ListNil => ListNil
+        ListCons(head, tail) =>
+            if keep(head) { ListCons(head, tail.filter(keep)) }
+            else { tail.filter(keep) }
+    }
+
 /// Pipe-friendly form of [std.list.List.fold].
 def list_fold[T, U](list: List[T], init: U, f: (U, T) => U): U = list.fold(init, f)
+
+/// Pipe-friendly form of [std.list.List.map].
+def list_map[T, U](list: List[T], f: (T) => U): List[U] = list.map(f)
+
+/// Pipe-friendly form of [std.list.List.filter].
+def list_filter[T](list: List[T], keep: (T) => bool): List[T] = list.filter(keep)

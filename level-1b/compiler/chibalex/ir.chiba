@@ -31,7 +31,7 @@ type LoweredLexer {
 }
 
 /// Lower a parsed chibalex spec into typed lexer IR.
-def lower_chibalex(spec: ChibalexSpec): LoweredLexer = extern "std" "chibalex_lower"
+def lower_chibalex(spec: ChibalexSpec): LoweredLexer = __compiler_builtin("std.chibalex_lower")
 
 /// Return rules in deterministic source order.
 def LoweredLexer.ordered_rules(self): Array[LoweredLexRule] = self.rules

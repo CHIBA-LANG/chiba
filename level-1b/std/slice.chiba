@@ -4,16 +4,16 @@
 namespace level1b.std.slice
 
 /// Return the number of elements in a managed slice.
-def Slice[T].len(self): usize = extern "std" "slice_len"
+def Slice[T].len(self): usize = __compiler_builtin("std.slice_len")
 
 /// Return true when a slice has no elements.
 def Slice[T].is_empty(self): bool = self.len() == 0
 
 /// Read an element by index with bounds checking.
-def Slice[T].get(self, index: usize): T = extern "std" "slice_get"
+def Slice[T].get(self, index: usize): T = __compiler_builtin("std.slice_get")
 
 /// Produce a narrower managed view over a slice range.
-def Slice[T].slice(self, offset: usize, len: usize): Slice[T] = extern "std" "slice_slice"
+def Slice[T].slice(self, offset: usize, len: usize): Slice[T] = __compiler_builtin("std.slice_slice")
 
 /// Pipe-friendly form of [std.slice.Slice.len].
 def slice_len[T](slice: Slice[T]): usize = slice.len()
