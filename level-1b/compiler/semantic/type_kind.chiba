@@ -1,0 +1,23 @@
+/// Type kind checking for level-1b semantic IR.
+namespace compiler.semantic.type_kind
+
+use compiler.semantic.types.*
+
+/// Type kind accepted by the checker.
+data SemanticTypeKind {
+    SemanticKindValue,
+    SemanticKindRow,
+    SemanticKindCapability,
+    SemanticKindContinuation,
+    SemanticKindAbiScalar,
+}
+
+/// Result of checking one type kind.
+type TypeKindResult {
+    ty: SemType,
+    kind: SemanticTypeKind,
+}
+
+/// Check the kind of a semantic type.
+def check_type_kind(ty: SemType): Result[TypeKindResult, SemanticDiagnostic] =
+    __compiler_builtin("std.semantic_check_type_kind")

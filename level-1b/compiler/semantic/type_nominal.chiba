@@ -1,0 +1,19 @@
+/// Nominal type identity and namespace-qualified type lookup.
+namespace compiler.semantic.type_nominal
+
+use compiler.semantic.types.*
+
+/// Nominal declaration header.
+type NominalDecl {
+    id: NominalId,
+    params: Array[TypeVar],
+}
+
+/// Nominal index built from project summaries.
+type NominalIndex {
+    decls: Array[NominalDecl],
+}
+
+/// Look up a nominal id by namespace and local name.
+def NominalIndex.lookup(self, namespace_name: String, name: String): Option[NominalId] =
+    __compiler_builtin("std.semantic_nominal_lookup")

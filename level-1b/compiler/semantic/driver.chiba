@@ -4,6 +4,12 @@ namespace compiler.semantic.driver
 use compiler.semantic.alpha.*
 use compiler.semantic.pattern.*
 use compiler.semantic.types.*
+use compiler.semantic.type_kind.*
+use compiler.semantic.type_unify.*
+use compiler.semantic.type_row.*
+use compiler.semantic.type_nominal.*
+use compiler.semantic.type_generalize.*
+use compiler.semantic.type_infer.*
 use compiler.semantic.template.*
 use compiler.semantic.method_operator.*
 use compiler.semantic.abi_capability.*

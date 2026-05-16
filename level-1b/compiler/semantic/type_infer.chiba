@@ -1,0 +1,10 @@
+/// HM + row inference driver.
+namespace compiler.semantic.type_infer
+
+use compiler.semantic.alpha.*
+use compiler.semantic.pattern.*
+use compiler.semantic.types.*
+
+/// Infer HM + row types for an alpha-renamed module.
+def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule, SemanticDiagnostics] =
+    __compiler_builtin("std.semantic_infer_types")

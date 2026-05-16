@@ -1,5 +1,7 @@
-/// Type representation and HM + row inference contracts.
+/// Type representation shared by semantic passes.
 namespace compiler.semantic.types
+
+use compiler.ir.type_ir.*
 
 /// Type variable identifier.
 type TypeVar {
@@ -32,14 +34,3 @@ type TypeScheme {
     vars: Array[TypeVar],
     body: SemType,
 }
-
-/// Unification result.
-type UnifyResult {
-    ty: SemType,
-}
-
-/// Unify two semantic types.
-def unify(left: SemType, right: SemType): Result[UnifyResult, SemanticDiagnostic] = __compiler_builtin("std.semantic_unify")
-
-/// Infer HM + row types for an alpha-renamed module.
-def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule, SemanticDiagnostics] = __compiler_builtin("std.semantic_infer_types")

@@ -15,16 +15,16 @@ below must have a level-1b owner before Second Bootstrap validation.
 | `alpha.chiba` | `compiler/semantic/alpha.chiba` | contract only |
 | `typed.chiba` | `compiler/semantic/types.chiba` | missing rewrite |
 | `typed_semantic_check.chiba` | `compiler/semantic/driver.chiba` | missing rewrite |
-| `type_kind.chiba` | `compiler/semantic/types.chiba` | contract only |
-| `type_l2_check.chiba` | `compiler/semantic/types.chiba` | missing rewrite |
-| `type_unify.chiba` | `compiler/semantic/types.chiba` | missing rewrite |
-| `type_row.chiba` | `compiler/semantic/types.chiba` | missing rewrite |
-| `type_record.chiba` | `compiler/semantic/types.chiba` | missing rewrite |
-| `type_nominal.chiba` | `compiler/semantic/types.chiba` | missing rewrite |
+| `type_kind.chiba` | `compiler/semantic/type_kind.chiba` | contract only |
+| `type_l2_check.chiba` | `compiler/semantic/type_infer.chiba` | missing rewrite |
+| `type_unify.chiba` | `compiler/semantic/type_unify.chiba` | contract only |
+| `type_row.chiba` | `compiler/semantic/type_row.chiba` | contract only |
+| `type_record.chiba` | `compiler/semantic/type_row.chiba` | missing rewrite |
+| `type_nominal.chiba` | `compiler/semantic/type_nominal.chiba` | contract only |
 | `type_method.chiba` | `compiler/semantic/method_operator.chiba` | contract only |
 | `type_template.chiba` | `compiler/semantic/template.chiba` | contract only |
 | `type_generic_body.chiba` | `compiler/semantic/template.chiba` | missing rewrite |
-| `type_generalize.chiba` | `compiler/semantic/types.chiba` | missing rewrite |
+| `type_generalize.chiba` | `compiler/semantic/type_generalize.chiba` | contract only |
 | `type_facts.chiba` | `compiler/semantic/types.chiba`, `compiler/semantic/abi_capability.chiba` | missing rewrite |
 | `type_capability.chiba` | `compiler/semantic/abi_capability.chiba` | contract only |
 | `answer_control.chiba` | `compiler/control/answer_control.chiba` | contract only |

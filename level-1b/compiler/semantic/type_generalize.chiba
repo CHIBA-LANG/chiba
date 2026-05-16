@@ -1,0 +1,15 @@
+/// Let/function type generalization.
+namespace compiler.semantic.type_generalize
+
+use compiler.semantic.types.*
+
+/// Generalization boundary.
+data GeneralizeBoundary {
+    GeneralizeLet,
+    GeneralizeFunction,
+    GeneralizeTemplateDefinition,
+}
+
+/// Generalize a type at a legal boundary.
+def generalize_type(ty: SemType, boundary: GeneralizeBoundary): Result[TypeScheme, SemanticDiagnostic] =
+    __compiler_builtin("std.semantic_generalize_type")

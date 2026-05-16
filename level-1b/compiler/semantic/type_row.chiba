@@ -1,0 +1,25 @@
+/// Canonical row construction and row unification.
+namespace compiler.semantic.type_row
+
+use compiler.semantic.types.*
+use compiler.semantic.type_unify.*
+
+/// Canonical row field after stable sorting.
+type CanonicalRowField {
+    id: RowFieldId,
+    ty: SemType,
+}
+
+/// Canonical row shape.
+type CanonicalRow {
+    fields: Array[CanonicalRowField],
+    tail: Option[TypeVar],
+}
+
+/// Canonicalize row fields independent of source order.
+def canonicalize_row(fields: Array[CanonicalRowField], tail: Option[TypeVar]): CanonicalRow =
+    __compiler_builtin("std.semantic_canonicalize_row")
+
+/// Unify two row shapes.
+def unify_rows(left: CanonicalRow, right: CanonicalRow): Result[UnifyResult, SemanticDiagnostic] =
+    __compiler_builtin("std.semantic_unify_rows")

@@ -1,0 +1,24 @@
+/// HM unification for semantic types.
+namespace compiler.semantic.type_unify
+
+use compiler.semantic.types.*
+
+/// One substitution produced by unification.
+type TypeSubstitution {
+    var: TypeVar,
+    ty: SemType,
+}
+
+/// Unification result.
+type UnifyResult {
+    ty: SemType,
+    substitutions: Array[TypeSubstitution],
+}
+
+/// Unify two semantic types.
+def unify(left: SemType, right: SemType): Result[UnifyResult, SemanticDiagnostic] =
+    __compiler_builtin("std.semantic_unify")
+
+/// Check whether a type variable occurs inside a type.
+def TypeVar.occurs_in(self, ty: SemType): bool =
+    __compiler_builtin("std.semantic_type_var_occurs_in")
