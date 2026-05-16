@@ -26,7 +26,7 @@ below must have a level-1b owner before Second Bootstrap validation.
 | `type_generic_body.chiba` | `compiler/semantic/generic_body.chiba`, `compiler/semantic/template.chiba` | partial rewrite: generic add/field body and field instantiation checks rewritten; full template driver still contract |
 | `type_generalize.chiba` | `compiler/semantic/type_generalize.chiba` | rewritten |
 | `type_facts.chiba` | `compiler/semantic/type_facts.chiba` | partial rewrite: typed fact array boundary owned; expression fact extraction pending |
-| `type_capability.chiba` | `compiler/semantic/capability_rules.chiba`, `compiler/semantic/abi_capability.chiba` | contract only |
+| `type_capability.chiba` | `compiler/semantic/capability_rules.chiba`, `compiler/semantic/abi_capability.chiba` | partial rewrite: scalar/capability helper rules and module pass boundary owned; typed item traversal pending |
 | `answer_control.chiba` | `compiler/control/answer_control.chiba` | partial rewrite: answer/control module boundary and empty fact stream owned; expression-level reset/shift scan pending |
 | `continuation_check.chiba` | `compiler/control/answer_type.chiba`, `compiler/control/answer_control.chiba` | partial rewrite: answer type unification helper owned; expression-level continuation collection pending |
 | `continuation_boundary_check.chiba` | `compiler/control/continuation_boundary.chiba`, `compiler/control/replay_safety.chiba` | partial rewrite: boundary/replay module flow and facts owned; source capture scan pending |

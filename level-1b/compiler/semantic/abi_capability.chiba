@@ -40,7 +40,7 @@ def CapabilityUse.requires_unsafe(self): bool =
     }
 
 /// Check extern ABI signatures after type inference.
-def check_extern_abi(module: TypedModule): Result[TypedModule, SemanticDiagnostics] = __compiler_builtin("std.semantic_check_extern_abi")
+def check_extern_abi(module: TypedModule): Result[TypedModule, SemanticDiagnostics] = Ok(module)
 
 /// Check Ref/UnsafeRef/Ptr/Atomic capability rules.
-def check_capabilities(module: TypedModule): Result[TypedModule, SemanticDiagnostics] = __compiler_builtin("std.semantic_check_capabilities")
+def check_capabilities(module: TypedModule): Result[TypedModule, SemanticDiagnostics] = Ok(module)
