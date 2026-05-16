@@ -58,3 +58,9 @@ source and generated `chibac.wasm` must not depend on Node-only host imports.
   through the Node WAT harness.
 - As C00 grows, the smoke target must be extended with a wasmtime-direct path
   for the same `chibac.wasm` CLI surface.
+
+## Migration Contract
+
+`compiler/MIGRATION.md` is the deletion checklist for `src/backend/cir`. C12
+cannot start until every old CIR pass has a rewritten level-1b owner and the
+level-1b gates no longer use `src/backend/cir` as primary behavior.

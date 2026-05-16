@@ -24,6 +24,7 @@
     "level1b:c09-control-cps": "node tools/node/run-level1b-c09-control-cps.mjs",
     "level1b:c10-closure-package": "node tools/node/run-level1b-c10-closure-package.mjs",
     "level1b:c11-backend": "node tools/node/run-level1b-c11-backend.mjs",
+    "level1b:cir-migration": "node tools/node/run-level1b-cir-migration.mjs",
     "level1b:namespace": "node tools/node/run-level1b-namespace-smoke.mjs",
     "level1b:chibalex-mini": "node tools/node/run-level1b-chibalex-mini.mjs",
     "level1b:chibacc-mini": "node tools/node/run-level1b-chibacc-mini.mjs",
