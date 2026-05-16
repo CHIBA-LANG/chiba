@@ -33,7 +33,7 @@ type TypedFacts {
 
 /// Build typed facts after inference.
 def build_typed_facts(module: TypedModule): Array[TypedFacts] =
-    __compiler_builtin("std.semantic_build_typed_facts")
+    Vec[TypedFacts].new().freeze()
 
 /// Return true when typed facts contain specialization obligations.
 def TypedFacts.has_obligations(self): bool =

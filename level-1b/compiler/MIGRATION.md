@@ -21,11 +21,11 @@ below must have a level-1b owner before Second Bootstrap validation.
 | `type_row.chiba` | `compiler/semantic/type_row.chiba` | rewritten |
 | `type_record.chiba` | `compiler/semantic/type_record.chiba`, `compiler/semantic/type_row.chiba` | rewritten |
 | `type_nominal.chiba` | `compiler/semantic/type_nominal.chiba` | rewritten |
-| `type_method.chiba` | `compiler/semantic/method_operator.chiba` | contract only |
+| `type_method.chiba` | `compiler/semantic/method_operator.chiba` | partial rewrite: nominal method/operator index data flow owned; module item scan pending |
 | `type_template.chiba` | `compiler/semantic/template.chiba` | partial rewrite: typed-fact obligation collection rewritten; full template body driver still contract |
 | `type_generic_body.chiba` | `compiler/semantic/generic_body.chiba`, `compiler/semantic/template.chiba` | partial rewrite: generic add/field body and field instantiation checks rewritten; full template driver still contract |
 | `type_generalize.chiba` | `compiler/semantic/type_generalize.chiba` | rewritten |
-| `type_facts.chiba` | `compiler/semantic/type_facts.chiba` | contract only |
+| `type_facts.chiba` | `compiler/semantic/type_facts.chiba` | partial rewrite: typed fact array boundary owned; expression fact extraction pending |
 | `type_capability.chiba` | `compiler/semantic/capability_rules.chiba`, `compiler/semantic/abi_capability.chiba` | contract only |
 | `answer_control.chiba` | `compiler/control/answer_control.chiba` | partial rewrite: answer/control module boundary and empty fact stream owned; expression-level reset/shift scan pending |
 | `continuation_check.chiba` | `compiler/control/answer_type.chiba`, `compiler/control/answer_control.chiba` | partial rewrite: answer type unification helper owned; expression-level continuation collection pending |

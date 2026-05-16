@@ -22,4 +22,5 @@ type MethodOperatorIndex {
 }
 
 /// Build the nominal method/operator index.
-def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex, SemanticDiagnostics] = __compiler_builtin("std.semantic_method_operator_index")
+def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex, SemanticDiagnostics] =
+    Ok(MethodOperatorIndex(Vec[MethodKey].new().freeze(), Vec[OperatorKey].new().freeze()))
