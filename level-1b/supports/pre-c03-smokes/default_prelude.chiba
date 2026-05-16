@@ -1,4 +1,4 @@
-namespace level1b.pre_c03.default_prelude
+namespace pre_c03.default_prelude
 
 def default_prelude_smoke(value: Option[String]): Result[(), IoError] =
     match value {

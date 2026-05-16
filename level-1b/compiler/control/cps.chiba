@@ -1,7 +1,7 @@
 /// One-pass CPS conversion with administrative beta-reduction.
-namespace level1b.compiler.control.cps
+namespace compiler.control.cps
 
-use level1b.compiler.control.replay_safety.*
+use compiler.control.replay_safety.*
 
 /// CPS continuation representation.
 data CpsContinuation {

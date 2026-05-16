@@ -5,7 +5,7 @@
 /// These APIs are the only level-1b surface that may touch raw address-like
 /// capability values. Ordinary code must enter an `unsafe` block before using
 /// `Ptr[T]` or `UnsafeRef[T]`.
-namespace level1b.metalstd.pointer
+namespace metalstd.pointer
 
 /// Return a null pointer for an ABI slot that explicitly accepts nullable data.
 ///

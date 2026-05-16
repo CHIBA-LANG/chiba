@@ -1,7 +1,7 @@
 /// Replay-safety and world/thread boundary checks for multi-shot continuations.
-namespace level1b.compiler.control.replay_safety
+namespace compiler.control.replay_safety
 
-use level1b.compiler.control.continuation_usage.*
+use compiler.control.continuation_usage.*
 
 /// Boundary where continuation capture or resume is illegal.
 data ControlBoundaryError {

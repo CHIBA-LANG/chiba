@@ -1,9 +1,9 @@
 /// Single-threaded level-1b pass driver contract.
-namespace level1b.compiler.driver.pass_driver
+namespace compiler.driver.pass_driver
 
-use level1b.compiler.cli.*
-use level1b.compiler.source.project.*
-use level1b.compiler.source.compile_if.*
+use compiler.cli.*
+use compiler.source.project.*
+use compiler.source.compile_if.*
 
 /// Driver diagnostic with stable ordering key.
 type DriverDiagnostic {

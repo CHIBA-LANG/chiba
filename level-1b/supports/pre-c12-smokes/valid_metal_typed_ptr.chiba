@@ -1,5 +1,5 @@
 #![Metal]
-namespace level1b.pre_c12.valid_metal_typed_ptr
+namespace pre_c12.valid_metal_typed_ptr
 
 def metal_load_byte(p: Ptr[u8], offset: i64): i64 =
     unsafe {

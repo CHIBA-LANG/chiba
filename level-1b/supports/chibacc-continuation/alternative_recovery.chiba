@@ -1,4 +1,4 @@
-namespace level1b.chibacc_continuation.alternative_recovery
+namespace chibacc_continuation.alternative_recovery
 
 type Candidate {
     pos: usize,

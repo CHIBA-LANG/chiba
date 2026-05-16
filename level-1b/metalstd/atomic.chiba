@@ -4,7 +4,7 @@
 ///
 /// Atomic is the explicit shared mutation capability. It is not a method
 /// witness mechanism and it does not make ordinary values internally mutable.
-namespace level1b.metalstd.atomic
+namespace metalstd.atomic
 
 /// Memory ordering accepted by level-1b atomic operations.
 data AtomicOrdering {

@@ -1,7 +1,7 @@
 /// Pattern elaboration pass.
-namespace level1b.compiler.semantic.pattern
+namespace compiler.semantic.pattern
 
-use level1b.compiler.semantic.alpha.*
+use compiler.semantic.alpha.*
 
 /// Elaborated pattern identifier.
 type PatternId {

@@ -1,7 +1,7 @@
 /// Continuation and binder usage analysis.
-namespace level1b.compiler.control.continuation_usage
+namespace compiler.control.continuation_usage
 
-use level1b.compiler.control.answer_control.*
+use compiler.control.answer_control.*
 
 /// Usage count used by CPS and continuation packaging.
 data UsageCount {

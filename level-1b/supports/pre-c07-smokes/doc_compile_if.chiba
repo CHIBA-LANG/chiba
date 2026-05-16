@@ -1,6 +1,6 @@
 /// Documented C07 namespace.
 #[doc(path="docs/c07.md")]
-namespace level1b.pre_c07.doc_compile_if
+namespace pre_c07.doc_compile_if
 
 #[compile_if(all(backend="wasm-gc", target="wasm32-unknown-wasi"))]
 def wasm_only(): i64 = 1

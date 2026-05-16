@@ -1,4 +1,4 @@
-namespace level1b.std_surface.refs_atomic
+namespace std_surface.refs_atomic
 
 #[world_local]
 def local_counter: Ref[i64] = Ref.new(0)

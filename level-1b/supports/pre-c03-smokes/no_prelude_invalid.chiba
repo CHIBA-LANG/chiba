@@ -1,4 +1,4 @@
 #![no_prelude_import]
-namespace level1b.pre_c03.no_prelude_invalid
+namespace pre_c03.no_prelude_invalid
 
 def missing_prelude_symbol(value: Option[String]): bool = value.is_some()

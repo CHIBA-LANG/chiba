@@ -4,7 +4,7 @@
 ///
 /// Production `chibac.wasm` must not require Node-only imports. This module is
 /// only for explicit C01/C02 host smoke boundaries.
-namespace level1b.metalstd.env_import
+namespace metalstd.env_import
 
 /// Typed host log function used by smoke tests.
 ///

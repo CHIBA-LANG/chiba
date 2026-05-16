@@ -1,7 +1,7 @@
 /// Nominal method and operator index.
-namespace level1b.compiler.semantic.method_operator
+namespace compiler.semantic.method_operator
 
-use level1b.compiler.semantic.types.*
+use compiler.semantic.types.*
 
 /// Method index key. Receiver identity is nominal and namespace-qualified.
 type MethodKey {

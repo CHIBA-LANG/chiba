@@ -1,5 +1,5 @@
 /// Doc comment and namespace documentation capture.
-namespace level1b.compiler.source.doc_surface
+namespace compiler.source.doc_surface
 
 /// Captured `///` block before an item.
 type DocCommentBlock {

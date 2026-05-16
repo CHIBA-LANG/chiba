@@ -1,5 +1,5 @@
 /// Extern ABI and memory capability checks.
-namespace level1b.compiler.semantic.abi_capability
+namespace compiler.semantic.abi_capability
 
 /// Extern ABI family.
 data ExternAbi {

@@ -1,7 +1,7 @@
 /// Checked structural template contracts.
-namespace level1b.compiler.semantic.template
+namespace compiler.semantic.template
 
-use level1b.compiler.semantic.types.*
+use compiler.semantic.types.*
 
 /// Template obligation recorded at definition time.
 data TemplateObligation {

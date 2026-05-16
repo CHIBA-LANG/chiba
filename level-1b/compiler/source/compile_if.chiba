@@ -1,5 +1,5 @@
 /// `compile_if` filtering for source item collection.
-namespace level1b.compiler.source.compile_if
+namespace compiler.source.compile_if
 
 /// Target/backend facts available before item collection.
 type CompileTargetFacts {

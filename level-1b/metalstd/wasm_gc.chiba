@@ -4,7 +4,7 @@
 ///
 /// Ordinary Chiba allocation lowers to Wasm-GC managed objects. Linear memory
 /// allocation is not the default heap and is only available through ABI scratch.
-namespace level1b.metalstd.wasm_gc
+namespace metalstd.wasm_gc
 
 /// Opaque backend-owned struct type descriptor.
 type WasmGcStructType {

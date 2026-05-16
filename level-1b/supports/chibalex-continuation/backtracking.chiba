@@ -1,4 +1,4 @@
-namespace level1b.chibalex_continuation.backtracking
+namespace chibalex_continuation.backtracking
 
 type Candidate {
     end: usize,

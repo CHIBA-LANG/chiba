@@ -8,6 +8,7 @@ const LEXER_SHOW = "src/frontend/chiba_level1_lexer_show.chiba";
 const PARSER_SPEC = "src/frontend/chiba-level1.chibacc";
 const PARSER = "src/frontend/chiba_level1_parser.chiba";
 const PARSER_HELPERS = "src/frontend/parserspec_helpers.chiba";
+const LEVEL1B_ROOT = "level-1b";
 
 function fail(message) {
   console.error(`[FAIL] ${message}`);
@@ -16,6 +17,16 @@ function fail(message) {
 
 function read(file) {
   return fs.readFileSync(file, "utf8");
+}
+
+function walk(dir) {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const path = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...walk(path));
+    else out.push(path);
+  }
+  return out;
 }
 
 function requireIncludes(name, source, needles) {
@@ -35,12 +46,20 @@ const parserHelpers = read(PARSER_HELPERS);
 requireIncludes("source fixture", fixture, [
   "/// level-1b source surface fixture.",
   "#[doc(path=\"level-1b/tests/source/doc_surface.chiba\")]",
-  "namespace level1b.tests.source.doc_surface",
+  "namespace tests.source.doc_surface",
   "/// Public API doc comment",
 ]);
 
 if (/\/\*/.test(fixture) || /\*\//.test(fixture)) {
   fail("source fixture must not use block comments");
+}
+
+for (const file of walk(LEVEL1B_ROOT)) {
+  if (!/\.(chiba|chibalex|chibacc|md)$/.test(file)) continue;
+  const source = read(file);
+  if (/\blevel1b\.(?=[A-Za-z_])/.test(source)) {
+    fail(`${file} must not use level1b-prefixed namespace names`);
+  }
 }
 
 requireIncludes("lexer spec", lexerSpec, [

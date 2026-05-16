@@ -10,7 +10,7 @@ const CASES = [
   {
     file: "basic.chibalex",
     name: "basic",
-    namespace: "level1b.chibalexmini.basic",
+    namespace: "chibalexmini.basic",
     expected: ["KwLet", "IntLit", "Ident", "Eq"],
     source: "mk_str(\"let x = 12\", 10)",
     check: `
@@ -35,7 +35,7 @@ const CASES = [
   {
     file: "longest.chibalex",
     name: "longest",
-    namespace: "level1b.chibalexmini.longest",
+    namespace: "chibalexmini.longest",
     expected: ["EqEq", "Eq", "KwIf", "Ident"],
     source: "mk_str(\"if == =\", 7)",
     check: `
@@ -54,7 +54,7 @@ const CASES = [
   {
     file: "string-mode.chibalex",
     name: "stringmode",
-    namespace: "level1b.chibalexmini.stringmode",
+    namespace: "chibalexmini.stringmode",
     expected: ["StringStart", "StringChunk", "StringEnd"],
     source: "mk_str(\"\\\"abc\\\"\", 5)",
     check: `

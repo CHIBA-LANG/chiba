@@ -1,5 +1,5 @@
 /// Alpha conversion pass for level-1b semantic analysis.
-namespace level1b.compiler.semantic.alpha
+namespace compiler.semantic.alpha
 
 /// Stable binder identifier after alpha conversion.
 type BinderId {

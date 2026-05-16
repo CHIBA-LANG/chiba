@@ -3,7 +3,7 @@
 /// The parser keeps file-level attributes in the source model. The source
 /// driver uses this contract before item collection so default prelude imports
 /// are deterministic and Metal files stay isolated.
-namespace level1b.compiler.source.import_policy
+namespace compiler.source.import_policy
 
 /// Default prelude import decision for one source file.
 data PreludeImportPolicy {

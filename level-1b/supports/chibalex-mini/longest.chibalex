@@ -1,7 +1,7 @@
 #![CHIBALEX]
 
 {
-    namespace level1b.chibalexmini.longest
+    namespace chibalexmini.longest
     use metalstd.str.*
 }
 

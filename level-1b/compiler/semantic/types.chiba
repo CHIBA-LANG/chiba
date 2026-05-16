@@ -1,5 +1,5 @@
 /// Type representation and HM + row inference contracts.
-namespace level1b.compiler.semantic.types
+namespace compiler.semantic.types
 
 /// Type variable identifier.
 type TypeVar {

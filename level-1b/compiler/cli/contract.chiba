@@ -3,7 +3,7 @@
 /// This module records the typed shape used by the C00 driver. The real parser
 /// grows around this contract instead of passing opaque integers between driver
 /// phases.
-namespace level1b.compiler.cli
+namespace compiler.cli
 
 /// Supported backend family for Second Bootstrap.
 data ChibacBackend {

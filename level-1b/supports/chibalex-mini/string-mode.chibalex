@@ -1,7 +1,7 @@
 #![CHIBALEX]
 
 {
-    namespace level1b.chibalexmini.stringmode
+    namespace chibalexmini.stringmode
     use metalstd.str.*
 }
 

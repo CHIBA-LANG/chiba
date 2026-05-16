@@ -4,7 +4,7 @@
 ///
 /// User-facing `panic` belongs in `std`/`prelude`; this layer only exposes the
 /// backend trap primitive and byte-oriented panic hook.
-namespace level1b.metalstd.trap
+namespace metalstd.trap
 
 /// Abort execution immediately with the backend trap instruction.
 ///

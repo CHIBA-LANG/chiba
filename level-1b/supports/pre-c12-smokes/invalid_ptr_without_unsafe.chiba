@@ -1,4 +1,4 @@
-namespace level1b.pre_c12.invalid_ptr_without_unsafe
+namespace pre_c12.invalid_ptr_without_unsafe
 
 def bad_ptr_without_unsafe(p: Ptr[u8]): i64 =
     Ptr.addr(p)

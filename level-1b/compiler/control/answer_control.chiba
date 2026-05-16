@@ -1,5 +1,5 @@
 /// Answer type and delimited-control checks.
-namespace level1b.compiler.control.answer_control
+namespace compiler.control.answer_control
 
 /// Control boundary kind observed in an expression.
 data ControlBoundary {

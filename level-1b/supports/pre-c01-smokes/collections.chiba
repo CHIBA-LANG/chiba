@@ -1,4 +1,4 @@
-namespace level1b.std_surface.collections
+namespace std_surface.collections
 
 def collection_smoke(xs: Array[i64], view: Slice[i64]): i64 = {
     let builder = Vec.new()

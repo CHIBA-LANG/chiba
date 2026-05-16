@@ -1,5 +1,5 @@
 /// Project source loading and namespace scan contract.
-namespace level1b.compiler.source.project
+namespace compiler.source.project
 
 /// Source file identifier after deterministic project scan.
 type SourceFileId {

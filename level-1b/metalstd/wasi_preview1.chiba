@@ -4,7 +4,7 @@
 ///
 /// This module keeps WASI file descriptors and byte buffers typed at the Metal
 /// surface. User-facing IO belongs in `std`, not here.
-namespace level1b.metalstd.wasi_preview1
+namespace metalstd.wasi_preview1
 
 /// WASI file descriptor handle.
 #[repr("C")]

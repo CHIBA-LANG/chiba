@@ -1,4 +1,4 @@
 #![Metal]
-namespace level1b.pre_c03.metal_no_prelude_invalid
+namespace pre_c03.metal_no_prelude_invalid
 
 def missing_metal_prelude_symbol(value: Option[String]): bool = value.is_some()

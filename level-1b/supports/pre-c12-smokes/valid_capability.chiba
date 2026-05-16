@@ -1,4 +1,4 @@
-namespace level1b.pre_c12.valid_capability
+namespace pre_c12.valid_capability
 
 #[world_local]
 def local_ref: Ref[i64] = Ref.new(0)

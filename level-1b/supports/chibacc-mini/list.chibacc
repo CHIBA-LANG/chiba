@@ -1,7 +1,7 @@
 #![CHIBACC]
 
 {
-    namespace level1b.chibaccmini.list
+    namespace chibaccmini.list
     use metalstd.option.*
     use metalstd.vec.*
 }

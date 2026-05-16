@@ -1,12 +1,12 @@
 /// Typed semantic pass driver.
-namespace level1b.compiler.semantic.driver
+namespace compiler.semantic.driver
 
-use level1b.compiler.semantic.alpha.*
-use level1b.compiler.semantic.pattern.*
-use level1b.compiler.semantic.types.*
-use level1b.compiler.semantic.template.*
-use level1b.compiler.semantic.method_operator.*
-use level1b.compiler.semantic.abi_capability.*
+use compiler.semantic.alpha.*
+use compiler.semantic.pattern.*
+use compiler.semantic.types.*
+use compiler.semantic.template.*
+use compiler.semantic.method_operator.*
+use compiler.semantic.abi_capability.*
 
 /// Semantic diagnostic with stable ordering key.
 type SemanticDiagnostic {

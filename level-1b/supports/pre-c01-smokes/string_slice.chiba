@@ -1,4 +1,4 @@
-namespace level1b.std_surface.string_slice
+namespace std_surface.string_slice
 
 def string_slice_smoke(text: String): i64 = {
     "hello ${text}"

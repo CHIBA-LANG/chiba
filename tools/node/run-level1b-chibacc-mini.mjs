@@ -9,7 +9,7 @@ const RUNNERS = ".scratch/level-1b/chibacc-mini-runners";
 const CASES = [
   {
     file: "simple.chibacc",
-    namespace: "level1b.chibaccmini.simple",
+    namespace: "chibaccmini.simple",
     expected: ["parse_rule", "Assign"],
     tokens: ["Ident(mk_str(\"x\", 1))", "Eq", "IntLit(mk_str(\"7\", 1))"],
     check: `
@@ -22,7 +22,7 @@ const CASES = [
   },
   {
     file: "pratt.chibacc",
-    namespace: "level1b.chibaccmini.pratt",
+    namespace: "chibaccmini.pratt",
     expected: ["parse_rule_0_bp", "Expr_Binary", "OpAdd"],
     tokens: ["IntLit(mk_str(\"1\", 1))", "Plus", "IntLit(mk_str(\"2\", 1))"],
     check: `
@@ -37,13 +37,13 @@ const CASES = [
   {
     name: "recover",
     file: "pratt.chibacc",
-    namespace: "level1b.chibaccmini.pratt",
+    namespace: "chibaccmini.pratt",
     expected: ["recover_pos", "RParen"],
     tokens: ["LParen", "RParen"],
   },
   {
     file: "list.chibacc",
-    namespace: "level1b.chibaccmini.list",
+    namespace: "chibaccmini.list",
     expected: ["Name_Cons", "Name_End"],
     tokens: ["Ident(mk_str(\"a\", 1))", "Comma", "Ident(mk_str(\"b\", 1))"],
     check: `

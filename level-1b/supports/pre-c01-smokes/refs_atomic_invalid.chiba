@@ -1,4 +1,4 @@
-namespace level1b.std_surface.refs_atomic_invalid
+namespace std_surface.refs_atomic_invalid
 
 def bad_global_ref: Ref[i64] = Ref.new(0)
 

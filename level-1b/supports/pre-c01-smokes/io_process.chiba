@@ -1,4 +1,4 @@
-namespace level1b.std_surface.io_process
+namespace std_surface.io_process
 
 def io_process_smoke(path: str): i64 = {
     let text = File.read(path)

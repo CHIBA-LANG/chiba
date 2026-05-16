@@ -101,7 +101,7 @@ function main() {
   for (const needle of [
     "/// Documented C07 namespace.",
     "#[doc(path=\"docs/c07.md\")]",
-    "namespace level1b.pre_c07.doc_compile_if",
+    "namespace pre_c07.doc_compile_if",
     "backend=\"wasm-gc\"",
     "target=\"wasm32-unknown-wasi\"",
     "not(backend=\"wasm-gc\")",

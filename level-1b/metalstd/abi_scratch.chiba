@@ -4,7 +4,7 @@
 ///
 /// Scratch memory is not the Chiba heap. It exists only to form WASI and FFI
 /// argument blocks that require linear-memory pointers.
-namespace level1b.metalstd.abi_scratch
+namespace metalstd.abi_scratch
 
 /// Linear-memory scratch region borrowed for one host call boundary.
 type AbiScratch {
