@@ -22,6 +22,8 @@ const REQUIRED_TEXT = [
   "\"wasm-gc\"",
   "type DriverDiagnostic",
   "def run_source_driver",
+  "data PipelineStage",
+  "def run_nanopass_wat",
   "stable_sort",
 ];
 

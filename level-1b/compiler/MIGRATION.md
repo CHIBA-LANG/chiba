@@ -13,13 +13,13 @@ below must have a level-1b owner before Second Bootstrap validation.
 | `ir.chiba` | `compiler/ir/*.chiba` | contract only |
 | `show.chiba` | `compiler/ir/show.chiba` | contract only |
 | `alpha.chiba` | `compiler/semantic/alpha.chiba` | contract only |
-| `typed.chiba` | `compiler/semantic/types.chiba` | missing rewrite |
-| `typed_semantic_check.chiba` | `compiler/semantic/driver.chiba` | missing rewrite |
+| `typed.chiba` | `compiler/semantic/typed_elaboration.chiba`, `compiler/semantic/types.chiba` | contract only |
+| `typed_semantic_check.chiba` | `compiler/semantic/driver.chiba`, `compiler/semantic/typed_elaboration.chiba` | contract only |
 | `type_kind.chiba` | `compiler/semantic/type_kind.chiba` | contract only |
-| `type_l2_check.chiba` | `compiler/semantic/type_infer.chiba` | missing rewrite |
+| `type_l2_check.chiba` | `compiler/semantic/type_infer.chiba` | contract only |
 | `type_unify.chiba` | `compiler/semantic/type_unify.chiba` | contract only |
 | `type_row.chiba` | `compiler/semantic/type_row.chiba` | contract only |
-| `type_record.chiba` | `compiler/semantic/type_row.chiba` | missing rewrite |
+| `type_record.chiba` | `compiler/semantic/type_record.chiba`, `compiler/semantic/type_row.chiba` | contract only |
 | `type_nominal.chiba` | `compiler/semantic/type_nominal.chiba` | contract only |
 | `type_method.chiba` | `compiler/semantic/method_operator.chiba` | contract only |
 | `type_template.chiba` | `compiler/semantic/template.chiba` | contract only |
@@ -36,7 +36,7 @@ below must have a level-1b owner before Second Bootstrap validation.
 | `closure.chiba` | `compiler/closure/*.chiba` | contract only |
 | `core.chiba` | `compiler/backend/core.chiba`, `compiler/backend/layout.chiba` | contract only |
 | `validate_core.chiba` | `compiler/backend/validate_core.chiba` | contract only |
-| `nanopass.chiba` | `compiler/driver/pass_driver.chiba`, `compiler/backend/driver.chiba` | missing rewrite |
+| `nanopass.chiba` | `compiler/driver/nanopass_pipeline.chiba`, `compiler/driver/pass_driver.chiba`, `compiler/backend/driver.chiba` | contract only |
 
 ## Exit Criteria
 

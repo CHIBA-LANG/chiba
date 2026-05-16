@@ -1,0 +1,19 @@
+/// Typed AST elaboration after alpha, pattern, and inference.
+namespace compiler.semantic.typed_elaboration
+
+use compiler.ir.typed.*
+use compiler.semantic.type_facts.*
+
+/// Elaboration artifact consumed by later control passes.
+type TypedElaboration {
+    module: TypedModule,
+    facts: Array[TypedFacts],
+}
+
+/// Elaborate typed expressions, facts, and obligations.
+def elaborate_typed_module(module: TypedModule): Result[TypedElaboration, SemanticDiagnostics] =
+    __compiler_builtin("std.semantic_elaborate_typed_module")
+
+/// Return true when elaboration produced no structural obligations.
+def TypedElaboration.concrete_only(self): bool =
+    self.facts.all {|fact: TypedFacts| fact.has_obligations() == false }

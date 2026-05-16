@@ -8,3 +8,7 @@ use compiler.semantic.types.*
 /// Infer HM + row types for an alpha-renamed module.
 def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule, SemanticDiagnostics] =
     __compiler_builtin("std.semantic_infer_types")
+
+/// Run the level-2 semantic checks that require inferred types.
+def check_l2_types(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
+    __compiler_builtin("std.semantic_check_l2_types")

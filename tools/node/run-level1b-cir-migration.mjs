@@ -13,12 +13,14 @@ const REQUIRED_OWNERS = [
   "compiler/semantic/type_kind.chiba",
   "compiler/semantic/type_unify.chiba",
   "compiler/semantic/type_row.chiba",
+  "compiler/semantic/type_record.chiba",
   "compiler/semantic/type_nominal.chiba",
   "compiler/semantic/type_generalize.chiba",
   "compiler/semantic/type_infer.chiba",
   "compiler/semantic/type_facts.chiba",
   "compiler/semantic/capability_rules.chiba",
   "compiler/semantic/generic_body.chiba",
+  "compiler/semantic/typed_elaboration.chiba",
   "compiler/semantic/method_operator.chiba",
   "compiler/semantic/template.chiba",
   "compiler/semantic/abi_capability.chiba",
@@ -33,6 +35,7 @@ const REQUIRED_OWNERS = [
   "compiler/backend/core.chiba",
   "compiler/backend/validate_core.chiba",
   "compiler/driver/pass_driver.chiba",
+  "compiler/driver/nanopass_pipeline.chiba",
 ];
 const REQUIRED_IR_FILES = [
   "level-1b/compiler/ir/common.chiba",

@@ -18,8 +18,10 @@ const REQUIRED_FILES = [
   "type_infer.chiba",
   "type_kind.chiba",
   "type_nominal.chiba",
+  "type_record.chiba",
   "type_row.chiba",
   "type_unify.chiba",
+  "typed_elaboration.chiba",
   "types.chiba",
 ];
 const REQUIRED_TEXT = [
@@ -31,6 +33,11 @@ const REQUIRED_TEXT = [
   "def canonicalize_row",
   "def generalize_type",
   "def infer_types",
+  "def check_l2_types",
+  "data AggregateKind",
+  "def build_aggregate_shape",
+  "type TypedElaboration",
+  "def elaborate_typed_module",
   "data SemanticConstraint",
   "data SemanticObligation",
   "def build_typed_facts",

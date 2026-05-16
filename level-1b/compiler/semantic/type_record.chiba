@@ -1,0 +1,38 @@
+/// Record, tuple, data, and union type rules over canonical rows.
+namespace compiler.semantic.type_record
+
+use compiler.semantic.types.*
+use compiler.semantic.type_row.*
+
+/// Aggregate kind whose layout is backed by row facts.
+data AggregateKind {
+    AggregateRecord,
+    AggregateTuple,
+    AggregateDataPayload,
+    AggregateUnion,
+}
+
+/// Aggregate field declaration.
+type AggregateField {
+    name: RowFieldId,
+    ty: SemType,
+}
+
+/// Aggregate shape after canonicalization.
+type AggregateShape {
+    kind: AggregateKind,
+    row: CanonicalRow,
+}
+
+/// Build a record/tuple/data/union aggregate shape.
+def build_aggregate_shape(kind: AggregateKind, fields: Array[AggregateField]): AggregateShape =
+    __compiler_builtin("std.semantic_build_aggregate_shape")
+
+/// Return true when aggregate field access uses row-field lowering.
+def AggregateKind.uses_row_field_lowering(self): bool =
+    match self {
+        AggregateRecord => true
+        AggregateTuple => true
+        AggregateDataPayload => true
+        AggregateUnion => true
+    }

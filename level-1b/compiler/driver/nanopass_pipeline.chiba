@@ -1,0 +1,34 @@
+/// Complete level-1b nanopass pipeline graph.
+namespace compiler.driver.nanopass_pipeline
+
+use compiler.driver.pass_driver.*
+use compiler.semantic.driver.*
+use compiler.control.driver.*
+use compiler.closure.driver.*
+use compiler.backend.driver.*
+
+/// Pipeline stage marker for diagnostics and dumps.
+data PipelineStage {
+    StageSource,
+    StageSemantic,
+    StageControl,
+    StageClosure,
+    StageBackendWat,
+}
+
+/// Pipeline artifact that records the last completed stage.
+type PipelineArtifact {
+    stage: PipelineStage,
+    diagnostics: DriverDiagnostics,
+}
+
+/// Run the level-1b pass graph through WAT emission.
+def run_nanopass_wat(input: DriverInput): Result[WatModule, DriverDiagnostics] =
+    __compiler_builtin("std.driver_run_nanopass_wat")
+
+/// Return true when a pipeline stage is after semantic checking.
+def PipelineStage.after_semantic(self): bool =
+    match self {
+        StageSource => false
+        _ => true
+    }
