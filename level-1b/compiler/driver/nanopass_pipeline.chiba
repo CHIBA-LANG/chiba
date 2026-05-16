@@ -22,9 +22,33 @@ type PipelineArtifact {
     diagnostics: DriverDiagnostics,
 }
 
+/// Convert one semantic diagnostic to a driver diagnostic.
+def semantic_to_driver_diagnostic(item: SemanticDiagnostic): DriverDiagnostic =
+    DriverDiagnostic(item.file, item.line, item.column, item.message)
+
+/// Convert semantic diagnostics to driver diagnostics in stable order.
+def semantic_to_driver_diagnostics(items: Array[SemanticDiagnostic], index: usize, out: Vec[DriverDiagnostic]): DriverDiagnostics =
+    if index == items.len() { DriverDiagnostics(out.freeze()).stable_sort() }
+    else { semantic_to_driver_diagnostics(items, index + 1, out.push(semantic_to_driver_diagnostic(items.get(index)))) }
+
+/// Convert a semantic diagnostic collection to the driver diagnostic channel.
+def SemanticDiagnostics.to_driver(self): DriverDiagnostics =
+    semantic_to_driver_diagnostics(self.items, 0, Vec[DriverDiagnostic].new())
+
 /// Run the level-1b pass graph through WAT emission.
 def run_nanopass_wat(input: DriverInput): Result[WatModule, DriverDiagnostics] =
-    __compiler_builtin("std.driver_run_nanopass_wat")
+    match run_source_driver(input) {
+        Ok(project) =>
+            match run_typed_semantics(project) {
+                Ok(typed) =>
+                    match run_wasm_gc_wat(typed) {
+                        Ok(wat) => Ok(wat)
+                        Err(errors) => Err(errors.to_driver())
+                    }
+                Err(errors) => Err(errors.to_driver())
+            }
+        Err(errors) => Err(errors)
+    }
 
 /// Return true when a pipeline stage is after semantic checking.
 def PipelineStage.after_semantic(self): bool =

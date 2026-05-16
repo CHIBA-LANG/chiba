@@ -36,7 +36,7 @@ below must have a level-1b owner before Second Bootstrap validation.
 | `closure.chiba` | `compiler/closure/*.chiba` | partial rewrite: CPS usage, continuation package decisions, layout threading, lambda lift stubs, and env simplification rewritten; full capture extraction still pending |
 | `core.chiba` | `compiler/backend/core.chiba`, `compiler/backend/layout.chiba` | rewritten |
 | `validate_core.chiba` | `compiler/backend/validate_core.chiba` | rewritten |
-| `nanopass.chiba` | `compiler/driver/nanopass_pipeline.chiba`, `compiler/driver/pass_driver.chiba`, `compiler/backend/driver.chiba` | contract only |
+| `nanopass.chiba` | `compiler/driver/nanopass_pipeline.chiba`, `compiler/driver/pass_driver.chiba`, `compiler/backend/driver.chiba` | partial rewrite: pass graph and diagnostic channel conversion owned; underlying source/semantic full drivers still partial |
 
 ## Exit Criteria
 
