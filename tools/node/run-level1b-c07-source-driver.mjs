@@ -84,6 +84,9 @@ function checkSource(file, source) {
   if (/\bmetalstd\b|Ptr\s*\[|UnsafeRef\s*\[|heap_alloc\s*\(|load(?:8|16|32|64)\s*\(/.test(code)) {
     errors.push(`${file}: source driver leaks Metal/raw memory`);
   }
+  if (file.endsWith("compile_if.chiba") && /__compiler_builtin\s*\(\s*"std\.compile_if_eval"/.test(code)) {
+    errors.push(`${file}: compile_if eval must be implemented in level-1b source`);
+  }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
       errors.push(`${file}:${i + 1}: public item is missing /// doc comment`);

@@ -9,14 +9,44 @@ type CompileTargetFacts {
 
 /// Compile-time predicate expression.
 data CompileIfPredicate {
-    CompileIfEq(str, String),
+    CompileIfEq(String, String),
     CompileIfAll(List[CompileIfPredicate]),
     CompileIfAny(List[CompileIfPredicate]),
     CompileIfNot(CompileIfPredicate),
 }
 
 /// Evaluate a compile_if predicate against target facts.
-def CompileIfPredicate.eval(self, facts: CompileTargetFacts): bool = __compiler_builtin("std.compile_if_eval")
+def CompileIfPredicate.eval(self, facts: CompileTargetFacts): bool =
+    match self {
+        CompileIfEq(key, value) => compile_if_eq(key, value, facts)
+        CompileIfAll(items) => compile_if_all(items, facts)
+        CompileIfAny(items) => compile_if_any(items, facts)
+        CompileIfNot(item) => item.eval(facts) == false
+    }
+
+/// Evaluate one key/value predicate.
+def compile_if_eq(key: String, value: String, facts: CompileTargetFacts): bool =
+    if key == "target" { value == facts.target }
+    else if key == "backend" { value == facts.backend }
+    else { false }
+
+/// Evaluate `all(...)` predicates.
+def compile_if_all(items: List[CompileIfPredicate], facts: CompileTargetFacts): bool =
+    match items {
+        Nil => true
+        Cons(head, tail) =>
+            if head.eval(facts) { compile_if_all(tail, facts) }
+            else { false }
+    }
+
+/// Evaluate `or(...)` predicates.
+def compile_if_any(items: List[CompileIfPredicate], facts: CompileTargetFacts): bool =
+    match items {
+        Nil => false
+        Cons(head, tail) =>
+            if head.eval(facts) { true }
+            else { compile_if_any(tail, facts) }
+    }
 
 /// Return the level-1b wasm target facts.
 def wasm_gc_wasi_facts(): CompileTargetFacts =

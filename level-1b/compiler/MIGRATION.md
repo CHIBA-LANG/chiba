@@ -6,7 +6,7 @@ below must have a level-1b owner before Second Bootstrap validation.
 
 | old `src/backend/cir` file | level-1b owner | status |
 | --- | --- | --- |
-| `compile_if.chiba` | `compiler/source/compile_if.chiba` | contract only |
+| `compile_if.chiba` | `compiler/source/compile_if.chiba` | rewritten |
 | `namespace_project_check.chiba` | `compiler/source/project.chiba` | contract only |
 | `source_semantic_check.chiba` | `compiler/source/semantic_gate.chiba`, `compiler/driver/pass_driver.chiba` | contract only |
 | `lower_ast.chiba` | `compiler/lower/ast_to_core.chiba` | contract only |
