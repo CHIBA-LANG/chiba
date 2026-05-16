@@ -1,0 +1,26 @@
+/// Nominal method and operator index.
+namespace level1b.compiler.semantic.method_operator
+
+use level1b.compiler.semantic.types.*
+
+/// Method index key. Receiver identity is nominal and namespace-qualified.
+type MethodKey {
+    receiver: NominalId,
+    name: String,
+}
+
+/// Operator index key.
+type OperatorKey {
+    receiver: NominalId,
+    operator_name: String,
+}
+
+/// Method/operator index for one project.
+type MethodOperatorIndex {
+    methods: Array[MethodKey],
+    operators: Array[OperatorKey],
+}
+
+/// Build the nominal method/operator index.
+def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex, SemanticDiagnostics] =
+    extern "std" "semantic_method_operator_index"

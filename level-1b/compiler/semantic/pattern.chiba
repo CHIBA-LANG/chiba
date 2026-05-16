@@ -1,0 +1,17 @@
+/// Pattern elaboration pass.
+namespace level1b.compiler.semantic.pattern
+
+use level1b.compiler.semantic.alpha.*
+
+/// Elaborated pattern identifier.
+type PatternId {
+    index: usize,
+}
+
+/// Pattern facts needed by type inference.
+type PatternFacts {
+    patterns: Array[PatternId],
+}
+
+/// Elaborate parameter, `let`, and match patterns after alpha conversion.
+def elaborate_patterns(module: AlphaModule): PatternFacts = extern "std" "semantic_elaborate_patterns"

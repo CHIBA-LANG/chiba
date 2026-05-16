@@ -1,0 +1,15 @@
+/// Alpha conversion pass for level-1b semantic analysis.
+namespace level1b.compiler.semantic.alpha
+
+/// Stable binder identifier after alpha conversion.
+type BinderId {
+    index: usize,
+}
+
+/// Alpha-renamed module.
+type AlphaModule {
+    binders: Array[BinderId],
+}
+
+/// Convert every source binder to a stable id before type checking.
+def alpha_convert(project: ProjectSurface): AlphaModule = extern "std" "semantic_alpha_convert"

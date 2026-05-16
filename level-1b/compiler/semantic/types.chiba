@@ -1,0 +1,47 @@
+/// Type representation and HM + row inference contracts.
+namespace level1b.compiler.semantic.types
+
+/// Type variable identifier.
+type TypeVar {
+    index: usize,
+}
+
+/// Nominal type identifier bound to namespace-qualified names.
+type NominalId {
+    namespace_name: String,
+    name: String,
+}
+
+/// Row field identifier after canonical sorting.
+type RowFieldId {
+    name: String,
+}
+
+/// Type expression used by semantic checking.
+data SemType {
+    TyVar(TypeVar),
+    TyNominal(NominalId),
+    TyFunction(Array[SemType], SemType),
+    TyRow(Array[RowFieldId], Option[TypeVar]),
+    TyArray(SemType),
+    TySlice(SemType),
+}
+
+/// Type scheme generalized at a legal boundary.
+type TypeScheme {
+    vars: Array[TypeVar],
+    body: SemType,
+}
+
+/// Unification result.
+type UnifyResult {
+    ty: SemType,
+}
+
+/// Unify two semantic types.
+def unify(left: SemType, right: SemType): Result[UnifyResult, SemanticDiagnostic] =
+    extern "std" "semantic_unify"
+
+/// Infer HM + row types for an alpha-renamed module.
+def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule, SemanticDiagnostics] =
+    extern "std" "semantic_infer_types"

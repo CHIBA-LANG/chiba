@@ -1,0 +1,21 @@
+/// Checked structural template contracts.
+namespace level1b.compiler.semantic.template
+
+use level1b.compiler.semantic.types.*
+
+/// Template obligation recorded at definition time.
+data TemplateObligation {
+    TemplateField(TypeVar, RowFieldId, SemType),
+    TemplateMethod(TypeVar, String),
+    TemplateOperator(TypeVar, String),
+}
+
+/// Checked generic body summary.
+type CheckedTemplate {
+    scheme: TypeScheme,
+    obligations: Array[TemplateObligation],
+}
+
+/// Check a generic body under abstract parameters.
+def check_template(module: TypedModule): Result[Array[CheckedTemplate], SemanticDiagnostics] =
+    extern "std" "semantic_check_template"

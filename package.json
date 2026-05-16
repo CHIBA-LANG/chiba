@@ -20,6 +20,7 @@
     "level1b:c05-chibalex": "node tools/node/run-level1b-c05-chibalex.mjs",
     "level1b:c06-chibacc": "node tools/node/run-level1b-c06-chibacc.mjs",
     "level1b:c07-source-driver": "node tools/node/run-level1b-c07-source-driver.mjs",
+    "level1b:c08-semantic": "node tools/node/run-level1b-c08-semantic.mjs",
     "level1b:namespace": "node tools/node/run-level1b-namespace-smoke.mjs",
     "level1b:chibalex-mini": "node tools/node/run-level1b-chibalex-mini.mjs",
     "level1b:chibacc-mini": "node tools/node/run-level1b-chibacc-mini.mjs",

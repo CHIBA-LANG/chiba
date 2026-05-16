@@ -1,0 +1,35 @@
+/// Typed semantic pass driver.
+namespace level1b.compiler.semantic.driver
+
+use level1b.compiler.semantic.alpha.*
+use level1b.compiler.semantic.pattern.*
+use level1b.compiler.semantic.types.*
+use level1b.compiler.semantic.template.*
+use level1b.compiler.semantic.method_operator.*
+use level1b.compiler.semantic.abi_capability.*
+
+/// Semantic diagnostic with stable ordering key.
+type SemanticDiagnostic {
+    file: String,
+    line: usize,
+    column: usize,
+    message: String,
+}
+
+/// Stable semantic diagnostic collection.
+type SemanticDiagnostics {
+    items: Array[SemanticDiagnostic],
+}
+
+/// Fully typed module after C08.
+type TypedModule {
+    alpha: AlphaModule,
+}
+
+/// Run alpha, pattern, inference, template, method/operator, ABI, and capability passes.
+def run_typed_semantics(project: ProjectSurface): Result[TypedModule, SemanticDiagnostics] =
+    extern "std" "semantic_run_typed"
+
+/// Sort semantic diagnostics deterministically.
+def SemanticDiagnostics.stable_sort(self): SemanticDiagnostics =
+    extern "std" "semantic_diagnostics_stable_sort"

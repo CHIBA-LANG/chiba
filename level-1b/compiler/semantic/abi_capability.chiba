@@ -1,0 +1,25 @@
+/// Extern ABI and memory capability checks.
+namespace level1b.compiler.semantic.abi_capability
+
+/// Extern ABI family.
+data ExternAbi {
+    ExternC,
+    ExternEnv,
+    ExternWasi,
+}
+
+/// Capability legality facts for references and atomics.
+data CapabilityUse {
+    CapabilityRef,
+    CapabilityUnsafeRef,
+    CapabilityPtr,
+    CapabilityAtomic,
+}
+
+/// Check extern ABI signatures after type inference.
+def check_extern_abi(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
+    extern "std" "semantic_check_extern_abi"
+
+/// Check Ref/UnsafeRef/Ptr/Atomic capability rules.
+def check_capabilities(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
+    extern "std" "semantic_check_capabilities"
