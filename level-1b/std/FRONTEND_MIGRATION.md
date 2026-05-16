@@ -23,7 +23,7 @@ live outside `std`.
 | `.chibalex` parser | `std/chibalex/parser.chiba` | contract only |
 | Lexer IR lowering | `std/chibalex/ir.chiba` | contract only |
 | Longest-match engine | `std/chibalex/engine.chiba` | partial rewrite: state advance and continuation choice rewritten; rule matching still builtin |
-| Lexer source codegen | `std/chibalex/codegen.chiba` | contract only |
+| Lexer source codegen | `std/chibalex/codegen.chiba` | partial rewrite: GeneratedLexer text wrapper owned; full lexer source serialization pending |
 
 ## Chibacc
 
@@ -33,7 +33,7 @@ live outside `std`.
 | `.chibacc` parser | `std/chibacc/parser.chiba` | contract only |
 | Grammar IR lowering | `std/chibacc/ir.chiba` | contract only |
 | Pratt/recovery engine | `std/chibacc/engine.chiba` | partial rewrite: recovery and continuation retry rewritten; Pratt parse still builtin |
-| Parser source codegen | `std/chibacc/codegen.chiba` | contract only |
+| Parser source codegen | `std/chibacc/codegen.chiba` | partial rewrite: GeneratedParser text wrapper owned; full parser source serialization pending |
 
 ## Exit Criteria
 
