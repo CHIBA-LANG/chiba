@@ -27,6 +27,10 @@ data SemType {
     TyRow(Array[RowFieldId], Option[TypeVar]),
     TyArray(SemType),
     TySlice(SemType),
+    TyRef(SemType),
+    TyUnsafeRef(SemType),
+    TyPtr(SemType),
+    TyAtomic(SemType),
 }
 
 /// Type scheme generalized at a legal boundary.

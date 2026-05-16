@@ -4,6 +4,7 @@ namespace compiler.driver.pass_driver
 use compiler.cli.*
 use compiler.source.project.*
 use compiler.source.compile_if.*
+use compiler.source.semantic_gate.*
 
 /// Driver diagnostic with stable ordering key.
 type DriverDiagnostic {
@@ -25,7 +26,7 @@ type DriverInput {
     target_facts: CompileTargetFacts,
 }
 
-/// Run source loading and header filtering.
+/// Run source loading, header filtering, and source-level semantic gates.
 def run_source_driver(input: DriverInput): Result[ProjectSurface, DriverDiagnostics] = __compiler_builtin("std.driver_run_source")
 
 /// Sort diagnostics by file, line, column, then message.

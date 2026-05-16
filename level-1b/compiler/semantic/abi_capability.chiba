@@ -16,6 +16,18 @@ data CapabilityUse {
     CapabilityAtomic,
 }
 
+/// Return true for ABI scalar types accepted at extern boundaries.
+def abi_scalar_type(ty: SemType): bool =
+    __compiler_builtin("std.semantic_abi_scalar_type")
+
+/// Return true if a capability use requires an unsafe block.
+def CapabilityUse.requires_unsafe(self): bool =
+    match self {
+        CapabilityPtr => true
+        CapabilityUnsafeRef => true
+        _ => false
+    }
+
 /// Check extern ABI signatures after type inference.
 def check_extern_abi(module: TypedModule): Result[TypedModule, SemanticDiagnostics] = __compiler_builtin("std.semantic_check_extern_abi")
 

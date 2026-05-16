@@ -1,0 +1,39 @@
+/// Source-level semantic gates before body type checking.
+namespace compiler.source.semantic_gate
+
+use compiler.source.project.*
+
+/// Source semantic gate error kind.
+data SourceGateErrorKind {
+    SourceGateTopLevelRefNeedsWorldLocal,
+    SourceGateAtomicPayloadUnsupported,
+    SourceGateAtomicLoadOrdering,
+    SourceGateAtomicStoreOrdering,
+    SourceGatePtrNeedsUnsafe,
+    SourceGateUnsafeRefNeedsUnsafe,
+    SourceGateMetalPointerMustUsePtr,
+    SourceGateRefArrayDirectAssignment,
+    SourceGateUnresolvedMethod,
+    SourceGateRowMissingField,
+}
+
+/// Source semantic gate error.
+type SourceGateError {
+    file: SourceFileId,
+    kind: SourceGateErrorKind,
+    message: String,
+}
+
+/// Result of source-level semantic gates.
+type SourceGateResult {
+    project: ProjectSurface,
+    errors: Array[SourceGateError],
+}
+
+/// Check source-level capability and surface rules using parsed project facts.
+def check_source_semantic_gates(project: ProjectSurface): SourceGateResult =
+    __compiler_builtin("std.source_check_semantic_gates")
+
+/// Return true when the gate result can continue to type checking.
+def SourceGateResult.ok(self): bool =
+    self.errors.len() == 0

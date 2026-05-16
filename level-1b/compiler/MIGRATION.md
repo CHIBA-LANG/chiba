@@ -8,7 +8,7 @@ below must have a level-1b owner before Second Bootstrap validation.
 | --- | --- | --- |
 | `compile_if.chiba` | `compiler/source/compile_if.chiba` | contract only |
 | `namespace_project_check.chiba` | `compiler/source/project.chiba` | contract only |
-| `source_semantic_check.chiba` | `compiler/source/project.chiba`, `compiler/driver/pass_driver.chiba` | missing rewrite |
+| `source_semantic_check.chiba` | `compiler/source/semantic_gate.chiba`, `compiler/driver/pass_driver.chiba` | contract only |
 | `lower_ast.chiba` | `compiler/lower/ast_to_core.chiba` | contract only |
 | `ir.chiba` | `compiler/ir/*.chiba` | contract only |
 | `show.chiba` | `compiler/ir/show.chiba` | contract only |
@@ -25,8 +25,8 @@ below must have a level-1b owner before Second Bootstrap validation.
 | `type_template.chiba` | `compiler/semantic/template.chiba` | contract only |
 | `type_generic_body.chiba` | `compiler/semantic/template.chiba` | missing rewrite |
 | `type_generalize.chiba` | `compiler/semantic/type_generalize.chiba` | contract only |
-| `type_facts.chiba` | `compiler/semantic/types.chiba`, `compiler/semantic/abi_capability.chiba` | missing rewrite |
-| `type_capability.chiba` | `compiler/semantic/abi_capability.chiba` | contract only |
+| `type_facts.chiba` | `compiler/semantic/type_facts.chiba` | contract only |
+| `type_capability.chiba` | `compiler/semantic/capability_rules.chiba`, `compiler/semantic/abi_capability.chiba` | contract only |
 | `answer_control.chiba` | `compiler/control/answer_control.chiba` | contract only |
 | `continuation_check.chiba` | `compiler/control/answer_control.chiba` | missing rewrite |
 | `continuation_boundary_check.chiba` | `compiler/control/replay_safety.chiba` | missing rewrite |

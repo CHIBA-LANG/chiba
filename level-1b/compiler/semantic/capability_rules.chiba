@@ -1,0 +1,81 @@
+/// Capability legality rules for Ref, Ptr, UnsafeRef, Atomic, and ABI scalar types.
+namespace compiler.semantic.capability_rules
+
+use compiler.semantic.types.*
+use compiler.semantic.type_unify.*
+
+/// Atomic ordering accepted by semantic checks.
+data AtomicOrdering {
+    AtomicRelaxed,
+    AtomicAcquire,
+    AtomicRelease,
+    AtomicAcqRel,
+    AtomicSeqCst,
+}
+
+/// Capability check result.
+data CapabilityCheck {
+    CapabilityOk,
+    CapabilityErr(String),
+}
+
+/// Check assignment through `Ref[T]`.
+def check_ref_assignment(lhs: SemType, rhs: SemType): CapabilityCheck =
+    match lhs {
+        TyRef(inner) =>
+            match unify(inner, rhs) {
+                Ok(_) => CapabilityOk
+                Err(_) => CapabilityErr("Ref assignment type mismatch")
+            }
+        _ => CapabilityErr("assignment lhs must be Ref[T]")
+    }
+
+/// Return true when a type can be stored in an `Atomic[T]`.
+def atomic_payload_supported(ty: SemType): bool =
+    match ty {
+        TyNominal(id) =>
+            if id.name == "i32" { true }
+            else if id.name == "i64" { true }
+            else if id.name == "usize" { true }
+            else if id.name == "bool" { true }
+            else { false }
+        TyPtr(_) => true
+        _ => false
+    }
+
+/// Check `Atomic[T]` payload legality.
+def check_atomic_payload(ty: SemType): CapabilityCheck =
+    match ty {
+        TyAtomic(inner) =>
+            if atomic_payload_supported(inner) { CapabilityOk }
+            else { CapabilityErr("unsupported Atomic[T]") }
+        _ => CapabilityErr("expected Atomic[T]")
+    }
+
+/// Check whether a type is legal outside an unsafe block.
+def check_unsafe_type(ty: SemType, unsafe_depth: usize): CapabilityCheck =
+    match ty {
+        TyPtr(_) =>
+            if unsafe_depth != 0 { CapabilityOk }
+            else { CapabilityErr("Ptr requires unsafe block") }
+        TyUnsafeRef(_) =>
+            if unsafe_depth != 0 { CapabilityOk }
+            else { CapabilityErr("UnsafeRef requires unsafe block") }
+        _ => CapabilityOk
+    }
+
+/// Check `Atomic.load` ordering.
+def atomic_load_ordering_allowed(order: AtomicOrdering): bool =
+    match order {
+        AtomicRelease => false
+        AtomicAcqRel => false
+        _ => true
+    }
+
+/// Check `Atomic.store` ordering.
+def atomic_store_ordering_allowed(order: AtomicOrdering): bool =
+    match order {
+        AtomicAcquire => false
+        AtomicAcqRel => false
+        _ => true
+    }

@@ -1,0 +1,40 @@
+/// Typed facts produced by HM + row inference.
+namespace compiler.semantic.type_facts
+
+use compiler.ir.type_ir.*
+use compiler.semantic.abi_capability.*
+use compiler.semantic.types.*
+
+/// Type equality and row/capability constraints.
+data SemanticConstraint {
+    ConstraintEq(SemType, SemType),
+    ConstraintRowEq(SemType, SemType),
+    ConstraintFieldPresent(SemType, RowFieldId),
+    ConstraintFieldType(SemType, RowFieldId, SemType),
+    ConstraintCapability(SemType, String),
+    ConstraintAbi(SemType, ExternAbi),
+}
+
+/// Structural obligation kept for checked templates and specialization.
+data SemanticObligation {
+    ObligationField(SemType, RowFieldId, SemType),
+    ObligationMethod(SemType, String, Array[SemType], SemType),
+    ObligationOperator(String, SemType, Array[SemType], SemType),
+    ObligationShapeDispatch(String, SemType, Array[SemType], SemType),
+    ObligationContinuationCapability(SemType, ContinuationResumeKind),
+}
+
+/// Facts attached to one typed expression or definition.
+type TypedFacts {
+    root_type: SemType,
+    constraints: Array[SemanticConstraint],
+    obligations: Array[SemanticObligation],
+}
+
+/// Build typed facts after inference.
+def build_typed_facts(module: TypedModule): Array[TypedFacts] =
+    __compiler_builtin("std.semantic_build_typed_facts")
+
+/// Return true when typed facts contain specialization obligations.
+def TypedFacts.has_obligations(self): bool =
+    self.obligations.len() != 0

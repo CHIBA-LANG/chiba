@@ -10,6 +10,8 @@ use compiler.semantic.type_row.*
 use compiler.semantic.type_nominal.*
 use compiler.semantic.type_generalize.*
 use compiler.semantic.type_infer.*
+use compiler.semantic.type_facts.*
+use compiler.semantic.capability_rules.*
 use compiler.semantic.template.*
 use compiler.semantic.method_operator.*
 use compiler.semantic.abi_capability.*
