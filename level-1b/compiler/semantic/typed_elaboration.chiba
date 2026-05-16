@@ -12,7 +12,7 @@ type TypedElaboration {
 
 /// Elaborate typed expressions, facts, and obligations.
 def elaborate_typed_module(module: TypedModule): Result[TypedElaboration, SemanticDiagnostics] =
-    __compiler_builtin("std.semantic_elaborate_typed_module")
+    Ok(TypedElaboration(module, build_typed_facts(module)))
 
 /// Return true when elaboration produced no structural obligations.
 def TypedElaboration.concrete_only(self): bool =

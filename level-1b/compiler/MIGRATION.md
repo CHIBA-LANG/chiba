@@ -13,8 +13,8 @@ below must have a level-1b owner before Second Bootstrap validation.
 | `ir.chiba` | `compiler/ir/*.chiba` | contract only |
 | `show.chiba` | `compiler/ir/show.chiba` | rewritten |
 | `alpha.chiba` | `compiler/semantic/alpha.chiba` | contract only |
-| `typed.chiba` | `compiler/semantic/typed_elaboration.chiba`, `compiler/semantic/types.chiba` | contract only |
-| `typed_semantic_check.chiba` | `compiler/semantic/driver.chiba`, `compiler/semantic/typed_elaboration.chiba` | contract only |
+| `typed.chiba` | `compiler/semantic/typed_elaboration.chiba`, `compiler/semantic/types.chiba` | partial rewrite: typed elaboration/fact attachment owned; full typed AST expression elaboration pending |
+| `typed_semantic_check.chiba` | `compiler/semantic/driver.chiba`, `compiler/semantic/typed_elaboration.chiba` | partial rewrite: typed diagnostics sort and elaboration boundary owned; full semantic driver still contract |
 | `type_kind.chiba` | `compiler/semantic/type_kind.chiba` | rewritten |
 | `type_l2_check.chiba` | `compiler/semantic/type_infer.chiba` | contract only |
 | `type_unify.chiba` | `compiler/semantic/type_unify.chiba` | rewritten |
