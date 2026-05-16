@@ -13,5 +13,25 @@ type DocPath {
     path: String,
 }
 
+/// Extract the text from an optional doc comment.
+def namespace_doc_comment_text(comment: Option[DocCommentBlock]): Option[String] =
+    match comment {
+        Some(block) => Some(block.text)
+        None => None
+    }
+
+/// Extract the path from an optional doc path attribute.
+def namespace_doc_path_text(doc_path: Option[DocPath]): Option[String] =
+    match doc_path {
+        Some(path) => Some(path.path)
+        None => None
+    }
+
 /// Attach namespace documentation from comment and attribute facts.
-def attach_namespace_doc(name: str, comment: Option[DocCommentBlock], doc_path: Option[DocPath]): NamespaceSurface = __compiler_builtin("std.source_attach_namespace_doc")
+def attach_namespace_doc(name: str, comment: Option[DocCommentBlock], doc_path: Option[DocPath]): NamespaceSurface =
+    NamespaceSurface {
+        name: name,
+        doc_path: namespace_doc_path_text(doc_path),
+        doc_comment: namespace_doc_comment_text(comment),
+        file: SourceFileId { index: 0 },
+    }
