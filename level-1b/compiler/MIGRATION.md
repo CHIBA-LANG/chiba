@@ -32,7 +32,7 @@ below must have a level-1b owner before Second Bootstrap validation.
 | `continuation_boundary_check.chiba` | `compiler/control/continuation_boundary.chiba`, `compiler/control/replay_safety.chiba` | contract only |
 | `continuation_usage.chiba` | `compiler/control/continuation_usage.chiba` | contract only |
 | `usage.chiba` | `compiler/control/usage_subject.chiba`, `compiler/control/continuation_usage.chiba`, `compiler/closure/usage_cps.chiba` | contract only |
-| `cps.chiba` | `compiler/control/cps.chiba` | contract only |
+| `cps.chiba` | `compiler/control/cps.chiba` | partial rewrite: CPS module boundary is level-1b-owned; full expression CPS lowering still pending |
 | `closure.chiba` | `compiler/closure/*.chiba` | partial rewrite: CPS usage, continuation package decisions, layout threading, lambda lift stubs, and env simplification rewritten; full capture extraction still pending |
 | `core.chiba` | `compiler/backend/core.chiba`, `compiler/backend/layout.chiba` | rewritten |
 | `validate_core.chiba` | `compiler/backend/validate_core.chiba` | rewritten |
