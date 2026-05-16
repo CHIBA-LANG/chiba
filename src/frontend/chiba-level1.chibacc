@@ -9,7 +9,8 @@
 start source_file
 
 rule trivia ::= 
-    _:LineComment => 0
+    _:DocComment => 0
+    | _:LineComment => 0
     | _:Newline => 0
     ;
 

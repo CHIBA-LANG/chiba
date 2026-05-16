@@ -60,6 +60,7 @@ data Token {
     KwSend,
     KwSelf,
 
+    DocComment(Str),
     LineComment(Str),
     Newline(Str),
 
@@ -285,6 +286,7 @@ def strhasnewline(s: Str): i64 = strhasnewlineloop(s, 0)
 
 def token_is_trivia(tok: Token): i64 =
     match tok {
+        DocComment(_) => 1
         LineComment(_) => 1
         _ => 0
     }
@@ -292,6 +294,7 @@ def token_is_trivia(tok: Token): i64 =
 def token_ends_line(tok: Token): i64 =
     match tok {
         Newline(_) => 1
+        DocComment(text) => strhasnewline(text)
         LineComment(text) => strhasnewline(text)
         _ => 0
     }
@@ -321,248 +324,251 @@ def lex_init_patterns(): Vec = {
     let p1 = mk_str("(?:[ \\t]+)", 10)
     let _ = vec_push(pats, lex_compile_pat(p1) as i64)
     // rule 2
-    let p2 = mk_str("(?://[^\\n]*(\r?\n[ \\t]*//[^\\n]*)*)", 32)
+    let p2 = mk_str("(?:///[^\\n]*(\r?\n[ \\t]*///[^\\n]*)*)", 34)
     let _ = vec_push(pats, lex_compile_pat(p2) as i64)
     // rule 3
-    let p3 = mk_str("(?:#*\")", 7)
+    let p3 = mk_str("(?://[^\\n]*(\r?\n[ \\t]*//[^\\n]*)*)", 32)
     let _ = vec_push(pats, lex_compile_pat(p3) as i64)
     // rule 4
-    let p4 = mk_str("(?:namespace(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 45)
+    let p4 = mk_str("(?:#*\")", 7)
     let _ = vec_push(pats, lex_compile_pat(p4) as i64)
     // rule 5
-    let p5 = mk_str("(?:def(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
+    let p5 = mk_str("(?:namespace(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 45)
     let _ = vec_push(pats, lex_compile_pat(p5) as i64)
     // rule 6
-    let p6 = mk_str("(?:type(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
+    let p6 = mk_str("(?:def(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
     let _ = vec_push(pats, lex_compile_pat(p6) as i64)
     // rule 7
-    let p7 = mk_str("(?:data(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
+    let p7 = mk_str("(?:type(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
     let _ = vec_push(pats, lex_compile_pat(p7) as i64)
     // rule 8
-    let p8 = mk_str("(?:union(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 41)
+    let p8 = mk_str("(?:data(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
     let _ = vec_push(pats, lex_compile_pat(p8) as i64)
     // rule 9
-    let p9 = mk_str("(?:let(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
+    let p9 = mk_str("(?:union(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 41)
     let _ = vec_push(pats, lex_compile_pat(p9) as i64)
     // rule 10
-    let p10 = mk_str("(?:if(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p10 = mk_str("(?:let(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
     let _ = vec_push(pats, lex_compile_pat(p10) as i64)
     // rule 11
-    let p11 = mk_str("(?:else(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
+    let p11 = mk_str("(?:if(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p11) as i64)
     // rule 12
-    let p12 = mk_str("(?:match(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 41)
+    let p12 = mk_str("(?:else(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
     let _ = vec_push(pats, lex_compile_pat(p12) as i64)
     // rule 13
-    let p13 = mk_str("(?:extern(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 42)
+    let p13 = mk_str("(?:match(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 41)
     let _ = vec_push(pats, lex_compile_pat(p13) as i64)
     // rule 14
-    let p14 = mk_str("(?:unsafe(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 42)
+    let p14 = mk_str("(?:extern(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 42)
     let _ = vec_push(pats, lex_compile_pat(p14) as i64)
     // rule 15
-    let p15 = mk_str("(?:reset(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 41)
+    let p15 = mk_str("(?:unsafe(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 42)
     let _ = vec_push(pats, lex_compile_pat(p15) as i64)
     // rule 16
-    let p16 = mk_str("(?:shift(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 41)
+    let p16 = mk_str("(?:reset(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 41)
     let _ = vec_push(pats, lex_compile_pat(p16) as i64)
     // rule 17
-    let p17 = mk_str("(?:true)", 8)
+    let p17 = mk_str("(?:shift(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 41)
     let _ = vec_push(pats, lex_compile_pat(p17) as i64)
     // rule 18
-    let p18 = mk_str("(?:false)", 9)
+    let p18 = mk_str("(?:true)", 8)
     let _ = vec_push(pats, lex_compile_pat(p18) as i64)
     // rule 19
-    let p19 = mk_str("(?:dyn(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
+    let p19 = mk_str("(?:false)", 9)
     let _ = vec_push(pats, lex_compile_pat(p19) as i64)
     // rule 20
-    let p20 = mk_str("(?:interface(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 45)
+    let p20 = mk_str("(?:dyn(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
     let _ = vec_push(pats, lex_compile_pat(p20) as i64)
     // rule 21
-    let p21 = mk_str("(?:as(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p21 = mk_str("(?:interface(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 45)
     let _ = vec_push(pats, lex_compile_pat(p21) as i64)
     // rule 22
-    let p22 = mk_str("(?:via(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
+    let p22 = mk_str("(?:as(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p22) as i64)
     // rule 23
-    let p23 = mk_str("(?:use(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
+    let p23 = mk_str("(?:via(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
     let _ = vec_push(pats, lex_compile_pat(p23) as i64)
     // rule 24
-    let p24 = mk_str("(?:private(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 43)
+    let p24 = mk_str("(?:use(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
     let _ = vec_push(pats, lex_compile_pat(p24) as i64)
     // rule 25
-    let p25 = mk_str("(?:asm(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
+    let p25 = mk_str("(?:private(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 43)
     let _ = vec_push(pats, lex_compile_pat(p25) as i64)
     // rule 26
-    let p26 = mk_str("(?:for(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
+    let p26 = mk_str("(?:asm(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
     let _ = vec_push(pats, lex_compile_pat(p26) as i64)
     // rule 27
-    let p27 = mk_str("(?:break(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 41)
+    let p27 = mk_str("(?:for(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
     let _ = vec_push(pats, lex_compile_pat(p27) as i64)
     // rule 28
-    let p28 = mk_str("(?:continue(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 44)
+    let p28 = mk_str("(?:break(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 41)
     let _ = vec_push(pats, lex_compile_pat(p28) as i64)
     // rule 29
-    let p29 = mk_str("(?:return(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 42)
+    let p29 = mk_str("(?:continue(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 44)
     let _ = vec_push(pats, lex_compile_pat(p29) as i64)
     // rule 30
-    let p30 = mk_str("(?:unique(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 42)
+    let p30 = mk_str("(?:return(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 42)
     let _ = vec_push(pats, lex_compile_pat(p30) as i64)
     // rule 31
-    let p31 = mk_str("(?:send(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
+    let p31 = mk_str("(?:unique(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 42)
     let _ = vec_push(pats, lex_compile_pat(p31) as i64)
     // rule 32
-    let p32 = mk_str("(?:self)", 8)
+    let p32 = mk_str("(?:send(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
     let _ = vec_push(pats, lex_compile_pat(p32) as i64)
     // rule 33
-    let p33 = mk_str("(?:_)", 5)
+    let p33 = mk_str("(?:self)", 8)
     let _ = vec_push(pats, lex_compile_pat(p33) as i64)
     // rule 34
-    let p34 = mk_str("(?:\\i\\j*)", 9)
+    let p34 = mk_str("(?:_)", 5)
     let _ = vec_push(pats, lex_compile_pat(p34) as i64)
     // rule 35
-    let p35 = mk_str("(?:(?:[0-9]([0-9]|_)*)\\.(?:[0-9]([0-9]|_)*)(?:[eE](\\+|-)?(?:[0-9]([0-9]|_)*))?(?:(?:\\i\\j*))?)", 93)
+    let p35 = mk_str("(?:\\i\\j*)", 9)
     let _ = vec_push(pats, lex_compile_pat(p35) as i64)
     // rule 36
-    let p36 = mk_str("(?:(?:[0-9]([0-9]|_)*)(?:[eE](\\+|-)?(?:[0-9]([0-9]|_)*))(?:(?:\\i\\j*))?)", 71)
+    let p36 = mk_str("(?:(?:[0-9]([0-9]|_)*)\\.(?:[0-9]([0-9]|_)*)(?:[eE](\\+|-)?(?:[0-9]([0-9]|_)*))?(?:(?:\\i\\j*))?)", 93)
     let _ = vec_push(pats, lex_compile_pat(p36) as i64)
     // rule 37
-    let p37 = mk_str("(?:((?:0[xX](?:[0-9A-Fa-f]([0-9A-Fa-f]|_)*))|(?:0[oO](?:[0-7]([0-7]|_)*))|(?:0[bB](?:[01]([01]|_)*))|(?:(?:[0-9]([0-9]|_)*)))(?:(?:\\i\\j*))?)", 140)
+    let p37 = mk_str("(?:(?:[0-9]([0-9]|_)*)(?:[eE](\\+|-)?(?:[0-9]([0-9]|_)*))(?:(?:\\i\\j*))?)", 71)
     let _ = vec_push(pats, lex_compile_pat(p37) as i64)
     // rule 38
-    let p38 = mk_str("(?::(?:\\i\\j*))", 14)
+    let p38 = mk_str("(?:((?:0[xX](?:[0-9A-Fa-f]([0-9A-Fa-f]|_)*))|(?:0[oO](?:[0-7]([0-7]|_)*))|(?:0[bB](?:[01]([01]|_)*))|(?:(?:[0-9]([0-9]|_)*)))(?:(?:\\i\\j*))?)", 140)
     let _ = vec_push(pats, lex_compile_pat(p38) as i64)
     // rule 39
-    let p39 = mk_str("(?:#!\\[(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
+    let p39 = mk_str("(?::(?:\\i\\j*))", 14)
     let _ = vec_push(pats, lex_compile_pat(p39) as i64)
     // rule 40
-    let p40 = mk_str("(?:#\\[(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
+    let p40 = mk_str("(?:#!\\[(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
     let _ = vec_push(pats, lex_compile_pat(p40) as i64)
     // rule 41
-    let p41 = mk_str("(?:#)", 5)
+    let p41 = mk_str("(?:#\\[(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
     let _ = vec_push(pats, lex_compile_pat(p41) as i64)
     // rule 42
-    let p42 = mk_str("(?:\\|>(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
+    let p42 = mk_str("(?:#)", 5)
     let _ = vec_push(pats, lex_compile_pat(p42) as i64)
     // rule 43
-    let p43 = mk_str("(?::=(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p43 = mk_str("(?:\\|>(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 39)
     let _ = vec_push(pats, lex_compile_pat(p43) as i64)
     // rule 44
-    let p44 = mk_str("(?:\\.\\*)", 8)
+    let p44 = mk_str("(?::=(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p44) as i64)
     // rule 45
-    let p45 = mk_str("(?:\\.\\.(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
+    let p45 = mk_str("(?:\\.\\*)", 8)
     let _ = vec_push(pats, lex_compile_pat(p45) as i64)
     // rule 46
-    let p46 = mk_str("(?:=>(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p46 = mk_str("(?:\\.\\.(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 40)
     let _ = vec_push(pats, lex_compile_pat(p46) as i64)
     // rule 47
-    let p47 = mk_str("(?:->(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p47 = mk_str("(?:=>(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p47) as i64)
     // rule 48
-    let p48 = mk_str("(?:==(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p48 = mk_str("(?:->(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p48) as i64)
     // rule 49
-    let p49 = mk_str("(?:!=(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p49 = mk_str("(?:==(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p49) as i64)
     // rule 50
-    let p50 = mk_str("(?:<=(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p50 = mk_str("(?:!=(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p50) as i64)
     // rule 51
-    let p51 = mk_str("(?:>=(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p51 = mk_str("(?:<=(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p51) as i64)
     // rule 52
-    let p52 = mk_str("(?:<<(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p52 = mk_str("(?:>=(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p52) as i64)
     // rule 53
-    let p53 = mk_str("(?:>>(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p53 = mk_str("(?:<<(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p53) as i64)
     // rule 54
-    let p54 = mk_str("(?:&&(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p54 = mk_str("(?:>>(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p54) as i64)
     // rule 55
-    let p55 = mk_str("(?:\\|\\|)", 8)
+    let p55 = mk_str("(?:&&(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p55) as i64)
     // rule 56
-    let p56 = mk_str("(?:=(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p56 = mk_str("(?:\\|\\|)", 8)
     let _ = vec_push(pats, lex_compile_pat(p56) as i64)
     // rule 57
-    let p57 = mk_str("(?:\\+(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p57 = mk_str("(?:=(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p57) as i64)
     // rule 58
-    let p58 = mk_str("(?:-(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p58 = mk_str("(?:\\+(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p58) as i64)
     // rule 59
-    let p59 = mk_str("(?:\\*(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p59 = mk_str("(?:-(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p59) as i64)
     // rule 60
-    let p60 = mk_str("(?:/(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p60 = mk_str("(?:\\*(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p60) as i64)
     // rule 61
-    let p61 = mk_str("(?:%(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p61 = mk_str("(?:/(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p61) as i64)
     // rule 62
-    let p62 = mk_str("(?:<(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p62 = mk_str("(?:%(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p62) as i64)
     // rule 63
-    let p63 = mk_str("(?:>(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p63 = mk_str("(?:<(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p63) as i64)
     // rule 64
-    let p64 = mk_str("(?:!(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p64 = mk_str("(?:>(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p64) as i64)
     // rule 65
-    let p65 = mk_str("(?:&(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p65 = mk_str("(?:!(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p65) as i64)
     // rule 66
-    let p66 = mk_str("(?:\\|)", 6)
+    let p66 = mk_str("(?:&(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p66) as i64)
     // rule 67
-    let p67 = mk_str("(?:\\^(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p67 = mk_str("(?:\\|)", 6)
     let _ = vec_push(pats, lex_compile_pat(p67) as i64)
     // rule 68
-    let p68 = mk_str("(?::(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p68 = mk_str("(?:\\^(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p68) as i64)
     // rule 69
-    let p69 = mk_str("(?:,(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p69 = mk_str("(?::(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p69) as i64)
     // rule 70
-    let p70 = mk_str("(?:\\.(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p70 = mk_str("(?:,(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p70) as i64)
     // rule 71
-    let p71 = mk_str("(?:;(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p71 = mk_str("(?:\\.(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p71) as i64)
     // rule 72
-    let p72 = mk_str("(?:@(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
+    let p72 = mk_str("(?:;(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p72) as i64)
     // rule 73
-    let p73 = mk_str("(?:\\((?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p73 = mk_str("(?:@(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 37)
     let _ = vec_push(pats, lex_compile_pat(p73) as i64)
     // rule 74
-    let p74 = mk_str("(?:(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?\\))", 38)
+    let p74 = mk_str("(?:\\((?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p74) as i64)
     // rule 75
-    let p75 = mk_str("(?:\\{(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p75 = mk_str("(?:(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?\\))", 38)
     let _ = vec_push(pats, lex_compile_pat(p75) as i64)
     // rule 76
-    let p76 = mk_str("(?:(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?\\})", 38)
+    let p76 = mk_str("(?:\\{(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p76) as i64)
     // rule 77
-    let p77 = mk_str("(?:\\[(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
+    let p77 = mk_str("(?:(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?\\})", 38)
     let _ = vec_push(pats, lex_compile_pat(p77) as i64)
     // rule 78
-    let p78 = mk_str("(?:(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?\\])", 38)
+    let p78 = mk_str("(?:\\[(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?)", 38)
     let _ = vec_push(pats, lex_compile_pat(p78) as i64)
     // rule 79
-    let p79 = mk_str("(?:\")", 5)
+    let p79 = mk_str("(?:(?:[ \\t]*\r?\n([ \\t]*\r?\n)*[ \\t]*)?\\])", 38)
     let _ = vec_push(pats, lex_compile_pat(p79) as i64)
     // rule 80
-    let p80 = mk_str("(?:\\{)", 6)
+    let p80 = mk_str("(?:\")", 5)
     let _ = vec_push(pats, lex_compile_pat(p80) as i64)
     // rule 81
-    let p81 = mk_str("(?:[^\"{}]+)", 11)
+    let p81 = mk_str("(?:\\{)", 6)
     let _ = vec_push(pats, lex_compile_pat(p81) as i64)
     // rule 82
-    let p82 = mk_str(".", 1)
+    let p82 = mk_str("(?:[^\"{}]+)", 11)
     let _ = vec_push(pats, lex_compile_pat(p82) as i64)
+    // rule 83
+    let p83 = mk_str(".", 1)
+    let _ = vec_push(pats, lex_compile_pat(p83) as i64)
     pats
 }
 
@@ -646,10 +652,11 @@ def lex_rule_mode(rule: i64): i64 =
     else if rule == 76 { LEX_MODE_CODE() }
     else if rule == 77 { LEX_MODE_CODE() }
     else if rule == 78 { LEX_MODE_CODE() }
-    else if rule == 79 { LEX_MODE_STRING() }
+    else if rule == 79 { LEX_MODE_CODE() }
     else if rule == 80 { LEX_MODE_STRING() }
     else if rule == 81 { LEX_MODE_STRING() }
     else if rule == 82 { LEX_MODE_STRING() }
+    else if rule == 83 { LEX_MODE_STRING() }
     else { LEX_MODE_CODE() }
 
 def lex_new_ctx(src: i64, src_len: i64): LexerCtx =
@@ -743,87 +750,88 @@ def lex_flush_emit(ctx: LexerCtx, out: Vec, emit: Vec, span: Span, i: i64): Lexe
 def lex_action(rule: i64, ctx: LexerCtx, s: Str, span: Span): LexerCtx =
     if rule == 0 { lex_ctx_emit(ctx, s.len, Newline(s)) }
     else if rule == 1 { lex_ctx_skip(ctx, s.len) }
-    else if rule == 2 { lex_ctx_emit(ctx, s.len, LineComment(s)) }
-    else if rule == 3 { string_open(ctx, s) }
-    else if rule == 4 { lex_ctx_emit(ctx, s.len, KwNamespace) }
-    else if rule == 5 { lex_ctx_emit(ctx, s.len, KwDef) }
-    else if rule == 6 { lex_ctx_emit(ctx, s.len, KwType) }
-    else if rule == 7 { lex_ctx_emit(ctx, s.len, KwData) }
-    else if rule == 8 { lex_ctx_emit(ctx, s.len, KwUnion) }
-    else if rule == 9 { lex_ctx_emit(ctx, s.len, KwLet) }
-    else if rule == 10 { lex_ctx_emit(ctx, s.len, KwIf) }
-    else if rule == 11 { lex_ctx_emit(ctx, s.len, KwElse) }
-    else if rule == 12 { lex_ctx_emit(ctx, s.len, KwMatch) }
-    else if rule == 13 { lex_ctx_emit(ctx, s.len, KwExtern) }
-    else if rule == 14 { lex_ctx_emit(ctx, s.len, KwUnsafe) }
-    else if rule == 15 { lex_ctx_emit(ctx, s.len, KwReset) }
-    else if rule == 16 { lex_ctx_emit(ctx, s.len, KwShift) }
-    else if rule == 17 { lex_ctx_emit(ctx, s.len, KwTrue) }
-    else if rule == 18 { lex_ctx_emit(ctx, s.len, KwFalse) }
-    else if rule == 19 { lex_ctx_emit(ctx, s.len, KwDyn) }
-    else if rule == 20 { lex_ctx_emit(ctx, s.len, KwInterface) }
-    else if rule == 21 { lex_ctx_emit(ctx, s.len, KwAs) }
-    else if rule == 22 { lex_ctx_emit(ctx, s.len, KwVia) }
-    else if rule == 23 { lex_ctx_emit(ctx, s.len, KwUse) }
-    else if rule == 24 { lex_ctx_emit(ctx, s.len, KwPrivate) }
-    else if rule == 25 { lex_ctx_emit(ctx, s.len, KwAsm) }
-    else if rule == 26 { lex_ctx_emit(ctx, s.len, KwFor) }
-    else if rule == 27 { lex_ctx_emit(ctx, s.len, KwBreak) }
-    else if rule == 28 { lex_ctx_emit(ctx, s.len, KwContinue) }
-    else if rule == 29 { lex_ctx_emit(ctx, s.len, KwReturn) }
-    else if rule == 30 { lex_ctx_emit(ctx, s.len, KwUnique) }
-    else if rule == 31 { lex_ctx_emit(ctx, s.len, KwSend) }
-    else if rule == 32 { lex_ctx_emit(ctx, s.len, KwSelf) }
-    else if rule == 33 { lex_ctx_emit(ctx, s.len, Underscore) }
-    else if rule == 34 { ident_or_string_open(ctx, s) }
-    else if rule == 35 { lex_ctx_emit(ctx, s.len, FloatLit(s)) }
+    else if rule == 2 { lex_ctx_emit(ctx, s.len, DocComment(s)) }
+    else if rule == 3 { lex_ctx_emit(ctx, s.len, LineComment(s)) }
+    else if rule == 4 { string_open(ctx, s) }
+    else if rule == 5 { lex_ctx_emit(ctx, s.len, KwNamespace) }
+    else if rule == 6 { lex_ctx_emit(ctx, s.len, KwDef) }
+    else if rule == 7 { lex_ctx_emit(ctx, s.len, KwType) }
+    else if rule == 8 { lex_ctx_emit(ctx, s.len, KwData) }
+    else if rule == 9 { lex_ctx_emit(ctx, s.len, KwUnion) }
+    else if rule == 10 { lex_ctx_emit(ctx, s.len, KwLet) }
+    else if rule == 11 { lex_ctx_emit(ctx, s.len, KwIf) }
+    else if rule == 12 { lex_ctx_emit(ctx, s.len, KwElse) }
+    else if rule == 13 { lex_ctx_emit(ctx, s.len, KwMatch) }
+    else if rule == 14 { lex_ctx_emit(ctx, s.len, KwExtern) }
+    else if rule == 15 { lex_ctx_emit(ctx, s.len, KwUnsafe) }
+    else if rule == 16 { lex_ctx_emit(ctx, s.len, KwReset) }
+    else if rule == 17 { lex_ctx_emit(ctx, s.len, KwShift) }
+    else if rule == 18 { lex_ctx_emit(ctx, s.len, KwTrue) }
+    else if rule == 19 { lex_ctx_emit(ctx, s.len, KwFalse) }
+    else if rule == 20 { lex_ctx_emit(ctx, s.len, KwDyn) }
+    else if rule == 21 { lex_ctx_emit(ctx, s.len, KwInterface) }
+    else if rule == 22 { lex_ctx_emit(ctx, s.len, KwAs) }
+    else if rule == 23 { lex_ctx_emit(ctx, s.len, KwVia) }
+    else if rule == 24 { lex_ctx_emit(ctx, s.len, KwUse) }
+    else if rule == 25 { lex_ctx_emit(ctx, s.len, KwPrivate) }
+    else if rule == 26 { lex_ctx_emit(ctx, s.len, KwAsm) }
+    else if rule == 27 { lex_ctx_emit(ctx, s.len, KwFor) }
+    else if rule == 28 { lex_ctx_emit(ctx, s.len, KwBreak) }
+    else if rule == 29 { lex_ctx_emit(ctx, s.len, KwContinue) }
+    else if rule == 30 { lex_ctx_emit(ctx, s.len, KwReturn) }
+    else if rule == 31 { lex_ctx_emit(ctx, s.len, KwUnique) }
+    else if rule == 32 { lex_ctx_emit(ctx, s.len, KwSend) }
+    else if rule == 33 { lex_ctx_emit(ctx, s.len, KwSelf) }
+    else if rule == 34 { lex_ctx_emit(ctx, s.len, Underscore) }
+    else if rule == 35 { ident_or_string_open(ctx, s) }
     else if rule == 36 { lex_ctx_emit(ctx, s.len, FloatLit(s)) }
-    else if rule == 37 { lex_ctx_emit(ctx, s.len, IntLit(s)) }
-    else if rule == 38 { lex_ctx_emit(ctx, s.len, Atom(mk_str(s.ptr + 1, s.len - 1))) }
-    else if rule == 39 { lex_ctx_emit(ctx, s.len, FileAttrStart) }
-    else if rule == 40 { lex_ctx_emit(ctx, s.len, ItemAttrStart) }
-    else if rule == 41 { lex_ctx_emit(ctx, s.len, Hash) }
-    else if rule == 42 { lex_ctx_emit(ctx, s.len, PipeGt) }
-    else if rule == 43 { lex_ctx_emit(ctx, s.len, ColonEq) }
-    else if rule == 44 { lex_ctx_emit(ctx, s.len, DotStar) }
-    else if rule == 45 { lex_ctx_emit(ctx, s.len, DotDot) }
-    else if rule == 46 { lex_ctx_emit(ctx, s.len, FatArrow) }
-    else if rule == 47 { lex_ctx_emit(ctx, s.len, ThinArrow) }
-    else if rule == 48 { lex_ctx_emit(ctx, s.len, EqEq) }
-    else if rule == 49 { lex_ctx_emit(ctx, s.len, BangEq) }
-    else if rule == 50 { lex_ctx_emit(ctx, s.len, LtEq) }
-    else if rule == 51 { lex_ctx_emit(ctx, s.len, GtEq) }
-    else if rule == 52 { lex_ctx_emit(ctx, s.len, LtLt) }
-    else if rule == 53 { lex_ctx_emit(ctx, s.len, GtGt) }
-    else if rule == 54 { lex_ctx_emit(ctx, s.len, AmpAmp) }
-    else if rule == 55 { lex_ctx_emit(ctx, s.len, PipePipe) }
-    else if rule == 56 { lex_ctx_emit(ctx, s.len, Eq) }
-    else if rule == 57 { lex_ctx_emit(ctx, s.len, Plus) }
-    else if rule == 58 { lex_ctx_emit(ctx, s.len, Minus) }
-    else if rule == 59 { lex_ctx_emit(ctx, s.len, Star) }
-    else if rule == 60 { lex_ctx_emit(ctx, s.len, Slash) }
-    else if rule == 61 { lex_ctx_emit(ctx, s.len, Percent) }
-    else if rule == 62 { lex_ctx_emit(ctx, s.len, Lt) }
-    else if rule == 63 { lex_ctx_emit(ctx, s.len, Gt) }
-    else if rule == 64 { lex_ctx_emit(ctx, s.len, Bang) }
-    else if rule == 65 { lex_ctx_emit(ctx, s.len, Amp) }
-    else if rule == 66 { lex_ctx_emit(ctx, s.len, Pipe) }
-    else if rule == 67 { lex_ctx_emit(ctx, s.len, Caret) }
-    else if rule == 68 { lex_ctx_emit(ctx, s.len, Colon) }
-    else if rule == 69 { lex_ctx_emit(ctx, s.len, Comma) }
-    else if rule == 70 { lex_ctx_emit(ctx, s.len, Dot) }
-    else if rule == 71 { lex_ctx_emit(ctx, s.len, Semicolon) }
-    else if rule == 72 { lex_ctx_emit(ctx, s.len, At) }
-    else if rule == 73 { lex_ctx_emit(ctx, s.len, LParen) }
-    else if rule == 74 { lex_ctx_emit(ctx, s.len, RParen) }
-    else if rule == 75 { code_lbrace(ctx, s) }
-    else if rule == 76 { code_rbrace(ctx, s) }
-    else if rule == 77 { lex_ctx_emit(ctx, s.len, LBracket) }
-    else if rule == 78 { lex_ctx_emit(ctx, s.len, RBracket) }
-    else if rule == 79 { string_quote(ctx, s) }
-    else if rule == 80 { string_enter_interp(ctx, s) }
-    else if rule == 81 { string_chunk(ctx, s) }
+    else if rule == 37 { lex_ctx_emit(ctx, s.len, FloatLit(s)) }
+    else if rule == 38 { lex_ctx_emit(ctx, s.len, IntLit(s)) }
+    else if rule == 39 { lex_ctx_emit(ctx, s.len, Atom(mk_str(s.ptr + 1, s.len - 1))) }
+    else if rule == 40 { lex_ctx_emit(ctx, s.len, FileAttrStart) }
+    else if rule == 41 { lex_ctx_emit(ctx, s.len, ItemAttrStart) }
+    else if rule == 42 { lex_ctx_emit(ctx, s.len, Hash) }
+    else if rule == 43 { lex_ctx_emit(ctx, s.len, PipeGt) }
+    else if rule == 44 { lex_ctx_emit(ctx, s.len, ColonEq) }
+    else if rule == 45 { lex_ctx_emit(ctx, s.len, DotStar) }
+    else if rule == 46 { lex_ctx_emit(ctx, s.len, DotDot) }
+    else if rule == 47 { lex_ctx_emit(ctx, s.len, FatArrow) }
+    else if rule == 48 { lex_ctx_emit(ctx, s.len, ThinArrow) }
+    else if rule == 49 { lex_ctx_emit(ctx, s.len, EqEq) }
+    else if rule == 50 { lex_ctx_emit(ctx, s.len, BangEq) }
+    else if rule == 51 { lex_ctx_emit(ctx, s.len, LtEq) }
+    else if rule == 52 { lex_ctx_emit(ctx, s.len, GtEq) }
+    else if rule == 53 { lex_ctx_emit(ctx, s.len, LtLt) }
+    else if rule == 54 { lex_ctx_emit(ctx, s.len, GtGt) }
+    else if rule == 55 { lex_ctx_emit(ctx, s.len, AmpAmp) }
+    else if rule == 56 { lex_ctx_emit(ctx, s.len, PipePipe) }
+    else if rule == 57 { lex_ctx_emit(ctx, s.len, Eq) }
+    else if rule == 58 { lex_ctx_emit(ctx, s.len, Plus) }
+    else if rule == 59 { lex_ctx_emit(ctx, s.len, Minus) }
+    else if rule == 60 { lex_ctx_emit(ctx, s.len, Star) }
+    else if rule == 61 { lex_ctx_emit(ctx, s.len, Slash) }
+    else if rule == 62 { lex_ctx_emit(ctx, s.len, Percent) }
+    else if rule == 63 { lex_ctx_emit(ctx, s.len, Lt) }
+    else if rule == 64 { lex_ctx_emit(ctx, s.len, Gt) }
+    else if rule == 65 { lex_ctx_emit(ctx, s.len, Bang) }
+    else if rule == 66 { lex_ctx_emit(ctx, s.len, Amp) }
+    else if rule == 67 { lex_ctx_emit(ctx, s.len, Pipe) }
+    else if rule == 68 { lex_ctx_emit(ctx, s.len, Caret) }
+    else if rule == 69 { lex_ctx_emit(ctx, s.len, Colon) }
+    else if rule == 70 { lex_ctx_emit(ctx, s.len, Comma) }
+    else if rule == 71 { lex_ctx_emit(ctx, s.len, Dot) }
+    else if rule == 72 { lex_ctx_emit(ctx, s.len, Semicolon) }
+    else if rule == 73 { lex_ctx_emit(ctx, s.len, At) }
+    else if rule == 74 { lex_ctx_emit(ctx, s.len, LParen) }
+    else if rule == 75 { lex_ctx_emit(ctx, s.len, RParen) }
+    else if rule == 76 { code_lbrace(ctx, s) }
+    else if rule == 77 { code_rbrace(ctx, s) }
+    else if rule == 78 { lex_ctx_emit(ctx, s.len, LBracket) }
+    else if rule == 79 { lex_ctx_emit(ctx, s.len, RBracket) }
+    else if rule == 80 { string_quote(ctx, s) }
+    else if rule == 81 { string_enter_interp(ctx, s) }
     else if rule == 82 { string_chunk(ctx, s) }
+    else if rule == 83 { string_chunk(ctx, s) }
     else { ctx }
 
 def lex_find_best(pats: Vec, src: i64, sl: i64, pos: i64, mode: i64, i: i64, best_r: i64, best_e: i64): LexBest =

@@ -11,6 +11,7 @@
     "level1b:smoke": "node tools/node/run-level1b-smoke.mjs",
     "level1b:c00-layout": "node tools/node/run-level1b-c00-layout.mjs",
     "level1b:c00-cli": "node tools/node/run-level1b-c00-cli-contract.mjs",
+    "level1b:c00-source": "node tools/node/run-level1b-c00-source-surface.mjs",
     "level1b:c00-wasmtime": "node tools/node/run-level1b-c00-wasmtime.mjs",
     "level1b:namespace": "node tools/node/run-level1b-namespace-smoke.mjs",
     "level1b:chibalex-mini": "node tools/node/run-level1b-chibalex-mini.mjs",

@@ -1,0 +1,7 @@
+/// level-1b source surface fixture.
+/// The C00 scanner keeps this as doc trivia with a source span.
+#[doc(path="level-1b/tests/source/doc_surface.chiba")]
+namespace level1b.tests.source.doc_surface
+
+/// Public API doc comment attached to a normal item.
+def documented_value(): i64 = 1

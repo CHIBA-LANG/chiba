@@ -13,6 +13,7 @@ mode STRING
 // Character classes and macros.
 @ws = [ \t]+
 @wsnl = [ \t]* "\r"? "\n" ([ \t]* "\r"? "\n")* [ \t]*
+@doccom = "///" [^\n]* ("\r"? "\n" [ \t]* "///" [^\n]*)*
 @linecom = "//" [^\n]* ("\r"? "\n" [ \t]* "//" [^\n]*)*
 @ident = $XID_START $XID_CONTINUE*
 @suffix = @ident
@@ -117,6 +118,7 @@ mode STRING
 tokens CODE :-
     @wsnl                   { Newline(s) }
     @ws                     ;
+    @doccom                 { DocComment(s) }
     @linecom                { LineComment(s) }
 
     @string_open            => string_open
@@ -247,6 +249,7 @@ tokens STRING :-
         KwSend,
         KwSelf,
 
+        DocComment(Str),
         LineComment(Str),
         Newline(Str),
 
@@ -472,6 +475,7 @@ tokens STRING :-
 
     def token_is_trivia(tok: Token): i64 =
         match tok {
+            DocComment(_) => 1
             LineComment(_) => 1
             _ => 0
         }
@@ -479,6 +483,7 @@ tokens STRING :-
     def token_ends_line(tok: Token): i64 =
         match tok {
             Newline(_) => 1
+            DocComment(text) => strhasnewline(text)
             LineComment(text) => strhasnewline(text)
             _ => 0
         }

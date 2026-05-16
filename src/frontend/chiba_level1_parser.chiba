@@ -285,6 +285,16 @@ def match_token_Eof(tokens: Vec, pos: i64): MatchResult =
     }
     else { MatchFail(pos) }
 
+def match_token_DocComment(tokens: Vec, pos: i64): MatchResult =
+    if pos < vec_len(tokens) {
+        let ts = vec_get(tokens, pos) as TokenSpan
+        match ts.token {
+            DocComment(v) => MatchOK(v as i64, pos + 1, 0)
+            _ => MatchFail(pos)
+        }
+    }
+    else { MatchFail(pos) }
+
 def match_token_LineComment(tokens: Vec, pos: i64): MatchResult =
     if pos < vec_len(tokens) {
         let ts = vec_get(tokens, pos) as TokenSpan
@@ -1059,6 +1069,9 @@ def match_token(tokens: Vec, pos: i64, want: Str): MatchResult =
     if streq(want, mk_str("Eof", 3)) != 0 {
         match_token_Eof(tokens, pos)
     }
+    else if streq(want, mk_str("DocComment", 10)) != 0 {
+        match_token_DocComment(tokens, pos)
+    }
     else if streq(want, mk_str("LineComment", 11)) != 0 {
         match_token_LineComment(tokens, pos)
     }
@@ -1308,6 +1321,12 @@ def token_name_matches_span(ts: TokenSpan, name: Str): i64 =
     if streq(name, mk_str("Eof", 3)) != 0 {
         match ts.token {
             Eof => 1
+            _ => 0
+        }
+    }
+    else if streq(name, mk_str("DocComment", 10)) != 0 {
+        match ts.token {
+            DocComment(_) => 1
             _ => 0
         }
     }
@@ -1795,7 +1814,7 @@ def find_token_position(tokens: Vec, pos: i64, name: Str): i64 =
     else if token_matches_name(tokens, pos, name) != 0 { pos }
     else { find_token_position(tokens, pos + 1, name) }
 
-def parse_rule_0_alt_0_item_0(tokens: Vec, pos: i64): MatchResult = match_token_LineComment(tokens, pos)
+def parse_rule_0_alt_0_item_0(tokens: Vec, pos: i64): MatchResult = match_token_DocComment(tokens, pos)
 
 def parse_rule_0_alt_0(tokens: Vec, pos: i64): MatchResult = parse_rule_0_alt_0_step_0(tokens, pos, 0)
 
@@ -1811,7 +1830,7 @@ def parse_rule_0_alt_0_step_1(tokens: Vec, pos: i64, recovered: i64, __v0: i64):
     ) as i64, pos, recovered)
 }
 
-def parse_rule_0_alt_1_item_0(tokens: Vec, pos: i64): MatchResult = match_token_Newline(tokens, pos)
+def parse_rule_0_alt_1_item_0(tokens: Vec, pos: i64): MatchResult = match_token_LineComment(tokens, pos)
 
 def parse_rule_0_alt_1(tokens: Vec, pos: i64): MatchResult = parse_rule_0_alt_1_step_0(tokens, pos, 0)
 
@@ -1822,6 +1841,22 @@ def parse_rule_0_alt_1_step_0(tokens: Vec, pos: i64, recovered: i64): MatchResul
     }
 
 def parse_rule_0_alt_1_step_1(tokens: Vec, pos: i64, recovered: i64, __v0: i64): MatchResult = {
+    let _: Str = __v0 as Str
+    MatchOK((0
+    ) as i64, pos, recovered)
+}
+
+def parse_rule_0_alt_2_item_0(tokens: Vec, pos: i64): MatchResult = match_token_Newline(tokens, pos)
+
+def parse_rule_0_alt_2(tokens: Vec, pos: i64): MatchResult = parse_rule_0_alt_2_step_0(tokens, pos, 0)
+
+def parse_rule_0_alt_2_step_0(tokens: Vec, pos: i64, recovered: i64): MatchResult =
+    match parse_rule_0_alt_2_item_0(tokens, pos) {
+        MatchOK(__v0, pos1, recovered1) => parse_rule_0_alt_2_step_1(tokens, pos1, recover_or(recovered, recovered1), __v0)
+        MatchFail(fail_pos) => MatchFail(fail_pos)
+    }
+
+def parse_rule_0_alt_2_step_1(tokens: Vec, pos: i64, recovered: i64, __v0: i64): MatchResult = {
     let _: Str = __v0 as Str
     MatchOK((0
     ) as i64, pos, recovered)
@@ -1840,6 +1875,17 @@ def parse_rule_0_dispatch_0(tokens: Vec, pos: i64): MatchResult =
 
 def parse_rule_0_dispatch_1(tokens: Vec, pos: i64): MatchResult =
     match parse_rule_0_alt_1(tokens, pos) {
+        MatchOK(ast, pos1, recovered) => MatchOK(ast, pos1, recovered)
+        MatchFail(fail_pos) => {
+            if fail_pos > pos { MatchFail(fail_pos) }
+            else {
+                parse_rule_0_dispatch_2(tokens, pos)
+            }
+        }
+    }
+
+def parse_rule_0_dispatch_2(tokens: Vec, pos: i64): MatchResult =
+    match parse_rule_0_alt_2(tokens, pos) {
         MatchOK(ast, pos1, recovered) => MatchOK(ast, pos1, recovered)
         MatchFail(fail_pos) => MatchFail(fail_pos)
     }
