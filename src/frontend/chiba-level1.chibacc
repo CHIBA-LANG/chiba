@@ -200,7 +200,12 @@ rule nominal_field_core ::=
     ;
 
 rule data_variant_list ::= 
-    _:trivia_list head:data_variant tail:data_variant_list => AdtVariant_Cons(head, tail)
+    _:trivia_list head:data_variant tail:data_variant_tail => AdtVariant_Cons(head, tail)
+    | => AdtVariant_End
+    ;
+
+rule data_variant_tail ::=
+    _:trivia_list Comma rest:data_variant_list => rest
     | => AdtVariant_End
     ;
 

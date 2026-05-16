@@ -1,0 +1,159 @@
+/// Command-line surface for the level-1b `chibac` compiler.
+///
+/// This module records the typed shape used by the C00 driver. The real parser
+/// grows around this contract instead of passing opaque integers between driver
+/// phases.
+namespace level1b.compiler.cli
+
+/// Supported backend family for Second Bootstrap.
+data ChibacBackend {
+    ChibacBackendWasmGc,
+}
+
+/// Backend argument state.
+///
+/// `explicit` is false until the user passes `--backend wasm-gc`.
+data ChibacBackendArg {
+    ChibacBackendMissing,
+    ChibacBackendKnown(ChibacBackend),
+}
+
+/// Supported target triple for Second Bootstrap.
+data ChibacTarget {
+    ChibacTargetWasm32UnknownWasi,
+}
+
+/// Target argument state.
+///
+/// `explicit` is false until the user passes `--target wasm32-unknown-wasi`.
+data ChibacTargetArg {
+    ChibacTargetMissing,
+    ChibacTargetKnown(ChibacTarget),
+}
+
+/// Requested compiler output mode.
+data ChibacEmitMode {
+    ChibacEmitDefault,
+    ChibacEmitParse,
+    ChibacEmitCheck,
+    ChibacEmitPreprocess,
+    ChibacEmitAssembly,
+    ChibacEmitObject,
+    ChibacEmitWat,
+    ChibacEmitWasm,
+}
+
+/// Optimization level requested by gcc-like `-O` flags.
+data ChibacOptLevel {
+    ChibacOpt0,
+    ChibacOpt1,
+    ChibacOpt2,
+    ChibacOpt3,
+    ChibacOptSize,
+    ChibacOptTiny,
+}
+
+/// Diagnostic output format.
+data ChibacErrorFormat {
+    ChibacErrorHuman,
+    ChibacErrorJson,
+    ChibacErrorShort,
+}
+
+/// Diagnostic color policy.
+data ChibacColorMode {
+    ChibacColorAuto,
+    ChibacColorAlways,
+    ChibacColorNever,
+}
+
+/// Parsed `chibac` command-line configuration.
+///
+/// Input files, include paths, and output paths are held by the source/driver
+/// layers. This value keeps only the small typed surface needed to select the
+/// pass graph.
+type ChibacCliConfig {
+    input_count: i64,
+    include_count: i64,
+    output_count: i64,
+    target: ChibacTargetArg,
+    backend: ChibacBackendArg,
+    emit: ChibacEmitMode,
+    opt_level: ChibacOptLevel,
+    debug: bool,
+    error_format: ChibacErrorFormat,
+    color: ChibacColorMode,
+    diagnostic_width: i64,
+}
+
+/// Build the deterministic default CLI configuration.
+///
+/// The user-facing driver still requires an explicit target before codegen.
+/// This default is only the parser accumulator seed.
+def cli_default_config(): ChibacCliConfig =
+    ChibacCliConfig {
+        input_count: 0,
+        include_count: 0,
+        output_count: 0,
+        target: ChibacTargetMissing,
+        backend: ChibacBackendMissing,
+        emit: ChibacEmitDefault,
+        opt_level: ChibacOpt0,
+        debug: false,
+        error_format: ChibacErrorHuman,
+        color: ChibacColorAuto,
+        diagnostic_width: 0,
+    }
+
+/// Check whether codegen has the explicit target/backend it needs.
+def cli_ready_for_codegen(config: ChibacCliConfig): bool =
+    match config.target {
+        ChibacTargetKnown(_) =>
+            match config.backend {
+                ChibacBackendKnown(_) => true
+                ChibacBackendMissing => false
+            }
+        ChibacTargetMissing => false
+    }
+
+/// Check whether a target is supported by level-1b.
+def target_supported(target: ChibacTarget): bool =
+    match target {
+        ChibacTargetWasm32UnknownWasi => true
+    }
+
+/// Check whether a backend is supported by level-1b.
+def backend_supported(backend: ChibacBackend): bool =
+    match backend {
+        ChibacBackendWasmGc => true
+    }
+
+/// Check whether a short flag is part of the fixed C00 surface.
+def cli_short_flag_supported(flag: Str): bool =
+    if flag == "-I" { true }
+    else if flag == "-t" { true }
+    else if flag == "-B" { true }
+    else if flag == "-o" { true }
+    else if flag == "-S" { true }
+    else if flag == "-c" { true }
+    else if flag == "-E" { true }
+    else if flag == "-g" { true }
+    else if flag == "-O0" { true }
+    else if flag == "-O1" { true }
+    else if flag == "-O2" { true }
+    else if flag == "-O3" { true }
+    else if flag == "-Os" { true }
+    else if flag == "-Oz" { true }
+    else { false }
+
+/// Check whether a long flag is part of the fixed C00 surface.
+def cli_long_flag_supported(flag: Str): bool =
+    if flag == "--include" { true }
+    else if flag == "--target" { true }
+    else if flag == "--backend" { true }
+    else if flag == "--out" { true }
+    else if flag == "--emit" { true }
+    else if flag == "--error-format" { true }
+    else if flag == "--color" { true }
+    else if flag == "--diagnostic-width" { true }
+    else { false }

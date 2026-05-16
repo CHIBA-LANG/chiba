@@ -37,7 +37,7 @@ const nodeRun = run("C00 node WASI smoke", process.execPath, [
   WAT,
 ]);
 
-if (!nodeRun.stdout.includes("chibac level-1b") || !nodeRun.stdout.includes("--backend wasm-gc")) {
+if (!nodeRun.stdout.includes("chibac level-1b") || !nodeRun.stdout.includes("--backend wasm-gc") || !nodeRun.stdout.includes("-O3") || !nodeRun.stdout.includes("--diagnostic-width")) {
   console.error("[FAIL] C00 node WASI smoke output");
   console.error(nodeRun.stdout);
   process.exit(1);
@@ -56,7 +56,7 @@ const wasmtime = run("C00 wasmtime direct smoke", "timeout", [
   "--help",
 ]);
 
-if (!wasmtime.stdout.includes("chibac level-1b") || !wasmtime.stdout.includes("--target wasm32-unknown-wasi")) {
+if (!wasmtime.stdout.includes("chibac level-1b") || !wasmtime.stdout.includes("--target wasm32-unknown-wasi") || !wasmtime.stdout.includes("-S") || !wasmtime.stdout.includes("-Oz")) {
   console.error("[FAIL] C00 wasmtime direct smoke output");
   console.error(wasmtime.stdout);
   process.exit(1);
