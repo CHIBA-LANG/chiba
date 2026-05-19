@@ -5,16 +5,20 @@ level-1 source tree for the replacement `chibac` compiler, not a copy of the
 current `src/` compiler stack. The current `src/`, level-0 compiler, native
 chibalex, and native chibacc are oracle inputs while this tree is rewritten.
 
-The final level-1b artifact is `chibac.wasm`. Users must be able to run that
-compiler directly:
+The level-1b backend's final direct output is deterministic WAT. The release
+artifact is `chibac.wasm`, built from that WAT with Binaryen. Users must be able
+to run that compiler directly:
 
 ```sh
 wasmtime chibac.wasm -- input.chiba -I std -I prelude --target wasm32-unknown-wasi --backend wasm-gc -o out.wasm
 ```
 
-Node runners and Binaryen wrappers are developer and CI conveniences only. They
-may compile WAT, run golden tests, or provide local harnesses, but level-1b
-source and generated `chibac.wasm` must not depend on Node-only host imports.
+Binaryen v129 is the standard WAT-to-WASM toolchain for level-1b validation:
+`wasm-as` assembles, `wasm-opt` validates/optimizes, `wasm-dis` roundtrips for
+debugging, and tools such as `wasm-merge` / `wasm-reduce` may be used by tests
+and debugging workflows. Node runners and the `binaryen.js` binding are allowed
+for development and CI convenience, but level-1b source and generated WAT/WASM
+must not depend on Node-only host imports.
 
 ## Source Layout
 
@@ -55,7 +59,7 @@ source and generated `chibac.wasm` must not depend on Node-only host imports.
   established.
 - `vp run level1b:smoke` compiles this project with the level-0 seed using
   `timeout 10`, emits WAT through the current level-1 path, and runs the result
-  through the Node WAT harness.
+  through the Node WAT harness backed by `binaryen.js`.
 - As C00 grows, the smoke target must be extended with a wasmtime-direct path
   for the same `chibac.wasm` CLI surface.
 

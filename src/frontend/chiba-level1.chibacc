@@ -19,6 +19,16 @@ rule trivia_list ::=
     | => 0
     ;
 
+rule comment_trivia ::= 
+    _:DocComment => 0
+    | _:LineComment => 0
+    ;
+
+rule comment_trivia_list ::= 
+    comment_trivia comment_trivia_list => 0
+    | => 0
+    ;
+
 rule source_file ::= 
     _:trivia_list attrs:file_attr_list ns:namespace_decl _:trivia_list items:item_list _:trivia_list => SourceFile(attrs, ns, items)
     | _:trivia_list attrs:file_attr_list items:item_list _:trivia_list => SourceFile(attrs, NamespaceNone, items)
@@ -172,7 +182,13 @@ rule def_body ::=
     ;
 
 rule type_item ::= 
-    KwType name:Ident generics:opt_generics LBrace fields:nominal_field_list RBrace => TypeItem(name, generics, fields)
+    KwType name:Ident generics:opt_generics body:type_item_body => TypeDecl(name, generics, body)
+    ;
+
+rule type_item_body ::= 
+    LBrace fields:nominal_field_list RBrace => TypeDecl_Record(fields)
+    | Eq ty:type_expr => TypeDecl_Alias(ty)
+    | ty:type_expr => TypeDecl_Alias(ty)
     ;
 
 rule data_item ::= 
@@ -429,17 +445,42 @@ rule type_arg_tail ::=
     ;
 
 rule block_expr ::= 
-    LBrace _:trivia_list stmts:stmt_list _:trivia_list RBrace => Expr_Block(stmts, TailExpr_None)
+    LBrace body:block_body RBrace => body
+    ;
+
+rule block_body ::= 
+    _:comment_trivia_list _:stmt_separator body:block_body => body
+    | _:trivia_list head:block_stmt body:block_body => block_prepend_stmt(head, body)
+    | _:trivia_list value:expr rest:block_expr_or_stmt => block_expr_or_stmt(value, rest)
+    | _:trivia_list tail:tail_expr _:trivia_list => Expr_Block(Stmt_End, tail)
+    ;
+
+rule block_expr_or_stmt ::=
+    _:comment_trivia_list _:stmt_separator body:block_body => BlockExprOrStmt_Stmt(body)
+    | _:trivia_list => BlockExprOrStmt_Tail
+    ;
+
+rule block_stmt ::=
+    attrs:item_attr_nonempty_list core:block_stmt_core => Stmt_WithAttrs(attrs, core)
+    | core:block_stmt_core => core
+    ;
+
+rule block_stmt_core ::=
+    KwLet pat:pattern ty:let_type_opt Eq value:expr => Stmt_LetPatternTyped(pat, ty, value)
+    | KwReturn value:expr => Stmt_Return(value)
+    | f:for_stmt => f
+    | KwBreak label:loop_label_opt => Stmt_Break(label)
+    | KwContinue label:loop_label_opt => Stmt_Continue(label)
     ;
 
 rule stmt_list ::= 
-    _:trivia_list _:stmt_separator tail:stmt_list => tail
+    _:comment_trivia_list _:stmt_separator tail:stmt_list => tail
     | _:trivia_list head:stmt rest:stmt_list_rest => Stmt_Cons(head, rest)
     | => Stmt_End
     ;
 
 rule stmt_list_rest ::= 
-    _:stmt_separator tail:stmt_list => tail
+    _:comment_trivia_list _:stmt_separator tail:stmt_list => tail
     | => Stmt_End
     ;
 
@@ -507,8 +548,8 @@ rule closure_expr ::=
     ;
 
 rule closure_after_lbrace ::= 
-    Pipe params:closure_param_list Pipe _:trivia_list stmts:stmt_list tail:tail_expr _:trivia_list RBrace => Expr_Closure(params, Expr_Block(stmts, tail))
-    | PipePipe _:trivia_list stmts:stmt_list tail:tail_expr _:trivia_list RBrace => Expr_Closure(Param_End, Expr_Block(stmts, tail))
+    Pipe params:closure_param_list Pipe body:block_body RBrace => Expr_Closure(params, body)
+    | PipePipe body:block_body RBrace => Expr_Closure(Param_End, body)
     ;
 
 rule closure_param_list ::= 
@@ -854,6 +895,7 @@ rule ident_expr ::=
 
 rule ident_tail ::= 
     LParen args:arg_list RParen closure:ident_call_closure => IdentTail_Call(args, closure)
+    | LBrace body:record_body RBrace => IdentTail_RecordCtor(body)
     | => IdentTail_None
     ;
 
@@ -1009,6 +1051,10 @@ rule arg_tail ::=
         DefFun(AST, AST, AST, AST),
         DefConst(AST, AST),
         TypeItem(Str, AST, AST),
+        TypeAlias(Str, AST, AST),
+        TypeDecl(Str, AST, AST),
+        TypeDecl_Record(AST),
+        TypeDecl_Alias(AST),
         AdtItem(Str, AST, AST),
         AdtRecordItem(Str, AST, AST),
         DataBody_Record(AST),
@@ -1075,6 +1121,8 @@ rule arg_tail ::=
         TypeArg_End,
 
         Expr_Block(AST, AST),
+        BlockExprOrStmt_Stmt(AST),
+        BlockExprOrStmt_Tail,
         Expr_Closure(AST, AST),
         Expr_If(AST, AST, AST),
         IfCond_Let(AST, AST),
@@ -1179,6 +1227,7 @@ rule arg_tail ::=
         Expr_PipeHole,
         IdentTail_Call(AST, AST),
         IdentTail_GenericCall(AST, AST),
+        IdentTail_RecordCtor(AST),
         IdentTail_None,
         IdentCallClosure_Some(AST, AST),
         IdentCallClosure_None,
@@ -1216,6 +1265,18 @@ rule arg_tail ::=
         OpOr,
         OpPipeGt,
     }
+
+    def block_prepend_stmt(stmt: AST, body: AST): AST =
+        match body {
+            Expr_Block(stmts, tail) => Expr_Block(Stmt_Cons(stmt, stmts), tail)
+            _ => Expr_Block(Stmt_Cons(stmt, Stmt_End), TailExpr_None)
+        }
+
+    def block_expr_or_stmt(value: AST, rest: AST): AST =
+        match rest {
+            BlockExprOrStmt_Stmt(body) => block_prepend_stmt(Stmt_Expr(value), body)
+            _ => Expr_Block(Stmt_End, TailExpr_Some(value))
+        }
 
     def data_body_from_first(first: Str, rest: AST): AST =
         match rest {

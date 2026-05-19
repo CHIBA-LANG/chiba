@@ -228,6 +228,7 @@ def cir_lower_ident_tail(name: Str, tail: AST): CirExpr =
         IdentTail_Call(args, IdentCallClosure_Some(_, closure)) =>
             L0OpCall(L0OpName(name), CirExprCons(cir_lower_expr(closure), cir_lower_expr_list(args)))
         IdentTail_GenericCall(_, args) => L0OpCall(L0OpName(name), cir_lower_expr_list(args))
+        IdentTail_RecordCtor(body) => L0OpCall(L0OpName(name), CirExprCons(cir_lower_expr(Expr_Record(body)), CirExprEnd))
         _ => cir_l0_unsupported(tail, mk_str("ident tail unsupported", 22))
     }
 

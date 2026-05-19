@@ -444,6 +444,8 @@ def cir_l2_check_ast_nominal_item(item: AST): CirL2TypeCheck =
     match item {
         TypeItem(_, _, fields) =>
             if cir_l2_ast_nominal_fields_has_duplicate(fields) != 0 { cir_l2_type_check_err("duplicate nominal field") } else { CirL2TypeCheckOk }
+        TypeDecl(_, _, TypeDecl_Record(fields)) =>
+            if cir_l2_ast_nominal_fields_has_duplicate(fields) != 0 { cir_l2_type_check_err("duplicate nominal field") } else { CirL2TypeCheckOk }
         _ => CirL2TypeCheckOk
     }
 
@@ -529,6 +531,8 @@ def cir_l2_ast_item_type_has_field(item: AST, type_name: Str, field: Str): i64 =
         Item_Type(ty) =>
             match ty {
                 TypeItem(name, _, fields) =>
+                    if streq(name, type_name) != 0 { cir_l2_ast_nominal_fields_has(fields, field) } else { 0 }
+                TypeDecl(name, _, TypeDecl_Record(fields)) =>
                     if streq(name, type_name) != 0 { cir_l2_ast_nominal_fields_has(fields, field) } else { 0 }
                 _ => 0
             }
@@ -1034,6 +1038,7 @@ def cir_l2_check_ast_expr(expr: AST): CirL2TypeCheck =
         Expr_Call(callee, args) => cir_l2_type_check_merge(cir_l2_check_ast_expr(callee), cir_l2_check_ast_args(args))
         Expr_IdentTail(_, IdentTail_Call(args, _)) => cir_l2_check_ast_args(args)
         Expr_IdentTail(_, IdentTail_GenericCall(_, args)) => cir_l2_check_ast_args(args)
+        Expr_IdentTail(_, IdentTail_RecordCtor(body)) => cir_l2_type_check_merge(cir_l2_check_ast_record_body(body), cir_l2_check_ast_record_body_values(body))
         Expr_Field(value, _) => cir_l2_check_ast_expr(value)
         Expr_Index(value, args) => cir_l2_type_check_merge(cir_l2_check_ast_expr(value), cir_l2_check_ast_args(args))
         Expr_Assign(lhs, rhs) => cir_l2_type_check_merge(cir_l2_check_ast_expr(lhs), cir_l2_check_ast_expr(rhs))

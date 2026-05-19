@@ -10,3 +10,5 @@
 /.scratch
 node_modules
 *.bak
+session*.md
+binaryen-*/

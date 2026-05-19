@@ -1,0 +1,17 @@
+namespace grammar.record_constructor_alias
+
+type UserId = i64
+
+type User {
+    id: UserId,
+    name: String,
+}
+
+def make_user(id: UserId, name: String): User =
+    User { id: id, name: name }
+
+def first_name(user: User): String = {
+    let keep = user.id;
+    if keep > 0 { user.name }
+    else { "anonymous" }
+}
