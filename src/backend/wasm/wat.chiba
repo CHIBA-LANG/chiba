@@ -162,8 +162,19 @@ def wat_emit_params(out: Str, params: CirParamList): i64 =
 def wat_emit_import_params(out: Str, params: CirParamList): i64 =
     match params {
         CirParamEnd => 0
-        CirParamCons(_, rest) => {
-            let _ = str_push_cstr(out, " (param i64)")
+        CirParamCons(param, rest) => {
+            let _ = match param {
+                L1Param(_, ty) => {
+                    let _ = str_push_cstr(out, " (param ")
+                    let _ = str_push_cstr(out, wat_valtype_from_ast(ty))
+                    str_push(out, 41)
+                }
+                L0Param(_, ty) => {
+                    let _ = str_push_cstr(out, " (param ")
+                    let _ = str_push_cstr(out, wat_valtype_from_ast(ty))
+                    str_push(out, 41)
+                }
+            }
             wat_emit_import_params(out, rest)
         }
     }
@@ -496,6 +507,68 @@ def wat_expr_is_string_array(expr: CirExpr): i64 =
         _ => 0
     }
 
+def wat_expr_method_owner(expr: CirExpr): Str =
+    match expr {
+        L8ValidatedCoreOp(value, _) => wat_expr_method_owner(value)
+        L7CoreOp(value, _) => wat_expr_method_owner(value)
+        L6OpClosureEnv(value, _) => wat_expr_method_owner(value)
+        L5OpContinuationPackage(_, _, value) => wat_expr_method_owner(value)
+        L5OpCps(value, _) => wat_expr_method_owner(value)
+        L4OpUsage(value, _) => wat_expr_method_owner(value)
+        L3OpAnswerControl(value, answer, _) =>
+            match answer {
+                CirTyString => mk_str("String", 6)
+                CirTyStr => mk_str("str", 3)
+                CirTySliceU8 => mk_str("Slice", 5)
+                CirTyConst(name) => name
+                CirTyNominal(id, _) => id.local_name
+                CirTyData(id, _) => id.local_name
+                CirTyUnion(id, _) => id.local_name
+                _ => wat_expr_method_owner(value)
+            }
+        L2OpTyped(value, ty) =>
+            match ty {
+                CirTyString => mk_str("String", 6)
+                CirTyStr => mk_str("str", 3)
+                CirTySliceU8 => mk_str("Slice", 5)
+                CirTyConst(name) => name
+                CirTyNominal(id, _) => id.local_name
+                CirTyData(id, _) => id.local_name
+                CirTyUnion(id, _) => id.local_name
+                _ => wat_expr_method_owner(value)
+            }
+        _ => mk_str("", 0)
+    }
+
+def wat_method_name(owner: Str, field: Str): Str = {
+    let out = str_new()
+    let _ = str_append(out, owner)
+    let _ = str_push(out, 46)
+    let _ = str_append(out, field)
+    out
+}
+
+def wat_emit_call_name(out: Str, depth: i64, name: Str): i64 = {
+    let _ = wat_indent(out, depth)
+    let _ = str_push_cstr(out, "call ")
+    let _ = wat_func_name(out, name)
+    str_push(out, 10)
+}
+
+def wat_emit_method_call(out: Str, depth: i64, value: CirExpr, field: Str, args: CirExprList): i64 =
+    if wat_is_string_char_method(field) != 0 && wat_expr_is_string_array(value) != 0 {
+        wat_emit_string_char_method_call(out, depth, value, args)
+    } else {
+        let owner = wat_expr_method_owner(value)
+        if owner.len == 0 {
+            wat_line(out, depth, "unreachable ;; method call unsupported")
+        } else {
+            let _ = wat_emit_expr(out, depth, value)
+            let _ = wat_emit_expr_list(out, depth, args)
+            wat_emit_call_name(out, depth, wat_method_name(owner, field))
+        }
+    }
+
 def wat_emit_expr_list(out: Str, depth: i64, args: CirExprList): i64 =
     match args {
         CirExprEnd => 0
@@ -503,6 +576,12 @@ def wat_emit_expr_list(out: Str, depth: i64, args: CirExprList): i64 =
             let _ = wat_emit_expr(out, depth, head)
             wat_emit_expr_list(out, depth, tail)
         }
+    }
+
+def wat_expr_list_len(args: CirExprList): i64 =
+    match args {
+        CirExprEnd => 0
+        CirExprCons(_, tail) => 1 + wat_expr_list_len(tail)
     }
 
 def wat_emit_string_char_method_call(out: Str, depth: i64, value: CirExpr, args: CirExprList): i64 =
@@ -667,14 +746,15 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
         }
         L1OpCall(callee, args) => {
             match wat_unwrap_pass_expr(callee) {
-                L1OpField(value, field) =>
-                    if wat_is_string_char_method(field) != 0 && wat_expr_is_string_array(value) != 0 {
-                        wat_emit_string_char_method_call(out, depth, value, args)
-                    } else { wat_line(out, depth, "unreachable ;; method call unsupported") }
+                L1OpField(value, field) => wat_emit_method_call(out, depth, value, field, args)
                 L1OpRef(ref) =>
                     if wat_is_ref_name(ref, mk_str("__tuple", 7)) != 0 {
-                        let _ = wat_emit_expr_list(out, depth, args)
-                        wat_line(out, depth, "struct.new $tuple2_i64")
+                        if wat_expr_list_len(args) == 0 {
+                            wat_line(out, depth, "i64.const 0")
+                        } else {
+                            let _ = wat_emit_expr_list(out, depth, args)
+                            wat_line(out, depth, "struct.new $tuple2_i64")
+                        }
                     } else {
                         let _ = wat_emit_expr_list(out, depth, args)
                         match ref {

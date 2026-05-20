@@ -178,6 +178,32 @@ def cir_typed_expr_type(expr: CirExpr): CirType =
         _ => CirTyUnknown
     }
 
+def cir_typed_owner_name_from_type(ty: CirType): Str =
+    match ty {
+        CirTyString => mk_str("String", 6)
+        CirTyStr => mk_str("str", 3)
+        CirTySliceU8 => mk_str("Slice", 5)
+        CirTyConst(name) => name
+        CirTyNominal(id, _) => id.local_name
+        CirTyData(id, _) => id.local_name
+        CirTyUnion(id, _) => id.local_name
+        _ => mk_str("", 0)
+    }
+
+def cir_typed_method_name(owner: Str, field: Str): Str = {
+    let out = str_new()
+    let _ = str_append(out, owner)
+    let _ = str_push(out, 46)
+    let _ = str_append(out, field)
+    out
+}
+
+def cir_typed_value_owner_name(expr: CirExpr): Str =
+    match expr {
+        L2OpTyped(_, ty) => cir_typed_owner_name_from_type(ty)
+        _ => cir_typed_owner_name_from_type(cir_typed_expr_type(expr))
+    }
+
 def cir_typed_callee_result(callee: CirExpr, globals: CirGlobalTypeEnv): CirType =
     match callee {
         L2OpTyped(inner, ty) =>
@@ -188,6 +214,11 @@ def cir_typed_callee_result(callee: CirExpr, globals: CirGlobalTypeEnv): CirType
                         L1RefUnresolved(name) => cir_global_type_env_lookup(globals, name)
                         _ => ty
                     }
+                L1OpField(value, field) => {
+                    let owner = cir_typed_value_owner_name(value)
+                    if owner.len == 0 { ty }
+                    else { cir_global_type_env_lookup(globals, cir_typed_method_name(owner, field)) }
+                }
                 _ => ty
             }
         L1OpRef(ref) =>
@@ -196,6 +227,11 @@ def cir_typed_callee_result(callee: CirExpr, globals: CirGlobalTypeEnv): CirType
                 L1RefUnresolved(name) => cir_global_type_env_lookup(globals, name)
                 _ => CirTyUnknown
             }
+        L1OpField(value, field) => {
+            let owner = cir_typed_value_owner_name(value)
+            if owner.len == 0 { CirTyUnknown }
+            else { cir_global_type_env_lookup(globals, cir_typed_method_name(owner, field)) }
+        }
         _ => CirTyUnknown
     }
 
