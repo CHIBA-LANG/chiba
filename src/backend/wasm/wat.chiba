@@ -1,8 +1,21 @@
 namespace backend.wasm.wat
+use metalstd.file.*
 use metalstd.mem.*
 use metalstd.str.*
 use parser.chiba_level1.*
 use backend.cir.ir.*
+
+def wat_debug_emit_name(name: Str): i64 = {
+    let _ = write_fd(2, "[wat emit] ", 11)
+    let _ = str_write_to(name, 2)
+    write_fd(2, "\n", 1)
+}
+
+def wat_debug_mark(text: i64): i64 = {
+    let _ = write_fd(2, "[wat] ", 6)
+    let _ = write_fd(2, text, strlen(text))
+    write_fd(2, "\n", 1)
+}
 
 def wat_indent_loop(out: Str, i: i64, depth: i64): i64 =
     if i >= depth { 0 }
@@ -164,6 +177,7 @@ def wat_params_empty(params: CirParamList): i64 =
 def wat_emit_import(out: Str, item: CirItem): i64 =
     match item {
         L1ItemExtern(binder, params, ret, import) => {
+            let _ = wat_debug_emit_name(binder.name)
             let _ = str_push_cstr(out, "  (import \"")
             let _ = str_append(out, import.module_name)
             let _ = str_push_cstr(out, "\" \"")
@@ -177,6 +191,7 @@ def wat_emit_import(out: Str, item: CirItem): i64 =
             str_push(out, 10)
         }
         L8ValidatedCoreItemExtern(binder, params, ret, import) => {
+            let _ = wat_debug_emit_name(binder.name)
             let _ = str_push_cstr(out, "  (import \"")
             let _ = str_append(out, import.module_name)
             let _ = str_push_cstr(out, "\" \"")
@@ -769,6 +784,7 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
 def wat_emit_func(out: Str, item: CirItem, export_main: i64): i64 =
     match item {
         L1ItemDef(binder, params, ret, body) => {
+            let _ = wat_debug_emit_name(binder.name)
             let _ = str_push_cstr(out, "  (func ")
             let _ = wat_func_name(out, binder.name)
             let _ = wat_emit_params(out, params)
@@ -796,6 +812,7 @@ def wat_emit_func(out: Str, item: CirItem, export_main: i64): i64 =
             } else { 0 }
         }
         L8ValidatedCoreItemDef(binder, params, ret, body) => {
+            let _ = wat_debug_emit_name(binder.name)
             let _ = str_push_cstr(out, "  (func ")
             let _ = wat_func_name(out, binder.name)
             let _ = wat_emit_params(out, params)
@@ -933,18 +950,24 @@ def wat_module_validated(module: CirModule): i64 =
 
 def wat_emit_module(module: CirModule): Str = {
     let out = str_new()
+    let _ = wat_debug_mark("module-start")
     let _ = str_push_cstr(out, "(module\n")
     let _ = str_push_cstr(out, "  (type $tuple2_i64 (struct (field i64) (field i64)))\n")
     let _ = str_push_cstr(out, "  (type $array_u8 (array (mut i8)))\n")
     let _ = str_push_cstr(out, "  (type $slice_u8 (struct (field (ref $array_u8)) (field i32) (field i32)))\n")
     let _ = match module {
         L1Module(_, items) => {
+            let _ = wat_debug_mark("emit-imports-l1")
             let _ = wat_emit_imports(out, items)
             wat_emit_env_hole_imports(out, items)
         }
-        L8ValidatedCoreModule(_, items) => wat_emit_imports(out, items)
+        L8ValidatedCoreModule(_, items) => {
+            let _ = wat_debug_mark("emit-imports-l8")
+            wat_emit_imports(out, items)
+        }
         _ => 0
     }
+    let _ = wat_debug_mark("emit-runtime-helpers")
     let _ = str_push_cstr(out, "  (func $__chiba_string_utf8_width (param $b i32) (result i32)\n")
     let _ = str_push_cstr(out, "    local.get $b\n")
     let _ = str_push_cstr(out, "    i32.const 128\n")

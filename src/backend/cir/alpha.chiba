@@ -5,7 +5,7 @@ use parser.chiba_level1.*
 use backend.cir.ir.*
 
 data AlphaBinding {
-    AlphaBinding(Str, i64)
+    AlphaBinding(Str, i64, i64)
 }
 
 data AlphaEnv {
@@ -33,8 +33,8 @@ def alpha_fresh(ctx: AlphaCtx): i64 = {
     id
 }
 
-def alpha_env_push(env: AlphaEnv, name: Str, id: i64): AlphaEnv =
-    AlphaEnvCons(AlphaBinding(name, id), env)
+def alpha_env_push(env: AlphaEnv, name: Str, id: i64, is_global: i64): AlphaEnv =
+    AlphaEnvCons(AlphaBinding(name, id, is_global), env)
 
 def alpha_env_get(ctx: AlphaCtx): AlphaEnv =
     load64(ctx.env, 0) as AlphaEnv
@@ -42,24 +42,32 @@ def alpha_env_get(ctx: AlphaCtx): AlphaEnv =
 def alpha_env_set(ctx: AlphaCtx, env: AlphaEnv): i64 =
     store64(ctx.env, 0, env as i64)
 
-def alpha_env_push_ctx(ctx: AlphaCtx, name: Str, id: i64): i64 =
-    alpha_env_set(ctx, alpha_env_push(alpha_env_get(ctx), name, id))
+def alpha_env_push_ctx(ctx: AlphaCtx, name: Str, id: i64, is_global: i64): i64 =
+    alpha_env_set(ctx, alpha_env_push(alpha_env_get(ctx), name, id, is_global))
 
 def alpha_env_lookup(env: AlphaEnv, name: Str): CirRef =
     match env {
         AlphaEnvEnd => L1RefUnresolved(name)
         AlphaEnvCons(binding, rest) =>
             match binding {
-                AlphaBinding(bound_name, id) =>
-                    if streq(bound_name, name) != 0 { L1RefLocal(id, name) }
+                AlphaBinding(bound_name, id, is_global) =>
+                    if streq(bound_name, name) != 0 {
+                        if is_global != 0 { L1RefGlobal(name) }
+                        else { L1RefLocal(id, name) }
+                    }
                     else { alpha_env_lookup(rest, name) }
             }
     }
 
 def alpha_env_lookup_id(env: AlphaEnv, name: Str): i64 =
-    match alpha_env_lookup(env, name) {
-        L1RefLocal(id, _) => id
-        _ => -1
+    match env {
+        AlphaEnvEnd => -1
+        AlphaEnvCons(binding, rest) =>
+            match binding {
+                AlphaBinding(bound_name, id, _) =>
+                    if streq(bound_name, name) != 0 { id }
+                    else { alpha_env_lookup_id(rest, name) }
+            }
     }
 
 data AlphaStmtResult {
@@ -74,7 +82,7 @@ def alpha_param_list(params: CirParamList, ctx: AlphaCtx): CirParamList =
                 L0Param(name, ty) => {
                     let id = alpha_fresh(ctx)
                     let binder = cir_binder(id, name)
-                    let _ = alpha_env_push_ctx(ctx, name, id)
+                    let _ = alpha_env_push_ctx(ctx, name, id, 0)
                     CirParamCons(L1Param(binder, ty), alpha_param_list(rest, ctx))
                 }
                 L1Param(_, _) => {
@@ -116,7 +124,7 @@ def alpha_stmt_list(stmts: CirStmtList, tail: CirExpr, ctx: AlphaCtx): AlphaStmt
                     let value2 = alpha_expr(value, ctx)
                     let id = alpha_fresh(ctx)
                     let binder = cir_binder(id, name)
-                    let _ = alpha_env_push_ctx(ctx, name, id)
+                    let _ = alpha_env_push_ctx(ctx, name, id, 0)
                     match alpha_stmt_list(rest, tail, ctx) {
                         AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtLet(binder, value2), rest2), tail2)
                     }
@@ -193,7 +201,7 @@ def alpha_expr(expr: CirExpr, ctx: AlphaCtx): CirExpr =
             let id = alpha_fresh(ctx)
             let binder = cir_binder(id, name)
             let old_env = alpha_env_get(ctx)
-            let _ = alpha_env_push_ctx(ctx, name, id)
+            let _ = alpha_env_push_ctx(ctx, name, id, 0)
             let body2 = alpha_expr(body, ctx)
             let _ = alpha_env_set(ctx, old_env)
             L1OpShift(label, binder, body2)
@@ -255,11 +263,11 @@ def alpha_prebind_item(item: CirItem, ctx: AlphaCtx): i64 =
     match item {
         L0ItemDef(name, _, _, _) => {
             let id = alpha_fresh(ctx)
-            alpha_env_push_ctx(ctx, name, id)
+            alpha_env_push_ctx(ctx, name, id, 1)
         }
         L0ItemExtern(name, _, _, _) => {
             let id = alpha_fresh(ctx)
-            alpha_env_push_ctx(ctx, name, id)
+            alpha_env_push_ctx(ctx, name, id, 1)
         }
         _ => 0
     }
