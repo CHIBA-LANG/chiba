@@ -190,6 +190,89 @@ def cir_typed_owner_name_from_type(ty: CirType): Str =
         _ => mk_str("", 0)
     }
 
+def cir_typed_method_receiver_type(name: Str): CirType =
+    if streq(name, mk_str("GeneratedParser.text", 20)) != 0 { CirTyConst(mk_str("GeneratedParser", 15)) }
+    else if streq(name, mk_str("Range.start", 11)) != 0 { CirTyConst(mk_str("Range", 5)) }
+    else if streq(name, mk_str("Range.end", 9)) != 0 { CirTyConst(mk_str("Range", 5)) }
+    else if streq(name, mk_str("Array.is_empty", 14)) != 0 { CirTyConst(mk_str("Array", 5)) }
+    else if streq(name, mk_str("Slice.is_empty", 14)) != 0 { CirTySliceU8 }
+    else { CirTyUnknown }
+
+def cir_type_env_from_params_for_item(params: CirParamList, item_name: Str, index: i64): CirTypeEnv =
+    match params {
+        CirParamEnd => CirTypeEnvEnd
+        CirParamCons(head, tail) =>
+            match head {
+                L1Param(binder, ty) => {
+                    let fallback = if index == 0 { cir_typed_method_receiver_type(item_name) } else { CirTyVar(CirTyVarId { id: binder.id }) }
+                    let inferred = cir_typed_type_from_ast(ty, fallback)
+                    cir_type_env_add(cir_type_env_from_params_for_item(tail, item_name, index + 1), binder, inferred)
+                }
+                _ => cir_type_env_from_params_for_item(tail, item_name, index + 1)
+            }
+    }
+
+def cir_typed_known_field_type(owner: Str, field: Str): CirType =
+    if streq(owner, mk_str("Range", 5)) != 0 {
+        if streq(field, mk_str("start", 5)) != 0 { CirTyI64 }
+        else if streq(field, mk_str("end", 3)) != 0 { CirTyI64 }
+        else { CirTyUnknown }
+    } else if streq(owner, mk_str("GeneratedParser", 15)) != 0 {
+        if streq(field, mk_str("source", 6)) != 0 { CirTyString } else { CirTyUnknown }
+    } else if streq(owner, mk_str("GrammarName", 11)) != 0 {
+        if streq(field, mk_str("text", 4)) != 0 { CirTyStr } else { CirTyUnknown }
+    } else if streq(owner, mk_str("GrammarToken", 12)) != 0 {
+        if streq(field, mk_str("text", 4)) != 0 { CirTyStr } else { CirTyUnknown }
+    } else if streq(owner, mk_str("GrammarRuleRef", 14)) != 0 {
+        if streq(field, mk_str("name", 4)) != 0 { CirTyConst(mk_str("GrammarName", 11)) } else { CirTyUnknown }
+    } else if streq(owner, mk_str("GrammarBind", 11)) != 0 {
+        if streq(field, mk_str("name", 4)) != 0 { CirTyStr }
+        else if streq(field, mk_str("value", 5)) != 0 { CirTyUnknown }
+        else { CirTyUnknown }
+    } else if streq(owner, mk_str("GrammarSequence", 15)) != 0 {
+        if streq(field, mk_str("atoms", 5)) != 0 { CirTyConst(mk_str("List", 4)) } else { CirTyUnknown }
+    } else if streq(owner, mk_str("GrammarAction", 13)) != 0 {
+        if streq(field, mk_str("source", 6)) != 0 { CirTyString } else { CirTyUnknown }
+    } else if streq(owner, mk_str("PrattTable", 10)) != 0 {
+        if streq(field, mk_str("prefixes", 8)) != 0 { CirTyConst(mk_str("Array", 5)) }
+        else if streq(field, mk_str("infixes", 7)) != 0 { CirTyConst(mk_str("Array", 5)) }
+        else { CirTyUnknown }
+    } else if streq(owner, mk_str("GrammarRule", 11)) != 0 {
+        if streq(field, mk_str("name", 4)) != 0 { CirTyConst(mk_str("GrammarName", 11)) }
+        else if streq(field, mk_str("alternatives", 12)) != 0 { CirTyConst(mk_str("Array", 5)) }
+        else if streq(field, mk_str("pratt", 5)) != 0 { CirTyConst(mk_str("Option", 6)) }
+        else { CirTyUnknown }
+    } else if streq(owner, mk_str("ParserStateId", 13)) != 0 {
+        if streq(field, mk_str("index", 5)) != 0 { CirTyUsize } else { CirTyUnknown }
+    } else if streq(owner, mk_str("LoweredAlternative", 18)) != 0 {
+        if streq(field, mk_str("index", 5)) != 0 { CirTyUsize }
+        else if streq(field, mk_str("sequence", 8)) != 0 { CirTyConst(mk_str("GrammarSequence", 15)) }
+        else if streq(field, mk_str("action", 6)) != 0 { CirTyConst(mk_str("GrammarAction", 13)) }
+        else if streq(field, mk_str("recovery", 8)) != 0 { CirTyConst(mk_str("RecoveryAction", 14)) }
+        else { CirTyUnknown }
+    } else if streq(owner, mk_str("LoweredRule", 11)) != 0 {
+        if streq(field, mk_str("name", 4)) != 0 { CirTyConst(mk_str("GrammarName", 11)) }
+        else if streq(field, mk_str("alternatives", 12)) != 0 { CirTyConst(mk_str("Array", 5)) }
+        else if streq(field, mk_str("pratt", 5)) != 0 { CirTyConst(mk_str("Option", 6)) }
+        else { CirTyUnknown }
+    } else if streq(owner, mk_str("LoweredParser", 13)) != 0 {
+        if streq(field, mk_str("namespace_name", 14)) != 0 { CirTyStr }
+        else if streq(field, mk_str("start", 5)) != 0 { CirTyConst(mk_str("GrammarName", 11)) }
+        else if streq(field, mk_str("rules", 5)) != 0 { CirTyConst(mk_str("Array", 5)) }
+        else if streq(field, mk_str("ast_data", 8)) != 0 { CirTyString }
+        else { CirTyUnknown }
+    } else { CirTyUnknown }
+
+def cir_typed_match_arms_in_g(arms: CirMatchArmList, env: CirTypeEnv, globals: CirGlobalTypeEnv): CirMatchArmList =
+    match arms {
+        CirMatchArmEnd => CirMatchArmEnd
+        CirMatchArmCons(head, tail) =>
+            match head {
+                L0MatchArm(pat, guard, body) => CirMatchArmCons(L1MatchArm(pat, guard, cir_typed_expr_in_g(body, env, globals)), cir_typed_match_arms_in_g(tail, env, globals))
+                L1MatchArm(pat, guard, body) => CirMatchArmCons(L1MatchArm(pat, guard, cir_typed_expr_in_g(body, env, globals)), cir_typed_match_arms_in_g(tail, env, globals))
+            }
+    }
+
 def cir_typed_method_name(owner: Str, field: Str): Str = {
     let out = str_new()
     let _ = str_append(out, owner)
@@ -329,7 +412,7 @@ def cir_typed_expr_in_g(expr: CirExpr, env: CirTypeEnv, globals: CirGlobalTypeEn
             let then2 = cir_typed_expr_in_g(then_expr, env, globals)
             L2OpTyped(L1OpIf(cir_typed_expr_in_g(cond, env, globals), then2, cir_typed_expr_in_g(else_expr, env, globals)), cir_typed_expr_type(then2))
         }
-        L1OpMatch(value, arms) => L2OpTyped(L1OpMatch(cir_typed_expr_in_g(value, env, globals), arms), CirTyUnknown)
+        L1OpMatch(value, arms) => L2OpTyped(L1OpMatch(cir_typed_expr_in_g(value, env, globals), cir_typed_match_arms_in_g(arms, env, globals)), CirTyUnknown)
         L1OpClosure(params, body) => L2OpTyped(L1OpClosure(params, cir_typed_expr_in_g(body, env, globals)), CirTyUnknown)
         L1OpReset(label, body) => {
             let body2 = cir_typed_expr_in_g(body, env, globals)
@@ -342,7 +425,11 @@ def cir_typed_expr_in_g(expr: CirExpr, env: CirTypeEnv, globals: CirGlobalTypeEn
         }
         L1OpNominalCtor(name, fields) =>
             L2OpTyped(L1OpNominalCtor(name, cir_typed_record_field_exprs_in_g(fields, env, globals)), CirTyConst(name))
-        L1OpField(value, field) => L2OpTyped(L1OpField(cir_typed_expr_in_g(value, env, globals), field), CirTyUnknown)
+        L1OpField(value, field) => {
+            let value2 = cir_typed_expr_in_g(value, env, globals)
+            let owner = cir_typed_value_owner_name(value2)
+            L2OpTyped(L1OpField(value2, field), cir_typed_known_field_type(owner, field))
+        }
         L1OpIndex(value, args) => {
             let args2 = cir_typed_expr_list_in_g(args, env, globals)
             L2OpTyped(L1OpIndex(cir_typed_expr_in_g(value, env, globals), args2), cir_typed_index_result(args2))
@@ -392,7 +479,7 @@ def cir_typed_items_g(items: CirItemList, globals: CirGlobalTypeEnv): CirItemLis
         CirItemEnd => CirItemEnd
         CirItemCons(item, rest) => {
             let item2 = match item {
-                L1ItemDef(binder, params, ret, body) => L2ItemDef(binder, params, ret, cir_typed_expr_in_g(body, cir_type_env_from_params(params), globals))
+                L1ItemDef(binder, params, ret, body) => L2ItemDef(binder, params, ret, cir_typed_expr_in_g(body, cir_type_env_from_params_for_item(params, binder.name, 0), globals))
                 L1ItemExtern(binder, params, ret, import) => L2ItemExtern(binder, params, ret, import)
                 L1ItemUnsupported(ast, reason) => L2ItemUnsupported(ast, reason)
                 _ => item

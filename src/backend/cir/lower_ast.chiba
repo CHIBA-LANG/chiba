@@ -334,6 +334,13 @@ def cir_lower_record_fields(type_names: CirTypeNameList, ast: AST): CirRecordFie
                     CirRecordFieldExprCons(CirRecordFieldExpr { field_name: name, value: L0OpName(name) }, cir_lower_record_fields(type_names, rest))
                 _ => CirRecordFieldExprEnd
             }
+        RecordField_End => CirRecordFieldExprEnd
+        RecordField_Cons(head, tail) =>
+            match head {
+                RecordField(name, value) =>
+                    CirRecordFieldExprCons(CirRecordFieldExpr { field_name: name, value: cir_lower_expr(type_names, value) }, cir_lower_record_fields(type_names, tail))
+                _ => cir_lower_record_fields(type_names, tail)
+            }
         Record_Fields(fields) => cir_lower_record_fields(type_names, fields)
         _ => CirRecordFieldExprEnd
     }
