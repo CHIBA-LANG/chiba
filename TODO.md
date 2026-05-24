@@ -28,6 +28,7 @@
 	- [x] global init surface facts：typed module 已记录静态值 initializer/dependency/world_local/ref surface；真实 init order、cycle、module-load lowering 仍 fail-closed。
 - [ ] pattern/match：deep pattern lowering、exhaustiveness、if let env 规则没完整 primary 实现。
 - [ ] pipe lowering：placeholder、receiver-first method pipe、operator/method interaction 还没完整 primary lowering。
+	- [x] pipe surface facts：typed module 已记录 pipe/placeholder/chain surface；真实 placeholder expansion、receiver-first desugar、operator/method interaction 仍 fail-closed。
 - [ ] ADT tuple bridge：Ctor <-> (:ctor, ...)、tuple_to_adt/adt_to_tuple intrinsic lowering 没完整。
 - [ ] compiler intrinsic namespace：有部分 contract；真实 intrinsic resolution/lowering 没完整。
 - [ ] answer/control scan：reset/shift/shiftn answer facts 没做。
