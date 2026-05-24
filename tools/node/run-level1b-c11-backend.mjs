@@ -148,6 +148,9 @@ function checkSource(file, source) {
   if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_owner\b[\s\S]{0,240}requires_layout[\s\S]{0,240}CoreMissingOwner/.test(code)) {
     errors.push(`${file}: validator must reject materialized Core ops without owner provenance`);
   }
+  if (path.basename(file) === "driver.chiba" && !/\bcore_validation_diagnostic\b[\s\S]{0,520}CoreIllegalRuntimeState/.test(code)) {
+    errors.push(`${file}: backend driver must surface CoreIllegalRuntimeState diagnostics`);
+  }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
       errors.push(`${file}:${i + 1}: public item is missing /// doc comment`);
