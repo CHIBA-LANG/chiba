@@ -67,6 +67,7 @@
 	- [x] closure capture blocker：lambda/closure CPS usage subjects 现在会 fail-closed 于 capture/env field extraction absent，不再空 layout 假通过。
 - [ ] Cont1 lowering：direct resume / boxed one-shot consumed state machine 没完整。
 - [ ] ContN lowering：stackless resume frame、frame chain、repeatable package 没完整 primary。
+	- [x] ContN frame-chain obligations：packaged ContN simplification 已生成 stackless resume function / frame chain / repeatable package obligation；真实 frame extraction 仍未完成。
 - [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。
 - [ ] Wasm-GC backend layout：layout 有一部分；真实 lowering 到 Wasm-GC object/funcref/eqref 不完整。
 - [ ] WAT emit：没有 executable WAT；现在 fail-closed。

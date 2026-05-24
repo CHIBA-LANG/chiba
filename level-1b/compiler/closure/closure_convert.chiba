@@ -37,6 +37,14 @@ type ClosureEnvLayout {
     fields: Array[CaptureField],
 }
 
+/// ContN lowering obligation before frame-chain extraction.
+type ContinuationFrameChainObligation {
+    owner: BinderId,
+    requires_stackless_resume_function: bool,
+    requires_frame_chain: bool,
+    requires_repeatable_package: bool,
+}
+
 /// Module after escaping lambdas have explicit code/env packages.
 type ClosureConvertedModule {
     source: SimplifiedContinuationModule,
@@ -49,6 +57,7 @@ def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConver
     if closure_usage_requires_capture_extraction(module.source.facts, 0) {
         Err(SemanticDiagnostics(closure_usage_capture_extraction_blockers(module.source.facts, 0, Vec[SemanticDiagnostic].new())))
     } else if continuation_decisions_require_capture_extraction(module.decisions, 0) {
+        let _ = continuation_frame_chain_obligations(module.decisions, 0, Vec[ContinuationFrameChainObligation].new())
         Err(SemanticDiagnostics(continuation_capture_extraction_blockers(module.decisions, 0, Vec[SemanticDiagnostic].new())))
     } else {
         Ok(ClosureConvertedModule(
@@ -94,6 +103,29 @@ def closure_usage_requires_capture_extraction(facts: Array[CpsUseFact], index: u
     if index == facts.len() { false }
     else if cps_use_fact_requires_closure_capture(facts.get(index)) { true }
     else { closure_usage_requires_capture_extraction(facts, index + 1) }
+
+/// Convert a packaged ContN decision into a frame-chain obligation.
+def continuation_frame_chain_obligation(decision: ContinuationSimplification): Option[ContinuationFrameChainObligation] =
+    match decision {
+        ContinuationPackaged(owner) =>
+            Some(ContinuationFrameChainObligation {
+                owner: owner,
+                requires_stackless_resume_function: true,
+                requires_frame_chain: true,
+                requires_repeatable_package: true,
+            })
+        _ => None
+    }
+
+/// Build ContN frame-chain obligations in stable decision order.
+def continuation_frame_chain_obligations(decisions: Array[ContinuationSimplification], index: usize, out: Vec[ContinuationFrameChainObligation]): Array[ContinuationFrameChainObligation] =
+    if index == decisions.len() { out.freeze() }
+    else {
+        match continuation_frame_chain_obligation(decisions.get(index)) {
+            Some(obligation) => continuation_frame_chain_obligations(decisions, index + 1, out.push(obligation))
+            None => continuation_frame_chain_obligations(decisions, index + 1, out)
+        }
+    }
 
 /// Append a closure environment layout for decisions that materialize.
 def push_closure_env_layout(out: Vec[ClosureEnvLayout], decision: ContinuationSimplification): Vec[ClosureEnvLayout] =
