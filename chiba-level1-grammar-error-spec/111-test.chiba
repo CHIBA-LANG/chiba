@@ -1,0 +1,7 @@
+namespace parser.error.continuation.shiftn.missing.binder
+
+def missing_binder(): i64 = reset {
+    shiftn :retry {
+        1
+    }
+}

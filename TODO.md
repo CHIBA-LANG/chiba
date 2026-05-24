@@ -1,3 +1,7 @@
+这两个目录是 level-1 的 spec 目录
+- `/home/lemonhx/Desktop/LJVM/chiba-org-web/src/content/chiba-level1-spec`
+- `/home/lemonhx/Desktop/LJVM/chiba-org-web/src/content/type_system`
+
 
 ## Second Bootstrap: remaining work only
 
@@ -7,16 +11,20 @@
 
 ## 当前判断
 
-- 当前主线已经不是“架构还没搭起来”，而是“**checkpoint gate 已绿后的未门禁语义收尾 + frontend migration builtin/oracle 债务清理 + C12 自举验证**”。
+- 当前必须修正前一版乐观判断：**level-1b 当前处于不可用状态**。它的 control / continuation / closure / backend 多数仍是 contract stub 或注释型 emitter，不具备作为 primary compiler behavior 的资格。
+- `checkpoint:gates` / `level1b:c11-backend` / `level1b:cir-migration` 已绿只能说明映射、接口和部分 smoke 覆盖成立；不能说明 level-1b 已经能承载真实 continuation / closure / Wasm-GC backend 语义。
+- 当前主线应改为“**先清理 level-1b 过时代码与假成功路径 + 固定 continuation/closure/callable 语义 + 再恢复 frontend migration 与 C12 自举推进**”。
 - 当前离 checkpoint 完成大约还差：
+	- **1 轮 level-1b truthfulness cleanup**：把 `Ok(module)` / 空 facts / 注释 WAT emitter / contract-only pass 从“看似已实现”改成显式 stub、真实 gate 或删除，避免继续误导路线判断。
+	- **1 轮 continuation/closure 语义落地**：`Cont1` / `ContN`、boxed one-shot state machine、erased callable ADT、`Ref[T]` shared-reference capture、one-shot continuation 与 no-capture closure 的必需优化。
 	- **1 轮未门禁语义收尾**：globals / `Self` with generics / ADT tuple bridge / compiler intrinsic surface / deep pattern lowering runtime / pipe matrix / scope shadowing / debugability / namespace ownership。
-	- **1 轮 TODO 与 gate 对齐**：把已经被 `checkpoint:gates` / `level1b:c11-backend` / `level1b:cir-migration` 验证通过的项从“核心 blocker”降级为历史完成或窄化为剩余边角。
 - 当前 **`validate:first-bootstrap` 已全绿**：parser compare / parser error smoke / semantic gates / checkpoint gates / all-wat / level1c.wasm smoke 均已通过，说明 first-bootstrap 主链路现阶段已经打通。
 - 当前自举后的主要剩余压力转为：
-	- **frontend migration builtin/oracle 债务**：`std.regex` / `std.chibalex` / `std.chibacc` 还需要从“gate 已成立”继续推进到“self-host truly primary”。
+	- **level-1b 不可用状态修复**：control / continuation / closure / backend 的 contract-only 代码必须先清理并替换成真实 lowering 或明确 blocker。
+	- **frontend migration builtin/oracle 债务**：`std.regex` / `std.chibalex` / `std.chibacc` 还需要从“gate 已成立”继续推进到“self-host truly primary”，但不能继续假设当前 level-1b backend 已可承载真实 continuation。
 	- **C11 primary-path / C12 second bootstrap**：first-bootstrap 过关不等于 second bootstrap 完成，后续重点是 `level1c-next` / `level1c-next2`。
 - 当前离 Second Bootstrap 完成大约还差：
-	- **C11 真正迁移清零**：虽然 `level1b:c11-backend` 与 `level1b:cir-migration` 已绿，但 level-1b backend 还需要继续巩固成 unquestioned primary behavior，旧 `src/backend/cir` 不再承担核心语义路径。
+	- **C11 真正迁移清零**：虽然 `level1b:c11-backend` 与 `level1b:cir-migration` 已绿，但 level-1b backend 当前仍不可用；必须先清掉 contract-only / stub-only / comment-only path，再让旧 `src/backend/cir` 不再承担核心语义路径。
 	- **C12 两轮 bootstrap 对拍**：`level1c.wasm -> level1c-next -> level1c-next2`。
 	- **post-C12 仓库形态收口**：Second Bootstrap 验证完成后，仓库目标不是长期并存多套 compiler 主实现，而是让 `level-1b/` 成为唯一 primary compiler tree；`level0/` 与 legacy `src/` / `level1c` 路径直接删除（Git 历史保留追溯），不再与主实现并列演化。
 
@@ -73,6 +81,22 @@
 	- 首先保证**语义正确**；
 	- golden/stability 是第二优先级；
 	- 可以接受后续通过 canonicalization 降噪，但不能用 canonicalization 掩盖真实类型错误。
+- continuation / callable / closure：
+	- `Ref[T]` 是 mut surface；multi-shot continuation 捕获 `Ref[T]` 采用 **shared-reference** 语义，不 snapshot / copy / rollback captured cell。
+	- continuation surface type 固定为 `Cont1[A, B]` / `cont1 (A) -> B` 与 `ContN[A, B]` / `contN (A) -> B`；二者默认 `!send`。
+	- `shift k { ... }` 捕获 `Cont1`；`shiftn k { ... }` 捕获 `ContN`；带 tag 时分别写 `shift :tag k { ... }` / `shiftn :tag k { ... }`。
+	- 非逃逸、静态 exactly-once 的 `Cont1` **必须** direct resume / inline / tail jump，不得分配 continuation package。
+	- 逃逸的 `Cont1` 可以进入 `(A) -> B` storage，但必须 boxed 成 one-shot consumed-state machine；第一次调用 consume，重复调用 runtime error / trap。
+	- 显式 `cont1 (A) -> B` storage lower 成 boxed one-shot state machine；显式 `contN (A) -> B` storage lower 成 multi-shot continuation package。
+	- `ContN` 可以进入普通 `(A) -> B` storage；它可重复恢复，但仍默认 `!send`。
+	- 参数位置的 `(A) -> B` 走 checked-template callable obligation，可实例化为 function / closure / `Cont1` / `ContN`。
+	- 存储位置的 `(A) -> B` lower 成 erased callable ADT，variant 至少包含 function / closure / boxed `Cont1` / `ContN`；调用时 tag dispatch，静态已知 variant 时必须优化掉 dispatch。
+	- `((A) -> B) send` 是 sendable callable storage，必须排除 `Cont1` / boxed `Cont1` / `ContN` 与所有 `!send` closure；传给 `spawn` 这类要求 send callable 的位置时 continuation 必须报错。
+	- no-capture closure **必须** 编译优化为 direct function / funref / inline，不得分配 closure env。
+- CIR/backend boundary：
+	- CIR 层千万不能和 Wasm / Wasm-GC / WAT / Binaryen / target ABI 耦合。
+	- CIR 只能携带语言级事实：continuation kind、callable storage kind、closure capture set、usage、send、arena、answer type、是否需要 boxed `Cont1` / `ContN` / erased callable ADT 等 obligation。
+	- Wasm-GC struct layout、`funcref` / `eqref`、frame header、WAT opcode、Binaryen feature、target import ABI 必须下沉到 BIR/LIR/backend layout 层。
 
 ## 工具链原则更新
 
@@ -230,8 +254,23 @@
 
 ### C11: wasm-gc Core/backend rewrite 收口
 
+- [ ] level-1b 不可用状态修复 / truthfulness cleanup
+	- **现状**: `level-1b/compiler/control/*`、`level-1b/compiler/closure/*`、`level-1b/compiler/backend/*` 中存在大量 contract-only / stub-only 实现：空 facts、直接 `Ok(module)`、只生成 layout 壳、WAT emitter 只输出注释等。
+	- **目标**: level-1b 不再让“接口已存在”伪装成“语义已实现”。所有暂未实现 pass 必须显式 blocker/stub；所有 gate 必须区分 contract smoke 与真实语义验收。
+	- **完成标准**:
+		- `check_answer_control` / usage / boundary / replay-safety / CPS / closure conversion / backend emit 不再以空 facts 或 pass-through 伪装完成；
+		- continuation lowering 能区分 `Cont1` direct、boxed `Cont1`、`ContN` package；
+		- closure lowering 能保证 no-capture closure 不分配 env，capturing closure 才 materialize env；
+		- parser / grammar 支持 `shift` / `shiftn` 与 `cont1 (A) -> B` / `contN (A) -> B` 类型糖；
+		- 已新增 grammar 契约源文件：`chiba-level1-grammar-spec/32-test.chiba` 与 `chiba-level1-grammar-error-spec/111-test.chiba`、`112-test.chiba`、`113-test.chiba`；lexer/parser golden 需等新 keyword/type grammar 实现后生成，不能伪造当前 parser 尚不支持的 spec；
+		- `(A) -> B` storage lower 成 erased callable ADT，并支持 function / closure / boxed `Cont1` / `ContN` dispatch；
+		- 显式 `cont1 (A) -> B` / `contN (A) -> B` storage 分别走 continuation-specific storage，不走 erased callable ADT；
+		- sendable callable storage 排除 continuation 和 `!send` closure；
+		- CIR 不含 Wasm-GC / WAT / Binaryen / target ABI 细节；这些只允许出现在 BIR/LIR/backend layout 层；
+		- WAT/Core emitter 不再只输出注释型 core-op，而是能承载真实 Wasm-GC / continuation frame / closure env 语义。
+
 - [ ] 完成 `src/backend/cir` 迁移清零
-	- **现状**: `level1b:c11-backend` 与 `level1b:cir-migration` 已通过，说明 gate 和映射覆盖已打通；剩余问题是“primary behavior 身份收尾”，不是 checkpoint blocker。
+	- **现状**: `level1b:c11-backend` 与 `level1b:cir-migration` 已通过，说明 gate 和映射覆盖已打通；但 level-1b 当前仍不可用，剩余问题不是“身份收尾”，而是“真实语义与真实 backend 尚未落地”。
 	- **目标**: `compiler/MIGRATION.md` 中旧 pass 不再停留在 `missing rewrite` / `contract only`；C08-C11 gate 不再把旧 `src/backend/cir` 当 primary behavior。
 	- **完成标准**:
 		- level-1b backend 成为主路径；
@@ -285,9 +324,11 @@
 
 ## 当前优先级顺序
 
-1. 清 frontend migration 的 builtin/oracle 债务，尤其 `std.chibalex` / `std.chibacc`。
-2. 收掉 checkpoint checklist 里仍未门禁或未 runtime 化的语义面：ADT tuple bridge、compiler intrinsic surface、globals、`Self` generics、deep pattern / pipe 全矩阵、scope shadowing。
-3. 继续完成 `src/backend/cir` 的 primary-path 清零，让 level-1b backend 成为 unquestioned primary path。
-4. 让 level-1b backend 稳定生成并跑通 `level1c-next` / `level1c-next2`。
-5. 做 C12 两轮 bootstrap 对拍。
-6. 做 post-C12 repository cleanup，让 `level-1b/` 成为唯一 primary compiler tree。
+1. 先修复 level-1b 不可用状态：清理 contract-only / stub-only / comment-only pass，避免假成功路径继续误导判断。
+2. 落地 continuation / closure / callable 语义：`Cont1` / `ContN`、boxed `Cont1` state machine、erased callable ADT、sendable callable storage、one-shot/no-capture 必需优化。
+3. 清 frontend migration 的 builtin/oracle 债务，尤其 `std.chibalex` / `std.chibacc`，但必须基于真实 continuation/closure lowering。
+4. 收掉 checkpoint checklist 里仍未门禁或未 runtime 化的语义面：ADT tuple bridge、compiler intrinsic surface、globals、`Self` generics、deep pattern / pipe 全矩阵、scope shadowing。
+5. 继续完成 `src/backend/cir` 的 primary-path 清零，让 level-1b backend 成为 unquestioned primary path。
+6. 让 level-1b backend 稳定生成并跑通 `level1c-next` / `level1c-next2`。
+7. 做 C12 两轮 bootstrap 对拍。
+8. 做 post-C12 repository cleanup，让 `level-1b/` 成为唯一 primary compiler tree。

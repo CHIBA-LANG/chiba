@@ -1,0 +1,32 @@
+namespace parser.spec.continuation.surface
+
+def use_cont1(k: cont1 (i64) -> i64): i64 = {
+    k(1)
+}
+
+def use_contn(k: contN (i64) -> i64): i64 = {
+    let a = k(1);
+    k(a)
+}
+
+def capture_continuations(): i64 = {
+    let once = reset {
+        shift k {
+            let saved: cont1 (i64) -> i64 = k;
+            saved(41)
+        }
+    };
+    let many = reset {
+        shiftn :retry k {
+            let saved: contN (i64) -> i64 = k;
+            saved(1)
+        }
+    };
+    once + many
+}
+
+type Handler {
+    any: (i64) -> i64,
+    once: cont1 (i64) -> i64,
+    many: contN (i64) -> i64,
+}

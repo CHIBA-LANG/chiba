@@ -1,0 +1,5 @@
+namespace parser.error.continuation.cont1.missing.arrow
+
+def bad_type(k: cont1 (i64) i64): i64 = {
+    k(1)
+}
