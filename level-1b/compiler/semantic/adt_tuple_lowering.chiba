@@ -2,6 +2,7 @@
 namespace compiler.semantic.adt_tuple_lowering
 
 use compiler.semantic.types.*
+use compiler.ir.control.*
 
 /// Canonical symbol tag assigned to one ADT constructor.
 type AdtVariantTag {
@@ -39,6 +40,7 @@ data ConstructorLoweringStrategy {
 type ConstructorMutationObligation {
     ctor: AdtVariantDecl,
     input: SemType,
+    use_count: UseCount,
     strategy: ConstructorLoweringStrategy,
 }
 
@@ -80,11 +82,28 @@ def constructor_strategy_for_use(used_once: bool): ConstructorLoweringStrategy =
     if used_once { ConstructorMutateOnceUsedInput }
     else { ConstructorAllocateValue }
 
+/// Choose constructor strategy from usage facts.
+def constructor_strategy_for_use_count(use_count: UseCount): ConstructorLoweringStrategy =
+    match use_count {
+        UseOne => ConstructorMutateOnceUsedInput
+        _ => ConstructorAllocateValue
+    }
+
+/// Build the constructor mutation obligation from real usage count facts.
+def constructor_mutation_obligation_from_use(ctor: AdtVariantDecl, input: SemType, use_count: UseCount): ConstructorMutationObligation =
+    ConstructorMutationObligation {
+        ctor: ctor,
+        input: input,
+        use_count: use_count,
+        strategy: constructor_strategy_for_use_count(use_count),
+    }
+
 /// Build the constructor mutation obligation after type and usage facts exist.
 def constructor_mutation_obligation(ctor: AdtVariantDecl, input: SemType, used_once: bool): ConstructorMutationObligation =
     ConstructorMutationObligation {
         ctor: ctor,
         input: input,
+        use_count: if used_once { UseOne } else { UseMany },
         strategy: constructor_strategy_for_use(used_once),
     }
 
