@@ -217,6 +217,14 @@ def source_region_has_text(text: String, offset: usize, end: usize, needle: str)
     else if source_starts_with_at(text, offset, needle, 0) { true }
     else { source_region_has_text(text, offset + 1, end, needle) }
 
+/// Count occurrences of an ASCII token in a bounded source region.
+def source_region_count_text(text: String, offset: usize, end: usize, needle: str, count: usize): usize =
+    if offset >= end { count }
+    else if offset >= text.len() { count }
+    else if source_starts_with_at(text, offset, needle, 0) {
+        source_region_count_text(text, offset + needle.len(), end, needle, count + 1)
+    } else { source_region_count_text(text, offset + 1, end, needle, count) }
+
 /// Return true when byte before offset is not an identifier continuation.
 def source_word_boundary_before(text: String, offset: usize): bool =
     if offset == 0 { true }
@@ -293,6 +301,20 @@ def source_scan_item_has_global_value_dependency(text: String, offset: usize): b
         else { source_is_ident_start(text.byte_at(start)) }
     }
 
+/// Return true when an item region contains a pipe expression.
+def source_scan_item_has_pipe_expr(text: String, offset: usize): bool =
+    source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "|>")
+
+/// Return true when an item pipe region contains a placeholder hole.
+def source_scan_item_has_pipe_placeholder(text: String, offset: usize): bool =
+    if source_scan_item_has_pipe_expr(text, offset) {
+        source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "_")
+    } else { false }
+
+/// Return true when an item region contains more than one pipe operator.
+def source_scan_item_has_pipe_chain(text: String, offset: usize): bool =
+    source_region_count_text(text, offset, source_scan_item_region_end(text, offset), "|>", 0) > 1
+
 /// Try to detect an inline namespace block unsupported by the transition scanner.
 def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceNamespaceScanWarning] =
     let start = source_skip_spaces(text, offset)
@@ -357,6 +379,9 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_tuple_type_surface: source_scan_item_has_tuple_type_surface(text, offset),
         has_global_value_initializer: source_line_has_byte(text, offset, 40) == false && source_scan_item_has_body(text, offset),
         has_global_value_dependency: source_line_has_byte(text, offset, 40) == false && source_scan_item_has_global_value_dependency(text, offset),
+        has_pipe_expr: source_scan_item_has_pipe_expr(text, offset),
+        has_pipe_placeholder: source_scan_item_has_pipe_placeholder(text, offset),
+        has_pipe_chain: source_scan_item_has_pipe_chain(text, offset),
     }
 
 /// Try to scan a source item at one line start.

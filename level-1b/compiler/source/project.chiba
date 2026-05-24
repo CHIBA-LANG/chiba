@@ -136,6 +136,9 @@ type SourceItemSurfaceFacts {
     has_tuple_type_surface: bool,
     has_global_value_initializer: bool,
     has_global_value_dependency: bool,
+    has_pipe_expr: bool,
+    has_pipe_placeholder: bool,
+    has_pipe_chain: bool,
 }
 
 /// Source item discovered by the byte-level scanner.
