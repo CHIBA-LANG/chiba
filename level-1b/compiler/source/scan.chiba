@@ -1,0 +1,106 @@
+/// Byte-level source scanner for early project facts.
+namespace compiler.source.scan
+
+use compiler.source.project.*
+use std.string.*
+
+/// Cursor used while scanning one source file.
+type SourceScanCursor {
+    offset: usize,
+    line: usize,
+    column: usize,
+}
+
+/// Namespace name slice discovered in source text.
+type NamespaceNameSlice {
+    offset: usize,
+    len: usize,
+}
+
+/// Result of scanning for one namespace declaration.
+type NamespaceScanResult {
+    file: SourceFileId,
+    name: NamespaceNameSlice,
+    line: usize,
+    column: usize,
+}
+
+/// Return true when an ASCII byte is whitespace inside source headers.
+def source_is_space(byte: u8): bool =
+    if byte == 32 { true }
+    else if byte == 9 { true }
+    else if byte == 13 { true }
+    else { false }
+
+/// Return true when an ASCII byte may start a namespace segment.
+def source_is_ident_start(byte: u8): bool =
+    if byte >= 65 && byte <= 90 { true }
+    else if byte >= 97 && byte <= 122 { true }
+    else if byte == 95 { true }
+    else { false }
+
+/// Return true when an ASCII byte may continue a namespace segment.
+def source_is_ident_continue(byte: u8): bool =
+    if source_is_ident_start(byte) { true }
+    else if byte >= 48 && byte <= 57 { true }
+    else if byte == 46 { true }
+    else { false }
+
+/// Match a byte string at a source offset.
+def source_starts_with_at(text: String, offset: usize, needle: str, index: usize): bool =
+    if index == needle.len() { true }
+    else if offset + index >= text.len() { false }
+    else if text.byte_at(offset + index) == needle.byte_at(index) {
+        source_starts_with_at(text, offset, needle, index + 1)
+    } else { false }
+
+/// Skip horizontal whitespace after a token.
+def source_skip_spaces(text: String, offset: usize): usize =
+    if offset >= text.len() { offset }
+    else if source_is_space(text.byte_at(offset)) { source_skip_spaces(text, offset + 1) }
+    else { offset }
+
+/// Scan to the end of one namespace name.
+def source_scan_namespace_name_end(text: String, offset: usize): usize =
+    if offset >= text.len() { offset }
+    else if source_is_ident_continue(text.byte_at(offset)) { source_scan_namespace_name_end(text, offset + 1) }
+    else { offset }
+
+/// Try to scan a namespace declaration at one line start.
+def source_scan_namespace_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[NamespaceScanResult] =
+    if source_starts_with_at(text, offset, "namespace", 0) {
+        let start = source_skip_spaces(text, offset + "namespace".len())
+        if start < text.len() && source_is_ident_start(text.byte_at(start)) {
+            let end = source_scan_namespace_name_end(text, start)
+            Some(NamespaceScanResult {
+                file: file,
+                name: NamespaceNameSlice { offset: start, len: end - start },
+                line: line,
+                column: start - offset,
+            })
+        } else { None }
+    } else { None }
+
+/// Advance to the start offset of the next line.
+def source_next_line_offset(text: String, offset: usize): usize =
+    if offset >= text.len() { offset }
+    else if text.byte_at(offset) == 10 { offset + 1 }
+    else { source_next_line_offset(text, offset + 1) }
+
+/// Scan line starts until the first namespace declaration is found.
+def source_scan_first_namespace_line(file: SourceFileId, text: String, offset: usize, line: usize): Option[NamespaceScanResult] =
+    if offset >= text.len() { None }
+    else {
+        match source_scan_namespace_at(file, text, offset, line) {
+            Some(result) => Some(result)
+            None => {
+                let next = source_next_line_offset(text, offset)
+                if next == offset { None }
+                else { source_scan_first_namespace_line(file, text, next, line + 1) }
+            }
+        }
+    }
+
+/// Scan the first namespace declaration in one source file.
+def source_scan_first_namespace(file: SourceFile): Option[NamespaceScanResult] =
+    source_scan_first_namespace_line(file.id, file.text, 0, 1)

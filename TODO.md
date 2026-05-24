@@ -264,6 +264,7 @@
 		- 新增轻量反馈环：`vp run level1b:truthfulness-audit`。该 gate 当前预期失败，用 blocker taxonomy 暴露假成功路径；不要把它并入 expensive bootstrap。
 		- 当前基线计数：`legacy-compiler-execution` / `oracle-success-path` 已清零；剩余 `primary-path-blocked` 26；`ok-module-pass-through` / `empty-facts` / `comment-only-backend-output` 已清零为显式 blocker 或 source-contract 拒绝。
 		- `level1b:c07-source-driver` 已拒绝 source semantic gate 空 errors pass-through；缺 parsed project facts / source semantic gate scan 时返回 `missing-facts` blocker，不能让 source driver 在无事实输入时冒充可进入 typed 阶段。
+		- C07 已新增 byte-level source scanner primitives：`source_starts_with_at`、line advance、first namespace scan、namespace name slice；这是 source facts primary path 的起点，不是 full parser，仍需接入 project load / doc / compile_if / item scan 后才能解除 parser execution blocker。
 		- `compiler/lower/ast_to_core.chiba` 已拒绝空 `SurfaceModule` lowering；缺 AST -> Surface item lowering 时返回 `missing-lowering` diagnostic。`level1b:truthfulness-audit` 已补 source gate 空放行、typed inference pass-through、空 Surface lowering 三类回归 detector。
 		- `level-1b/src/level1b_main.chiba` 已不再是 `main = 42` magic placeholder；seed entry 只连接 CLI readiness contract，`level1b:smoke` 仍标记 primary compile / WAT emission blocked。
 		- `level1b:c09-control-cps` 已改成 fail-closed：缺 answer/control scan、usage subject collection、boundary scan、one-pass CPS beta lowering 时返回 blocker diagnostic；该 gate 当前只通过 source contract，真实 valid/invalid continuation gates 标记为 primary-path-blocked。
