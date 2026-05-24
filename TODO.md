@@ -277,6 +277,7 @@
 		- C07 source semantic gate 现在在 item-level `compile_if` 尚未过滤时 fail-closed 于 `item compile_if filtering absent`，避免被禁用 item 产生 binder/export/backend symbol。
 		- C07 source item scanner 现在把 file-header namespace 作为 `owner_namespace` 挂到 item fact；inline namespace 仍 fail-closed，真实 nested namespace ownership 还没完成。
 		- C07 source item scanner 现在保留 item header slice 与粗粒度 surface shape（是否有参数、类型标注、body/initializer），为后续 def/static/type/data lowering 提供输入；参数 pattern、type expr、body AST 仍未解析。
+		- C07 source item scanner 现在保留 method receiver / operator method / `Self` surface bits；非 method receiver scope 中出现 `Self` 会 fail-closed 于 `invalid-surface: Self only valid in method receiver scope`，避免 `Self` 被当作普通 top-level type name。
 		- C07 source semantic gate 现在拒绝缺少任何扫描到的类型标注的 `extern` item，符合 spec 中 extern ABI 边界必须显式标注的方向；真实 ABI signature parse 仍未完成。
 		- C07 source scanner/gate 现在识别 `#[world_local]` 与 header 中的 `Ref[`，并拒绝缺少 world_local 的顶层 static `Ref`；这是 spec 级安全规则的 fail-closed 早期实现，真实 type expr parse 仍未完成。
 		- C07 source semantic gate 现在拒绝缺少扫描到的 body/initializer marker 的 `def` item，避免把没有函数体/静态初始化输入的 skeleton 交给 typed lowering。
@@ -284,6 +285,7 @@
 		- C08 typed item skeleton 现在会把 scanned item 粗分为 function/static value/extern function/nominal type/data/union/interface，避免 `def x` 静态值与 `def f(...)` 函数在 skeleton 阶段混成同一种壳。
 		- C08 alpha origins 现在保留 source item kind/name/file/owner_namespace/line/column/private/attributes/surface；type inference 先构造 `TypedItemSkeleton` 并检查 pattern coverage，再 fail-closed 于 source item type expression/body inference absent，避免把只有 binder index 的骨架伪装成 typed module。
 		- C08 pattern elaboration 已开始消费 alpha binders：`elaborate_patterns` 由 binder stream 派生稳定 pattern ids，不再创建空 pattern stream；这仍是骨架 facts，不等于完整 pattern AST lowering。
+		- C08 typed skeleton 现在在 method-style surface 上 fail-closed 于 `missing-lowering: method receiver Self binding absent`；template / method-operator / typed-facts gates 已接入 semantic driver，不能继续被注释中的“会运行”冒充。
 		- `compiler/lower/ast_to_core.chiba` 已拒绝空 `SurfaceModule` lowering；缺 AST -> Surface item lowering 时返回 `missing-lowering` diagnostic。`level1b:truthfulness-audit` 已补 source gate 空放行、typed inference pass-through、空 Surface lowering 三类回归 detector。
 		- `level-1b/src/level1b_main.chiba` 已不再是 `main = 42` magic placeholder；seed entry 只连接 CLI readiness contract，`level1b:smoke` 仍标记 primary compile / WAT emission blocked。
 		- `level1b:c09-control-cps` 已改成 fail-closed：缺 answer/control scan、usage subject collection、boundary scan、one-pass CPS beta lowering 时返回 blocker diagnostic；该 gate 当前只通过 source contract，真实 valid/invalid continuation gates 标记为 primary-path-blocked。
@@ -312,6 +314,7 @@
 		- C11 validator 已补 runtime Core op owner invariant：任何需要 layout 的 materialized Core op 缺 owner provenance 时返回 `CoreMissingOwner`，避免匿名 closure / continuation package 进入 backend emit。
 		- C11 Core op 现在保留 runtime state machine fact；boxed `Cont1` 必须携带 `CoreConsumedStateMachine`，其他 op 不得误带 consumed-state，防止 one-shot 语义在 backend 前丢失。
 		- C11 Core op 现在保留 `frame_count`，validator 拒绝 zero-frame 的 `ContN` frame-chain，避免 repeatable package 只有壳没有 stackless resume frame。
+		- C11 `ContN` lowering 现在会先发出 stackless resume Core ops，再发出 frame-chain 与 repeatable package；validator 要求 frame-chain 前存在匹配数量的 stackless resume ops，且 stackless Core op 也必须保留 owner provenance。
 		- `ContN` lowering 验收必须证明：repeatable frame chain 由 stackless resume functions 驱动；frame chain 可重复恢复；捕获 `Ref[T]` 是 shared-reference，不 snapshot / rollback。
 		- closure lowering 验收必须证明：no-capture closure 走 direct function / funref / inline；capturing closure 只有逃逸或确需 env 时才 materialize env；env 内 continuation / `Ref[T]` 不被能力洗白。
 		- spec 要求 `(A) -> B` 参数位置是 checked-template callable obligation，存储位置 lower 成 erased callable ADT；显式 `cont1` / `contN` storage 不走 erased callable ADT；当前未见真实 callable storage lowering。
