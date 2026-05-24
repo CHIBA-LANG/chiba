@@ -154,6 +154,28 @@ for (const root of SCAN_ROOTS) {
       });
     }
 
+    const templateEmptySuccess = /\bdef\s+check_template\b[\s\S]*?Ok\s*\(\s*Vec\s*\[\s*CheckedTemplate\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/g;
+    for (const match of source.matchAll(templateEmptySuccess)) {
+      blockers.push({
+        id: "template-empty-success",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "missing-lowering",
+        semantic: "checked-template pass returns an empty success instead of analyzing generic bodies",
+        message: "missing-lowering: checked-template pass returns an empty success instead of analyzing generic bodies",
+      });
+    }
+
+    const methodOperatorEmptySuccess = /\bdef\s+build_method_operator_index\b[\s\S]*?Ok\s*\(\s*MethodOperatorIndex\s*\(\s*Vec\s*\[\s*MethodKey\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*,\s*Vec\s*\[\s*OperatorKey\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)\s*\)/g;
+    for (const match of source.matchAll(methodOperatorEmptySuccess)) {
+      blockers.push({
+        id: "method-operator-empty-success",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "missing-lowering",
+        semantic: "method/operator index returns an empty success instead of indexing source methods",
+        message: "missing-lowering: method/operator index returns an empty success instead of indexing source methods",
+      });
+    }
+
     const emptySurfaceLowering = /\bdef\s+lower_ast_to_surface\b[\s\S]*?Ok\s*\(\s*SurfaceModule\s*\(\s*""\s*,\s*Vec\s*\[\s*SurfaceItem\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)\s*\)/g;
     for (const match of source.matchAll(emptySurfaceLowering)) {
       blockers.push({
