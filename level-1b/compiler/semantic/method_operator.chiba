@@ -23,4 +23,6 @@ type MethodOperatorIndex {
 
 /// Build the nominal method/operator index.
 def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex, SemanticDiagnostics] =
-    Ok(MethodOperatorIndex(Vec[MethodKey].new().freeze(), Vec[OperatorKey].new().freeze()))
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method/operator index construction absent"))
+        .freeze()))

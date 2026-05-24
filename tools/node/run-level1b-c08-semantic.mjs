@@ -74,6 +74,7 @@ const REQUIRED_TEXT = [
   "type MethodKey",
   "type OperatorKey",
   "def build_method_operator_index",
+  "missing-lowering: method/operator index construction absent",
   "data ExternAbi",
   "data CapabilityUse",
   "def check_extern_abi",
@@ -163,6 +164,9 @@ function checkSource(file, source) {
   }
   if (file.endsWith("pattern.chiba") && /\bdef\s+elaborate_patterns\b[\s\S]*PatternFacts\s*\(\s*Vec\s*\[\s*PatternId\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/.test(code)) {
     errors.push(`${file}: pattern elaboration must derive facts from alpha binders`);
+  }
+  if (file.endsWith("method_operator.chiba") && /\bdef\s+build_method_operator_index\b[\s\S]*Ok\s*\(\s*MethodOperatorIndex\s*\(\s*Vec\s*\[\s*MethodKey\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*,\s*Vec\s*\[\s*OperatorKey\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)\s*\)/.test(code)) {
+    errors.push(`${file}: method/operator index must not return an empty success`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
