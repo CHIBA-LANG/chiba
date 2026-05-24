@@ -38,6 +38,7 @@ type SemanticDiagnostics {
 type TypedModule {
     alpha: AlphaModule,
     callable_storage: Array[CallableStorageFact],
+    namespace_ownership: Array[NamespaceOwnershipFact],
 }
 
 /// Run alpha, pattern, inference, template, method/operator, ABI, and capability passes.
