@@ -393,6 +393,20 @@ def source_scan_item_has_auto_generic_params(text: String, offset: usize): bool 
 def source_scan_item_has_explicit_instantiation_call(text: String, offset: usize): bool =
     source_region_has_text(text, source_scan_item_body_region_start(text, offset), source_scan_item_region_end(text, offset), "](")
 
+/// Return true when an item body contains local let binding surface.
+def source_scan_item_has_let_binding(text: String, offset: usize): bool =
+    source_region_has_text(text, source_scan_item_body_region_start(text, offset), source_scan_item_region_end(text, offset), "let ")
+
+/// Return true when an item body contains wildcard discard let surface.
+def source_scan_item_has_wildcard_let(text: String, offset: usize): bool =
+    source_region_has_text(text, source_scan_item_body_region_start(text, offset), source_scan_item_region_end(text, offset), "let _")
+
+/// Return true when local or pattern bindings require scope/shadow analysis.
+def source_scan_item_has_scope_shadow_candidate(text: String, offset: usize): bool =
+    if source_scan_item_has_let_binding(text, offset) { true }
+    else if source_scan_item_has_match_expr(text, offset) { true }
+    else { source_scan_item_has_if_let_expr(text, offset) }
+
 /// Try to detect an inline namespace block unsupported by the transition scanner.
 def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceNamespaceScanWarning] =
     let start = source_skip_spaces(text, offset)
@@ -473,6 +487,9 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_operator_obligation_surface: source_scan_item_has_operator_obligation_surface(text, offset),
         has_auto_generic_params: source_scan_item_has_auto_generic_params(text, offset),
         has_explicit_instantiation_call: source_scan_item_has_explicit_instantiation_call(text, offset),
+        has_let_binding: source_scan_item_has_let_binding(text, offset),
+        has_wildcard_let: source_scan_item_has_wildcard_let(text, offset),
+        has_scope_shadow_candidate: source_scan_item_has_scope_shadow_candidate(text, offset),
     }
 
 /// Try to scan a source item at one line start.

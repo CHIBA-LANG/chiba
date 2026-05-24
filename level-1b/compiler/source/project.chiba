@@ -152,6 +152,9 @@ type SourceItemSurfaceFacts {
     has_operator_obligation_surface: bool,
     has_auto_generic_params: bool,
     has_explicit_instantiation_call: bool,
+    has_let_binding: bool,
+    has_wildcard_let: bool,
+    has_scope_shadow_candidate: bool,
 }
 
 /// Source item discovered by the byte-level scanner.

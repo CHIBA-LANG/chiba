@@ -58,6 +58,8 @@ const REQUIRED_TEXT = [
   "missing-lowering: explicit generic parameter binding absent",
   "def typed_item_skeletons_have_generic_instantiation_surface",
   "missing-lowering: auto-generic and explicit instantiation checking absent",
+  "def typed_item_skeletons_have_scope_shadow_surface",
+  "missing-lowering: local scope graph and shadowing analysis absent",
   "def typed_item_skeletons_have_compiler_intrinsic_surface",
   "missing-lowering: compiler intrinsic surface lowering absent",
   "def typed_item_skeletons_have_global_init_surface",
