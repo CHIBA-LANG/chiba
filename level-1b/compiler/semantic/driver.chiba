@@ -45,6 +45,7 @@ type TypedModule {
     control_surface: Array[ControlSurfaceFact],
     global_init_surface: Array[GlobalInitSurfaceFact],
     pipe_surface: Array[PipeSurfaceFact],
+    pattern_surface: Array[PatternSurfaceFact],
 }
 
 /// Run alpha, pattern, inference, template, method/operator, ABI, and capability passes.

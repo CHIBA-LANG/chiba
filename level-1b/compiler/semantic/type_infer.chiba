@@ -89,6 +89,17 @@ type PipeSurfaceFact {
     has_chain: bool,
 }
 
+/// Pattern surface fact before DFT lowering and exhaustiveness checks.
+type PatternSurfaceFact {
+    owner: BinderId,
+    file: SourceFileId,
+    has_match: bool,
+    has_if_let: bool,
+    has_deep_pattern: bool,
+    has_pattern_params: bool,
+    has_wildcard_let: bool,
+}
+
 /// Classify a scanned source item into the first typed-lowering bucket.
 def classify_typed_item_skeleton_kind(item: AlphaBinderOrigin): TypedItemSkeletonKind =
     match item.kind {
@@ -360,6 +371,38 @@ def pipe_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], index
         }
     }
 
+/// Return true when an item needs pattern lowering or exhaustiveness checking.
+def typed_item_has_pattern_surface(item: TypedItemSkeleton): bool =
+    if item.surface.has_match_expr { true }
+    else if item.surface.has_if_let_expr { true }
+    else if item.surface.has_deep_pattern_surface { true }
+    else if item.surface.has_pattern_params { true }
+    else { item.surface.has_wildcard_let }
+
+/// Create one pattern surface fact from an item skeleton.
+def pattern_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[PatternSurfaceFact] =
+    if typed_item_has_pattern_surface(item) {
+        Some(PatternSurfaceFact {
+            owner: item.binder,
+            file: item.file,
+            has_match: item.surface.has_match_expr,
+            has_if_let: item.surface.has_if_let_expr,
+            has_deep_pattern: item.surface.has_deep_pattern_surface,
+            has_pattern_params: item.surface.has_pattern_params,
+            has_wildcard_let: item.surface.has_wildcard_let,
+        })
+    } else { None }
+
+/// Generate pattern surface facts in stable binder order.
+def pattern_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[PatternSurfaceFact]): Array[PatternSurfaceFact] =
+    if index == skeletons.len() { out.freeze() }
+    else {
+        match pattern_surface_fact_from_skeleton(skeletons.get(index)) {
+            Some(fact) => pattern_surface_facts_from_skeletons(skeletons, index + 1, out.push(fact))
+            None => pattern_surface_facts_from_skeletons(skeletons, index + 1, out)
+        }
+    }
+
 /// Return true when item surfaces mention method-style receiver definitions.
 def typed_item_skeletons_have_method_receiver_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
     if index == skeletons.len() { false }
@@ -383,8 +426,7 @@ def typed_item_skeletons_have_generic_self_method_surface(skeletons: Array[Typed
 def typed_item_skeletons_have_pattern_param_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
     if index == skeletons.len() { false }
     else {
-        let surface = skeletons.get(index).surface
-        if surface.has_pattern_params { true }
+        if skeletons.get(index).surface.has_pattern_params { true }
         else { typed_item_skeletons_have_pattern_param_surface(skeletons, index + 1) }
     }
 
@@ -458,10 +500,10 @@ def typed_item_skeletons_have_pipe_surface(skeletons: Array[TypedItemSkeleton], 
 def typed_item_skeletons_have_deep_pattern_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
     if index == skeletons.len() { false }
     else {
-        let surface = skeletons.get(index).surface
-        if surface.has_match_expr { true }
-        else if surface.has_if_let_expr { true }
-        else if surface.has_deep_pattern_surface { true }
+        let item = skeletons.get(index)
+        if item.surface.has_match_expr { true }
+        else if item.surface.has_if_let_expr { true }
+        else if item.surface.has_deep_pattern_surface { true }
         else { typed_item_skeletons_have_deep_pattern_surface(skeletons, index + 1) }
     }
 
@@ -506,6 +548,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let control_surface = control_surface_facts_from_skeletons(skeletons, 0, Vec[ControlSurfaceFact].new())
     let global_init_surface = global_init_surface_facts_from_skeletons(skeletons, 0, Vec[GlobalInitSurfaceFact].new())
     let pipe_surface = pipe_surface_facts_from_skeletons(skeletons, 0, Vec[PipeSurfaceFact].new())
+    let pattern_surface = pattern_surface_facts_from_skeletons(skeletons, 0, Vec[PatternSurfaceFact].new())
     if skeletons.len() == 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: typed item skeletons absent"))
@@ -539,9 +582,15 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .freeze()))
         }
     } else if typed_item_skeletons_have_deep_pattern_surface(skeletons, 0) {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: deep pattern match and if-let lowering absent"))
-            .freeze()))
+        if pattern_surface.len() == 0 {
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: pattern surface fact generation absent"))
+                .freeze()))
+        } else {
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: deep pattern match and if-let lowering absent"))
+                .freeze()))
+        }
     } else if typed_item_skeletons_have_string_slice_surface(skeletons, 0) {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: string interpolation and slice lowering absent"))
@@ -579,9 +628,15 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .freeze()))
         }
     } else if typed_item_skeletons_have_pattern_param_surface(skeletons, 0) {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: function pattern parameter desugaring absent"))
-            .freeze()))
+        if pattern_surface.len() == 0 {
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: pattern surface fact generation absent"))
+                .freeze()))
+        } else {
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: function pattern parameter desugaring absent"))
+                .freeze()))
+        }
     } else if typed_item_skeletons_have_generic_instantiation_surface(skeletons, 0) {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: auto-generic and explicit instantiation checking absent"))
@@ -611,7 +666,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
-def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact]): TypedModule =
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact]): TypedModule =
     TypedModule {
         alpha: module,
         items: skeletons,
@@ -622,6 +677,7 @@ def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemS
         control_surface: control_surface,
         global_init_surface: global_init_surface,
         pipe_surface: pipe_surface,
+        pattern_surface: pattern_surface,
     }
 
 /// Run the level-2 semantic checks that require inferred types.
