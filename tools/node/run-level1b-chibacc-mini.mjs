@@ -89,6 +89,32 @@ const CASES = [
         _ => 1
 `,
   },
+  {
+    file: "attribute-args.chibacc",
+    namespace: "chibaccmini.attribute_args",
+    expected: ["AttrNamed", "AttrCall", "AttrList", "AttrObject", "AttrBare"],
+    tokens: [
+      "Hash",
+      "LBracket",
+      "Ident(mk_str(\"attribute\", 9))",
+      "LParen",
+      "Ident(mk_str(\"all\", 3))",
+      "LParen",
+      "Ident(mk_str(\"someident\", 9))",
+      "Comma",
+      "Ident(mk_str(\"a\", 1))",
+      "Eq",
+      "Ident(mk_str(\"b\", 1))",
+      "RParen",
+      "RParen",
+      "RBracket",
+    ],
+    check: `
+        Attr(name, args) =>
+            if streq(name, mk_str("attribute", 9)) != 0 { 0 } else { 3 }
+        _ => 4
+`,
+  },
 ];
 
 function run(name, command, args) {
