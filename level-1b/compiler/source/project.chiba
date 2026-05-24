@@ -115,6 +115,7 @@ data SourceItemKind {
 /// Attribute facts attached to a source item before full AST parsing.
 type SourceItemAttributeFacts {
     compile_if: Option[SourceCompileIfFacts],
+    world_local: bool,
 }
 
 /// Surface slices for source item lowering before full AST parsing.
@@ -123,6 +124,7 @@ type SourceItemSurfaceFacts {
     has_params: bool,
     has_type_annotation: bool,
     has_body: bool,
+    has_ref_type: bool,
 }
 
 /// Source item discovered by the byte-level scanner.

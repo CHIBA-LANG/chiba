@@ -11,10 +11,10 @@ data SourceGateErrorKind {
     SourceGateInlineNamespaceUnsupported,
     SourceGateImportResolutionAbsent,
     SourceGateExternAbiSignatureAbsent,
+    SourceGateTopLevelRefNeedsWorldLocal,
     SourceGateMissingNamespace,
     SourceGateItemScanAbsent,
     SourceGateTypedItemLoweringAbsent,
-    SourceGateTopLevelRefNeedsWorldLocal,
     SourceGateAtomicPayloadUnsupported,
     SourceGateAtomicLoadOrdering,
     SourceGateAtomicStoreOrdering,
@@ -94,6 +94,29 @@ def source_items_have_extern_without_type_annotation(items: Array[SourceItemScan
 def source_project_has_extern_without_type_annotation(project: ProjectSurface): bool =
     source_items_have_extern_without_type_annotation(project.facts.items, 0)
 
+/// Return true when a top-level static Ref lacks the required world-local marker.
+def source_items_have_static_ref_without_world_local(items: Array[SourceItemScanResult], index: usize): bool =
+    if index == items.len() { false }
+    else {
+        let item = items.get(index)
+        match item.kind {
+            SourceItemDef => {
+                if item.surface.has_params {
+                    source_items_have_static_ref_without_world_local(items, index + 1)
+                } else if item.surface.has_ref_type && item.attributes.world_local == false {
+                    true
+                } else {
+                    source_items_have_static_ref_without_world_local(items, index + 1)
+                }
+            }
+            _ => source_items_have_static_ref_without_world_local(items, index + 1)
+        }
+    }
+
+/// Return true when project source facts contain a static Ref missing world-local.
+def source_project_has_static_ref_without_world_local(project: ProjectSurface): bool =
+    source_items_have_static_ref_without_world_local(project.facts.items, 0)
+
 /// Build fail-closed source gate diagnostics from source scan facts.
 def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
     if source_project_has_utf8_warning(project) {
@@ -137,6 +160,13 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceFileId { index: 0 },
                 SourceGateExternAbiSignatureAbsent,
                 "missing-facts: extern ABI signature type annotations absent"))
+            .freeze()
+    } else if source_project_has_static_ref_without_world_local(project) {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateTopLevelRefNeedsWorldLocal,
+                "missing-attribute: top-level Ref requires world_local"))
             .freeze()
     } else if source_project_needs_import_resolution(project) {
         Vec[SourceGateError].new()

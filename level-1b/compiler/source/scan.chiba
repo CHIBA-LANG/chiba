@@ -105,11 +105,11 @@ def source_scan_compile_if_facts_at(file: SourceFileId, text: String, offset: us
 
 /// Empty item attributes used when no line attribute is pending.
 def source_item_attributes_none(): SourceItemAttributeFacts =
-    SourceItemAttributeFacts { compile_if: None }
+    SourceItemAttributeFacts { compile_if: None, world_local: false }
 
 /// Build item attributes from a pending compile_if attribute.
-def source_item_attributes_from_compile_if(compile_if: Option[SourceCompileIfFacts]): SourceItemAttributeFacts =
-    SourceItemAttributeFacts { compile_if: compile_if }
+def source_item_attributes_from_pending(compile_if: Option[SourceCompileIfFacts], world_local: bool): SourceItemAttributeFacts =
+    SourceItemAttributeFacts { compile_if: compile_if, world_local: world_local }
 
 /// Classify the top-level compile_if predicate shape.
 def source_scan_compile_if_shape_at(text: String, offset: usize): SourceCompileIfShape =
@@ -176,6 +176,13 @@ def source_line_has_byte(text: String, offset: usize, byte: u8): bool =
     else if text.byte_at(offset) == byte { true }
     else { source_line_has_byte(text, offset + 1, byte) }
 
+/// Return true when one source line contains an ASCII token.
+def source_line_has_text(text: String, offset: usize, needle: str): bool =
+    if offset >= text.len() { false }
+    else if text.byte_at(offset) == 10 { false }
+    else if source_starts_with_at(text, offset, needle, 0) { true }
+    else { source_line_has_text(text, offset + 1, needle) }
+
 /// Try to detect an inline namespace block unsupported by the transition scanner.
 def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceNamespaceScanWarning] =
     let start = source_skip_spaces(text, offset)
@@ -221,6 +228,7 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_params: source_line_has_byte(text, offset, 40),
         has_type_annotation: source_line_has_byte(text, offset, 58),
         has_body: source_scan_item_has_body(text, offset),
+        has_ref_type: source_line_has_text(text, offset, "Ref["),
     }
 
 /// Try to scan a source item at one line start.
@@ -350,27 +358,34 @@ def source_scan_uses(file: SourceFile): Array[SourceUseScanResult] =
     source_scan_uses_line(file.id, file.text, 0, 1, Vec[SourceUseScanResult].new())
 
 /// Scan item declarations from line starts, carrying pending line attributes.
-def source_scan_items_line(file: SourceFileId, owner_namespace: Option[NamespaceNameSlice], text: String, offset: usize, line: usize, pending_compile_if: Option[SourceCompileIfFacts], out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
+def source_scan_items_line(file: SourceFileId, owner_namespace: Option[NamespaceNameSlice], text: String, offset: usize, line: usize, pending_compile_if: Option[SourceCompileIfFacts], pending_world_local: bool, out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
     if offset >= text.len() { out.freeze() }
     else {
         let next = source_next_line_offset(text, offset)
         match source_scan_compile_if_facts_at(file, text, offset) {
             Some(facts) => {
                 if next == offset { out.freeze() }
-                else { source_scan_items_line(file, owner_namespace, text, next, line + 1, Some(facts), out) }
+                else { source_scan_items_line(file, owner_namespace, text, next, line + 1, Some(facts), pending_world_local, out) }
             }
             None => {
-                let attributes = source_item_attributes_from_compile_if(pending_compile_if)
-                let next_out = match source_scan_item_at(file, owner_namespace, text, offset, line, attributes) {
-                    Some(result) => out.push(result)
-                    None => out
+                if source_starts_with_at(text, offset, "#[world_local]", 0) {
+                    if next == offset { out.freeze() }
+                    else { source_scan_items_line(file, owner_namespace, text, next, line + 1, pending_compile_if, true, out) }
+                } else {
+                    let attributes = source_item_attributes_from_pending(pending_compile_if, pending_world_local)
+                    let next_out = match source_scan_item_at(file, owner_namespace, text, offset, line, attributes) {
+                        Some(result) => out.push(result)
+                        None => out
+                    }
+                    let saw_item = match source_scan_item_at(file, owner_namespace, text, offset, line, source_item_attributes_none()) {
+                        Some(_) => true
+                        None => false
+                    }
+                    let next_compile_if = if saw_item { None } else { pending_compile_if }
+                    let next_world_local = if saw_item { false } else { pending_world_local }
+                    if next == offset { next_out.freeze() }
+                    else { source_scan_items_line(file, owner_namespace, text, next, line + 1, next_compile_if, next_world_local, next_out) }
                 }
-                let next_pending = match source_scan_item_at(file, owner_namespace, text, offset, line, source_item_attributes_none()) {
-                    Some(_) => None
-                    None => pending_compile_if
-                }
-                if next == offset { next_out.freeze() }
-                else { source_scan_items_line(file, owner_namespace, text, next, line + 1, next_pending, next_out) }
             }
         }
     }
@@ -384,7 +399,7 @@ def source_scan_file_owner_namespace(file: SourceFile): Option[NamespaceNameSlic
 
 /// Scan source item declarations in one file.
 def source_scan_items(file: SourceFile): Array[SourceItemScanResult] =
-    source_scan_items_line(file.id, source_scan_file_owner_namespace(file), file.text, 0, 1, None, Vec[SourceItemScanResult].new())
+    source_scan_items_line(file.id, source_scan_file_owner_namespace(file), file.text, 0, 1, None, false, Vec[SourceItemScanResult].new())
 
 /// Build source facts from already loaded files.
 def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
