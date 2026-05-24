@@ -3,7 +3,7 @@ namespace lexer.spec.defs
 type UserId = i64
 
 data Option[T] {
-    Some(T)
+    Some(T),
     None
 }
 
