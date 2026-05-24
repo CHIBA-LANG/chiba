@@ -138,6 +138,7 @@ type SourceItemSurfaceFacts {
     has_ref_type: bool,
     has_callable_arrow: bool,
     has_explicit_continuation_type: bool,
+    has_send_callable_qualifier: bool,
     has_method_receiver: bool,
     has_operator_method: bool,
     has_self_type: bool,

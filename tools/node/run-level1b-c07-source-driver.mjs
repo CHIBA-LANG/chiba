@@ -48,6 +48,7 @@ const REQUIRED_TEXT = [
   "def source_scan_item_surface",
   "has_callable_arrow",
   "has_explicit_continuation_type",
+  "has_send_callable_qualifier",
   "has_method_receiver",
   "has_operator_method",
   "has_self_type",
