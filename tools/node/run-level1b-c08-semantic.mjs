@@ -172,8 +172,8 @@ function checkSource(file, source) {
   if (file.endsWith("template.chiba") && /\bdef\s+check_template\b[\s\S]*Ok\s*\(\s*Vec\s*\[\s*CheckedTemplate\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/.test(code)) {
     errors.push(`${file}: checked-template pass must not return an empty success`);
   }
-  if (file.endsWith("driver.chiba") && !/\bcheck_template\b[\s\S]{0,520}\bbuild_method_operator_index\b[\s\S]{0,520}\bcheck_extern_abi\b/.test(code)) {
-    errors.push(`${file}: semantic driver must thread template and method/operator gates before ABI checks`);
+  if (file.endsWith("driver.chiba") && !/\bbuild_typed_facts\b[\s\S]{0,520}\bcheck_template\b[\s\S]{0,520}\bbuild_method_operator_index\b[\s\S]{0,520}\bcheck_extern_abi\b/.test(code)) {
+    errors.push(`${file}: semantic driver must thread typed facts, template, and method/operator gates before ABI checks`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
