@@ -28,9 +28,26 @@ function sha256(text) {
   return crypto.createHash("sha256").update(text).digest("hex");
 }
 
+function normalizeTransientIds(text) {
+  const binderIds = new Map();
+  const typeVarIds = new Map();
+  let nextBinder = 0;
+  let nextTypeVar = 0;
+  return text
+    .replace(/#\d+/g, (token) => {
+      if (!binderIds.has(token)) binderIds.set(token, `#${nextBinder++}`);
+      return binderIds.get(token);
+    })
+    .replace(/\$T\d+/g, (token) => {
+      if (!typeVarIds.has(token)) typeVarIds.set(token, `$T${nextTypeVar++}`);
+      return typeVarIds.get(token);
+    });
+}
+
 function checkCase(test) {
   const result = run(test.args);
-  const text = output(result);
+  const rawText = output(result);
+  const text = test.normalizeIds ? normalizeTransientIds(rawText) : rawText;
   const digest = sha256(text);
   const ok =
     result.status === (test.status ?? 0) &&
@@ -103,8 +120,9 @@ const CASES = [
     group: "inference",
     name: "typed source golden dump",
     args: ["typed", "supports/semantic-gates/type_inference.chiba"],
-    sha256: "29be03b756fae05d722ff6e47fcd8f8aaa57b0487f34044c0f7ec9649721b9fe",
-    expect: ["L2Module", "infer_return", "infer_params", "type $T2", "explicit_and_implicit", "type $T9", "annotated_generic", "type T"],
+    normalizeIds: true,
+    sha256: "c10e4dddd1e97684d4182f1288dd3eec00c24ca5f929bae50eec99ea259823e8",
+    expect: ["L2Module", "infer_return", "infer_params", "explicit_and_implicit", "generic_return_from_param", "annotated_generic", "type T"],
   },
   {
     group: "inference",
@@ -123,6 +141,7 @@ const CASES = [
     group: "generics",
     name: "explicit generic typed golden dump",
     args: ["typed", "supports/semantic-gates/type_generics.chiba"],
+    normalizeIds: true,
     sha256: "951f5445dd653b6a73ea5ad14e9db2a780ff0d8c02e1ab1adce88fe36a471eb9",
     expect: ["L2Module", "id", "type T", "left", "type T"],
   },
@@ -168,8 +187,9 @@ const CASES = [
     group: "row",
     name: "row shorthand typed golden dump",
     args: ["typed", "supports/semantic-gates/row_shorthand.chiba"],
-    sha256: "b6dbeaef115f9a098484aeabe33eb0d17cd99d92469dd2dc5cc1b4a78cee9cc5",
-    expect: ["L2Module", "get_name", "type $T1", "get_age", "type $T3", "row_shorthand_identity", "type $T5"],
+    normalizeIds: true,
+    sha256: "a5ec808ecf13c7460536aa838f28058d48fc5611031d9c9e0ec9b65e29bbeeb3",
+    expect: ["L2Module", "get_name", "type str", "get_age", "type i64", "row_shorthand_identity"],
   },
   {
     group: "row",

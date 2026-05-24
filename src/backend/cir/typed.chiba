@@ -5,7 +5,7 @@ use backend.cir.ir.*
 
 data CirTypeEnv {
     CirTypeEnvEnd,
-    CirTypeEnvCons(i64, CirType, CirTypeEnv)
+    CirTypeEnvCons(i64, CirType, AST, CirTypeEnv)
 }
 
 data CirGlobalTypeEnv {
@@ -26,12 +26,19 @@ type CirTypedStmtListResult {
 def cir_type_env_lookup(env: CirTypeEnv, id: i64): CirType =
     match env {
         CirTypeEnvEnd => CirTyUnknown
-        CirTypeEnvCons(entry_id, ty, rest) =>
+        CirTypeEnvCons(entry_id, ty, _, rest) =>
             if entry_id == id { ty } else { cir_type_env_lookup(rest, id) }
     }
 
-def cir_type_env_add(env: CirTypeEnv, binder: CirBinder, ty: CirType): CirTypeEnv =
-    CirTypeEnvCons(binder.id, ty, env)
+def cir_type_env_lookup_ast(env: CirTypeEnv, id: i64): AST =
+    match env {
+        CirTypeEnvEnd => Type_Path(mk_str("", 0), Type_Tail_End)
+        CirTypeEnvCons(entry_id, _, ty_ast, rest) =>
+            if entry_id == id { ty_ast } else { cir_type_env_lookup_ast(rest, id) }
+    }
+
+def cir_type_env_add(env: CirTypeEnv, binder: CirBinder, ty: CirType, ty_ast: AST): CirTypeEnv =
+    CirTypeEnvCons(binder.id, ty, ty_ast, env)
 
 def cir_global_type_env_lookup(env: CirGlobalTypeEnv, name: Str): CirType =
     match env {
@@ -82,6 +89,104 @@ def cir_typed_type_first_arg(ty: AST, fallback: CirType): CirType =
         _ => fallback
     }
 
+def cir_typed_header_items(ast: AST): AST =
+    match ast {
+        SourceFile(_, _, items) => items
+        _ => Item_End
+    }
+
+def cir_typed_ast_item_def_name(ast: AST): Str =
+    match ast {
+        Item_WithAttrs(_, item) => cir_typed_ast_item_def_name(item)
+        Item_Def(defn) =>
+            match defn {
+                DefItem(name, _, _, _, _) => name
+                DefItem2(name_ast, _) =>
+                    match name_ast {
+                        DefName(name, _, _) => name
+                        _ => mk_str("", 0)
+                    }
+                _ => mk_str("", 0)
+            }
+        _ => mk_str("", 0)
+    }
+
+def cir_typed_ast_item_def_generics(ast: AST): AST =
+    match ast {
+        Item_WithAttrs(_, item) => cir_typed_ast_item_def_generics(item)
+        Item_Def(defn) =>
+            match defn {
+                DefItem(_, generics, _, _, _) => generics
+                DefItem2(name_ast, _) =>
+                    match name_ast {
+                        DefName(_, generics, _) => generics
+                        _ => Generic_End
+                    }
+                _ => Generic_End
+            }
+        _ => Generic_End
+    }
+
+def cir_typed_ast_find_item(items: AST, name: Str): AST =
+    match items {
+        Item_Cons(head, tail) =>
+            if streq(cir_typed_ast_item_def_name(head), name) != 0 { head } else { cir_typed_ast_find_item(tail, name) }
+        _ => Item_End
+    }
+
+def cir_typed_ast_single_generic_name(generics: AST): Str =
+    match generics {
+        Generic_Cons(head, tail) =>
+            match head {
+                GenericParam(name, _) =>
+                    match tail {
+                        Generic_End => name
+                        _ => mk_str("", 0)
+                    }
+                _ => mk_str("", 0)
+            }
+        _ => mk_str("", 0)
+    }
+
+def cir_typed_generic_fallback(source_item: AST): CirType =
+    {
+        let name = cir_typed_ast_single_generic_name(cir_typed_ast_item_def_generics(source_item))
+        if name.len == 0 { CirTyUnknown } else { CirTyConst(name) }
+    }
+
+def cir_typed_row_field_type_from_fields(fields: AST, field: Str): CirType =
+    match fields {
+        GenericRowField_Cons(head, tail) =>
+            match head {
+                GenericRowField(name, ty) =>
+                    if streq(name, field) != 0 { cir_typed_type_from_ast(ty, CirTyUnknown) }
+                    else { cir_typed_row_field_type_from_fields(tail, field) }
+                _ => cir_typed_row_field_type_from_fields(tail, field)
+            }
+        _ => CirTyUnknown
+    }
+
+def cir_typed_row_field_type_from_ast(ty: AST, field: Str): CirType =
+    match ty {
+        Type_Row(row) =>
+            match row {
+                GenericRow(_, fields) => cir_typed_row_field_type_from_fields(fields, field)
+                _ => CirTyUnknown
+            }
+        _ => CirTyUnknown
+    }
+
+def cir_typed_row_field_type_from_value(env: CirTypeEnv, value: CirExpr, field: Str): CirType =
+    match value {
+        L2OpTyped(inner, _) => cir_typed_row_field_type_from_value(env, inner, field)
+        L1OpRef(ref) =>
+            match ref {
+                L1RefLocal(id, _) => cir_typed_row_field_type_from_ast(cir_type_env_lookup_ast(env, id), field)
+                _ => CirTyUnknown
+            }
+        _ => CirTyUnknown
+    }
+
 def cir_type_env_from_params(params: CirParamList): CirTypeEnv =
     match params {
         CirParamEnd => CirTypeEnvEnd
@@ -89,7 +194,7 @@ def cir_type_env_from_params(params: CirParamList): CirTypeEnv =
             match head {
                 L1Param(binder, ty) => {
                     let fallback = CirTyVar(CirTyVarId { id: binder.id })
-                    cir_type_env_add(cir_type_env_from_params(tail), binder, cir_typed_type_from_ast(ty, fallback))
+                    cir_type_env_add(cir_type_env_from_params(tail), binder, cir_typed_type_from_ast(ty, fallback), ty)
                 }
                 _ => cir_type_env_from_params(tail)
             }
@@ -200,22 +305,35 @@ def cir_typed_method_receiver_type(name: Str): CirType =
     else { CirTyUnknown }
 
 def cir_type_env_from_params_for_item(params: CirParamList, item_name: Str, index: i64): CirTypeEnv =
+    cir_type_env_from_params_for_item_with_ast(params, item_name, cir_typed_ast_find_item(cir_typed_header_items(Type_Unit), item_name), index)
+
+def cir_type_env_from_params_for_item_with_ast(params: CirParamList, item_name: Str, source_item: AST, index: i64): CirTypeEnv =
     match params {
         CirParamEnd => CirTypeEnvEnd
         CirParamCons(head, tail) =>
             match head {
                 L1Param(binder, ty) => {
                     let receiver_fallback = cir_typed_method_receiver_type(item_name)
+                    let generic_fallback = cir_typed_generic_fallback(source_item)
                     let fallback = if index == 0 {
                         match receiver_fallback {
-                            CirTyUnknown => CirTyVar(CirTyVarId { id: binder.id })
+                            CirTyUnknown =>
+                                match generic_fallback {
+                                    CirTyUnknown => CirTyVar(CirTyVarId { id: binder.id })
+                                    _ => generic_fallback
+                                }
                             _ => receiver_fallback
                         }
-                    } else { CirTyVar(CirTyVarId { id: binder.id }) }
+                    } else {
+                        match generic_fallback {
+                            CirTyUnknown => CirTyVar(CirTyVarId { id: binder.id })
+                            _ => generic_fallback
+                        }
+                    }
                     let inferred = cir_typed_type_from_ast(ty, fallback)
-                    cir_type_env_add(cir_type_env_from_params_for_item(tail, item_name, index + 1), binder, inferred)
+                    cir_type_env_add(cir_type_env_from_params_for_item_with_ast(tail, item_name, source_item, index + 1), binder, inferred, ty)
                 }
-                _ => cir_type_env_from_params_for_item(tail, item_name, index + 1)
+                _ => cir_type_env_from_params_for_item_with_ast(tail, item_name, source_item, index + 1)
             }
     }
 
@@ -411,7 +529,7 @@ def cir_typed_stmt_in_g(stmt: CirStmt, env: CirTypeEnv, globals: CirGlobalTypeEn
         L1StmtLet(binder, value) => {
             let value2 = cir_typed_expr_in_g(value, env, globals)
             let ty = cir_typed_expr_type(value2)
-            CirTypedStmtResult { stmt: L2StmtLet(binder, ty, value2), env: cir_type_env_add(env, binder, ty) }
+            CirTypedStmtResult { stmt: L2StmtLet(binder, ty, value2), env: cir_type_env_add(env, binder, ty, Type_Path(mk_str("", 0), Type_Tail_End)) }
         }
         L1StmtLetPattern(pat, value) => CirTypedStmtResult { stmt: L2StmtLetPattern(pat, cir_typed_expr_in_g(value, env, globals)), env: env }
         L1StmtAssign(lhs, rhs) => CirTypedStmtResult { stmt: L2StmtAssign(cir_typed_expr_in_g(lhs, env, globals), cir_typed_expr_in_g(rhs, env, globals)), env: env }
@@ -455,7 +573,12 @@ def cir_typed_expr_in_g(expr: CirExpr, env: CirTypeEnv, globals: CirGlobalTypeEn
         L1OpField(value, field) => {
             let value2 = cir_typed_expr_in_g(value, env, globals)
             let owner = cir_typed_value_owner_name(value2)
-            L2OpTyped(L1OpField(value2, field), cir_typed_known_field_type(owner, field))
+            let known = cir_typed_known_field_type(owner, field)
+            let inferred = match known {
+                CirTyUnknown => cir_typed_row_field_type_from_value(env, value2, field)
+                _ => known
+            }
+            L2OpTyped(L1OpField(value2, field), inferred)
         }
         L1OpIndex(value, args) => {
             let args2 = cir_typed_expr_list_in_g(args, env, globals)
@@ -501,30 +624,33 @@ def cir_typed_expr_in_g(expr: CirExpr, env: CirTypeEnv, globals: CirGlobalTypeEn
 def cir_typed_expr_in(expr: CirExpr, env: CirTypeEnv): CirExpr =
     cir_typed_expr_in_g(expr, env, CirGlobalTypeEnvEnd)
 
-def cir_typed_items_g(items: CirItemList, globals: CirGlobalTypeEnv): CirItemList =
+def cir_typed_items_g(items: CirItemList, globals: CirGlobalTypeEnv, header: AST): CirItemList =
     match items {
         CirItemEnd => CirItemEnd
         CirItemCons(item, rest) => {
             let item2 = match item {
-                L1ItemDef(binder, params, ret, body) => L2ItemDef(binder, params, ret, cir_typed_expr_in_g(body, cir_type_env_from_params_for_item(params, binder.name, 0), globals))
+                L1ItemDef(binder, params, ret, body) => {
+                    let source_item = cir_typed_ast_find_item(cir_typed_header_items(header), binder.name)
+                    L2ItemDef(binder, params, ret, cir_typed_expr_in_g(body, cir_type_env_from_params_for_item_with_ast(params, binder.name, source_item, 0), globals))
+                }
                 L1ItemExtern(binder, params, ret, import) => L2ItemExtern(binder, params, ret, import)
                 L1ItemUnsupported(ast, reason) => L2ItemUnsupported(ast, reason)
                 _ => item
             }
-            CirItemCons(item2, cir_typed_items_g(rest, globals))
+            CirItemCons(item2, cir_typed_items_g(rest, globals, header))
         }
     }
 
-def cir_typed_items(items: CirItemList): CirItemList =
+def cir_typed_items(items: CirItemList, header: AST): CirItemList =
     {
         let declared = cir_global_type_env_from_items(items)
-        let first = cir_typed_items_g(items, declared)
+        let first = cir_typed_items_g(items, declared, header)
         let inferred = cir_global_type_env_from_typed_items(first, declared)
-        cir_typed_items_g(items, inferred)
+        cir_typed_items_g(items, inferred, header)
     }
 
 def cir_typed_module(module: CirModule): CirModule =
     match module {
-        L1Module(header, items) => L2Module(header, cir_typed_items(items))
+        L1Module(header, items) => L2Module(header, cir_typed_items(items, header))
         _ => module
     }
