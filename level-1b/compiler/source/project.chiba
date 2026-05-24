@@ -134,6 +134,8 @@ type SourceItemSurfaceFacts {
     has_explicit_type_params: bool,
     has_compiler_intrinsic_call: bool,
     has_tuple_type_surface: bool,
+    has_global_value_initializer: bool,
+    has_global_value_dependency: bool,
 }
 
 /// Source item discovered by the byte-level scanner.

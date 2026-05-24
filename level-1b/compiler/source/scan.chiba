@@ -180,6 +180,13 @@ def source_line_has_byte(text: String, offset: usize, byte: u8): bool =
     else if text.byte_at(offset) == byte { true }
     else { source_line_has_byte(text, offset + 1, byte) }
 
+/// Return the first byte offset on one line, or text.len() when absent.
+def source_line_find_byte_or_end(text: String, offset: usize, byte: u8): usize =
+    if offset >= text.len() { text.len() }
+    else if text.byte_at(offset) == 10 { text.len() }
+    else if text.byte_at(offset) == byte { offset }
+    else { source_line_find_byte_or_end(text, offset + 1, byte) }
+
 /// Return true when one source line contains an ASCII token.
 def source_line_has_text(text: String, offset: usize, needle: str): bool =
     if offset >= text.len() { false }
@@ -275,6 +282,17 @@ def source_scan_item_has_compiler_intrinsic_call(text: String, offset: usize): b
 def source_scan_item_has_tuple_type_surface(text: String, offset: usize): bool =
     source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "Tuple[")
 
+/// Return true when a static global initializer starts from another identifier.
+def source_scan_item_has_global_value_dependency(text: String, offset: usize): bool =
+    let eq = source_line_find_byte_or_end(text, offset, 61)
+    if eq >= text.len() { false }
+    else {
+        let start = source_skip_spaces(text, eq + 1)
+        if start >= text.len() { false }
+        else if text.byte_at(start) == 10 { false }
+        else { source_is_ident_start(text.byte_at(start)) }
+    }
+
 /// Try to detect an inline namespace block unsupported by the transition scanner.
 def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceNamespaceScanWarning] =
     let start = source_skip_spaces(text, offset)
@@ -337,6 +355,8 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_explicit_type_params: source_line_has_byte_before_byte(text, offset, 91, 40),
         has_compiler_intrinsic_call: source_scan_item_has_compiler_intrinsic_call(text, offset),
         has_tuple_type_surface: source_scan_item_has_tuple_type_surface(text, offset),
+        has_global_value_initializer: source_line_has_byte(text, offset, 40) == false && source_scan_item_has_body(text, offset),
+        has_global_value_dependency: source_line_has_byte(text, offset, 40) == false && source_scan_item_has_global_value_dependency(text, offset),
     }
 
 /// Try to scan a source item at one line start.

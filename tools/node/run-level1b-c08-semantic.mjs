@@ -56,6 +56,8 @@ const REQUIRED_TEXT = [
   "missing-lowering: explicit generic parameter binding absent",
   "def typed_item_skeletons_have_compiler_intrinsic_surface",
   "missing-lowering: compiler intrinsic surface lowering absent",
+  "def typed_item_skeletons_have_global_init_surface",
+  "missing-lowering: global initialization dependency and cycle analysis absent",
   "missing-facts: callable storage fact generation absent",
   "missing-lowering: source item type expression and body inference absent",
   "def check_l2_types",
