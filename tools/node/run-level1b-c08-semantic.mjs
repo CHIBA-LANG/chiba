@@ -68,6 +68,7 @@ const REQUIRED_TEXT = [
   "sendable callable storage excludes continuations",
   "data TemplateObligation",
   "def check_template",
+  "missing-lowering: checked-template body analysis absent",
   "data GenericBodyCheck",
   "def check_generic_add_body",
   "def instantiate_field_obligation",
@@ -167,6 +168,9 @@ function checkSource(file, source) {
   }
   if (file.endsWith("method_operator.chiba") && /\bdef\s+build_method_operator_index\b[\s\S]*Ok\s*\(\s*MethodOperatorIndex\s*\(\s*Vec\s*\[\s*MethodKey\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*,\s*Vec\s*\[\s*OperatorKey\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)\s*\)/.test(code)) {
     errors.push(`${file}: method/operator index must not return an empty success`);
+  }
+  if (file.endsWith("template.chiba") && /\bdef\s+check_template\b[\s\S]*Ok\s*\(\s*Vec\s*\[\s*CheckedTemplate\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/.test(code)) {
+    errors.push(`${file}: checked-template pass must not return an empty success`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {

@@ -22,7 +22,9 @@ type CheckedTemplate {
 
 /// Check a generic body under abstract parameters.
 def check_template(module: TypedModule): Result[Array[CheckedTemplate], SemanticDiagnostics] =
-    Ok(Vec[CheckedTemplate].new().freeze())
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: checked-template body analysis absent"))
+        .freeze()))
 
 /// Append one template obligation if the semantic obligation is generic.
 def push_template_obligation(out: Vec[TemplateObligation], obligation: SemanticObligation): Vec[TemplateObligation] =
