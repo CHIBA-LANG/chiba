@@ -29,7 +29,7 @@ def parse_failure(expected: List[str], position: ParsePosition): ParseFailure =
 
 /// Retry one parser alternative with a multi-resume continuation.
 def retry_alternative[T](candidate: ParseCandidate[T]): ParseCandidate[T] = reset {
-    shift retry {
+    shiftn retry {
         let first = retry(candidate)
         retry(first)
     }

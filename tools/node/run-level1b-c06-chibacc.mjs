@@ -20,7 +20,7 @@ const REQUIRED_TEXT = [
   "def parse_pratt_at",
   "def generate_parser",
   "reset",
-  "shift retry",
+  "shiftn retry",
 ];
 
 function fail(message) {

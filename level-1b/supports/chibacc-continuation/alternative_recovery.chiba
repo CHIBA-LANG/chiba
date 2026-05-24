@@ -5,7 +5,7 @@ type Candidate {
 }
 
 def retry_parser_alternative(candidate: Candidate): Candidate = reset {
-    shift retry {
+    shiftn retry {
         let first = retry(candidate)
         retry(first)
     }

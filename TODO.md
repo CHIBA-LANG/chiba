@@ -298,6 +298,7 @@
 		- closure lowering 验收必须证明：no-capture closure 走 direct function / funref / inline；capturing closure 只有逃逸或确需 env 时才 materialize env；env 内 continuation / `Ref[T]` 不被能力洗白。
 		- spec 要求 `(A) -> B` 参数位置是 checked-template callable obligation，存储位置 lower 成 erased callable ADT；显式 `cont1` / `contN` storage 不走 erased callable ADT；当前未见真实 callable storage lowering。
 		- frontend grammar source 已补 `cont1 (A) -> B`、`contN (A) -> B`、`shiftn` contract 与 chibalex/chibacc mini fixtures；生成版 lexer/parser 已刷新，`shift :tag` / `shiftn :tag` label parse 已对齐 lexer 的 `Colon Ident` tokenization，且 AST 保留 tag 名；native chibalex oracle 尚未覆盖 continuation surface keywords。
+		- C06 chibacc alternative retry/recovery source 现在使用 `shiftn retry`，与 multi-shot parser retry 语义一致；generated parser runner 仍 blocked 于 level-1b primary compiler execution。
 		- chibalex 真实实现必须支持 UTF-8 source/identifier scanning；当前 C07 `scan.chiba` 是 ASCII byte-level 过渡 scanner，只能安全识别 ASCII header/keyword facts。若 namespace/item identifier 允许 UTF-8，scanner 必须补 UTF-8 aware path，或在遇到非 ASCII 相关事实时 fail-closed，不能静默漏扫后冒充 source facts 完整。
 		- C05 chibalex contract 已固定 UTF-8/XID identifier policy，engine state advance 改为 codepoint offset (`next_char_offset`)；`utf8-ident.chibalex` mini fixture 覆盖 `$XID_START/$XID_CONTINUE`。真实 generated lexer runner 仍 blocked 于 level-1b primary compiler execution。
 		- spec 要求 `((A) -> B) send` 排除 continuation 与 `!send` closure；当前 send/capability 与 callable storage / continuation 没有真实集成。
