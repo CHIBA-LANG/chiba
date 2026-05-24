@@ -46,6 +46,13 @@ type NamespaceScanResult {
     column: usize,
 }
 
+/// Namespace form not handled by the transition scanner.
+type SourceNamespaceScanWarning {
+    file: SourceFileId,
+    line: usize,
+    column: usize,
+}
+
 /// Header attributes discovered before item parsing.
 type SourceHeaderFacts {
     file: SourceFileId,
@@ -115,6 +122,7 @@ type SourceProjectFacts {
     docs: Array[SourceDocFacts],
     compile_if: Array[SourceCompileIfFacts],
     namespaces: Array[NamespaceScanResult],
+    namespace_warnings: Array[SourceNamespaceScanWarning],
     items: Array[SourceItemScanResult],
     utf8_warnings: Array[SourceUtf8ScanWarning],
 }
