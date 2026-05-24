@@ -169,6 +169,10 @@ def source_scan_item_at(file: SourceFileId, text: String, offset: usize, line: u
         Some(SourceItemScanResult { file: file, kind: SourceItemType, name: source_scan_item_name(text, offset + "type".len()), private: false, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "data ", 0) {
         Some(SourceItemScanResult { file: file, kind: SourceItemData, name: source_scan_item_name(text, offset + "data".len()), private: false, line: line, column: 0 })
+    } else if source_starts_with_at(text, offset, "union ", 0) {
+        Some(SourceItemScanResult { file: file, kind: SourceItemUnion, name: source_scan_item_name(text, offset + "union".len()), private: false, line: line, column: 0 })
+    } else if source_starts_with_at(text, offset, "interface ", 0) {
+        Some(SourceItemScanResult { file: file, kind: SourceItemInterface, name: source_scan_item_name(text, offset + "interface".len()), private: false, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "extern ", 0) {
         Some(SourceItemScanResult { file: file, kind: SourceItemExtern, name: source_scan_item_name(text, offset + "extern".len()), private: false, line: line, column: 0 })
     } else { None }
@@ -182,6 +186,10 @@ def source_scan_private_item_at(file: SourceFileId, text: String, offset: usize,
         Some(SourceItemScanResult { file: file, kind: SourceItemType, name: source_scan_item_name(text, start + "type".len()), private: true, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "data ", 0) {
         Some(SourceItemScanResult { file: file, kind: SourceItemData, name: source_scan_item_name(text, start + "data".len()), private: true, line: line, column: 0 })
+    } else if source_starts_with_at(text, start, "union ", 0) {
+        Some(SourceItemScanResult { file: file, kind: SourceItemUnion, name: source_scan_item_name(text, start + "union".len()), private: true, line: line, column: 0 })
+    } else if source_starts_with_at(text, start, "interface ", 0) {
+        Some(SourceItemScanResult { file: file, kind: SourceItemInterface, name: source_scan_item_name(text, start + "interface".len()), private: true, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "extern ", 0) {
         Some(SourceItemScanResult { file: file, kind: SourceItemExtern, name: source_scan_item_name(text, start + "extern".len()), private: true, line: line, column: 0 })
     } else { None }

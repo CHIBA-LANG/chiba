@@ -23,6 +23,8 @@ const REQUIRED_TEXT = [
   "type SourceItemScanResult",
   "type SourceUtf8ScanWarning",
   "data SourceItemKind",
+  "SourceItemUnion",
+  "SourceItemInterface",
   "type NamespaceSurface",
   "type SourceNamespaceScanWarning",
   "def load_project",
