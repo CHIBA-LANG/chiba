@@ -132,6 +132,8 @@ type SourceItemSurfaceFacts {
     has_self_type: bool,
     has_pattern_params: bool,
     has_explicit_type_params: bool,
+    has_compiler_intrinsic_call: bool,
+    has_tuple_type_surface: bool,
 }
 
 /// Source item discovered by the byte-level scanner.

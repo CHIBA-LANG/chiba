@@ -54,6 +54,8 @@ const REQUIRED_TEXT = [
   "missing-lowering: function pattern parameter desugaring absent",
   "def typed_item_skeletons_have_explicit_type_params",
   "missing-lowering: explicit generic parameter binding absent",
+  "def typed_item_skeletons_have_compiler_intrinsic_surface",
+  "missing-lowering: compiler intrinsic surface lowering absent",
   "missing-facts: callable storage fact generation absent",
   "missing-lowering: source item type expression and body inference absent",
   "def check_l2_types",

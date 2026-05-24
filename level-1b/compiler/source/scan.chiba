@@ -203,6 +203,13 @@ def source_line_has_byte_before_byte(text: String, offset: usize, byte: u8, stop
     else if text.byte_at(offset) == byte { true }
     else { source_line_has_byte_before_byte(text, offset + 1, byte, stop) }
 
+/// Return true when a bounded source region contains an ASCII token.
+def source_region_has_text(text: String, offset: usize, end: usize, needle: str): bool =
+    if offset >= end { false }
+    else if offset >= text.len() { false }
+    else if source_starts_with_at(text, offset, needle, 0) { true }
+    else { source_region_has_text(text, offset + 1, end, needle) }
+
 /// Return true when byte before offset is not an identifier continuation.
 def source_word_boundary_before(text: String, offset: usize): bool =
     if offset == 0 { true }
@@ -230,6 +237,43 @@ def source_line_has_uppercase_call_before_byte(text: String, offset: usize, stop
         if end < text.len() && text.byte_at(end) == 40 { true }
         else { source_line_has_uppercase_call_before_byte(text, offset + 1, stop) }
     } else { source_line_has_uppercase_call_before_byte(text, offset + 1, stop) }
+
+/// Return true when one line start begins a top-level item or namespace boundary.
+def source_line_starts_item_boundary(text: String, offset: usize): bool =
+    if source_starts_with_at(text, offset, "namespace ", 0) { true }
+    else if source_starts_with_at(text, offset, "def ", 0) { true }
+    else if source_starts_with_at(text, offset, "type ", 0) { true }
+    else if source_starts_with_at(text, offset, "data ", 0) { true }
+    else if source_starts_with_at(text, offset, "union ", 0) { true }
+    else if source_starts_with_at(text, offset, "interface ", 0) { true }
+    else if source_starts_with_at(text, offset, "extern ", 0) { true }
+    else { source_starts_with_at(text, offset, "private ", 0) }
+
+/// Scan from a body line to the next top-level item boundary or EOF.
+def source_scan_next_item_boundary(text: String, offset: usize): usize =
+    if offset >= text.len() { text.len() }
+    else if source_line_starts_item_boundary(text, offset) { offset }
+    else {
+        let next = source_next_line_offset(text, offset)
+        if next == offset { text.len() }
+        else { source_scan_next_item_boundary(text, next) }
+    }
+
+/// Return the byte range end for one scanned item including its indented body.
+def source_scan_item_region_end(text: String, offset: usize): usize =
+    source_scan_next_item_boundary(text, source_next_line_offset(text, offset))
+
+/// Return true when an item region mentions compiler-owned intrinsic surface.
+def source_scan_item_has_compiler_intrinsic_call(text: String, offset: usize): bool =
+    let end = source_scan_item_region_end(text, offset)
+    if source_region_has_text(text, offset, end, "tuple_to_adt[") { true }
+    else if source_region_has_text(text, offset, end, "adt_to_tuple[") { true }
+    else if source_region_has_text(text, offset, end, "unsafe_cast[") { true }
+    else { source_region_has_text(text, offset, end, "__compiler_builtin(") }
+
+/// Return true when an item region mentions compiler-owned tuple type surface.
+def source_scan_item_has_tuple_type_surface(text: String, offset: usize): bool =
+    source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "Tuple[")
 
 /// Try to detect an inline namespace block unsupported by the transition scanner.
 def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceNamespaceScanWarning] =
@@ -291,6 +335,8 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_self_type: source_line_has_word(text, offset, "Self"),
         has_pattern_params: source_line_has_uppercase_call_before_byte(text, offset, 61),
         has_explicit_type_params: source_line_has_byte_before_byte(text, offset, 91, 40),
+        has_compiler_intrinsic_call: source_scan_item_has_compiler_intrinsic_call(text, offset),
+        has_tuple_type_surface: source_scan_item_has_tuple_type_surface(text, offset),
     }
 
 /// Try to scan a source item at one line start.

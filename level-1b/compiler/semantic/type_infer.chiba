@@ -111,6 +111,16 @@ def typed_item_skeletons_have_explicit_type_params(skeletons: Array[TypedItemSke
         else { typed_item_skeletons_have_explicit_type_params(skeletons, index + 1) }
     }
 
+/// Return true when item surfaces mention compiler-owned intrinsic or tuple surface.
+def typed_item_skeletons_have_compiler_intrinsic_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
+    if index == skeletons.len() { false }
+    else {
+        let surface = skeletons.get(index).surface
+        if surface.has_compiler_intrinsic_call { true }
+        else if surface.has_tuple_type_surface { true }
+        else { typed_item_skeletons_have_compiler_intrinsic_surface(skeletons, index + 1) }
+    }
+
 /// Infer HM + row types for an alpha-renamed module.
 def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule, SemanticDiagnostics] =
     let skeletons = typed_item_skeletons_from_alpha(module.origins, 0, Vec[TypedItemSkeleton].new())
@@ -121,6 +131,10 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     } else if type_inference_has_pattern_coverage(skeletons, patterns) == false {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: pattern coverage for typed item skeletons absent"))
+            .freeze()))
+    } else if typed_item_skeletons_have_compiler_intrinsic_surface(skeletons, 0) {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: compiler intrinsic surface lowering absent"))
             .freeze()))
     } else if typed_item_skeletons_have_callable_storage_surface(skeletons, 0) {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
