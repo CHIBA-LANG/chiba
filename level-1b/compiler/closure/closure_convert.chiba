@@ -2,6 +2,7 @@
 namespace compiler.closure.closure_convert
 
 use compiler.closure.continuation_simplify.*
+use compiler.closure.usage_cps.*
 use compiler.ir.closure.*
 use compiler.ir.type_ir.*
 use compiler.control.replay_safety.*
@@ -45,7 +46,9 @@ type ClosureConvertedModule {
 
 /// Convert escaping lambdas and packaged continuations to explicit env layouts.
 def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConvertedModule, SemanticDiagnostics] =
-    if continuation_decisions_require_capture_extraction(module.decisions, 0) {
+    if closure_usage_requires_capture_extraction(module.source.facts, 0) {
+        Err(SemanticDiagnostics(closure_usage_capture_extraction_blockers(module.source.facts, 0, Vec[SemanticDiagnostic].new())))
+    } else if continuation_decisions_require_capture_extraction(module.decisions, 0) {
         Err(SemanticDiagnostics(continuation_capture_extraction_blockers(module.decisions, 0, Vec[SemanticDiagnostic].new())))
     } else {
         Ok(ClosureConvertedModule(
@@ -57,6 +60,40 @@ def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConver
 /// Empty capture list for a directified closure or continuation package.
 def empty_capture_fields(): Array[CaptureField] =
     Vec[CaptureField].new().freeze()
+
+/// Return true when a CPS use subject is a lambda/closure needing env extraction.
+def cps_use_fact_requires_closure_capture(fact: CpsUseFact): bool =
+    match fact.subject {
+        UseSubjectLambda(_) => true
+        UseSubjectClosure(_) => true
+        _ => false
+    }
+
+/// Return the precise capture extraction blocker for a lambda/closure subject.
+def closure_usage_capture_extraction_blocker(fact: CpsUseFact): Option[SemanticDiagnostic] =
+    match fact.subject {
+        UseSubjectLambda(_) =>
+            Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: lambda capture extraction absent"))
+        UseSubjectClosure(_) =>
+            Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: closure env field extraction absent"))
+        _ => None
+    }
+
+/// Collect blockers for lambda/closure subjects before env layout.
+def closure_usage_capture_extraction_blockers(facts: Array[CpsUseFact], index: usize, out: Vec[SemanticDiagnostic]): Array[SemanticDiagnostic] =
+    if index == facts.len() { out.freeze() }
+    else {
+        match closure_usage_capture_extraction_blocker(facts.get(index)) {
+            Some(error) => closure_usage_capture_extraction_blockers(facts, index + 1, out.push(error))
+            None => closure_usage_capture_extraction_blockers(facts, index + 1, out)
+        }
+    }
+
+/// Return true when any lambda/closure subject still lacks capture facts.
+def closure_usage_requires_capture_extraction(facts: Array[CpsUseFact], index: usize): bool =
+    if index == facts.len() { false }
+    else if cps_use_fact_requires_closure_capture(facts.get(index)) { true }
+    else { closure_usage_requires_capture_extraction(facts, index + 1) }
 
 /// Append a closure environment layout for decisions that materialize.
 def push_closure_env_layout(out: Vec[ClosureEnvLayout], decision: ContinuationSimplification): Vec[ClosureEnvLayout] =
