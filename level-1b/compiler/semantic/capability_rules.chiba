@@ -85,3 +85,13 @@ def atomic_store_ordering_allowed(order: AtomicOrdering): bool =
 def check_sendable_callable_storage(fact: CallableStorageFact): CapabilityCheck =
     if fact.excludes_continuations_for_send() { CapabilityOk }
     else { CapabilityErr("sendable callable storage excludes continuations") }
+
+/// Check all callable storage facts for send legality.
+def check_sendable_callable_storages(facts: Array[CallableStorageFact], index: usize): CapabilityCheck =
+    if index == facts.len() { CapabilityOk }
+    else {
+        match check_sendable_callable_storage(facts.get(index)) {
+            CapabilityOk => check_sendable_callable_storages(facts, index + 1)
+            CapabilityErr(message) => CapabilityErr(message)
+        }
+    }

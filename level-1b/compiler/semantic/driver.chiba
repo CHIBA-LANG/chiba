@@ -19,6 +19,7 @@ use compiler.semantic.generic_body.*
 use compiler.semantic.method_operator.*
 use compiler.semantic.abi_capability.*
 use compiler.semantic.adt_tuple_lowering.*
+use compiler.ir.control.*
 
 /// Semantic diagnostic with stable ordering key.
 type SemanticDiagnostic {
@@ -36,6 +37,7 @@ type SemanticDiagnostics {
 /// Fully typed module after C08.
 type TypedModule {
     alpha: AlphaModule,
+    callable_storage: Array[CallableStorageFact],
 }
 
 /// Run alpha, pattern, inference, template, method/operator, ABI, and capability passes.
