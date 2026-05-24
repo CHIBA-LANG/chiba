@@ -18,9 +18,57 @@ type CpsModule {
     continuations: Array[ContinuationFact],
 }
 
+/// Branching shape that needs a CPS join continuation.
+data BranchJoinKind {
+    BranchJoinIfElse,
+    BranchJoinElseIf,
+    BranchJoinIfLet,
+    BranchJoinMatch,
+    BranchJoinShortCircuit,
+}
+
+/// Branching surface lowered into CPS join-planning input.
+type BranchJoinPlan {
+    owner: BinderId,
+    file: SourceFileId,
+    has_if: bool,
+    has_else: bool,
+    has_else_if: bool,
+    has_if_let: bool,
+    has_match: bool,
+    has_short_circuit: bool,
+}
+
+/// Convert one typed branching surface fact into a CPS join plan.
+def branch_join_plan_from_surface(fact: BranchingSurfaceFact): BranchJoinPlan =
+    BranchJoinPlan {
+        owner: fact.owner,
+        file: fact.file,
+        has_if: fact.has_if,
+        has_else: fact.has_else,
+        has_else_if: fact.has_else_if,
+        has_if_let: fact.has_if_let,
+        has_match: fact.has_match,
+        has_short_circuit: fact.has_short_circuit,
+    }
+
+/// Convert branching surface facts in stable owner order.
+def branch_join_plans_from_surface(facts: Array[BranchingSurfaceFact], index: usize, out: Vec[BranchJoinPlan]): Array[BranchJoinPlan] =
+    if index == facts.len() { out.freeze() }
+    else { branch_join_plans_from_surface(facts, index + 1, out.push(branch_join_plan_from_surface(facts.get(index)))) }
+
+/// Build CPS join plans from replay-safe typed module surface facts.
+def branch_join_plans(module: ReplaySafeModule): Array[BranchJoinPlan] =
+    branch_join_plans_from_surface(module.usage.answer.typed.branching_surface, 0, Vec[BranchJoinPlan].new())
+
 /// Transform a replay-safe module to CPS while beta-reducing administrative continuations.
 def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostics] =
-    if module.usage.facts.len() == 0 && module.replay.len() == 0 {
+    let branches = branch_join_plans(module)
+    if branches.len() > 0 {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: branching CPS join continuation planning absent"))
+            .freeze()))
+    } else if module.usage.facts.len() == 0 && module.replay.len() == 0 {
         Ok(CpsModule(module, cps_continuation_facts_none()))
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
