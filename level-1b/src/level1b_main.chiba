@@ -1,3 +1,7 @@
 namespace bootstrap
 
-def main(): i64 = 42
+use compiler.cli.*
+
+/// Seed entry until level-1b owns parser, semantic checker, and WAT emission.
+def main(): i64 =
+    if cli_ready_for_codegen(cli_default_config()) { 0 } else { 1 }

@@ -265,6 +265,7 @@
 		- 当前基线计数：`legacy-compiler-execution` / `oracle-success-path` 已清零；剩余 `primary-path-blocked` 26；`ok-module-pass-through` / `empty-facts` / `comment-only-backend-output` 已清零为显式 blocker 或 source-contract 拒绝。
 		- `level1b:c07-source-driver` 已拒绝 source semantic gate 空 errors pass-through；缺 parsed project facts / source semantic gate scan 时返回 `missing-facts` blocker，不能让 source driver 在无事实输入时冒充可进入 typed 阶段。
 		- `compiler/lower/ast_to_core.chiba` 已拒绝空 `SurfaceModule` lowering；缺 AST -> Surface item lowering 时返回 `missing-lowering` diagnostic。`level1b:truthfulness-audit` 已补 source gate 空放行、typed inference pass-through、空 Surface lowering 三类回归 detector。
+		- `level-1b/src/level1b_main.chiba` 已不再是 `main = 42` magic placeholder；seed entry 只连接 CLI readiness contract，`level1b:smoke` 仍标记 primary compile / WAT emission blocked。
 		- `level1b:c09-control-cps` 已改成 fail-closed：缺 answer/control scan、usage subject collection、boundary scan、one-pass CPS beta lowering 时返回 blocker diagnostic；该 gate 当前只通过 source contract，真实 valid/invalid continuation gates 标记为 primary-path-blocked。
 		- `level1b:c08-semantic` 已拒绝 `infer_types -> Ok(TypedModule(module))` 这类 untyped alpha module pass-through；缺 HM + row inference over source items 时返回 `missing-facts` blocker，不能让后续 C09/C10/C11 误以为 typed module 已成立。
 		- `level1b:c10-closure-package` 已保留 continuation/lambda/closure subject kind，并区分 escaped boxed `Cont1` 与 repeatable `ContN` package；缺 continuation capture extraction 时 fail-closed；该 gate 当前只通过 source contract，closure/directification/nanopass 验收标记为 primary-path-blocked。
