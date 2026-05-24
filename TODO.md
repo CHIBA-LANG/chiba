@@ -15,7 +15,9 @@
 - [ ] namespace resolution：只有扫描和 owner slice；真实 import/name resolution、owner namespace symbol、visibility/private、冲突规则没做。
 	- [x] namespace ownership facts：alpha/typed skeleton 已把 item owner namespace 线程化进 `TypedModule.namespace_ownership`；import/name resolution 仍未完成。
 - [ ] method resolution：没做。method index、receiver binding、qualified callee、Self with generics 都缺。
+	- [x] method surface facts：source scan 已抽取 `def Receiver.member` 的 receiver/member slices，后续 method index 不再只靠 boolean。
 - [ ] operator overloading：没做。candidate collection、operand matching、ambiguity、op_index/op_index_slice lowering 都缺。
+	- [x] operator method surface facts：`.op_*` 现在和普通 method 共用 receiver/member slices；真实 overload resolution 仍未完成。
 - [ ] typed AST elaboration：现在很多是 skeleton/facts；真实 expression/type/item traversal 不完整。
 	- [x] typed item skeleton threading：`TypedModule.items` 保留 alpha 后的 item skeleton，后续 method/operator/branch/control pass 不再只能重扫 source。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。

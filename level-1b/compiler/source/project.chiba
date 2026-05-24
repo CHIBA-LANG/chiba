@@ -143,6 +143,8 @@ type SourceItemSurfaceFacts {
     has_send_callable_qualifier: bool,
     has_method_receiver: bool,
     has_operator_method: bool,
+    method_receiver: Option[SourceNameSlice],
+    method_member: Option[SourceNameSlice],
     has_self_type: bool,
     has_pattern_params: bool,
     has_explicit_type_params: bool,

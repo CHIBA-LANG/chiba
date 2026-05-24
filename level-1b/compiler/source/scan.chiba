@@ -242,6 +242,36 @@ def source_line_has_word(text: String, offset: usize, word: str): bool =
     else if source_starts_with_at(text, offset, word, 0) && source_word_boundary_before(text, offset) && source_word_boundary_after(text, offset, word.len()) { true }
     else { source_line_has_word(text, offset + 1, word) }
 
+/// Return the first identifier slice after an offset.
+def source_scan_ident_slice(text: String, offset: usize): Option[SourceNameSlice] =
+    let start = source_skip_spaces(text, offset)
+    if start < text.len() && source_is_ident_start(text.byte_at(start)) {
+        let end = source_scan_namespace_name_end(text, start)
+        Some(SourceNameSlice { offset: start, len: end - start })
+    } else { None }
+
+/// Return the offset after one identifier slice.
+def source_name_slice_end(name: SourceNameSlice): usize =
+    name.offset + name.len
+
+/// Scan a method receiver from a `def Receiver.member(` header.
+def source_scan_method_receiver(text: String, offset: usize): Option[SourceNameSlice] =
+    if source_starts_with_at(text, offset, "def", 0) {
+        match source_scan_ident_slice(text, offset + "def".len()) {
+            Some(receiver) =>
+                if source_name_slice_end(receiver) < text.len() && text.byte_at(source_name_slice_end(receiver)) == 46 { Some(receiver) }
+                else { None }
+            None => None
+        }
+    } else { None }
+
+/// Scan a method member from a `def Receiver.member(` header.
+def source_scan_method_member(text: String, offset: usize): Option[SourceNameSlice] =
+    match source_scan_method_receiver(text, offset) {
+        Some(receiver) => source_scan_ident_slice(text, source_name_slice_end(receiver) + 1)
+        None => None
+    }
+
 /// Return true when a header contains `Ctor(` before a stop byte.
 def source_line_has_uppercase_call_before_byte(text: String, offset: usize, stop: u8): bool =
     if offset >= text.len() { false }
@@ -487,6 +517,8 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_send_callable_qualifier: source_line_has_text(text, offset, ") send"),
         has_method_receiver: source_line_has_text_before_byte(text, offset, ".", 40),
         has_operator_method: source_line_has_text_before_byte(text, offset, ".op_", 40),
+        method_receiver: source_scan_method_receiver(text, offset),
+        method_member: source_scan_method_member(text, offset),
         has_self_type: source_line_has_word(text, offset, "Self"),
         has_pattern_params: source_line_has_uppercase_call_before_byte(text, offset, 61),
         has_explicit_type_params: source_line_has_byte_before_byte(text, offset, 91, 40),
