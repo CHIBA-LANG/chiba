@@ -80,7 +80,7 @@ def continuation_core_layout(kind: ContinuationLoweringKind): Option[WasmGcLayou
         ContinuationLowerDirectCont1 => None
         ContinuationLowerBoxedCont1 => Some(layout_boxed_cont1())
         ContinuationLowerRepeatableContN => Some(layout_continuation_package())
-        ContinuationLowerErasedCallableVariant => Some(closure_env_layout())
+        ContinuationLowerErasedCallableVariant => Some(layout_erased_continuation_package())
     }
 
 /// Layout used by the repeatable frame chain inside a ContN package.

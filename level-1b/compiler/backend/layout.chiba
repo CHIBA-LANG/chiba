@@ -125,6 +125,18 @@ def layout_continuation_package(): WasmGcLayout =
             .freeze(),
     }
 
+/// Erased callable continuation package layout.
+def layout_erased_continuation_package(): WasmGcLayout =
+    WasmGcLayout {
+        id: 7,
+        key: "compiler.continuation.erased_callable_package",
+        kind: LayoutContinuationPackage,
+        fields: Vec[WasmGcFieldLayout].new()
+            .push(wasm_gc_field("tag", "usize"))
+            .push(wasm_gc_field("payload", "eqref"))
+            .freeze(),
+    }
+
 /// Build canonical Wasm-GC layouts from optimized closure Core.
 def build_wasm_gc_layouts(module: OptimizedClosureModule): WasmGcLayoutTable =
     WasmGcLayoutTable {
@@ -136,6 +148,7 @@ def build_wasm_gc_layouts(module: OptimizedClosureModule): WasmGcLayoutTable =
             .push(layout_continuation_frame_chain())
             .push(layout_boxed_cont1())
             .push(layout_continuation_package())
+            .push(layout_erased_continuation_package())
             .freeze(),
     }
 

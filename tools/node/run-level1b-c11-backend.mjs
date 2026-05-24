@@ -28,6 +28,8 @@ const REQUIRED_TEXT = [
   "LayoutContinuationFrameChain",
   "LayoutBoxedCont1",
   "LayoutContNPackage",
+  "LayoutContinuationPackage",
+  "def layout_erased_continuation_package",
   "data CoreValidationError",
   "CoreDanglingLayout",
   "CoreIllegalTailCall",
@@ -109,6 +111,12 @@ function checkSource(file, source) {
   }
   if (path.basename(file) === "core.chiba" && !/\bContinuationLowerRepeatableContN\s*=>[\s\S]{0,260}CoreOpContinuationFrameChain[\s\S]{0,260}CoreOpContNPackage/.test(code)) {
     errors.push(`${file}: ContN lowering must emit frame chain before repeatable package`);
+  }
+  if (path.basename(file) === "core.chiba" && /\bContinuationLowerErasedCallableVariant\s*=>\s*Some\s*\(\s*closure_env_layout\s*\(\s*\)\s*\)/.test(code)) {
+    errors.push(`${file}: erased callable continuation package must not reuse closure env layout`);
+  }
+  if (path.basename(file) === "layout.chiba" && !/kind:\s*LayoutContinuationPackage[\s\S]{0,240}"tag"[\s\S]{0,240}"payload"/.test(code)) {
+    errors.push(`${file}: erased callable continuation layout must carry tag and payload fields`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
