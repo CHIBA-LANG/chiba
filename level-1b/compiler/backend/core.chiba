@@ -59,16 +59,15 @@ type WasmGcCoreModule {
 /// Return the closure environment layout used by escaping closures.
 def closure_env_layout(): WasmGcLayout = layout_closure_env()
 
-/// Lower one closure simplification fact into an optional Core operation.
-def lower_closure_simplification(fact: ClosureSimplification): Option[CoreOp] =
-    match fact {
-        ClosureEnvErased(_) => None
-        ClosureDirectified(_) => None
-        ClosureDeadCaptureDropped(_) => None
-        ClosureKnownCalleeDirectCall(_) => None
-        ClosureKeptEscaping(owner) =>
+/// Lower one closure lowering fact into an optional Core operation.
+def lower_closure_fact(fact: ClosureLoweringFact): Option[CoreOp] =
+    match fact.kind {
+        ClosureNoCaptureDirect => None
+        ClosureKnownCallableDirect => None
+        ClosureErasedCallableDispatch => None
+        ClosureCapturingEnv =>
             Some(CoreOp {
-                owner: Some(owner),
+                owner: Some(fact.owner),
                 kind: CoreOpClosureCall,
                 layout: Some(closure_env_layout()),
                 tail: CorePlainCall,
@@ -77,13 +76,13 @@ def lower_closure_simplification(fact: ClosureSimplification): Option[CoreOp] =
             })
     }
 
-/// Lower simplification facts into a stable Core op stream.
-def lower_closure_simplifications(facts: Array[ClosureSimplification], index: usize, out: Vec[CoreOp]): Array[CoreOp] =
+/// Lower closure facts into a stable Core op stream.
+def lower_closure_facts(facts: Array[ClosureLoweringFact], index: usize, out: Vec[CoreOp]): Array[CoreOp] =
     if index == facts.len() { out.freeze() }
     else {
-        match lower_closure_simplification(facts.get(index)) {
-            Some(op) => lower_closure_simplifications(facts, index + 1, out.push(op))
-            None => lower_closure_simplifications(facts, index + 1, out)
+        match lower_closure_fact(facts.get(index)) {
+            Some(op) => lower_closure_facts(facts, index + 1, out.push(op))
+            None => lower_closure_facts(facts, index + 1, out)
         }
     }
 
@@ -194,7 +193,7 @@ def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[Cor
 
 /// Lower optimized closure Core to Wasm-GC Core.
 def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
-    let closure_ops = lower_closure_simplifications(module.simplifications, 0, Vec[CoreOp].new())
+    let closure_ops = lower_closure_facts(module.closures, 0, Vec[CoreOp].new())
     let continuation_ops = lower_continuation_facts(module.continuations, 0, Vec[CoreOp].new())
     WasmGcCoreModule {
         source: module,
