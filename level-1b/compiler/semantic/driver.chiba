@@ -48,8 +48,16 @@ def run_typed_semantics(project: ProjectSurface): Result[TypedModule, SemanticDi
                 Ok(inferred) =>
                     match check_l2_types(inferred) {
                         Ok(checked) =>
-                            match check_extern_abi(checked) {
-                                Ok(abi_checked) => check_capabilities(abi_checked)
+                            match check_template(checked) {
+                                Ok(_) =>
+                                    match build_method_operator_index(checked) {
+                                        Ok(_) =>
+                                            match check_extern_abi(checked) {
+                                                Ok(abi_checked) => check_capabilities(abi_checked)
+                                                Err(errors) => Err(errors)
+                                            }
+                                        Err(errors) => Err(errors)
+                                    }
                                 Err(errors) => Err(errors)
                             }
                         Err(errors) => Err(errors)
