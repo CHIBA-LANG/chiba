@@ -74,12 +74,29 @@ def source_scan_compile_if_facts(file: SourceFile): SourceCompileIfFacts =
         file: file.id,
         has_compile_if: expr.is_some(),
         expr: expr,
+        shape: source_scan_compile_if_shape(file.text, expr),
         has_target_predicate: source_has_header_attr(file.text, "target=", 0),
         has_backend_predicate: source_has_header_attr(file.text, "backend=", 0),
         has_all_predicate: source_has_header_attr(file.text, "all(", 0),
         has_any_predicate: source_has_header_attr(file.text, "or(", 0),
         has_not_predicate: source_has_header_attr(file.text, "not(", 0),
         has_unknown_predicate: source_has_header_attr(file.text, "xor(", 0),
+    }
+
+/// Classify the top-level compile_if predicate shape.
+def source_scan_compile_if_shape_at(text: String, offset: usize): SourceCompileIfShape =
+    if source_starts_with_at(text, offset, "target=", 0) { SourceCompileIfEqTarget }
+    else if source_starts_with_at(text, offset, "backend=", 0) { SourceCompileIfEqBackend }
+    else if source_starts_with_at(text, offset, "all(", 0) { SourceCompileIfAll }
+    else if source_starts_with_at(text, offset, "or(", 0) { SourceCompileIfAny }
+    else if source_starts_with_at(text, offset, "not(", 0) { SourceCompileIfNot }
+    else { SourceCompileIfUnknown }
+
+/// Classify a scanned compile_if expression, or absent when no attribute exists.
+def source_scan_compile_if_shape(text: String, expr: Option[SourceNameSlice]): SourceCompileIfShape =
+    match expr {
+        Some(slice) => source_scan_compile_if_shape_at(text, slice.offset)
+        None => SourceCompileIfAbsent
     }
 
 /// Scan to the closing attribute bracket for one compile_if expression.

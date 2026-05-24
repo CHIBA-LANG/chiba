@@ -61,10 +61,22 @@ type SourceDocFacts {
 }
 
 /// Compile-if attributes discovered before item filtering.
+data SourceCompileIfShape {
+    SourceCompileIfAbsent,
+    SourceCompileIfEqTarget,
+    SourceCompileIfEqBackend,
+    SourceCompileIfAll,
+    SourceCompileIfAny,
+    SourceCompileIfNot,
+    SourceCompileIfUnknown,
+}
+
+/// Compile-if attributes discovered before item filtering.
 type SourceCompileIfFacts {
     file: SourceFileId,
     has_compile_if: bool,
     expr: Option[SourceNameSlice],
+    shape: SourceCompileIfShape,
     has_target_predicate: bool,
     has_backend_predicate: bool,
     has_all_predicate: bool,
