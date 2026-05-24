@@ -2,6 +2,7 @@
 namespace compiler.source.scan
 
 use compiler.source.project.*
+use std.option.*
 use std.string.*
 
 /// Cursor used while scanning one source file.
@@ -68,10 +69,27 @@ def source_scan_doc_facts(file: SourceFile): SourceDocFacts =
 
 /// Scan compile_if attributes before item filtering.
 def source_scan_compile_if_facts(file: SourceFile): SourceCompileIfFacts =
+    let expr = source_scan_compile_if_expr(file.text, 0)
     SourceCompileIfFacts {
         file: file.id,
-        has_compile_if: source_has_header_attr(file.text, "#[compile_if(", 0),
+        has_compile_if: expr.is_some(),
+        expr: expr,
     }
+
+/// Scan to the closing attribute bracket for one compile_if expression.
+def source_scan_compile_if_expr_end(text: String, offset: usize): usize =
+    if offset >= text.len() { offset }
+    else if text.byte_at(offset) == 93 { offset }
+    else { source_scan_compile_if_expr_end(text, offset + 1) }
+
+/// Scan the first compile_if expression slice.
+def source_scan_compile_if_expr(text: String, offset: usize): Option[SourceNameSlice] =
+    if offset >= text.len() { None }
+    else if source_starts_with_at(text, offset, "#[compile_if(", 0) {
+        let start = offset + "#[compile_if(".len()
+        let end = source_scan_compile_if_expr_end(text, start)
+        Some(SourceNameSlice { offset: start, len: end - start })
+    } else { source_scan_compile_if_expr(text, offset + 1) }
 
 /// Skip horizontal whitespace after a token.
 def source_skip_spaces(text: String, offset: usize): usize =

@@ -64,6 +64,7 @@ type SourceDocFacts {
 type SourceCompileIfFacts {
     file: SourceFileId,
     has_compile_if: bool,
+    expr: Option[SourceNameSlice],
 }
 
 /// Source item kind visible to early gates before full AST lowering.

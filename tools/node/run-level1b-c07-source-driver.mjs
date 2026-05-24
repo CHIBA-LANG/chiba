@@ -24,6 +24,8 @@ const REQUIRED_TEXT = [
   "def source_scan_header",
   "def source_scan_doc_facts",
   "def source_scan_compile_if_facts",
+  "def source_scan_compile_if_expr",
+  "def source_scan_compile_if_expr_end",
   "def source_scan_item_at",
   "def source_scan_item_name",
   "def source_scan_items",

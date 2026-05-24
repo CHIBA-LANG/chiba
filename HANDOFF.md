@@ -146,6 +146,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - C05 chibalex now has explicit UTF-8/XID identifier policy and codepoint-based state advance via `next_char_offset`; `utf8-ident.chibalex` is the mini fixture.
 - C06 chibacc alternative retry/recovery source uses `shiftn retry`; parser retry is multi-shot by contract, not one-shot `shift`.
 - C05/C06 generated lexer/parser codegen artifacts carry `ContractOnly` status and `missing-lowering` diagnostics until executable codegen exists.
+- C07 `compile_if` facts now keep an expression slice, not only a presence bit. Predicate parsing/eval against target facts is still not wired into item filtering.
 - C08 alpha origins retain source item kind/name/file/line/column. Type inference builds `TypedItemSkeleton` and checks placeholder pattern coverage, then fail-closes on missing source item type-expression/body inference rather than claiming a typed module.
 - C09 replay safety must not mark every usage fact safe. It now fail-closes until replay capture classification exists.
 - C10 CPS usage now fail-closes on missing closure/lambda/continuation subject extraction; previous continuation-only use reconstruction was not enough to prove closure directification/capture semantics.
