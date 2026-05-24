@@ -23,6 +23,7 @@ type ValidatedCoreModule {
 type ContNFrameChainState {
     owner: Option[BinderId],
     frame_count: usize,
+    pending_stackless_count: usize,
 }
 
 /// Return true when a layout table contains a layout id with the expected kind.
@@ -141,11 +142,25 @@ def core_op_is_contn_frame_chain(op: CoreOp): bool =
         _ => false
     }
 
+/// Return true when a Core op materializes a stackless resume function.
+def core_op_is_stackless_function(op: CoreOp): bool =
+    match op.kind {
+        CoreOpStacklessFunction => true
+        _ => false
+    }
+
 /// Validate that a ContN frame-chain op carries at least one lowered frame.
 def validate_core_contn_frame_count(op: CoreOp): Option[CoreValidationError] =
     if core_op_is_contn_frame_chain(op) {
         if op.frame_count == 0 { Some(CoreIllegalContinuationPackage("ContN frame chain has no stackless resume frames")) }
         else { None }
+    } else { None }
+
+/// Validate that frame-chain count matches preceding stackless resume functions.
+def validate_core_contn_stackless_count(op: CoreOp, frame_state: ContNFrameChainState): Option[CoreValidationError] =
+    if core_op_is_contn_frame_chain(op) {
+        if op.frame_count == frame_state.pending_stackless_count { None }
+        else { Some(CoreIllegalContinuationPackage("ContN frame chain missing stackless resume functions")) }
     } else { None }
 
 /// Return true when a Core op materializes a ContN package.
@@ -160,10 +175,17 @@ def binder_id_eq(left: BinderId, right: BinderId): bool = left.id == right.id
 
 /// Return the latest ContN frame-chain state after observing one op.
 def core_contn_frame_state_after(op: CoreOp, current: ContNFrameChainState): ContNFrameChainState =
-    if core_op_is_contn_frame_chain(op) {
+    if core_op_is_stackless_function(op) {
+        ContNFrameChainState {
+            owner: current.owner,
+            frame_count: current.frame_count,
+            pending_stackless_count: current.pending_stackless_count + 1,
+        }
+    } else if core_op_is_contn_frame_chain(op) {
         ContNFrameChainState {
             owner: op.owner,
             frame_count: op.frame_count,
+            pending_stackless_count: 0,
         }
     } else { current }
 
@@ -212,12 +234,13 @@ def validate_core_ops_with_contn_frame(module: WasmGcCoreModule, index: usize, f
             index + 1,
             next_frame_state,
             validate_core_op(module, op, out)
+                |> push_validation_error(validate_core_contn_stackless_count(op, frame_state))
                 |> push_validation_error(validate_core_continuation_order(op, frame_state)))
     }
 
 /// Validate Core operations in stable order.
 def validate_core_ops(module: WasmGcCoreModule, index: usize, out: Vec[CoreValidationError]): Array[CoreValidationError] =
-    validate_core_ops_with_contn_frame(module, index, ContNFrameChainState { owner: None, frame_count: 0 }, out)
+    validate_core_ops_with_contn_frame(module, index, ContNFrameChainState { owner: None, frame_count: 0, pending_stackless_count: 0 }, out)
 
 /// Validate symbols, layouts, tailcall facts, and continuation packages.
 def validate_wasm_gc_core(module: WasmGcCoreModule): Result[ValidatedCoreModule, Array[CoreValidationError]] =
