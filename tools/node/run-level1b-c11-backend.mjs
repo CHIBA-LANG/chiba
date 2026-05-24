@@ -57,6 +57,13 @@ const REQUIRED_TEXT = [
   "ContN package owner does not match preceding frame chain",
   "ContN package frame count does not match preceding frame chain",
   "ContN package missing preceding frame chain",
+  "type SymbolDebugManifest",
+  "type SymbolDebugEntry",
+  "source_symbol: String",
+  "lowered_symbol: String",
+  "mangled_symbol: String",
+  "def build_symbol_debug_manifest",
+  "def symbol_debug_manifest_as_text",
   "def emit_wat",
   "def run_wasm_gc_wat",
 ];

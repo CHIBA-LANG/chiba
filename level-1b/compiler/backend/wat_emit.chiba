@@ -9,6 +9,28 @@ type WatModule {
     text: String,
 }
 
+/// One source-facing symbol mapping for diagnostics and WAT comments.
+type SymbolDebugEntry {
+    source_symbol: String,
+    lowered_symbol: String,
+    mangled_symbol: String,
+}
+
+/// Deterministic symbol debug map emitted beside backend output.
+type SymbolDebugManifest {
+    entries: Array[SymbolDebugEntry],
+}
+
+/// Build the symbol debug manifest once real name resolution owns symbol paths.
+def build_symbol_debug_manifest(module: ValidatedCoreModule): Result[SymbolDebugManifest, SemanticDiagnostics] =
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<backend>", 0, 0, "missing-backend-layout: symbol debug manifest generation absent"))
+        .freeze()))
+
+/// Render a symbol debug manifest in source/lowered/mangled order.
+def symbol_debug_manifest_as_text(manifest: SymbolDebugManifest): String =
+    "source symbol -> lowered symbol -> final mangled name\n"
+
 /// Return a stable label for a Core operation kind.
 def CoreOpKind.wat_label(self): String =
     match self {
