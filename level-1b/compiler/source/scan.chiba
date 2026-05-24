@@ -195,6 +195,14 @@ def source_line_has_text_before_byte(text: String, offset: usize, needle: str, s
     else if source_starts_with_at(text, offset, needle, 0) { true }
     else { source_line_has_text_before_byte(text, offset + 1, needle, stop) }
 
+/// Return true when one source line contains a byte before a stop byte.
+def source_line_has_byte_before_byte(text: String, offset: usize, byte: u8, stop: u8): bool =
+    if offset >= text.len() { false }
+    else if text.byte_at(offset) == 10 { false }
+    else if text.byte_at(offset) == stop { false }
+    else if text.byte_at(offset) == byte { true }
+    else { source_line_has_byte_before_byte(text, offset + 1, byte, stop) }
+
 /// Return true when byte before offset is not an identifier continuation.
 def source_word_boundary_before(text: String, offset: usize): bool =
     if offset == 0 { true }
@@ -282,6 +290,7 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_operator_method: source_line_has_text_before_byte(text, offset, ".op_", 40),
         has_self_type: source_line_has_word(text, offset, "Self"),
         has_pattern_params: source_line_has_uppercase_call_before_byte(text, offset, 61),
+        has_explicit_type_params: source_line_has_byte_before_byte(text, offset, 91, 40),
     }
 
 /// Try to scan a source item at one line start.
