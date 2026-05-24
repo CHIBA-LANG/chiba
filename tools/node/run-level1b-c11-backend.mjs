@@ -22,7 +22,9 @@ const REQUIRED_TEXT = [
   "CoreOpTailCall",
   "def lower_continuation_fact",
   "def lower_continuation_facts",
+  "def push_continuation_core_ops",
   "def continuation_core_layout",
+  "def continuation_frame_chain_layout",
   "LayoutContinuationFrameChain",
   "LayoutBoxedCont1",
   "LayoutContNPackage",
@@ -104,6 +106,9 @@ function checkSource(file, source) {
   }
   if (/\bContinuationLowerRepeatableContN\s*=>\s*Some\s*\(\s*CoreOp\s*\{[\s\S]{0,240}CoreOpBoxedCont1/.test(code)) {
     errors.push(`${file}: backend must not lower ContN as boxed Cont1`);
+  }
+  if (path.basename(file) === "core.chiba" && !/\bContinuationLowerRepeatableContN\s*=>[\s\S]{0,260}CoreOpContinuationFrameChain[\s\S]{0,260}CoreOpContNPackage/.test(code)) {
+    errors.push(`${file}: ContN lowering must emit frame chain before repeatable package`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {

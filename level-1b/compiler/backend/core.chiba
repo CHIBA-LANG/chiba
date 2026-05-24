@@ -83,6 +83,13 @@ def continuation_core_layout(kind: ContinuationLoweringKind): Option[WasmGcLayou
         ContinuationLowerErasedCallableVariant => Some(closure_env_layout())
     }
 
+/// Layout used by the repeatable frame chain inside a ContN package.
+def continuation_frame_chain_layout(kind: ContinuationLoweringKind): Option[WasmGcLayout] =
+    match kind {
+        ContinuationLowerRepeatableContN => Some(layout_continuation_frame_chain())
+        _ => None
+    }
+
 /// Lower a continuation fact to a Core op without erasing Cont1/ContN semantics.
 def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
     match fact.kind {
@@ -107,15 +114,32 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
             })
     }
 
+/// Push all Core ops needed for one continuation lowering fact.
+def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact): Vec[CoreOp] =
+    match fact.kind {
+        ContinuationLowerRepeatableContN =>
+            out
+                .push(CoreOp {
+                    kind: CoreOpContinuationFrameChain,
+                    layout: continuation_frame_chain_layout(fact.kind),
+                    tail: CorePlainCall,
+                })
+                .push(CoreOp {
+                    kind: CoreOpContNPackage,
+                    layout: continuation_core_layout(fact.kind),
+                    tail: CorePlainCall,
+                })
+        _ =>
+            match lower_continuation_fact(fact) {
+                Some(op) => out.push(op)
+                None => out
+            }
+    }
+
 /// Lower continuation facts into a stable Core op stream.
 def lower_continuation_facts(facts: Array[ContinuationLoweringFact], index: usize, out: Vec[CoreOp]): Array[CoreOp] =
     if index == facts.len() { out.freeze() }
-    else {
-        match lower_continuation_fact(facts.get(index)) {
-            Some(op) => lower_continuation_facts(facts, index + 1, out.push(op))
-            None => lower_continuation_facts(facts, index + 1, out)
-        }
-    }
+    else { lower_continuation_facts(facts, index + 1, push_continuation_core_ops(out, facts.get(index))) }
 
 /// Append one Core op array to another builder.
 def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[CoreOp] =
