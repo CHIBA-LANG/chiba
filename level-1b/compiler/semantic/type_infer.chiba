@@ -92,9 +92,12 @@ def callable_storage_position_from_surface(surface: SourceItemSurfaceFacts): Cal
 
 /// Build erased callable variants required before backend-specific layout.
 def callable_storage_variants_from_surface(surface: SourceItemSurfaceFacts): Array[CallableStorageVariant] =
-    if surface.has_explicit_continuation_type {
+    if surface.has_cont1_type {
         Vec[CallableStorageVariant].new()
             .push(CallableVariantBoxedCont1)
+            .freeze()
+    } else if surface.has_contn_type {
+        Vec[CallableStorageVariant].new()
             .push(CallableVariantContN)
             .freeze()
     } else if surface.has_send_callable_qualifier {

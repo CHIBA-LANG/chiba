@@ -446,9 +446,17 @@ def source_scan_item_has_body(text: String, offset: usize): bool =
 
 /// Return true when one item line mentions explicit continuation storage type sugar.
 def source_scan_item_has_explicit_continuation_type(text: String, offset: usize): bool =
+    if source_scan_item_has_cont1_type(text, offset) { true }
+    else { source_scan_item_has_contn_type(text, offset) }
+
+/// Return true when one item line mentions one-shot continuation type sugar.
+def source_scan_item_has_cont1_type(text: String, offset: usize): bool =
     if source_line_has_text(text, offset, "cont1 ") { true }
-    else if source_line_has_text(text, offset, "contN ") { true }
-    else if source_line_has_text(text, offset, "Cont1[") { true }
+    else { source_line_has_text(text, offset, "Cont1[") }
+
+/// Return true when one item line mentions multi-shot continuation type sugar.
+def source_scan_item_has_contn_type(text: String, offset: usize): bool =
+    if source_line_has_text(text, offset, "contN ") { true }
     else { source_line_has_text(text, offset, "ContN[") }
 
 /// Scan item surface shape on one source line.
@@ -462,6 +470,8 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_ref_type: source_line_has_text(text, offset, "Ref["),
         has_callable_arrow: source_line_has_text(text, offset, "->"),
         has_explicit_continuation_type: source_scan_item_has_explicit_continuation_type(text, offset),
+        has_cont1_type: source_scan_item_has_cont1_type(text, offset),
+        has_contn_type: source_scan_item_has_contn_type(text, offset),
         has_send_callable_qualifier: source_line_has_text(text, offset, ") send"),
         has_method_receiver: source_line_has_text_before_byte(text, offset, ".", 40),
         has_operator_method: source_line_has_text_before_byte(text, offset, ".op_", 40),

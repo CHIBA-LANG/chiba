@@ -78,6 +78,8 @@ const REQUIRED_TEXT = [
   "missing-lowering: operator obligation resolution absent",
   "missing-facts: callable storage fact generation absent",
   "has_send_callable_qualifier",
+  "has_cont1_type",
+  "has_contn_type",
   "def callable_storage_position_from_surface",
   "def callable_storage_variants_from_surface",
   "def callable_storage_fact_from_skeleton",
