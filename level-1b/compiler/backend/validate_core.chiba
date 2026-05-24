@@ -19,6 +19,12 @@ type ValidatedCoreModule {
     core: WasmGcCoreModule,
 }
 
+/// Latest observed ContN frame-chain state while validating op order.
+type ContNFrameChainState {
+    owner: Option[BinderId],
+    frame_count: usize,
+}
+
 /// Return true when a layout table contains a layout id with the expected kind.
 def WasmGcLayoutTable.contains_layout(self, layout: WasmGcLayout, index: usize): bool =
     if index == self.entries.len() { false }
@@ -152,20 +158,26 @@ def core_op_is_contn_package(op: CoreOp): bool =
 /// Return true when two binder ids are the same origin.
 def binder_id_eq(left: BinderId, right: BinderId): bool = left.id == right.id
 
-/// Return the latest ContN frame-chain owner after observing one op.
-def core_contn_frame_owner_after(op: CoreOp, current: Option[BinderId]): Option[BinderId] =
-    if core_op_is_contn_frame_chain(op) { op.owner }
-    else { current }
+/// Return the latest ContN frame-chain state after observing one op.
+def core_contn_frame_state_after(op: CoreOp, current: ContNFrameChainState): ContNFrameChainState =
+    if core_op_is_contn_frame_chain(op) {
+        ContNFrameChainState {
+            owner: op.owner,
+            frame_count: op.frame_count,
+        }
+    } else { current }
 
-/// Validate that a ContN package follows a same-owner emitted frame chain.
-def validate_core_continuation_order(op: CoreOp, frame_owner: Option[BinderId]): Option[CoreValidationError] =
+/// Validate that a ContN package follows a same-owner emitted frame chain with matching frame count.
+def validate_core_continuation_order(op: CoreOp, frame_state: ContNFrameChainState): Option[CoreValidationError] =
     if core_op_is_contn_package(op) {
         match op.owner {
             Some(package_owner) =>
-                match frame_owner {
+                match frame_state.owner {
                     Some(owner) =>
-                        if binder_id_eq(package_owner, owner) { None }
-                        else { Some(CoreIllegalContinuationPackage("ContN package owner does not match preceding frame chain")) }
+                        if binder_id_eq(package_owner, owner) {
+                            if op.frame_count == frame_state.frame_count { None }
+                            else { Some(CoreIllegalContinuationPackage("ContN package frame count does not match preceding frame chain")) }
+                        } else { Some(CoreIllegalContinuationPackage("ContN package owner does not match preceding frame chain")) }
                     None => Some(CoreIllegalContinuationPackage("ContN package missing preceding frame chain"))
                 }
             None => Some(CoreIllegalContinuationPackage("ContN package missing owner"))
@@ -190,22 +202,22 @@ def validate_core_op(module: WasmGcCoreModule, op: CoreOp, out: Vec[CoreValidati
         |> push_validation_error(validate_core_contn_frame_count(op))
 
 /// Validate Core operations after tracking frame-chain materialization.
-def validate_core_ops_with_contn_frame(module: WasmGcCoreModule, index: usize, frame_owner: Option[BinderId], out: Vec[CoreValidationError]): Array[CoreValidationError] =
+def validate_core_ops_with_contn_frame(module: WasmGcCoreModule, index: usize, frame_state: ContNFrameChainState, out: Vec[CoreValidationError]): Array[CoreValidationError] =
     if index == module.ops.len() { out.freeze() }
     else {
         let op = module.ops.get(index)
-        let next_frame_owner = core_contn_frame_owner_after(op, frame_owner)
+        let next_frame_state = core_contn_frame_state_after(op, frame_state)
         validate_core_ops_with_contn_frame(
             module,
             index + 1,
-            next_frame_owner,
+            next_frame_state,
             validate_core_op(module, op, out)
-                |> push_validation_error(validate_core_continuation_order(op, frame_owner)))
+                |> push_validation_error(validate_core_continuation_order(op, frame_state)))
     }
 
 /// Validate Core operations in stable order.
 def validate_core_ops(module: WasmGcCoreModule, index: usize, out: Vec[CoreValidationError]): Array[CoreValidationError] =
-    validate_core_ops_with_contn_frame(module, index, None, out)
+    validate_core_ops_with_contn_frame(module, index, ContNFrameChainState { owner: None, frame_count: 0 }, out)
 
 /// Validate symbols, layouts, tailcall facts, and continuation packages.
 def validate_wasm_gc_core(module: WasmGcCoreModule): Result[ValidatedCoreModule, Array[CoreValidationError]] =

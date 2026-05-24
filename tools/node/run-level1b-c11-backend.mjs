@@ -42,6 +42,7 @@ const REQUIRED_TEXT = [
   "CoreIllegalContinuationPackage",
   "def validate_wasm_gc_core",
   "def validate_core_continuation_order",
+  "type ContNFrameChainState",
   "def validate_core_owner",
   "def validate_core_runtime_state",
   "def validate_core_contn_frame_count",
@@ -50,6 +51,7 @@ const REQUIRED_TEXT = [
   "runtime Core op missing owner provenance",
   "def validate_core_ops_with_contn_frame",
   "ContN package owner does not match preceding frame chain",
+  "ContN package frame count does not match preceding frame chain",
   "ContN package missing preceding frame chain",
   "def emit_wat",
   "def run_wasm_gc_wat",
@@ -139,6 +141,9 @@ function checkSource(file, source) {
   }
   if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_continuation_order\b[\s\S]{0,520}core_op_is_contn_package[\s\S]{0,520}owner does not match[\s\S]{0,520}preceding frame chain/.test(code)) {
     errors.push(`${file}: validator must reject ContN package without same-owner preceding frame chain`);
+  }
+  if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_continuation_order\b[\s\S]{0,720}frame count does not match[\s\S]{0,360}preceding frame chain/.test(code)) {
+    errors.push(`${file}: validator must reject ContN package whose frame_count diverges from preceding frame chain`);
   }
   if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_owner\b[\s\S]{0,240}requires_layout[\s\S]{0,240}CoreMissingOwner/.test(code)) {
     errors.push(`${file}: validator must reject materialized Core ops without owner provenance`);
