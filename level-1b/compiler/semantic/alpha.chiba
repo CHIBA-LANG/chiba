@@ -12,6 +12,7 @@ type BinderId {
 type AlphaBinderOrigin {
     binder: BinderId,
     file: SourceFileId,
+    owner_namespace: Option[NamespaceNameSlice],
     kind: SourceItemKind,
     name: Option[SourceNameSlice],
     private: bool,
@@ -48,6 +49,7 @@ def alpha_origins_from_source_items(items: Array[SourceItemScanResult], index: u
             out.push(AlphaBinderOrigin {
                 binder: BinderId { index: index },
                 file: item.file,
+                owner_namespace: item.owner_namespace,
                 kind: item.kind,
                 name: item.name,
                 private: item.private,

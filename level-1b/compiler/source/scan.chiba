@@ -209,38 +209,38 @@ def source_scan_use_at(file: SourceFileId, text: String, offset: usize, line: us
     } else { None }
 
 /// Try to scan a source item at one line start.
-def source_scan_item_at(file: SourceFileId, text: String, offset: usize, line: usize, attributes: SourceItemAttributeFacts): Option[SourceItemScanResult] =
+def source_scan_item_at(file: SourceFileId, owner_namespace: Option[NamespaceNameSlice], text: String, offset: usize, line: usize, attributes: SourceItemAttributeFacts): Option[SourceItemScanResult] =
     if source_starts_with_at(text, offset, "private ", 0) {
-        source_scan_private_item_at(file, text, offset + "private".len(), line, attributes)
+        source_scan_private_item_at(file, owner_namespace, text, offset + "private".len(), line, attributes)
     } else if source_starts_with_at(text, offset, "def ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemDef, name: source_scan_item_name(text, offset + "def".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemDef, name: source_scan_item_name(text, offset + "def".len()), private: false, attributes: attributes, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "type ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemType, name: source_scan_item_name(text, offset + "type".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemType, name: source_scan_item_name(text, offset + "type".len()), private: false, attributes: attributes, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "data ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemData, name: source_scan_item_name(text, offset + "data".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemData, name: source_scan_item_name(text, offset + "data".len()), private: false, attributes: attributes, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "union ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemUnion, name: source_scan_item_name(text, offset + "union".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemUnion, name: source_scan_item_name(text, offset + "union".len()), private: false, attributes: attributes, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "interface ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemInterface, name: source_scan_item_name(text, offset + "interface".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemInterface, name: source_scan_item_name(text, offset + "interface".len()), private: false, attributes: attributes, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "extern ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemExtern, name: source_scan_item_name(text, offset + "extern".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemExtern, name: source_scan_item_name(text, offset + "extern".len()), private: false, attributes: attributes, line: line, column: 0 })
     } else { None }
 
 /// Try to scan an item after a private visibility modifier.
-def source_scan_private_item_at(file: SourceFileId, text: String, offset: usize, line: usize, attributes: SourceItemAttributeFacts): Option[SourceItemScanResult] =
+def source_scan_private_item_at(file: SourceFileId, owner_namespace: Option[NamespaceNameSlice], text: String, offset: usize, line: usize, attributes: SourceItemAttributeFacts): Option[SourceItemScanResult] =
     let start = source_skip_spaces(text, offset)
     if source_starts_with_at(text, start, "def ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemDef, name: source_scan_item_name(text, start + "def".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemDef, name: source_scan_item_name(text, start + "def".len()), private: true, attributes: attributes, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "type ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemType, name: source_scan_item_name(text, start + "type".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemType, name: source_scan_item_name(text, start + "type".len()), private: true, attributes: attributes, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "data ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemData, name: source_scan_item_name(text, start + "data".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemData, name: source_scan_item_name(text, start + "data".len()), private: true, attributes: attributes, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "union ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemUnion, name: source_scan_item_name(text, start + "union".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemUnion, name: source_scan_item_name(text, start + "union".len()), private: true, attributes: attributes, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "interface ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemInterface, name: source_scan_item_name(text, start + "interface".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemInterface, name: source_scan_item_name(text, start + "interface".len()), private: true, attributes: attributes, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "extern ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemExtern, name: source_scan_item_name(text, start + "extern".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemExtern, name: source_scan_item_name(text, start + "extern".len()), private: true, attributes: attributes, line: line, column: 0 })
     } else { None }
 
 /// Try to scan the first ASCII item name after an item keyword.
@@ -334,34 +334,41 @@ def source_scan_uses(file: SourceFile): Array[SourceUseScanResult] =
     source_scan_uses_line(file.id, file.text, 0, 1, Vec[SourceUseScanResult].new())
 
 /// Scan item declarations from line starts, carrying pending line attributes.
-def source_scan_items_line(file: SourceFileId, text: String, offset: usize, line: usize, pending_compile_if: Option[SourceCompileIfFacts], out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
+def source_scan_items_line(file: SourceFileId, owner_namespace: Option[NamespaceNameSlice], text: String, offset: usize, line: usize, pending_compile_if: Option[SourceCompileIfFacts], out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
     if offset >= text.len() { out.freeze() }
     else {
         let next = source_next_line_offset(text, offset)
         match source_scan_compile_if_facts_at(file, text, offset) {
             Some(facts) => {
                 if next == offset { out.freeze() }
-                else { source_scan_items_line(file, text, next, line + 1, Some(facts), out) }
+                else { source_scan_items_line(file, owner_namespace, text, next, line + 1, Some(facts), out) }
             }
             None => {
                 let attributes = source_item_attributes_from_compile_if(pending_compile_if)
-                let next_out = match source_scan_item_at(file, text, offset, line, attributes) {
+                let next_out = match source_scan_item_at(file, owner_namespace, text, offset, line, attributes) {
                     Some(result) => out.push(result)
                     None => out
                 }
-                let next_pending = match source_scan_item_at(file, text, offset, line, source_item_attributes_none()) {
+                let next_pending = match source_scan_item_at(file, owner_namespace, text, offset, line, source_item_attributes_none()) {
                     Some(_) => None
                     None => pending_compile_if
                 }
                 if next == offset { next_out.freeze() }
-                else { source_scan_items_line(file, text, next, line + 1, next_pending, next_out) }
+                else { source_scan_items_line(file, owner_namespace, text, next, line + 1, next_pending, next_out) }
             }
         }
     }
 
+/// Return the file-header namespace owner, when the transition scanner found one.
+def source_scan_file_owner_namespace(file: SourceFile): Option[NamespaceNameSlice] =
+    match source_scan_first_namespace(file) {
+        Some(namespace) => Some(namespace.name)
+        None => None
+    }
+
 /// Scan source item declarations in one file.
 def source_scan_items(file: SourceFile): Array[SourceItemScanResult] =
-    source_scan_items_line(file.id, file.text, 0, 1, None, Vec[SourceItemScanResult].new())
+    source_scan_items_line(file.id, source_scan_file_owner_namespace(file), file.text, 0, 1, None, Vec[SourceItemScanResult].new())
 
 /// Build source facts from already loaded files.
 def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =

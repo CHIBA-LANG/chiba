@@ -10,6 +10,7 @@ use compiler.semantic.types.*
 type TypedItemSkeleton {
     binder: BinderId,
     file: SourceFileId,
+    owner_namespace: Option[NamespaceNameSlice],
     kind: SourceItemKind,
     name: Option[SourceNameSlice],
     private: bool,
@@ -29,6 +30,7 @@ def typed_item_skeletons_from_alpha(origins: Array[AlphaBinderOrigin], index: us
             out.push(TypedItemSkeleton {
                 binder: origin.binder,
                 file: origin.file,
+                owner_namespace: origin.owner_namespace,
                 kind: origin.kind,
                 name: origin.name,
                 private: origin.private,

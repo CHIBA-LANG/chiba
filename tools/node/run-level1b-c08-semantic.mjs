@@ -29,6 +29,7 @@ const REQUIRED_TEXT = [
   "def alpha_convert",
   "def alpha_binders_from_source_items",
   "type AlphaBinderOrigin",
+  "owner_namespace: Option[NamespaceNameSlice]",
   "attributes: SourceItemAttributeFacts",
   "def alpha_origins_from_source_items",
   "def elaborate_patterns",

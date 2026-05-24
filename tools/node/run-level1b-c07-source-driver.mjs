@@ -45,6 +45,8 @@ const REQUIRED_TEXT = [
   "def source_scan_item_name",
   "def source_scan_items",
   "def source_scan_items_line",
+  "def source_scan_file_owner_namespace",
+  "owner_namespace: Option[NamespaceNameSlice]",
   "def source_scan_utf8_warnings",
   "def scan_project_utf8_warnings",
   "def source_scan_first_namespace",

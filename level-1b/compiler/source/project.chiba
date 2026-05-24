@@ -120,6 +120,7 @@ type SourceItemAttributeFacts {
 /// Source item discovered by the byte-level scanner.
 type SourceItemScanResult {
     file: SourceFileId,
+    owner_namespace: Option[NamespaceNameSlice],
     kind: SourceItemKind,
     name: Option[SourceNameSlice],
     private: bool,

@@ -272,8 +272,9 @@
 		- C07 source scanner 现在派生 `use` declaration facts（path slice、glob、multi-import marker），为后续 namespace/use resolution primary path 准备输入；真实 import resolution 仍未执行。
 		- C07 source semantic gate 现在在存在显式 `use` facts 时 fail-closed 于 `explicit use resolution absent`，避免跳过 import/name resolution 直接进入 typed lowering。
 		- C07 source item scanner 现在把 line-start `#[compile_if(...)]` 作为 item attribute fact 挂到后续 item；这只是保留条件编译证据，尚未执行 compile_if eval/filter。
+		- C07 source item scanner 现在把 file-header namespace 作为 `owner_namespace` 挂到 item fact；inline namespace 仍 fail-closed，真实 nested namespace ownership 还没完成。
 		- C08 alpha conversion 已开始消费 C07 source item facts：`alpha_convert` 由 `ProjectSurface.facts.items` 派生稳定 binder ids，不再创建空 binder stream；HM + row inference 仍 fail-closed，尚未产 typed item facts。
-		- C08 alpha origins 现在保留 source item kind/name/file/line/column/private/attributes；type inference 先构造 `TypedItemSkeleton` 并检查 pattern coverage，再 fail-closed 于 source item type expression/body inference absent，避免把只有 binder index 的骨架伪装成 typed module。
+		- C08 alpha origins 现在保留 source item kind/name/file/owner_namespace/line/column/private/attributes；type inference 先构造 `TypedItemSkeleton` 并检查 pattern coverage，再 fail-closed 于 source item type expression/body inference absent，避免把只有 binder index 的骨架伪装成 typed module。
 		- C08 pattern elaboration 已开始消费 alpha binders：`elaborate_patterns` 由 binder stream 派生稳定 pattern ids，不再创建空 pattern stream；这仍是骨架 facts，不等于完整 pattern AST lowering。
 		- `compiler/lower/ast_to_core.chiba` 已拒绝空 `SurfaceModule` lowering；缺 AST -> Surface item lowering 时返回 `missing-lowering` diagnostic。`level1b:truthfulness-audit` 已补 source gate 空放行、typed inference pass-through、空 Surface lowering 三类回归 detector。
 		- `level-1b/src/level1b_main.chiba` 已不再是 `main = 42` magic placeholder；seed entry 只连接 CLI readiness contract，`level1b:smoke` 仍标记 primary compile / WAT emission blocked。
