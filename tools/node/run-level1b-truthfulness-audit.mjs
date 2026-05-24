@@ -133,6 +133,17 @@ for (const root of SCAN_ROOTS) {
       });
     }
 
+    const magicSeedMain = /\bdef\s+main\s*\(\s*\)\s*:\s*i64\s*=\s*42\b/g;
+    for (const match of source.matchAll(magicSeedMain)) {
+      blockers.push({
+        id: "magic-seed-main",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "missing-lowering",
+        semantic: "level-1b seed main returns a magic value instead of wiring compiler entry facts",
+        message: "missing-lowering: level-1b seed main returns a magic value instead of wiring compiler entry facts",
+      });
+    }
+
     const emptyCapturePackage = /ContinuationPackaged\s*\(\s*binder\s*\)\s*=>\s*out\.push\s*\(\s*ClosureEnvLayout\s*\(\s*binder\s*,\s*empty_capture_fields\s*\(\s*\)\s*\)\s*\)/g;
     for (const match of source.matchAll(emptyCapturePackage)) {
       blockers.push({
