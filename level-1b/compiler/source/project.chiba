@@ -53,6 +53,16 @@ type SourceNamespaceScanWarning {
     column: usize,
 }
 
+/// Source use declaration discovered before full import resolution.
+type SourceUseScanResult {
+    file: SourceFileId,
+    path: SourceNameSlice,
+    glob: bool,
+    multi: bool,
+    line: usize,
+    column: usize,
+}
+
 /// Header attributes discovered before item parsing.
 type SourceHeaderFacts {
     file: SourceFileId,
@@ -126,6 +136,7 @@ type SourceProjectFacts {
     compile_if: Array[SourceCompileIfFacts],
     namespaces: Array[NamespaceScanResult],
     namespace_warnings: Array[SourceNamespaceScanWarning],
+    uses: Array[SourceUseScanResult],
     items: Array[SourceItemScanResult],
     utf8_warnings: Array[SourceUtf8ScanWarning],
 }

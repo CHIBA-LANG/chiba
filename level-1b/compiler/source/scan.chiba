@@ -159,6 +159,27 @@ def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: u
         } else { None }
     } else { None }
 
+/// Scan to the end of a use declaration line.
+def source_scan_use_end(text: String, offset: usize): usize =
+    if offset >= text.len() { offset }
+    else if text.byte_at(offset) == 10 { offset }
+    else { source_scan_use_end(text, offset + 1) }
+
+/// Try to scan a source use declaration at one line start.
+def source_scan_use_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceUseScanResult] =
+    if source_starts_with_at(text, offset, "use ", 0) {
+        let start = source_skip_spaces(text, offset + "use".len())
+        let end = source_scan_use_end(text, start)
+        Some(SourceUseScanResult {
+            file: file,
+            path: SourceNameSlice { offset: start, len: end - start },
+            glob: source_line_has_byte(text, start, 42),
+            multi: source_line_has_byte(text, start, 123),
+            line: line,
+            column: start - offset,
+        })
+    } else { None }
+
 /// Try to scan a source item at one line start.
 def source_scan_item_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceItemScanResult] =
     if source_starts_with_at(text, offset, "private ", 0) {
@@ -267,6 +288,23 @@ def source_scan_namespace_warnings_line(file: SourceFileId, text: String, offset
 def source_scan_namespace_warnings(file: SourceFile): Array[SourceNamespaceScanWarning] =
     source_scan_namespace_warnings_line(file.id, file.text, 0, 1, Vec[SourceNamespaceScanWarning].new())
 
+/// Scan use declarations from line starts.
+def source_scan_uses_line(file: SourceFileId, text: String, offset: usize, line: usize, out: Vec[SourceUseScanResult]): Array[SourceUseScanResult] =
+    if offset >= text.len() { out.freeze() }
+    else {
+        let next_out = match source_scan_use_at(file, text, offset, line) {
+            Some(result) => out.push(result)
+            None => out
+        }
+        let next = source_next_line_offset(text, offset)
+        if next == offset { next_out.freeze() }
+        else { source_scan_uses_line(file, text, next, line + 1, next_out) }
+    }
+
+/// Scan source use declarations in one file.
+def source_scan_uses(file: SourceFile): Array[SourceUseScanResult] =
+    source_scan_uses_line(file.id, file.text, 0, 1, Vec[SourceUseScanResult].new())
+
 /// Scan item declarations from line starts.
 def source_scan_items_line(file: SourceFileId, text: String, offset: usize, line: usize, out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
     if offset >= text.len() { out.freeze() }
@@ -292,6 +330,7 @@ def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
         compile_if: scan_project_compile_if(project.files, 0, Vec[SourceCompileIfFacts].new()),
         namespaces: scan_project_namespaces(project.files, 0, Vec[NamespaceScanResult].new()),
         namespace_warnings: scan_project_namespace_warnings(project.files, 0, Vec[SourceNamespaceScanWarning].new()),
+        uses: scan_project_uses(project.files, 0, Vec[SourceUseScanResult].new()),
         items: scan_project_items(project.files, 0, Vec[SourceItemScanResult].new()),
         utf8_warnings: scan_project_utf8_warnings(project.files, 0, Vec[SourceUtf8ScanWarning].new()),
     }
@@ -320,6 +359,16 @@ def scan_project_items_append(items: Array[SourceItemScanResult], index: usize, 
 def scan_project_items(files: Array[SourceFile], index: usize, out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
     if index == files.len() { out.freeze() }
     else { scan_project_items(files, index + 1, scan_project_items_append(source_scan_items(files.get(index)), 0, out)) }
+
+/// Append use scan results for one file.
+def scan_project_uses_append(uses: Array[SourceUseScanResult], index: usize, out: Vec[SourceUseScanResult]): Vec[SourceUseScanResult] =
+    if index == uses.len() { out }
+    else { scan_project_uses_append(uses, index + 1, out.push(uses.get(index))) }
+
+/// Scan use declarations in deterministic file order.
+def scan_project_uses(files: Array[SourceFile], index: usize, out: Vec[SourceUseScanResult]): Array[SourceUseScanResult] =
+    if index == files.len() { out.freeze() }
+    else { scan_project_uses(files, index + 1, scan_project_uses_append(source_scan_uses(files.get(index)), 0, out)) }
 
 /// Append UTF-8 scan warnings for one file.
 def scan_project_utf8_warnings_append(warnings: Array[SourceUtf8ScanWarning], index: usize, out: Vec[SourceUtf8ScanWarning]): Vec[SourceUtf8ScanWarning] =
