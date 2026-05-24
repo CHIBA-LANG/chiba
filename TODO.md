@@ -279,7 +279,7 @@
 		- C10/C11 source path 已把 `ContinuationSimplification` 转成 `ContinuationLoweringFact` 并贯穿到 backend Core op lowering；boxed `Cont1` 保留 consumed-state，`ContN` lower 为 frame-chain op + repeatable package op，但真实 capture extraction / frame body / WAT emission 仍是 blocker。
 		- C10 capture model 已区分 `CaptureSharedRefCell`，并把 materialized continuation blocker 拆成 boxed `Cont1` capture extraction 与 `ContN` frame-chain capture extraction；这只提高 fail-closed 诊断精度，尚未实现真实 capture set / frame body 抽取。
 		- C11 已修正 erased callable continuation package layout：`ContinuationLowerErasedCallableVariant` 不再复用 closure env layout，而是进入独立 `LayoutContinuationPackage`（tag + payload）；真实 callable ADT dispatch / WAT emission 仍是 blocker。
-		- C11 validator 已补 `ContN` ordering invariant：`CoreOpContNPackage` 必须在已见 `CoreOpContinuationFrameChain` 后出现；这防止其他 lowering path 绕过 repeatable frame-chain 语义。
+		- C11 validator 已补 `ContN` ordering invariant：`CoreOpContNPackage` 必须在已见同 owner 的 `CoreOpContinuationFrameChain` 后出现；`CoreOp` 现在保留 owner provenance，防止其他 lowering path 用不相关 frame-chain 绕过 repeatable frame-chain 语义。
 		- `ContN` lowering 验收必须证明：repeatable frame chain 由 stackless resume functions 驱动；frame chain 可重复恢复；捕获 `Ref[T]` 是 shared-reference，不 snapshot / rollback。
 		- closure lowering 验收必须证明：no-capture closure 走 direct function / funref / inline；capturing closure 只有逃逸或确需 env 时才 materialize env；env 内 continuation / `Ref[T]` 不被能力洗白。
 		- spec 要求 `(A) -> B` 参数位置是 checked-template callable obligation，存储位置 lower 成 erased callable ADT；显式 `cont1` / `contN` storage 不走 erased callable ADT；当前未见真实 callable storage lowering。

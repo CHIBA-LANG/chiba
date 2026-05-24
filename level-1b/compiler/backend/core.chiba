@@ -2,6 +2,7 @@
 namespace compiler.backend.core
 
 use compiler.closure.env_simplify.*
+use compiler.ir.common.*
 use compiler.ir.closure.*
 use compiler.backend.layout.*
 
@@ -34,6 +35,7 @@ data CoreOpKind {
 
 /// One lowered Core operation.
 type CoreOp {
+    owner: Option[BinderId],
     kind: CoreOpKind,
     layout: Option[WasmGcLayout],
     tail: CoreTailPosition,
@@ -56,8 +58,9 @@ def lower_closure_simplification(fact: ClosureSimplification): Option[CoreOp] =
         ClosureDirectified(_) => None
         ClosureDeadCaptureDropped(_) => None
         ClosureKnownCalleeDirectCall(_) => None
-        ClosureKeptEscaping(_) =>
+        ClosureKeptEscaping(owner) =>
             Some(CoreOp {
+                owner: Some(owner),
                 kind: CoreOpClosureCall,
                 layout: Some(closure_env_layout()),
                 tail: CorePlainCall,
@@ -96,18 +99,21 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
         ContinuationLowerDirectCont1 => None
         ContinuationLowerBoxedCont1 =>
             Some(CoreOp {
+                owner: Some(fact.owner),
                 kind: CoreOpBoxedCont1,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
             })
         ContinuationLowerRepeatableContN =>
             Some(CoreOp {
+                owner: Some(fact.owner),
                 kind: CoreOpContNPackage,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
             })
         ContinuationLowerErasedCallableVariant =>
             Some(CoreOp {
+                owner: Some(fact.owner),
                 kind: CoreOpContinuationPackage,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
@@ -120,11 +126,13 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
         ContinuationLowerRepeatableContN =>
             out
                 .push(CoreOp {
+                    owner: Some(fact.owner),
                     kind: CoreOpContinuationFrameChain,
                     layout: continuation_frame_chain_layout(fact.kind),
                     tail: CorePlainCall,
                 })
                 .push(CoreOp {
+                    owner: Some(fact.owner),
                     kind: CoreOpContNPackage,
                     layout: continuation_core_layout(fact.kind),
                     tail: CorePlainCall,
