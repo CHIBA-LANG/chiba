@@ -46,6 +46,7 @@ type CoreOp {
     layout: Option[WasmGcLayout],
     tail: CoreTailPosition,
     runtime_state: CoreRuntimeState,
+    frame_count: usize,
 }
 
 /// Wasm-GC Core module with a stable layout table.
@@ -72,6 +73,7 @@ def lower_closure_simplification(fact: ClosureSimplification): Option[CoreOp] =
                 layout: Some(closure_env_layout()),
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
+                frame_count: 0,
             })
     }
 
@@ -112,6 +114,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
                 runtime_state: CoreConsumedStateMachine,
+                frame_count: 0,
             })
         ContinuationLowerRepeatableContN =>
             Some(CoreOp {
@@ -120,6 +123,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
+                frame_count: fact.frames.len(),
             })
         ContinuationLowerErasedCallableVariant =>
             Some(CoreOp {
@@ -128,6 +132,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
+                frame_count: 0,
             })
     }
 
@@ -142,6 +147,7 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     layout: continuation_frame_chain_layout(fact.kind),
                     tail: CorePlainCall,
                     runtime_state: CoreNoRuntimeState,
+                    frame_count: fact.frames.len(),
                 })
                 .push(CoreOp {
                     owner: Some(fact.owner),
@@ -149,6 +155,7 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     layout: continuation_core_layout(fact.kind),
                     tail: CorePlainCall,
                     runtime_state: CoreNoRuntimeState,
+                    frame_count: fact.frames.len(),
                 })
         _ =>
             match lower_continuation_fact(fact) {

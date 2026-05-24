@@ -165,6 +165,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - C10 CPS usage now fail-closes on missing closure/lambda/continuation subject extraction; previous continuation-only use reconstruction was not enough to prove closure directification/capture semantics.
 - C10 closure conversion no longer emits backend lowering facts for deleted continuations, preventing deleted continuations from leaking as default direct Cont1 lowering.
 - C11 Core ops retain runtime state machine facts. Boxed `Cont1` must carry `CoreConsumedStateMachine`; non-Cont1 ops must not.
+- C11 Core ops retain `frame_count`; validator rejects zero-frame ContN frame chains so repeatable packages cannot be backed by empty stackless resume frames.
 - No-capture closure must optimize to direct function/funref/inline; no env allocation.
 - Non-escaping exactly-once `Cont1` must optimize to direct resume/inline/tail jump; no continuation package.
 - CIR must stay target-independent. It must not contain Wasm-GC layout ids, `funcref`/`eqref`, WAT opcodes, Binaryen feature flags, or target ABI details. Those belong in BIR/LIR/backend layout.

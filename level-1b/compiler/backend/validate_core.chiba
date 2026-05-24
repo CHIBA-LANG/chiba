@@ -135,6 +135,13 @@ def core_op_is_contn_frame_chain(op: CoreOp): bool =
         _ => false
     }
 
+/// Validate that a ContN frame-chain op carries at least one lowered frame.
+def validate_core_contn_frame_count(op: CoreOp): Option[CoreValidationError] =
+    if core_op_is_contn_frame_chain(op) {
+        if op.frame_count == 0 { Some(CoreIllegalContinuationPackage("ContN frame chain has no stackless resume frames")) }
+        else { None }
+    } else { None }
+
 /// Return true when a Core op materializes a ContN package.
 def core_op_is_contn_package(op: CoreOp): bool =
     match op.kind {
@@ -180,6 +187,7 @@ def validate_core_op(module: WasmGcCoreModule, op: CoreOp, out: Vec[CoreValidati
         |> push_validation_error(validate_core_tail(op))
         |> push_validation_error(validate_core_runtime_state(op))
         |> push_validation_error(validate_core_continuation_package(op))
+        |> push_validation_error(validate_core_contn_frame_count(op))
 
 /// Validate Core operations after tracking frame-chain materialization.
 def validate_core_ops_with_contn_frame(module: WasmGcCoreModule, index: usize, frame_owner: Option[BinderId], out: Vec[CoreValidationError]): Array[CoreValidationError] =

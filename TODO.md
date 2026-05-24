@@ -308,6 +308,7 @@
 		- C11 validator 已补 `ContN` ordering invariant：`CoreOpContNPackage` 必须在已见同 owner 的 `CoreOpContinuationFrameChain` 后出现；`CoreOp` 现在保留 owner provenance，防止其他 lowering path 用不相关 frame-chain 绕过 repeatable frame-chain 语义。
 		- C11 validator 已补 runtime Core op owner invariant：任何需要 layout 的 materialized Core op 缺 owner provenance 时返回 `CoreMissingOwner`，避免匿名 closure / continuation package 进入 backend emit。
 		- C11 Core op 现在保留 runtime state machine fact；boxed `Cont1` 必须携带 `CoreConsumedStateMachine`，其他 op 不得误带 consumed-state，防止 one-shot 语义在 backend 前丢失。
+		- C11 Core op 现在保留 `frame_count`，validator 拒绝 zero-frame 的 `ContN` frame-chain，避免 repeatable package 只有壳没有 stackless resume frame。
 		- `ContN` lowering 验收必须证明：repeatable frame chain 由 stackless resume functions 驱动；frame chain 可重复恢复；捕获 `Ref[T]` 是 shared-reference，不 snapshot / rollback。
 		- closure lowering 验收必须证明：no-capture closure 走 direct function / funref / inline；capturing closure 只有逃逸或确需 env 时才 materialize env；env 内 continuation / `Ref[T]` 不被能力洗白。
 		- spec 要求 `(A) -> B` 参数位置是 checked-template callable obligation，存储位置 lower 成 erased callable ADT；显式 `cont1` / `contN` storage 不走 erased callable ADT；当前未见真实 callable storage lowering。
