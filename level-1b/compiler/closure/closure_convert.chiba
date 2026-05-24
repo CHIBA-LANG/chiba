@@ -11,6 +11,7 @@ use compiler.semantic.driver.*
 data CaptureKind {
     CaptureValue,
     CaptureReplaySafeContinuation,
+    CaptureSharedRefCell,
     CaptureWorldLocalRejected,
     CaptureThreadLocalRejected,
     CaptureUnsafeRejected,
@@ -45,9 +46,7 @@ type ClosureConvertedModule {
 /// Convert escaping lambdas and packaged continuations to explicit env layouts.
 def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConvertedModule, SemanticDiagnostics] =
     if continuation_decisions_require_capture_extraction(module.decisions, 0) {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: continuation capture extraction absent"))
-            .freeze()))
+        Err(SemanticDiagnostics(continuation_capture_extraction_blockers(module.decisions, 0, Vec[SemanticDiagnostic].new())))
     } else {
         Ok(ClosureConvertedModule(
             module,
@@ -103,6 +102,26 @@ def continuation_decision_requires_capture_extraction(decision: ContinuationSimp
         _ => false
     }
 
+/// Return the precise capture extraction blocker for a materialized continuation.
+def continuation_capture_extraction_blocker(decision: ContinuationSimplification): Option[SemanticDiagnostic] =
+    match decision {
+        ContinuationBoxedOneShot(_) =>
+            Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: boxed Cont1 capture extraction absent"))
+        ContinuationPackaged(_) =>
+            Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: ContN frame-chain capture extraction absent"))
+        _ => None
+    }
+
+/// Collect per-continuation blockers instead of collapsing materialization holes.
+def continuation_capture_extraction_blockers(decisions: Array[ContinuationSimplification], index: usize, out: Vec[SemanticDiagnostic]): Array[SemanticDiagnostic] =
+    if index == decisions.len() { out.freeze() }
+    else {
+        match continuation_capture_extraction_blocker(decisions.get(index)) {
+            Some(error) => continuation_capture_extraction_blockers(decisions, index + 1, out.push(error))
+            None => continuation_capture_extraction_blockers(decisions, index + 1, out)
+        }
+    }
+
 /// Return true when any decision cannot be converted without capture facts.
 def continuation_decisions_require_capture_extraction(decisions: Array[ContinuationSimplification], index: usize): bool =
     if index == decisions.len() { false }
@@ -119,5 +138,6 @@ def CaptureKind.package_legal(self): bool =
     match self {
         CaptureValue => true
         CaptureReplaySafeContinuation => true
+        CaptureSharedRefCell => true
         _ => false
     }

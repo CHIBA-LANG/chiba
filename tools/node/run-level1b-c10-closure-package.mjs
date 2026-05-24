@@ -35,10 +35,15 @@ const REQUIRED_TEXT = [
   "def continuation_lowering_fact",
   "def continuation_lowering_kind",
   "def ContinuationSimplification.capability",
+  "def continuation_capture_extraction_blocker",
+  "def continuation_capture_extraction_blockers",
   "consumed_state",
+  "CaptureSharedRefCell",
   "CaptureWorldLocalRejected",
   "CaptureThreadLocalRejected",
   "CaptureUnsafeRejected",
+  "missing-facts: boxed Cont1 capture extraction absent",
+  "missing-facts: ContN frame-chain capture extraction absent",
 ];
 
 function fail(message) {
@@ -116,6 +121,12 @@ function checkSource(file, source) {
   }
   if (/\bContinuationBoxedOneShot\s*\([^)]+\)\s*=>\s*ContinuationLowerRepeatableContN/.test(code)) {
     errors.push(`${file}: boxed Cont1 must not lower as repeatable ContN package`);
+  }
+  if (/\bCaptureSharedRefCell\s*=>\s*false/.test(code)) {
+    errors.push(`${file}: captured Ref[T] cells must keep shared-reference package legality, not snapshot rejection`);
+  }
+  if (/\bContinuationPackaged\s*\([^)]+\)\s*=>\s*Some\s*\(\s*SemanticDiagnostic[\s\S]{0,160}boxed Cont1/.test(code)) {
+    errors.push(`${file}: ContN frame-chain blockers must not reuse boxed Cont1 diagnostics`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
