@@ -24,6 +24,30 @@ type GrammarAction {
     source: String,
 }
 
+/// One structured attribute object field.
+type AttrField {
+    name: str,
+    value: AttrArg,
+}
+
+/// Structured Chiba attribute argument surface.
+data AttrArg {
+    AttrBare(str),
+    AttrString(str),
+    AttrInt(str),
+    AttrBool(bool),
+    AttrNamed(str, AttrArg),
+    AttrCall(str, List[AttrArg]),
+    AttrList(List[AttrArg]),
+    AttrObject(List[AttrField]),
+}
+
+/// Chiba attribute surface parsed by generated parsers.
+type Attr {
+    name: str,
+    args: List[AttrArg],
+}
+
 /// Chiba type surface forms that generated parsers must be able to recognize.
 data GrammarTypeSurface {
     GrammarTypePath(str),

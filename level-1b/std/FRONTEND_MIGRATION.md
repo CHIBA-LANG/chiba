@@ -41,7 +41,7 @@ time instead of producing partial or misleading matches.
 | `.chibacc` AST | `std/chibacc/ast.chiba` | rewritten |
 | `.chibacc` parser | `std/chibacc/parser.chiba` | contract only |
 | Continuation type grammar (`cont1 (A) -> B`, `contN (A) -> B`) | `std/chibacc/ast.chiba` + frontend parser spec | contract only |
-| Attribute argument grammar | frontend parser spec | specified: `AttrArg` AST covers bare, string/int/bool, named, call, list, and object args; implementation pending |
+| Attribute argument grammar | `std/chibacc/ast.chiba` + frontend parser spec | `AttrArg` AST covers bare, string/int/bool, named, call, list, and object args; mini fixture records structured parser grammar; parser execution pending |
 | Grammar IR lowering | `std/chibacc/ir.chiba` | contract only |
 | Pratt/recovery engine | `std/chibacc/engine.chiba` | partial rewrite: recovery and continuation retry rewritten; Pratt parse still builtin |
 | Parser source codegen | `std/chibacc/codegen.chiba` | partial rewrite: GeneratedParser text wrapper owned; full parser source serialization pending |

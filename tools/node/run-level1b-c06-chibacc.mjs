@@ -11,6 +11,13 @@ const REQUIRED_TEXT = [
   "type ChibaccSpec",
   "data GrammarRuleBody",
   "data GrammarTypeSurface",
+  "data AttrArg",
+  "type AttrField",
+  "type Attr",
+  "AttrNamed",
+  "AttrCall",
+  "AttrList",
+  "AttrObject",
   "GrammarTypeCont1",
   "GrammarTypeContN",
   "type PrattTable",
@@ -107,7 +114,7 @@ function checkSource(file, source) {
 }
 
 function checkMiniSpecs() {
-  const required = new Set(["simple.chibacc", "pratt.chibacc", "list.chibacc", "continuation-type.chibacc"]);
+  const required = new Set(["simple.chibacc", "pratt.chibacc", "list.chibacc", "continuation-type.chibacc", "attribute-args.chibacc"]);
   for (const name of fs.readdirSync(MINI_ROOT).filter((file) => file.endsWith(".chibacc"))) {
     required.delete(name);
     const source = read(path.join(MINI_ROOT, name));
@@ -117,6 +124,11 @@ function checkMiniSpecs() {
     if (name === "continuation-type.chibacc") {
       for (const needle of ["KwCont1", "KwContN", "ThinArrow", "Type_Cont1", "Type_ContN", "Type_Callable"]) {
         if (!source.includes(needle)) fail(`continuation-type fixture missing ${needle}`);
+      }
+    }
+    if (name === "attribute-args.chibacc") {
+      for (const needle of ["rule attr_arg", "AttrNamed", "AttrCall", "AttrList", "AttrObject", "AttrBare"]) {
+        if (!source.includes(needle)) fail(`attribute-args fixture missing ${needle}`);
       }
     }
   }

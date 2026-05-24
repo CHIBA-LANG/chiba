@@ -1,0 +1,56 @@
+#![CHIBACC]
+
+{
+    namespace chibaccmini.attribute_args
+    use std.chibacc.ast.*
+    use metalstd.vec.*
+}
+
+start attr
+
+rule attr ::=
+    Hash LBracket name:Ident RBracket => Attr(name, Vec[AttrArg].new().freeze())
+    | Hash LBracket name:Ident LParen args:attr_args RParen RBracket => Attr(name, args)
+    ;
+
+rule attr_args ::=
+    first:attr_arg rest:attr_args_tail => attr_args_cons(first, rest)
+    ;
+
+rule attr_args_tail ::=
+    Comma next:attr_arg rest:attr_args_tail => attr_args_cons(next, rest)
+    | Empty => Vec[AttrArg].new().freeze()
+    ;
+
+rule attr_arg ::=
+    name:Ident Eq value:attr_arg => AttrNamed(name, value)
+    | name:Ident LParen args:attr_args RParen => AttrCall(name, args)
+    | LBracket args:attr_args RBracket => AttrList(args)
+    | LBrace fields:attr_fields RBrace => AttrObject(fields)
+    | s:StringLit => AttrString(s)
+    | n:IntLit => AttrInt(n)
+    | KwTrue => AttrBool(true)
+    | KwFalse => AttrBool(false)
+    | name:Ident => AttrBare(name)
+    ;
+
+rule attr_fields ::=
+    first:attr_field rest:attr_fields_tail => attr_fields_cons(first, rest)
+    ;
+
+rule attr_fields_tail ::=
+    Comma next:attr_field rest:attr_fields_tail => attr_fields_cons(next, rest)
+    | Empty => Vec[AttrField].new().freeze()
+    ;
+
+rule attr_field ::=
+    name:Ident Eq value:attr_arg => AttrField { name: name, value: value }
+    ;
+
+{
+    def attr_args_cons(head: AttrArg, tail: Array[AttrArg]): Array[AttrArg] =
+        Vec[AttrArg].new().push(head).extend(tail).freeze()
+
+    def attr_fields_cons(head: AttrField, tail: Array[AttrField]): Array[AttrField] =
+        Vec[AttrField].new().push(head).extend(tail).freeze()
+}
