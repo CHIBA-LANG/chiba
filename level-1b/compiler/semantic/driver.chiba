@@ -40,6 +40,7 @@ type TypedModule {
     items: Array[TypedItemSkeleton],
     callable_storage: Array[CallableStorageFact],
     namespace_ownership: Array[NamespaceOwnershipFact],
+    method_surface: Array[MethodSurfaceFact],
 }
 
 /// Run alpha, pattern, inference, template, method/operator, ABI, and capability passes.
