@@ -383,6 +383,16 @@ def source_scan_item_has_operator_obligation_surface(text: String, offset: usize
     if source_scan_item_has_infix_operator_expr(text, offset) { true }
     else { source_line_has_text_before_byte(text, offset, ".op_", 40) }
 
+/// Return true when a function parameter list contains omitted type annotations.
+def source_scan_item_has_auto_generic_params(text: String, offset: usize): bool =
+    if source_line_has_byte(text, offset, 40) == false { false }
+    else if source_line_has_text_before_byte(text, offset, ":", 41) { false }
+    else { true }
+
+/// Return true when an item body contains explicit generic instantiation syntax.
+def source_scan_item_has_explicit_instantiation_call(text: String, offset: usize): bool =
+    source_region_has_text(text, source_scan_item_body_region_start(text, offset), source_scan_item_region_end(text, offset), "](")
+
 /// Try to detect an inline namespace block unsupported by the transition scanner.
 def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceNamespaceScanWarning] =
     let start = source_skip_spaces(text, offset)
@@ -461,6 +471,8 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_index_slice_expr: source_scan_item_has_index_slice_expr(text, offset),
         has_infix_operator_expr: source_scan_item_has_infix_operator_expr(text, offset),
         has_operator_obligation_surface: source_scan_item_has_operator_obligation_surface(text, offset),
+        has_auto_generic_params: source_scan_item_has_auto_generic_params(text, offset),
+        has_explicit_instantiation_call: source_scan_item_has_explicit_instantiation_call(text, offset),
     }
 
 /// Try to scan a source item at one line start.

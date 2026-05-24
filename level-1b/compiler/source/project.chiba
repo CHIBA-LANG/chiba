@@ -150,6 +150,8 @@ type SourceItemSurfaceFacts {
     has_index_slice_expr: bool,
     has_infix_operator_expr: bool,
     has_operator_obligation_surface: bool,
+    has_auto_generic_params: bool,
+    has_explicit_instantiation_call: bool,
 }
 
 /// Source item discovered by the byte-level scanner.
