@@ -6,6 +6,7 @@ const ATTR = `${SPEC_ROOT}/01-core-language/attributes.md`;
 const LEX = `${SPEC_ROOT}/chibalex.md`;
 const ACC = `${SPEC_ROOT}/chibacc.md`;
 const FIXTURE = "level-1b/supports/attributes/complex_attribute.chiba";
+const MIGRATION = "level-1b/std/FRONTEND_MIGRATION.md";
 const TODO = "TODO.md";
 
 function fail(message) {
@@ -26,6 +27,7 @@ const attr = read(ATTR);
 const lex = read(LEX);
 const acc = read(ACC);
 const fixture = read(FIXTURE);
+const migration = read(MIGRATION);
 const todo = read(TODO);
 
 for (const needle of [
@@ -48,6 +50,12 @@ for (const needle of ["rule attr_arg", "AttrNamed", "AttrCall", "AttrList", "Att
 }
 if (!fixture.includes("#[attribute(all(someident, a=b, c=[1,2,3,4], meta={owner=\"compiler\", stable=true}))]")) {
   fail("complex attribute fixture missing nested/named/list/object coverage");
+}
+if (!migration.includes("it must not collapse `#[ident]` into a single legacy token")) {
+  fail("frontend migration must forbid legacy collapsed attribute tokens");
+}
+if (!migration.includes("`AttrArg` AST covers bare, string/int/bool, named, call, list, and object args")) {
+  fail("frontend migration must record structured attribute parser grammar");
 }
 if (!todo.includes("attribute spec/golden：spec 已定义 AttrArg AST 与 nested/named/list/object grammar")) {
   fail("TODO.md must mark completed attribute spec/golden slice");
