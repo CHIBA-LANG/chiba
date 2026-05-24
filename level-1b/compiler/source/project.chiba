@@ -65,6 +65,12 @@ type SourceCompileIfFacts {
     file: SourceFileId,
     has_compile_if: bool,
     expr: Option[SourceNameSlice],
+    has_target_predicate: bool,
+    has_backend_predicate: bool,
+    has_all_predicate: bool,
+    has_any_predicate: bool,
+    has_not_predicate: bool,
+    has_unknown_predicate: bool,
 }
 
 /// Source item kind visible to early gates before full AST lowering.
