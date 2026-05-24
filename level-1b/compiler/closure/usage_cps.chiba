@@ -29,12 +29,11 @@ type CpsUsageModule {
 
 /// Recompute use counts on CPS Core.
 def analyze_cps_usage(module: CpsModule): Result[CpsUsageModule, SemanticDiagnostics] =
-    if module.continuations.len() == 0 {
+    let facts = cps_usage_facts_from_runtime_surface(module)
+    if facts.len() == 0 {
         Ok(CpsUsageModule(module, cps_usage_facts_none()))
     } else {
-        Ok(CpsUsageModule(
-            module,
-            cps_usage_facts(module.continuations, 0, Vec[CpsUseFact].new())))
+        Ok(CpsUsageModule(module, facts))
     }
 
 /// Empty CPS usage fact stream for modules without runtime closure/continuation subjects.
@@ -50,6 +49,26 @@ def cps_usage_facts(facts: Array[ContinuationFact], index: usize, out: Vec[CpsUs
             UseSubjectContinuation(fact.binder, fact.capability),
             continuation_storage_use_count(fact.storage))))
     }
+
+/// Append lambda/closure surface usage facts without erasing subject kind.
+def push_closure_surface_usage_fact(out: Vec[CpsUseFact], fact: ClosureSurfaceFact): Vec[CpsUseFact] =
+    let with_lambda =
+        if fact.has_lambda { out.push(CpsUseFact(UseSubjectLambda(fact.owner), UseMany)) }
+        else { out }
+    if fact.has_trailing_closure { with_lambda.push(CpsUseFact(UseSubjectClosure(fact.owner), UseMany)) }
+    else { with_lambda }
+
+/// Convert typed closure surface facts into CPS runtime usage inputs.
+def cps_usage_facts_from_closure_surface(facts: Array[ClosureSurfaceFact], index: usize, out: Vec[CpsUseFact]): Vec[CpsUseFact] =
+    if index == facts.len() { out }
+    else { cps_usage_facts_from_closure_surface(facts, index + 1, push_closure_surface_usage_fact(out, facts.get(index))) }
+
+/// Build usage facts from closure/lambda surface and continuation facts together.
+def cps_usage_facts_from_runtime_surface(module: CpsModule): Array[CpsUseFact] =
+    cps_usage_facts(
+        module.continuations,
+        0,
+        cps_usage_facts_from_closure_surface(module.source.usage.answer.typed.closure_surface, 0, Vec[CpsUseFact].new()))
 
 /// Map storage obligations to runtime use classes.
 def continuation_storage_use_count(storage: ContinuationStorageKind): UsageCount =

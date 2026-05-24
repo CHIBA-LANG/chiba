@@ -17,6 +17,11 @@ const REQUIRED_FILES = [
 const REQUIRED_TEXT = [
   "def analyze_cps_usage",
   "def cps_usage_facts_none",
+  "def push_closure_surface_usage_fact",
+  "def cps_usage_facts_from_closure_surface",
+  "def cps_usage_facts_from_runtime_surface",
+  "UseSubjectLambda",
+  "UseSubjectClosure",
   "def simplify_continuations",
   "def convert_closures",
   "def lift_lambdas",
