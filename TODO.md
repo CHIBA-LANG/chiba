@@ -276,6 +276,7 @@
 		- C07 source item scanner 现在保留 item header slice 与粗粒度 surface shape（是否有参数、类型标注、body/initializer），为后续 def/static/type/data lowering 提供输入；参数 pattern、type expr、body AST 仍未解析。
 		- C07 source semantic gate 现在拒绝缺少任何扫描到的类型标注的 `extern` item，符合 spec 中 extern ABI 边界必须显式标注的方向；真实 ABI signature parse 仍未完成。
 		- C08 alpha conversion 已开始消费 C07 source item facts：`alpha_convert` 由 `ProjectSurface.facts.items` 派生稳定 binder ids，不再创建空 binder stream；HM + row inference 仍 fail-closed，尚未产 typed item facts。
+		- C08 typed item skeleton 现在会把 scanned item 粗分为 function/static value/extern function/nominal type/data/union/interface，避免 `def x` 静态值与 `def f(...)` 函数在 skeleton 阶段混成同一种壳。
 		- C08 alpha origins 现在保留 source item kind/name/file/owner_namespace/line/column/private/attributes/surface；type inference 先构造 `TypedItemSkeleton` 并检查 pattern coverage，再 fail-closed 于 source item type expression/body inference absent，避免把只有 binder index 的骨架伪装成 typed module。
 		- C08 pattern elaboration 已开始消费 alpha binders：`elaborate_patterns` 由 binder stream 派生稳定 pattern ids，不再创建空 pattern stream；这仍是骨架 facts，不等于完整 pattern AST lowering。
 		- `compiler/lower/ast_to_core.chiba` 已拒绝空 `SurfaceModule` lowering；缺 AST -> Surface item lowering 时返回 `missing-lowering` diagnostic。`level1b:truthfulness-audit` 已补 source gate 空放行、typed inference pass-through、空 Surface lowering 三类回归 detector。

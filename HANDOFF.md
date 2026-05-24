@@ -156,6 +156,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - Source item scan now attaches the file-header namespace as `owner_namespace`; inline namespace ownership remains fail-closed until block assembly exists.
 - Source item scan now preserves item header slices and coarse surface shape: params present, type annotation present, body/initializer present. It still does not parse parameter patterns, type expressions, or body AST.
 - Source semantic gate now rejects `extern` items with no scanned type annotation, matching the spec rule that extern ABI boundaries require explicit types. Real ABI signature parsing remains absent.
+- C08 typed item skeletons now classify scanned items as function/static value/extern function/nominal type/data/union/interface before real HM + row inference.
 - C08 alpha origins retain source item kind/name/file/owner_namespace/line/column/private/attributes/surface. Type inference builds `TypedItemSkeleton` and checks placeholder pattern coverage, then fail-closes on missing source item type-expression/body inference rather than claiming a typed module.
 - C09 replay safety must not mark every usage fact safe. It now fail-closes until replay capture classification exists.
 - C10 CPS usage now fail-closes on missing closure/lambda/continuation subject extraction; previous continuation-only use reconstruction was not enough to prove closure directification/capture semantics.

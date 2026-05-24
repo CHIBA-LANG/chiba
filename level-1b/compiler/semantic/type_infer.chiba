@@ -6,12 +6,24 @@ use compiler.semantic.alpha.*
 use compiler.semantic.pattern.*
 use compiler.semantic.types.*
 
+/// Coarse typed item category before full item lowering.
+data TypedItemSkeletonKind {
+    TypedItemFunction,
+    TypedItemStaticValue,
+    TypedItemExternFunction,
+    TypedItemNominalType,
+    TypedItemData,
+    TypedItemUnion,
+    TypedItemInterface,
+}
+
 /// Source item skeleton ready for real type-expression and body inference.
 type TypedItemSkeleton {
     binder: BinderId,
     file: SourceFileId,
     owner_namespace: Option[NamespaceNameSlice],
     kind: SourceItemKind,
+    skeleton_kind: TypedItemSkeletonKind,
     name: Option[SourceNameSlice],
     private: bool,
     attributes: SourceItemAttributeFacts,
@@ -19,6 +31,20 @@ type TypedItemSkeleton {
     line: usize,
     column: usize,
 }
+
+/// Classify a scanned source item into the first typed-lowering bucket.
+def classify_typed_item_skeleton_kind(item: AlphaBinderOrigin): TypedItemSkeletonKind =
+    match item.kind {
+        SourceItemDef => {
+            if item.surface.has_params { TypedItemFunction }
+            else { TypedItemStaticValue }
+        }
+        SourceItemExtern => TypedItemExternFunction
+        SourceItemType => TypedItemNominalType
+        SourceItemData => TypedItemData
+        SourceItemUnion => TypedItemUnion
+        SourceItemInterface => TypedItemInterface
+    }
 
 /// Build source item skeletons from alpha origins before HM + row inference.
 def typed_item_skeletons_from_alpha(origins: Array[AlphaBinderOrigin], index: usize, out: Vec[TypedItemSkeleton]): Array[TypedItemSkeleton] =
@@ -33,6 +59,7 @@ def typed_item_skeletons_from_alpha(origins: Array[AlphaBinderOrigin], index: us
                 file: origin.file,
                 owner_namespace: origin.owner_namespace,
                 kind: origin.kind,
+                skeleton_kind: classify_typed_item_skeleton_kind(origin),
                 name: origin.name,
                 private: origin.private,
                 attributes: origin.attributes,
