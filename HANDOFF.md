@@ -152,7 +152,8 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - Source item scan preserves `private` on def/type/data/union/interface/extern; alpha origins and typed item skeletons carry it forward.
 - Source scanner now derives `use` declaration facts with path slice, glob marker, and multi-import marker. Actual import resolution still absent.
 - Source semantic gate fail-closes on explicit `use` facts until import/name resolution exists.
-- C08 alpha origins retain source item kind/name/file/line/column. Type inference builds `TypedItemSkeleton` and checks placeholder pattern coverage, then fail-closes on missing source item type-expression/body inference rather than claiming a typed module.
+- Source item scan now attaches line-start `#[compile_if(...)]` facts to the following item. This preserves item-level conditional compilation evidence; real compile_if eval/filtering is still absent.
+- C08 alpha origins retain source item kind/name/file/line/column/private/attributes. Type inference builds `TypedItemSkeleton` and checks placeholder pattern coverage, then fail-closes on missing source item type-expression/body inference rather than claiming a typed module.
 - C09 replay safety must not mark every usage fact safe. It now fail-closes until replay capture classification exists.
 - C10 CPS usage now fail-closes on missing closure/lambda/continuation subject extraction; previous continuation-only use reconstruction was not enough to prove closure directification/capture semantics.
 - C11 Core ops retain runtime state machine facts. Boxed `Cont1` must carry `CoreConsumedStateMachine`; non-Cont1 ops must not.

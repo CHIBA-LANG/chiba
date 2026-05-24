@@ -112,12 +112,18 @@ data SourceItemKind {
     SourceItemExtern,
 }
 
+/// Attribute facts attached to a source item before full AST parsing.
+type SourceItemAttributeFacts {
+    compile_if: Option[SourceCompileIfFacts],
+}
+
 /// Source item discovered by the byte-level scanner.
 type SourceItemScanResult {
     file: SourceFileId,
     kind: SourceItemKind,
     name: Option[SourceNameSlice],
     private: bool,
+    attributes: SourceItemAttributeFacts,
     line: usize,
     column: usize,
 }
