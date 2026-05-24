@@ -1,0 +1,15 @@
+namespace level1b.branching.if_let_scope
+
+data MaybeI64 {
+    None,
+    Some(i64),
+}
+
+def fallback(): i64 = 0
+
+def unwrap_or_zero(value: MaybeI64): i64 =
+    if let Some(inner) = value {
+        inner
+    } else {
+        fallback()
+    }

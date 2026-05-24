@@ -9,7 +9,32 @@
 
 已完成的 C00-C10、库边界冻结、语义/CPS/closure 主干落地、以及对应 gate 建设，统一视为历史完成项，不再继续堆在这里干扰判断。详细过程保留在 git 历史、`TODO.checkpoint.md` 和各 gate / runner 中。
 
-## P0：移除 C07 临时 scanner，改由 chibacc frontend 接管 source facts
+## P0
+- [ ] chibalex/chibacc frontend：还没替换 scan.chiba；真实 source AST 还没进 primary path。
+- [ ] attribute grammar：#[attr(...)] nested/named/list args 没 spec/golden/AST/parser。
+- [ ] namespace resolution：只有扫描和 owner slice；真实 import/name resolution、owner namespace symbol、visibility/private、冲突规则没做。
+- [ ] method resolution：没做。method index、receiver binding、qualified callee、Self with generics 都缺。
+- [ ] operator overloading：没做。candidate collection、operand matching、ambiguity、op_index/op_index_slice lowering 都缺。
+- [ ] typed AST elaboration：现在很多是 skeleton/facts；真实 expression/type/item traversal 不完整。
+- [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
+- [ ] globals/init：module-load init order、dependency/cycle、side-effect init lowering 没完整。
+- [ ] pattern/match：deep pattern lowering、exhaustiveness、if let env 规则没完整 primary 实现。
+- [ ] pipe lowering：placeholder、receiver-first method pipe、operator/method interaction 还没完整 primary lowering。
+- [ ] ADT tuple bridge：Ctor <-> (:ctor, ...)、tuple_to_adt/adt_to_tuple intrinsic lowering 没完整。
+- [ ] compiler intrinsic namespace：有部分 contract；真实 intrinsic resolution/lowering 没完整。
+- [ ] answer/control scan：reset/shift/shiftn answer facts 没做。
+- [ ] usage analysis：只有粗 fact threading；真实 binder/lambda/closure/continuation usage count 没做。
+- [ ] continuation boundary：world/thread/send boundary 检查没做。
+- [ ] ContN replay safety：capture classification、Ref[T] shared-reference、non-replay reject 没做。
+- [ ] one-pass CPS + beta：没做。现在还是 fail-closed，不是 level0 那条真实 CPS。
+- [ ] CIR nanopass IR：清晰分层还不够；需要语言级 CPS/CIR facts，且保证不耦合 Wasm。
+	- [x] CIR/backend boundary gate：compiler/ir/control/closure 不允许出现 Wasm/WAT/Binaryen/funcref/eqref/backend opcode；backend 细节只允许在 backend 层。
+- [ ] closure conversion：no-capture direct、capturing env、env field extraction、call rewrite 没完整。
+- [ ] Cont1 lowering：direct resume / boxed one-shot consumed state machine 没完整。
+- [ ] ContN lowering：stackless resume frame、frame chain、repeatable package 没完整 primary。
+- [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。
+- [ ] Wasm-GC backend layout：layout 有一部分；真实 lowering 到 Wasm-GC object/funcref/eqref 不完整。
+- [ ] WAT emit：没有 executable WAT；现在 fail-closed。
 
 - [ ] `level-1b/compiler/source/scan.chiba` 只是 truthfulness scaffold，不是语言设计或未来 frontend；第一优先级是让 chibalex/chibacc parser 成为 C07 source facts 的 primary path，然后删除或降级 `scan.chiba`，不能让 byte-level scanner 长期承担 namespace/item/attribute 语义。
 - [ ] attribute grammar 必须先补齐 spec/golden，再实现：
@@ -27,6 +52,11 @@
 	- `AST -> one-pass CPS + beta`：meta-level continuation `(Val) => CpsExpr`，atom 直接调用 `k(atom)`，只在 call / switch / reset / shift 处物化 IR continuation。
 	- `CPS -> BIR/Core blocks`：continuation block / function return / frame-chain lower 到显式 block terminator，`ContN` 先 emit stackless resume frame，再 emit frame-chain，再 emit repeatable package。
 	- 这一路只能借鉴 `level0/src/backend/cir/lower.chiba`、`level0/src/backend/bir/lower.chiba` 的流程；不能把 level0 的 numeric bool、旧 branching bug、旧 scanner 语义搬进 level-1b。
+- [ ] branching 分析必须作为本轮 primary lowering 的硬门槛：
+	- [x] branching gate fixtures：覆盖 if/else、else-if、if-let、match、short-circuit、nested branch；用于防止只看 happy path。
+	- 不能只看 `if` then/happy path；必须同时覆盖 `else`、`else if`、`if let` 成功/失败分支、`match` 每个 arm、default/fallback、短路逻辑和 nested branch。
+	- typed env、pattern binding scope、exhaustiveness/warning、CPS join continuation、branch result type unify 必须一起验收。
+	- 所有 branching lowering gate 必须包含 “then/else 都有副作用或不同 binder” 的 fixture，避免再出现看了 if 不看 else、match branching 一坨但漏分支的情况。
 
 ## 当前判断
 

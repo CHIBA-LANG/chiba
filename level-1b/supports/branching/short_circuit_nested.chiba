@@ -1,0 +1,16 @@
+namespace level1b.branching.short_circuit_nested
+
+def left(value: i64): bool = value > 0
+
+def right(value: i64): bool = value < 10
+
+def nested(a: i64, b: i64): i64 =
+    if left(a) && right(b) {
+        if a == b {
+            1
+        } else {
+            2
+        }
+    } else {
+        3
+    }

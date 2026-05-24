@@ -1,0 +1,14 @@
+namespace level1b.branching.match_arms_default
+
+data Token {
+    Ident(i64),
+    Int(i64),
+    Other,
+}
+
+def token_weight(token: Token): i64 =
+    match token {
+        Ident(id) => id
+        Int(value) => value + 100
+        _ => 0
+    }
