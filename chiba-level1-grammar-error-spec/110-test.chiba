@@ -1,0 +1,6 @@
+namespace parser.error.kwdata.variant.missing.comma
+
+data Option[T] {
+    Some(T)
+    None
+}
