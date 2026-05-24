@@ -61,6 +61,15 @@ type BranchingSurfaceFact {
     has_short_circuit: bool,
 }
 
+/// Delimited-control surface fact before answer/control checking.
+type ControlSurfaceFact {
+    owner: BinderId,
+    file: SourceFileId,
+    has_reset: bool,
+    has_shift: bool,
+    has_shiftn: bool,
+}
+
 /// Classify a scanned source item into the first typed-lowering bucket.
 def classify_typed_item_skeleton_kind(item: AlphaBinderOrigin): TypedItemSkeletonKind =
     match item.kind {
@@ -247,6 +256,34 @@ def branching_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], 
         }
     }
 
+/// Return true when an item has delimited-control syntax.
+def typed_item_has_control_surface_fact(item: TypedItemSkeleton): bool =
+    if item.surface.has_reset_expr { true }
+    else if item.surface.has_shift_expr { true }
+    else { item.surface.has_shiftn_expr }
+
+/// Create one delimited-control surface fact from a typed item skeleton.
+def control_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[ControlSurfaceFact] =
+    if typed_item_has_control_surface_fact(item) {
+        Some(ControlSurfaceFact {
+            owner: item.binder,
+            file: item.file,
+            has_reset: item.surface.has_reset_expr,
+            has_shift: item.surface.has_shift_expr,
+            has_shiftn: item.surface.has_shiftn_expr,
+        })
+    } else { None }
+
+/// Generate delimited-control surface facts in stable binder order.
+def control_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[ControlSurfaceFact]): Array[ControlSurfaceFact] =
+    if index == skeletons.len() { out.freeze() }
+    else {
+        match control_surface_fact_from_skeleton(skeletons.get(index)) {
+            Some(fact) => control_surface_facts_from_skeletons(skeletons, index + 1, out.push(fact))
+            None => control_surface_facts_from_skeletons(skeletons, index + 1, out)
+        }
+    }
+
 /// Return true when item surfaces mention method-style receiver definitions.
 def typed_item_skeletons_have_method_receiver_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
     if index == skeletons.len() { false }
@@ -395,6 +432,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let namespace_ownership = namespace_ownership_facts_from_skeletons(skeletons, 0, Vec[NamespaceOwnershipFact].new())
     let method_surface = method_surface_facts_from_skeletons(skeletons, 0, Vec[MethodSurfaceFact].new())
     let branching_surface = branching_surface_facts_from_skeletons(skeletons, 0, Vec[BranchingSurfaceFact].new())
+    let control_surface = control_surface_facts_from_skeletons(skeletons, 0, Vec[ControlSurfaceFact].new())
     if skeletons.len() == 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: typed item skeletons absent"))
@@ -488,7 +526,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
-def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact]): TypedModule =
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact]): TypedModule =
     TypedModule {
         alpha: module,
         items: skeletons,
@@ -496,6 +534,7 @@ def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemS
         namespace_ownership: namespace_ownership,
         method_surface: method_surface,
         branching_surface: branching_surface,
+        control_surface: control_surface,
     }
 
 /// Run the level-2 semantic checks that require inferred types.

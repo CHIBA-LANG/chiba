@@ -22,6 +22,7 @@ const REQUIRED_TEXT = [
   "data AnswerTypeCheck",
   "def check_answer_type",
   "def check_answer_control",
+  "control_surface.len() > 0",
   "def typed_items_have_control_surface",
   "def answer_facts_none",
   "data UsageCount",

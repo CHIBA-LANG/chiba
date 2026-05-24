@@ -35,7 +35,7 @@ def answer_facts_none(): Array[AnswerFact] =
 
 /// Check `reset` and `shift` answer consistency.
 def check_answer_control(module: TypedModule): Result[AnswerControlModule, SemanticDiagnostics] =
-    if typed_items_have_control_surface(module.items, 0) {
+    if module.control_surface.len() > 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<control>", 0, 0, "missing-facts: answer/control expression scan absent"))
             .freeze()))

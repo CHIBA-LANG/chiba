@@ -42,6 +42,7 @@ type TypedModule {
     namespace_ownership: Array[NamespaceOwnershipFact],
     method_surface: Array[MethodSurfaceFact],
     branching_surface: Array[BranchingSurfaceFact],
+    control_surface: Array[ControlSurfaceFact],
 }
 
 /// Run alpha, pattern, inference, template, method/operator, ABI, and capability passes.
