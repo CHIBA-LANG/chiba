@@ -95,6 +95,9 @@ function checkSource(file, source) {
     errors.push(`${rel}: chibacc leaks old Metal/raw-memory style`);
   }
   if (/\b(ptr|pointer|addr|raw)\w*\s*:\s*i64\b/i.test(code)) errors.push(`${rel}: chibacc uses opaque i64 pointer field`);
+  if (rel === "engine.chiba" && /\bshift\s+retry\b/.test(code)) {
+    errors.push(`${rel}: parser retry must use multi-shot shiftn retry`);
+  }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
       errors.push(`${rel}:${i + 1}: public item is missing /// doc comment`);

@@ -167,6 +167,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - C11 Core ops retain runtime state machine facts. Boxed `Cont1` must carry `CoreConsumedStateMachine`; non-Cont1 ops must not.
 - C11 Core ops retain `frame_count`; validator rejects zero-frame ContN frame chains so repeatable packages cannot be backed by empty stackless resume frames.
 - C05 chibalex mini generator advances identifier scans by UTF-8 lead-byte length instead of byte-by-byte inside non-ASCII identifiers. Real XID tables and invalid-sequence validation are still primary lexer work.
+- C06 chibacc gate rejects `shift retry` in parser retry; retry must remain multi-shot `shiftn retry`.
 - No-capture closure must optimize to direct function/funref/inline; no env allocation.
 - Non-escaping exactly-once `Cont1` must optimize to direct resume/inline/tail jump; no continuation package.
 - CIR must stay target-independent. It must not contain Wasm-GC layout ids, `funcref`/`eqref`, WAT opcodes, Binaryen feature flags, or target ABI details. Those belong in BIR/LIR/backend layout.
