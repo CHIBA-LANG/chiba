@@ -18,6 +18,12 @@ data CoreTailPosition {
     CorePlainCall,
 }
 
+/// Runtime state machine required by a materialized Core operation.
+data CoreRuntimeState {
+    CoreNoRuntimeState,
+    CoreConsumedStateMachine,
+}
+
 /// Core operation class understood by the dumb backend emitter.
 data CoreOpKind {
     CoreOpFunction,
@@ -39,6 +45,7 @@ type CoreOp {
     kind: CoreOpKind,
     layout: Option[WasmGcLayout],
     tail: CoreTailPosition,
+    runtime_state: CoreRuntimeState,
 }
 
 /// Wasm-GC Core module with a stable layout table.
@@ -64,6 +71,7 @@ def lower_closure_simplification(fact: ClosureSimplification): Option[CoreOp] =
                 kind: CoreOpClosureCall,
                 layout: Some(closure_env_layout()),
                 tail: CorePlainCall,
+                runtime_state: CoreNoRuntimeState,
             })
     }
 
@@ -103,6 +111,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 kind: CoreOpBoxedCont1,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
+                runtime_state: CoreConsumedStateMachine,
             })
         ContinuationLowerRepeatableContN =>
             Some(CoreOp {
@@ -110,6 +119,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 kind: CoreOpContNPackage,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
+                runtime_state: CoreNoRuntimeState,
             })
         ContinuationLowerErasedCallableVariant =>
             Some(CoreOp {
@@ -117,6 +127,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 kind: CoreOpContinuationPackage,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
+                runtime_state: CoreNoRuntimeState,
             })
     }
 
@@ -130,12 +141,14 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     kind: CoreOpContinuationFrameChain,
                     layout: continuation_frame_chain_layout(fact.kind),
                     tail: CorePlainCall,
+                    runtime_state: CoreNoRuntimeState,
                 })
                 .push(CoreOp {
                     owner: Some(fact.owner),
                     kind: CoreOpContNPackage,
                     layout: continuation_core_layout(fact.kind),
                     tail: CorePlainCall,
+                    runtime_state: CoreNoRuntimeState,
                 })
         _ =>
             match lower_continuation_fact(fact) {

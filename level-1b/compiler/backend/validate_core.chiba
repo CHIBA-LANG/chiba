@@ -10,6 +10,7 @@ data CoreValidationError {
     CoreDanglingSymbol(str),
     CoreMissingOwner(str),
     CoreIllegalTailCall(str),
+    CoreIllegalRuntimeState(str),
     CoreIllegalContinuationPackage(str),
 }
 
@@ -112,6 +113,21 @@ def validate_core_continuation_package(op: CoreOp): Option[CoreValidationError] 
         _ => None
     }
 
+/// Validate runtime state attached to materialized continuation operations.
+def validate_core_runtime_state(op: CoreOp): Option[CoreValidationError] =
+    match op.kind {
+        CoreOpBoxedCont1 =>
+            match op.runtime_state {
+                CoreConsumedStateMachine => None
+                _ => Some(CoreIllegalRuntimeState("boxed Cont1 must carry consumed-state machine"))
+            }
+        _ =>
+            match op.runtime_state {
+                CoreConsumedStateMachine => Some(CoreIllegalRuntimeState("consumed-state machine attached to non-Cont1 op"))
+                _ => None
+            }
+    }
+
 /// Return true when a Core op materializes a ContN frame chain.
 def core_op_is_contn_frame_chain(op: CoreOp): bool =
     match op.kind {
@@ -162,6 +178,7 @@ def validate_core_op(module: WasmGcCoreModule, op: CoreOp, out: Vec[CoreValidati
         |> push_validation_error(validate_core_layout(module, op))
         |> push_validation_error(validate_core_owner(op))
         |> push_validation_error(validate_core_tail(op))
+        |> push_validation_error(validate_core_runtime_state(op))
         |> push_validation_error(validate_core_continuation_package(op))
 
 /// Validate Core operations after tracking frame-chain materialization.

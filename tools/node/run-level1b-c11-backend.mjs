@@ -15,6 +15,8 @@ const REQUIRED_TEXT = [
   "type WasmGcLayoutTable",
   "data CoreOpKind",
   "owner: Option[BinderId]",
+  "data CoreRuntimeState",
+  "CoreConsumedStateMachine",
   "CoreOpStacklessFunction",
   "CoreOpBoxedCont1",
   "CoreOpContinuationFrameChain",
@@ -34,11 +36,14 @@ const REQUIRED_TEXT = [
   "data CoreValidationError",
   "CoreDanglingLayout",
   "CoreMissingOwner",
+  "CoreIllegalRuntimeState",
   "CoreIllegalTailCall",
   "CoreIllegalContinuationPackage",
   "def validate_wasm_gc_core",
   "def validate_core_continuation_order",
   "def validate_core_owner",
+  "def validate_core_runtime_state",
+  "boxed Cont1 must carry consumed-state machine",
   "runtime Core op missing owner provenance",
   "def validate_core_ops_with_contn_frame",
   "ContN package owner does not match preceding frame chain",
@@ -117,7 +122,7 @@ function checkSource(file, source) {
   if (/\bContinuationLowerRepeatableContN\s*=>\s*Some\s*\(\s*CoreOp\s*\{[\s\S]{0,240}CoreOpBoxedCont1/.test(code)) {
     errors.push(`${file}: backend must not lower ContN as boxed Cont1`);
   }
-  if (path.basename(file) === "core.chiba" && !/\bContinuationLowerRepeatableContN\s*=>[\s\S]{0,260}CoreOpContinuationFrameChain[\s\S]{0,260}CoreOpContNPackage/.test(code)) {
+  if (path.basename(file) === "core.chiba" && !/\bContinuationLowerRepeatableContN\s*=>[\s\S]{0,420}CoreOpContinuationFrameChain[\s\S]{0,420}CoreOpContNPackage/.test(code)) {
     errors.push(`${file}: ContN lowering must emit frame chain before repeatable package`);
   }
   if (path.basename(file) === "core.chiba" && /\bContinuationLowerErasedCallableVariant\s*=>\s*Some\s*\(\s*closure_env_layout\s*\(\s*\)\s*\)/.test(code)) {

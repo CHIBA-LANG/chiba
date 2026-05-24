@@ -146,6 +146,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - C08 alpha origins retain source item kind/name/file/line/column. Type inference builds `TypedItemSkeleton` and checks placeholder pattern coverage, then fail-closes on missing source item type-expression/body inference rather than claiming a typed module.
 - C09 replay safety must not mark every usage fact safe. It now fail-closes until replay capture classification exists.
 - C10 CPS usage now fail-closes on missing closure/lambda/continuation subject extraction; previous continuation-only use reconstruction was not enough to prove closure directification/capture semantics.
+- C11 Core ops retain runtime state machine facts. Boxed `Cont1` must carry `CoreConsumedStateMachine`; non-Cont1 ops must not.
 - No-capture closure must optimize to direct function/funref/inline; no env allocation.
 - Non-escaping exactly-once `Cont1` must optimize to direct resume/inline/tail jump; no continuation package.
 - CIR must stay target-independent. It must not contain Wasm-GC layout ids, `funcref`/`eqref`, WAT opcodes, Binaryen feature flags, or target ABI details. Those belong in BIR/LIR/backend layout.
