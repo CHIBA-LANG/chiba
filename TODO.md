@@ -314,6 +314,7 @@
 		- closure lowering 验收必须证明：no-capture closure 走 direct function / funref / inline；capturing closure 只有逃逸或确需 env 时才 materialize env；env 内 continuation / `Ref[T]` 不被能力洗白。
 		- spec 要求 `(A) -> B` 参数位置是 checked-template callable obligation，存储位置 lower 成 erased callable ADT；显式 `cont1` / `contN` storage 不走 erased callable ADT；当前未见真实 callable storage lowering。
 		- C09 control IR 现在有 `CallableStorageFact` / `CallableStorageVariant` contract，明确 erased callable storage 至少区分 function / closure / boxed `Cont1` / `ContN`，并提供 sendable callable 排除 continuation variants 的 invariant；真实 callable storage lowering 仍未执行。
+		- C08 capability rules 现在有 `check_sendable_callable_storage`，sendable callable storage 若包含 continuation variant 会返回 capability error；真实 callable storage fact 生成仍未执行。
 		- frontend grammar source 已补 `cont1 (A) -> B`、`contN (A) -> B`、`shiftn` contract 与 chibalex/chibacc mini fixtures；生成版 lexer/parser 已刷新，`shift :tag` / `shiftn :tag` label parse 已对齐 lexer 的 `Colon Ident` tokenization，且 AST 保留 tag 名；native chibalex oracle 尚未覆盖 continuation surface keywords。
 		- C06 chibacc alternative retry/recovery source 现在使用 `shiftn retry`，与 multi-shot parser retry 语义一致；generated parser runner 仍 blocked 于 level-1b primary compiler execution。
 		- C06 chibacc source gate 现在检测 `engine.chiba` 中的 `shift retry` 回归，parser retry 必须保持 multi-shot `shiftn retry`。

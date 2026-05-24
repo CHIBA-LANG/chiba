@@ -1,6 +1,7 @@
 /// Capability legality rules for Ref, Ptr, UnsafeRef, Atomic, and ABI scalar types.
 namespace compiler.semantic.capability_rules
 
+use compiler.ir.control.*
 use compiler.semantic.types.*
 use compiler.semantic.type_unify.*
 
@@ -79,3 +80,8 @@ def atomic_store_ordering_allowed(order: AtomicOrdering): bool =
         AtomicAcqRel => false
         _ => true
     }
+
+/// Check that sendable callable storage excludes continuation variants.
+def check_sendable_callable_storage(fact: CallableStorageFact): CapabilityCheck =
+    if fact.excludes_continuations_for_send() { CapabilityOk }
+    else { CapabilityErr("sendable callable storage excludes continuations") }
