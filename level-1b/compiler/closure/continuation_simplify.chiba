@@ -6,8 +6,8 @@ use compiler.ir.type_ir.*
 
 /// Continuation simplification decision.
 data ContinuationSimplification {
-    ContinuationDeleted(BinderId),
-    ContinuationInlined(BinderId),
+    ContinuationDeleted(BinderId, ContinuationCapabilityKind),
+    ContinuationInlined(BinderId, ContinuationCapabilityKind),
     ContinuationBoxedOneShot(BinderId),
     ContinuationPackaged(BinderId),
 }
@@ -36,13 +36,13 @@ def push_continuation_capability_simplification(out: Vec[ContinuationSimplificat
     match capability {
         ContinuationCont1 =>
             match count {
-                UseZero => out.push(ContinuationDeleted(binder))
-                UseOne => out.push(ContinuationInlined(binder))
+                UseZero => out.push(ContinuationDeleted(binder, capability))
+                UseOne => out.push(ContinuationInlined(binder, capability))
                 UseMany => out.push(ContinuationBoxedOneShot(binder))
             }
         ContinuationContN =>
             match count {
-                UseZero => out.push(ContinuationDeleted(binder))
+                UseZero => out.push(ContinuationDeleted(binder, capability))
                 _ => out.push(ContinuationPackaged(binder))
             }
     }
@@ -58,4 +58,22 @@ def ContinuationSimplification.materializes_package(self): bool =
         ContinuationBoxedOneShot(_) => true
         ContinuationPackaged(_) => true
         _ => false
+    }
+
+/// Return the original continuation capability preserved by simplification.
+def ContinuationSimplification.capability(self): ContinuationCapabilityKind =
+    match self {
+        ContinuationDeleted(_, capability) => capability
+        ContinuationInlined(_, capability) => capability
+        ContinuationBoxedOneShot(_) => ContinuationCont1
+        ContinuationPackaged(_) => ContinuationContN
+    }
+
+/// Return the continuation owner binder for stable downstream lowering.
+def ContinuationSimplification.owner(self): BinderId =
+    match self {
+        ContinuationDeleted(binder, _) => binder
+        ContinuationInlined(binder, _) => binder
+        ContinuationBoxedOneShot(binder) => binder
+        ContinuationPackaged(binder) => binder
     }

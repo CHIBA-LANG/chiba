@@ -32,6 +32,10 @@ const REQUIRED_TEXT = [
   "type ContinuationFrame",
   "ContinuationLowerBoxedCont1",
   "ContinuationLowerRepeatableContN",
+  "def continuation_lowering_fact",
+  "def continuation_lowering_kind",
+  "def ContinuationSimplification.capability",
+  "consumed_state",
   "CaptureWorldLocalRejected",
   "CaptureThreadLocalRejected",
   "CaptureUnsafeRejected",
@@ -106,6 +110,12 @@ function checkSource(file, source) {
   }
   if (/\bUseMany\s*=>\s*out\.push\s*\(\s*ContinuationPackaged\s*\(\s*binder\s*\)\s*\)/.test(code)) {
     errors.push(`${file}: continuation packaging must not be driven by UseMany alone`);
+  }
+  if (/\bContinuationDeleted\s*\(\s*BinderId\s*\)/.test(code) || /\bContinuationInlined\s*\(\s*BinderId\s*\)/.test(code)) {
+    errors.push(`${file}: continuation simplification must preserve capability on deleted/inlined continuations`);
+  }
+  if (/\bContinuationBoxedOneShot\s*\([^)]+\)\s*=>\s*ContinuationLowerRepeatableContN/.test(code)) {
+    errors.push(`${file}: boxed Cont1 must not lower as repeatable ContN package`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {

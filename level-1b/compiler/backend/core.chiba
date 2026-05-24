@@ -2,6 +2,7 @@
 namespace compiler.backend.core
 
 use compiler.closure.env_simplify.*
+use compiler.ir.closure.*
 use compiler.backend.layout.*
 
 /// Direct import target selected before emit.
@@ -73,12 +74,63 @@ def lower_closure_simplifications(facts: Array[ClosureSimplification], index: us
         }
     }
 
+/// Pick the Core layout for one continuation lowering fact.
+def continuation_core_layout(kind: ContinuationLoweringKind): Option[WasmGcLayout] =
+    match kind {
+        ContinuationLowerDirectCont1 => None
+        ContinuationLowerBoxedCont1 => Some(layout_boxed_cont1())
+        ContinuationLowerRepeatableContN => Some(layout_continuation_package())
+        ContinuationLowerErasedCallableVariant => Some(closure_env_layout())
+    }
+
+/// Lower a continuation fact to a Core op without erasing Cont1/ContN semantics.
+def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
+    match fact.kind {
+        ContinuationLowerDirectCont1 => None
+        ContinuationLowerBoxedCont1 =>
+            Some(CoreOp {
+                kind: CoreOpBoxedCont1,
+                layout: continuation_core_layout(fact.kind),
+                tail: CorePlainCall,
+            })
+        ContinuationLowerRepeatableContN =>
+            Some(CoreOp {
+                kind: CoreOpContNPackage,
+                layout: continuation_core_layout(fact.kind),
+                tail: CorePlainCall,
+            })
+        ContinuationLowerErasedCallableVariant =>
+            Some(CoreOp {
+                kind: CoreOpContinuationPackage,
+                layout: continuation_core_layout(fact.kind),
+                tail: CorePlainCall,
+            })
+    }
+
+/// Lower continuation facts into a stable Core op stream.
+def lower_continuation_facts(facts: Array[ContinuationLoweringFact], index: usize, out: Vec[CoreOp]): Array[CoreOp] =
+    if index == facts.len() { out.freeze() }
+    else {
+        match lower_continuation_fact(facts.get(index)) {
+            Some(op) => lower_continuation_facts(facts, index + 1, out.push(op))
+            None => lower_continuation_facts(facts, index + 1, out)
+        }
+    }
+
+/// Append one Core op array to another builder.
+def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[CoreOp] =
+    if index == ops.len() { out }
+    else { append_core_ops(out.push(ops.get(index)), ops, index + 1) }
+
 /// Lower optimized closure Core to Wasm-GC Core.
 def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
+    let closure_ops = lower_closure_simplifications(module.simplifications, 0, Vec[CoreOp].new())
+    let continuation_ops = lower_continuation_facts(module.continuations, 0, Vec[CoreOp].new())
     WasmGcCoreModule {
         source: module,
         layouts: build_wasm_gc_layouts(module),
-        ops: lower_closure_simplifications(module.simplifications, 0, Vec[CoreOp].new()),
+        ops: append_core_ops(Vec[CoreOp].new(), closure_ops, 0)
+            |> append_core_ops(continuation_ops, 0),
     }
 
 /// Return true when a Core op requires a layout reference.

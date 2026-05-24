@@ -2,6 +2,8 @@
 namespace compiler.closure.closure_convert
 
 use compiler.closure.continuation_simplify.*
+use compiler.ir.closure.*
+use compiler.ir.type_ir.*
 use compiler.control.replay_safety.*
 use compiler.semantic.driver.*
 
@@ -37,6 +39,7 @@ type ClosureEnvLayout {
 type ClosureConvertedModule {
     source: SimplifiedContinuationModule,
     layouts: Array[ClosureEnvLayout],
+    continuations: Array[ContinuationLoweringFact],
 }
 
 /// Convert escaping lambdas and packaged continuations to explicit env layouts.
@@ -46,7 +49,10 @@ def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConver
             .push(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: continuation capture extraction absent"))
             .freeze()))
     } else {
-        Ok(ClosureConvertedModule(module, closure_env_layouts(module.decisions, 0, Vec[ClosureEnvLayout].new())))
+        Ok(ClosureConvertedModule(
+            module,
+            closure_env_layouts(module.decisions, 0, Vec[ClosureEnvLayout].new()),
+            continuation_lowering_facts(module.decisions, 0, Vec[ContinuationLoweringFact].new())))
     }
 
 /// Empty capture list for a directified closure or continuation package.
@@ -58,6 +64,36 @@ def push_closure_env_layout(out: Vec[ClosureEnvLayout], decision: ContinuationSi
     match decision {
         _ => out
     }
+
+/// Map a simplification decision to target-independent continuation lowering.
+def continuation_lowering_kind(decision: ContinuationSimplification): ContinuationLoweringKind =
+    match decision {
+        ContinuationBoxedOneShot(_) => ContinuationLowerBoxedCont1
+        ContinuationPackaged(_) => ContinuationLowerRepeatableContN
+        _ => ContinuationLowerDirectCont1
+    }
+
+/// Return true when runtime state must trap on repeated one-shot resume.
+def continuation_lowering_consumed_state(decision: ContinuationSimplification): bool =
+    match decision {
+        ContinuationBoxedOneShot(_) => true
+        _ => false
+    }
+
+/// Build a lowering fact for direct/deleted continuations that need no frame.
+def continuation_lowering_fact(decision: ContinuationSimplification): ContinuationLoweringFact =
+    ContinuationLoweringFact {
+        owner: decision.owner(),
+        capability: decision.capability(),
+        kind: continuation_lowering_kind(decision),
+        frames: Vec[ContinuationFrame].new().freeze(),
+        consumed_state: continuation_lowering_consumed_state(decision),
+    }
+
+/// Build continuation lowering facts in stable decision order.
+def continuation_lowering_facts(decisions: Array[ContinuationSimplification], index: usize, out: Vec[ContinuationLoweringFact]): Array[ContinuationLoweringFact] =
+    if index == decisions.len() { out.freeze() }
+    else { continuation_lowering_facts(decisions, index + 1, out.push(continuation_lowering_fact(decisions.get(index)))) }
 
 /// Return true when a continuation decision needs real capture extraction.
 def continuation_decision_requires_capture_extraction(decision: ContinuationSimplification): bool =

@@ -20,6 +20,9 @@ const REQUIRED_TEXT = [
   "CoreOpContNPackage",
   "CoreOpContinuationPackage",
   "CoreOpTailCall",
+  "def lower_continuation_fact",
+  "def lower_continuation_facts",
+  "def continuation_core_layout",
   "LayoutContinuationFrameChain",
   "LayoutBoxedCont1",
   "LayoutContNPackage",
@@ -95,6 +98,12 @@ function checkSource(file, source) {
   }
   if (/\bdef\s+emit_core_op\b[\s\S]*"\s*;;\s*core-op/.test(code)) {
     errors.push(`${file}: backend WAT emitter must not represent Core ops as comments`);
+  }
+  if (/\bContinuationLowerBoxedCont1\s*=>\s*Some\s*\(\s*CoreOp\s*\{[\s\S]{0,240}CoreOpContNPackage/.test(code)) {
+    errors.push(`${file}: backend must not lower boxed Cont1 as ContN package`);
+  }
+  if (/\bContinuationLowerRepeatableContN\s*=>\s*Some\s*\(\s*CoreOp\s*\{[\s\S]{0,240}CoreOpBoxedCont1/.test(code)) {
+    errors.push(`${file}: backend must not lower ContN as boxed Cont1`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {

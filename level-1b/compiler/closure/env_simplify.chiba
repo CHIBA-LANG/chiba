@@ -2,6 +2,7 @@
 namespace compiler.closure.env_simplify
 
 use compiler.closure.lambda_lift.*
+use compiler.ir.closure.*
 
 /// Simplification performed after closure conversion and lifting.
 data ClosureSimplification {
@@ -16,12 +17,16 @@ data ClosureSimplification {
 type OptimizedClosureModule {
     source: LiftedClosureModule,
     simplifications: Array[ClosureSimplification],
+    continuations: Array[ContinuationLoweringFact],
 }
 
 /// Shrink environments, erase no-capture closures, and directify single-use
 /// known closures.
 def simplify_closure_envs(module: LiftedClosureModule): OptimizedClosureModule =
-    OptimizedClosureModule(module, closure_simplifications(module.functions, 0, Vec[ClosureSimplification].new()))
+    OptimizedClosureModule(
+        module,
+        closure_simplifications(module.functions, 0, Vec[ClosureSimplification].new()),
+        module.source.continuations)
 
 /// Pick the final simplification for one lifted closure.
 def lifted_function_simplification(function: LiftedFunction): ClosureSimplification =
