@@ -88,6 +88,7 @@
 - [ ] `std.regex` 首发路线改为 Rust-like Thompson NFA/DFA subset，以完成 frontend bootstrap 为先；Perl/PCRE2-compatible VM 作为后续 TODO，不阻塞 C05/C06 自举。
 	- 首发必须支持：literal、char class/range、concat、alternation、group/capture bookkeeping、`* + ? {m,n}` greedy/lazy 基础、anchors、UTF-8/codepoint boundary、leftmost/longest tie-break for chibalex。
 	- 首发必须拒绝：backref、conditional、recursive pattern、atomic group、possessive、variable-length lookbehind、复杂 lookaround/capture 组合等 PCRE2 VM-only 特性；parse-time hard error，不能半支持。
+	- [x] regex unsupported feature policy：std.regex parser 已记录 PCRE-only unsupported matrix 与 parse-time hard-error policy；真实 parser reject 执行仍未完成。
 	- PCRE2/Perl 兼容目标保留为 std.regex 后续阶段：单独建 feature matrix、oracle corpus、VM bytecode/backtracking stack/capture rollback 设计后再做。
 - [ ] level-1b 最小可执行链必须先复刻 level0 的正确流程，而不是继续扩大 contract gates：
 	- `AST -> one-pass CPS + beta`：meta-level continuation `(Val) => CpsExpr`，atom 直接调用 `k(atom)`，只在 call / switch / reset / shift 处物化 IR continuation。
