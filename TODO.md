@@ -270,6 +270,7 @@
 		- C07 source semantic gate 现在会拒绝未知 `compile_if` predicate shape（例如 `xor(...)`），避免 unsupported predicate 被 presence/classification facts 洗成可继续编译。
 		- C07 source scanner 现在检测 inline namespace block / indented namespace forms，并在 source gate fail-closed 于 `inline namespace block assembly absent`；spec 支持 file-header namespace 与 inline namespace block，当前 transition scanner 只拥有 file-header primary path。
 		- C07 source scanner 现在派生 `use` declaration facts（path slice、glob、multi-import marker），为后续 namespace/use resolution primary path 准备输入；真实 import resolution 仍未执行。
+		- C07 source semantic gate 现在在存在显式 `use` facts 时 fail-closed 于 `explicit use resolution absent`，避免跳过 import/name resolution 直接进入 typed lowering。
 		- C08 alpha conversion 已开始消费 C07 source item facts：`alpha_convert` 由 `ProjectSurface.facts.items` 派生稳定 binder ids，不再创建空 binder stream；HM + row inference 仍 fail-closed，尚未产 typed item facts。
 		- C08 alpha origins 现在保留 source item kind/name/file/line/column；type inference 先构造 `TypedItemSkeleton` 并检查 pattern coverage，再 fail-closed 于 source item type expression/body inference absent，避免把只有 binder index 的骨架伪装成 typed module。
 		- C08 pattern elaboration 已开始消费 alpha binders：`elaborate_patterns` 由 binder stream 派生稳定 pattern ids，不再创建空 pattern stream；这仍是骨架 facts，不等于完整 pattern AST lowering。
