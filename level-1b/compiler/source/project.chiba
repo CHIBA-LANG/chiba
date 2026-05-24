@@ -129,6 +129,7 @@ type SourceItemSurfaceFacts {
     has_explicit_continuation_type: bool,
     has_method_receiver: bool,
     has_operator_method: bool,
+    has_self_type: bool,
 }
 
 /// Source item discovered by the byte-level scanner.

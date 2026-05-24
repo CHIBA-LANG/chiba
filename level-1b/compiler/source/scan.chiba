@@ -248,6 +248,7 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_explicit_continuation_type: source_scan_item_has_explicit_continuation_type(text, offset),
         has_method_receiver: source_line_has_text_before_byte(text, offset, ".", 40),
         has_operator_method: source_line_has_text_before_byte(text, offset, ".op_", 40),
+        has_self_type: source_line_has_text(text, offset, "Self"),
     }
 
 /// Try to scan a source item at one line start.

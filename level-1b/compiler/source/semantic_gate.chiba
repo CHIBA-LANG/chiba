@@ -14,6 +14,7 @@ data SourceGateErrorKind {
     SourceGateExternAbiSignatureAbsent,
     SourceGateTopLevelRefNeedsWorldLocal,
     SourceGateDefBodyAbsent,
+    SourceGateSelfOutsideMethod,
     SourceGateMissingNamespace,
     SourceGateItemScanAbsent,
     SourceGateTypedItemLoweringAbsent,
@@ -151,6 +152,19 @@ def source_items_have_def_without_body(items: Array[SourceItemScanResult], index
 def source_project_has_def_without_body(project: ProjectSurface): bool =
     source_items_have_def_without_body(project.facts.items, 0)
 
+/// Return true when a source item mentions `Self` outside method receiver scope.
+def source_items_have_self_outside_method(items: Array[SourceItemScanResult], index: usize): bool =
+    if index == items.len() { false }
+    else {
+        let item = items.get(index)
+        if item.surface.has_self_type && item.surface.has_method_receiver == false { true }
+        else { source_items_have_self_outside_method(items, index + 1) }
+    }
+
+/// Return true when project source facts contain illegal `Self` use.
+def source_project_has_self_outside_method(project: ProjectSurface): bool =
+    source_items_have_self_outside_method(project.facts.items, 0)
+
 /// Build fail-closed source gate diagnostics from source scan facts.
 def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
     if source_project_has_utf8_warning(project) {
@@ -215,6 +229,13 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceFileId { index: 0 },
                 SourceGateDefBodyAbsent,
                 "missing-facts: source def body or initializer absent"))
+            .freeze()
+    } else if source_project_has_self_outside_method(project) {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateSelfOutsideMethod,
+                "invalid-surface: Self only valid in method receiver scope"))
             .freeze()
     } else if source_project_needs_import_resolution(project) {
         Vec[SourceGateError].new()
