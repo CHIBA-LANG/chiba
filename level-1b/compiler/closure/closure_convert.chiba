@@ -45,6 +45,14 @@ type ContinuationFrameChainObligation {
     requires_repeatable_package: bool,
 }
 
+/// Cont1 lowering obligation before direct/boxed one-shot lowering.
+type ContinuationOneShotObligation {
+    owner: BinderId,
+    requires_direct_resume: bool,
+    requires_boxed_state_machine: bool,
+    requires_consumed_state: bool,
+}
+
 /// Module after escaping lambdas have explicit code/env packages.
 type ClosureConvertedModule {
     source: SimplifiedContinuationModule,
@@ -58,6 +66,7 @@ def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConver
         Err(SemanticDiagnostics(closure_usage_capture_extraction_blockers(module.source.facts, 0, Vec[SemanticDiagnostic].new())))
     } else if continuation_decisions_require_capture_extraction(module.decisions, 0) {
         let _ = continuation_frame_chain_obligations(module.decisions, 0, Vec[ContinuationFrameChainObligation].new())
+        let _ = continuation_one_shot_obligations(module.decisions, 0, Vec[ContinuationOneShotObligation].new())
         Err(SemanticDiagnostics(continuation_capture_extraction_blockers(module.decisions, 0, Vec[SemanticDiagnostic].new())))
     } else {
         Ok(ClosureConvertedModule(
@@ -124,6 +133,36 @@ def continuation_frame_chain_obligations(decisions: Array[ContinuationSimplifica
         match continuation_frame_chain_obligation(decisions.get(index)) {
             Some(obligation) => continuation_frame_chain_obligations(decisions, index + 1, out.push(obligation))
             None => continuation_frame_chain_obligations(decisions, index + 1, out)
+        }
+    }
+
+/// Convert a Cont1 simplification into direct or boxed one-shot obligations.
+def continuation_one_shot_obligation(decision: ContinuationSimplification): Option[ContinuationOneShotObligation] =
+    match decision {
+        ContinuationInlined(owner, ContinuationCont1) =>
+            Some(ContinuationOneShotObligation {
+                owner: owner,
+                requires_direct_resume: true,
+                requires_boxed_state_machine: false,
+                requires_consumed_state: false,
+            })
+        ContinuationBoxedOneShot(owner) =>
+            Some(ContinuationOneShotObligation {
+                owner: owner,
+                requires_direct_resume: false,
+                requires_boxed_state_machine: true,
+                requires_consumed_state: true,
+            })
+        _ => None
+    }
+
+/// Build Cont1 lowering obligations in stable decision order.
+def continuation_one_shot_obligations(decisions: Array[ContinuationSimplification], index: usize, out: Vec[ContinuationOneShotObligation]): Array[ContinuationOneShotObligation] =
+    if index == decisions.len() { out.freeze() }
+    else {
+        match continuation_one_shot_obligation(decisions.get(index)) {
+            Some(obligation) => continuation_one_shot_obligations(decisions, index + 1, out.push(obligation))
+            None => continuation_one_shot_obligations(decisions, index + 1, out)
         }
     }
 

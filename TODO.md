@@ -66,6 +66,7 @@
 	- [x] no-continuation closure usage path：无 runtime closure/continuation subjects 的 CPS module 可通过 C10 usage/simplification 空事实路径；真实 closure extraction 仍未完成。
 	- [x] closure capture blocker：lambda/closure CPS usage subjects 现在会 fail-closed 于 capture/env field extraction absent，不再空 layout 假通过。
 - [ ] Cont1 lowering：direct resume / boxed one-shot consumed state machine 没完整。
+	- [x] Cont1 one-shot obligations：Cont1 simplification 已生成 direct resume vs boxed state-machine obligation，并显式要求 consumed state。
 - [ ] ContN lowering：stackless resume frame、frame chain、repeatable package 没完整 primary。
 	- [x] ContN frame-chain obligations：packaged ContN simplification 已生成 stackless resume function / frame chain / repeatable package obligation；真实 frame extraction 仍未完成。
 - [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。
