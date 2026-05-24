@@ -137,10 +137,28 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
     }
 
 /// Push all Core ops needed for one continuation lowering fact.
+def push_continuation_frame_core_ops(out: Vec[CoreOp], frames: Array[ContinuationFrame], index: usize): Vec[CoreOp] =
+    if index == frames.len() { out }
+    else {
+        let frame = frames.get(index)
+        push_continuation_frame_core_ops(
+            out.push(CoreOp {
+                owner: Some(frame.owner),
+                kind: CoreOpStacklessFunction,
+                layout: None,
+                tail: CorePlainCall,
+                runtime_state: CoreNoRuntimeState,
+                frame_count: 0,
+            }),
+            frames,
+            index + 1)
+    }
+
+/// Push all Core ops needed for one continuation lowering fact.
 def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact): Vec[CoreOp] =
     match fact.kind {
         ContinuationLowerRepeatableContN =>
-            out
+            push_continuation_frame_core_ops(out, fact.frames, 0)
                 .push(CoreOp {
                     owner: Some(fact.owner),
                     kind: CoreOpContinuationFrameChain,

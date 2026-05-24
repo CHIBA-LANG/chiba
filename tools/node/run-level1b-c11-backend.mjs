@@ -26,6 +26,7 @@ const REQUIRED_TEXT = [
   "CoreOpTailCall",
   "def lower_continuation_fact",
   "def lower_continuation_facts",
+  "def push_continuation_frame_core_ops",
   "def push_continuation_core_ops",
   "def continuation_core_layout",
   "def continuation_frame_chain_layout",
@@ -129,6 +130,9 @@ function checkSource(file, source) {
   }
   if (path.basename(file) === "core.chiba" && !/\bContinuationLowerRepeatableContN\s*=>[\s\S]{0,420}CoreOpContinuationFrameChain[\s\S]{0,420}CoreOpContNPackage/.test(code)) {
     errors.push(`${file}: ContN lowering must emit frame chain before repeatable package`);
+  }
+  if (path.basename(file) === "core.chiba" && !/\bContinuationLowerRepeatableContN\s*=>[\s\S]{0,520}push_continuation_frame_core_ops[\s\S]{0,520}CoreOpContinuationFrameChain/.test(code)) {
+    errors.push(`${file}: ContN lowering must emit stackless resume frame ops before frame-chain package`);
   }
   if (path.basename(file) === "core.chiba" && /\bContinuationLowerErasedCallableVariant\s*=>\s*Some\s*\(\s*closure_env_layout\s*\(\s*\)\s*\)/.test(code)) {
     errors.push(`${file}: erased callable continuation package must not reuse closure env layout`);
