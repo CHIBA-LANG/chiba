@@ -6,14 +6,33 @@ namespace std.chibalex.codegen
 
 use std.chibalex.ir.*
 
+/// Codegen completeness for generated lexer source.
+data LexerCodegenStatus {
+    LexerCodegenComplete,
+    LexerCodegenContractOnly,
+}
+
 /// Generated lexer source file.
 type GeneratedLexer {
     source: String,
+    status: LexerCodegenStatus,
+    diagnostic: String,
 }
 
 /// Generate Chiba source for a lowered lexer.
 def generate_lexer(lexer: LoweredLexer): GeneratedLexer =
-    GeneratedLexer("namespace ".concat(lexer.namespace_name).concat("\n"))
+    GeneratedLexer {
+        source: "namespace ".concat(lexer.namespace_name).concat("\n"),
+        status: LexerCodegenContractOnly,
+        diagnostic: "missing-lowering: executable chibalex lexer codegen absent",
+    }
 
 /// Return the generated source text.
 def GeneratedLexer.text(self): String = self.source
+
+/// Return true when codegen has produced executable lexer source.
+def GeneratedLexer.complete(self): bool =
+    match self.status {
+        LexerCodegenComplete => true
+        _ => false
+    }

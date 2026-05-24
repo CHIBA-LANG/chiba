@@ -7,9 +7,17 @@ use std.chibacc.ir.*
 use std.option.*
 use std.string.*
 
+/// Codegen completeness for generated parser source.
+data ParserCodegenStatus {
+    ParserCodegenComplete,
+    ParserCodegenContractOnly,
+}
+
 /// Generated parser source.
 type GeneratedParser {
     source: String,
+    status: ParserCodegenStatus,
+    diagnostic: String,
 }
 
 /// Append the generated parser prelude.
@@ -49,8 +57,19 @@ def generate_parser(parser: LoweredParser): GeneratedParser = {
     let builder1 = append_parser_prelude(builder0, parser)
     let builder2 = append_rule_summaries(parser.rules, 0, builder1)
     let header = builder2.push_str("\n").finish()
-    GeneratedParser(header.concat(parser.ast_data))
+    GeneratedParser {
+        source: header.concat(parser.ast_data),
+        status: ParserCodegenContractOnly,
+        diagnostic: "missing-lowering: executable chibacc parser codegen absent",
+    }
 }
 
 /// Return the generated source text.
 def GeneratedParser.text(self): String = self.source
+
+/// Return true when codegen has produced executable parser source.
+def GeneratedParser.complete(self): bool =
+    match self.status {
+        ParserCodegenComplete => true
+        _ => false
+    }
