@@ -37,6 +37,7 @@
 	- [x] global init obligations：typed pass 已把 init surface 转成 `GlobalInitObligation`；依赖排序、cycle 检测、module-load lowering 仍未完成。
 - [ ] pattern/match：deep pattern lowering、exhaustiveness、if let env 规则没完整 primary 实现。
 	- [x] pattern surface facts：typed module 已记录 match/if-let/deep-pattern/function-pattern/wildcard-let surface；真实 DFT lowering、exhaustiveness、if-let 失败分支 env 仍 fail-closed。
+	- [x] pattern lowering obligations：typed pass 已把 pattern surface 转成 `PatternLoweringObligation`，显式区分 match exhaustiveness、if-let 双分支 env、deep DFT、函数参数 desugar。
 - [ ] pipe lowering：placeholder、receiver-first method pipe、operator/method interaction 还没完整 primary lowering。
 	- [x] pipe surface facts：typed module 已记录 pipe/placeholder/chain surface；真实 placeholder expansion、receiver-first desugar、operator/method interaction 仍 fail-closed。
 	- [x] pipe repeated-placeholder gate：spec 与 checkpoint fixture 已锁定 `a |> f(b,_,_) == f(b,a,a)`；真实 lowering 仍未完成。

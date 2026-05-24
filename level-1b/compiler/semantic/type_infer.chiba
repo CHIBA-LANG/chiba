@@ -128,6 +128,17 @@ type PatternSurfaceFact {
     has_wildcard_let: bool,
 }
 
+/// Pattern lowering obligation before DFT lowering and exhaustiveness checks.
+type PatternLoweringObligation {
+    owner: BinderId,
+    file: SourceFileId,
+    requires_match_exhaustiveness: bool,
+    requires_if_let_dual_env: bool,
+    requires_deep_pattern_dft: bool,
+    requires_function_param_desugar: bool,
+    wildcard_let_discards_value: bool,
+}
+
 /// Compiler intrinsic and tuple bridge surface before checked lowering.
 type IntrinsicSurfaceFact {
     owner: BinderId,
@@ -515,6 +526,23 @@ def pattern_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], in
         }
     }
 
+/// Convert one pattern surface fact into lowering obligations.
+def pattern_lowering_obligation_from_surface(fact: PatternSurfaceFact): PatternLoweringObligation =
+    PatternLoweringObligation {
+        owner: fact.owner,
+        file: fact.file,
+        requires_match_exhaustiveness: fact.has_match,
+        requires_if_let_dual_env: fact.has_if_let,
+        requires_deep_pattern_dft: fact.has_deep_pattern,
+        requires_function_param_desugar: fact.has_pattern_params,
+        wildcard_let_discards_value: fact.has_wildcard_let,
+    }
+
+/// Convert pattern surface facts in stable owner order.
+def pattern_lowering_obligations_from_surface(facts: Array[PatternSurfaceFact], index: usize, out: Vec[PatternLoweringObligation]): Array[PatternLoweringObligation] =
+    if index == facts.len() { out.freeze() }
+    else { pattern_lowering_obligations_from_surface(facts, index + 1, out.push(pattern_lowering_obligation_from_surface(facts.get(index)))) }
+
 /// Return true when an item mentions compiler-owned intrinsic or tuple bridge surface.
 def typed_item_has_intrinsic_surface(item: TypedItemSkeleton): bool =
     if item.surface.has_compiler_intrinsic_call { true }
@@ -772,6 +800,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let pipe_surface = pipe_surface_facts_from_skeletons(skeletons, 0, Vec[PipeSurfaceFact].new())
     let pipe_lowering_obligations = pipe_lowering_obligations_from_surface(pipe_surface, 0, Vec[PipeLoweringObligation].new())
     let pattern_surface = pattern_surface_facts_from_skeletons(skeletons, 0, Vec[PatternSurfaceFact].new())
+    let pattern_lowering_obligations = pattern_lowering_obligations_from_surface(pattern_surface, 0, Vec[PatternLoweringObligation].new())
     let intrinsic_surface = intrinsic_surface_facts_from_skeletons(skeletons, 0, Vec[IntrinsicSurfaceFact].new())
     let generic_surface = generic_surface_facts_from_skeletons(skeletons, 0, Vec[GenericSurfaceFact].new())
     let operator_use_surface = operator_use_surface_facts_from_skeletons(skeletons, 0, Vec[OperatorUseSurfaceFact].new())
@@ -815,7 +844,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .freeze()))
         }
     } else if typed_item_skeletons_have_deep_pattern_surface(skeletons, 0) {
-        if pattern_surface.len() == 0 {
+        if pattern_surface.len() == 0 || pattern_lowering_obligations.len() == 0 {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: pattern surface fact generation absent"))
                 .freeze()))
