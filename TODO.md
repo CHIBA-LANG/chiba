@@ -316,6 +316,7 @@
 		- C06 chibacc alternative retry/recovery source 现在使用 `shiftn retry`，与 multi-shot parser retry 语义一致；generated parser runner 仍 blocked 于 level-1b primary compiler execution。
 		- chibalex 真实实现必须支持 UTF-8 source/identifier scanning；当前 C07 `scan.chiba` 是 ASCII byte-level 过渡 scanner，只能安全识别 ASCII header/keyword facts。若 namespace/item identifier 允许 UTF-8，scanner 必须补 UTF-8 aware path，或在遇到非 ASCII 相关事实时 fail-closed，不能静默漏扫后冒充 source facts 完整。
 		- C05 chibalex contract 已固定 UTF-8/XID identifier policy，engine state advance 改为 codepoint offset (`next_char_offset`)；`utf8-ident.chibalex` mini fixture 覆盖 `$XID_START/$XID_CONTINUE`。真实 generated lexer runner 仍 blocked 于 level-1b primary compiler execution。
+		- C05 chibalex mini generator 现在用 UTF-8 lead-byte 长度推进 identifier scan，不再在 UTF-8 identifier 内按单字节推进；真实 XID 表/invalid sequence validation 仍待 primary lexer 接管。
 		- C05/C06 generated lexer/parser codegen artifacts 现在带 `ContractOnly` status 与 `missing-lowering` diagnostic，避免 header/comment-only source 被误读为 executable codegen complete。
 		- spec 要求 `((A) -> B) send` 排除 continuation 与 `!send` closure；当前 send/capability 与 callable storage / continuation 没有真实集成。
 		- spec 要求 no-capture closure 不分配 env，capturing closure 只有需要时 materialize env；当前 closure env layout 由 continuation packaging decision 壳生成，capture extraction 仍缺。

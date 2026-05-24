@@ -237,7 +237,19 @@ def regex_compile(ast: RegexAST): RegexCompiled =
 
 def utf8_decode_char(src: i64, pos: i64): i64 = load8(src, pos)
 
-def utf8_next_offset(src: i64, pos: i64): i64 = pos + 1
+def utf8_is_continuation_byte(b: i64): i64 =
+    if b >= 128 && b <= 191 { 1 } else { 0 }
+
+def utf8_sequence_len_from_lead(b: i64): i64 =
+    if b < 128 { 1 }
+    else if b >= 194 && b <= 223 { 2 }
+    else if b >= 224 && b <= 239 { 3 }
+    else if b >= 240 && b <= 244 { 4 }
+    else { 0 }
+
+def utf8_next_offset(src: i64, pos: i64): i64 =
+    let len = utf8_sequence_len_from_lead(load8(src, pos))
+    if len == 0 { pos + 1 } else { pos + len }
 
 def mini_is_ws(b: i64): i64 =
     if b == 32 { 1 } else if b == 9 { 1 } else if b == 10 { 1 } else if b == 13 { 1 } else { 0 }
@@ -345,7 +357,7 @@ def mini_scan_digits(src: i64, sl: i64, pos: i64): i64 =
 
 def mini_scan_ident(src: i64, sl: i64, pos: i64): i64 =
     if pos >= sl { pos }
-    else if mini_is_ident_continue(load8(src, pos)) != 0 { mini_scan_ident(src, sl, pos + 1) }
+    else if mini_is_ident_continue(load8(src, pos)) != 0 { mini_scan_ident(src, sl, utf8_next_offset(src, pos)) }
     else { pos }
 
 def mini_scan_until_quote(src: i64, sl: i64, pos: i64): i64 =
@@ -379,7 +391,7 @@ def lex_loop(src: i64, sl: i64, file: i64, out: Vec, pos: i64): i64 =
             let _ = lex_emit(out, IntLit(mk_str(src + pos, end - pos)), file, pos, end - pos)
             lex_loop(src, sl, file, out, end)
         } else if mini_is_ident_start(b) != 0 {
-            let end = mini_scan_ident(src, sl, pos + 1)
+            let end = mini_scan_ident(src, sl, utf8_next_offset(src, pos))
             let _ = lex_emit(out, Ident(mk_str(src + pos, end - pos)), file, pos, end - pos)
             lex_loop(src, sl, file, out, end)
         } else if b == 61 {
@@ -413,7 +425,7 @@ def lex_loop(src: i64, sl: i64, file: i64, out: Vec, pos: i64): i64 =
             let _ = lex_emit(out, Eq, file, pos, 1)
             lex_loop(src, sl, file, out, pos + 1)
         } else if mini_is_ident_start(b) != 0 {
-            let end = mini_scan_ident(src, sl, pos + 1)
+            let end = mini_scan_ident(src, sl, utf8_next_offset(src, pos))
             let _ = lex_emit(out, Ident(mk_str(src + pos, end - pos)), file, pos, end - pos)
             lex_loop(src, sl, file, out, end)
         } else {
@@ -447,7 +459,7 @@ def lex_loop(src: i64, sl: i64, file: i64, out: Vec, pos: i64): i64 =
             let _ = lex_emit(out, KwIf, file, pos, 2)
             lex_loop(src, sl, file, out, pos + 2)
         } else if mini_is_ident_start(b) != 0 {
-            let end = mini_scan_ident(src, sl, pos + 1)
+            let end = mini_scan_ident(src, sl, utf8_next_offset(src, pos))
             let _ = lex_emit(out, Ident(mk_str(src + pos, end - pos)), file, pos, end - pos)
             lex_loop(src, sl, file, out, end)
         } else {
@@ -490,7 +502,7 @@ def lex_loop(src: i64, sl: i64, file: i64, out: Vec, pos: i64): i64 =
             let _ = lex_emit(out, RParen, file, pos, 1)
             lex_loop(src, sl, file, out, pos + 1)
         } else if mini_is_ident_start(b) != 0 {
-            let end = mini_scan_ident(src, sl, pos + 1)
+            let end = mini_scan_ident(src, sl, utf8_next_offset(src, pos))
             let _ = lex_emit(out, Ident(mk_str(src + pos, end - pos)), file, pos, end - pos)
             lex_loop(src, sl, file, out, end)
         } else {
