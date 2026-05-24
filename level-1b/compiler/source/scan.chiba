@@ -672,6 +672,7 @@ def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
         namespace_warnings: scan_project_namespace_warnings(project.files, 0, Vec[SourceNamespaceScanWarning].new()),
         uses: scan_project_uses(project.files, 0, Vec[SourceUseScanResult].new()),
         items: scan_project_items(project.files, 0, Vec[SourceItemScanResult].new()),
+        owner_symbols: scan_project_owner_symbols(project.files, 0, Vec[SourceOwnerSymbolFact].new()),
         utf8_warnings: scan_project_utf8_warnings(project.files, 0, Vec[SourceUtf8ScanWarning].new()),
     }
 
@@ -699,6 +700,30 @@ def scan_project_items_append(items: Array[SourceItemScanResult], index: usize, 
 def scan_project_items(files: Array[SourceFile], index: usize, out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
     if index == files.len() { out.freeze() }
     else { scan_project_items(files, index + 1, scan_project_items_append(source_scan_items(files.get(index)), 0, out)) }
+
+/// Append owner symbol facts for scanned items.
+def source_owner_symbols_from_items(items: Array[SourceItemScanResult], index: usize, out: Vec[SourceOwnerSymbolFact]): Vec[SourceOwnerSymbolFact] =
+    if index == items.len() { out }
+    else {
+        let item = items.get(index)
+        source_owner_symbols_from_items(
+            items,
+            index + 1,
+            out.push(SourceOwnerSymbolFact {
+                file: item.file,
+                owner_namespace: item.owner_namespace,
+                name: item.name,
+                kind: item.kind,
+                private: item.private,
+                line: item.line,
+                column: item.column,
+            }))
+    }
+
+/// Scan owner-scoped symbol facts in deterministic file order.
+def scan_project_owner_symbols(files: Array[SourceFile], index: usize, out: Vec[SourceOwnerSymbolFact]): Array[SourceOwnerSymbolFact] =
+    if index == files.len() { out.freeze() }
+    else { scan_project_owner_symbols(files, index + 1, source_owner_symbols_from_items(source_scan_items(files.get(index)), 0, out)) }
 
 /// Append use scan results for one file.
 def scan_project_uses_append(uses: Array[SourceUseScanResult], index: usize, out: Vec[SourceUseScanResult]): Vec[SourceUseScanResult] =

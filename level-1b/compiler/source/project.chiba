@@ -63,6 +63,17 @@ type SourceUseScanResult {
     column: usize,
 }
 
+/// Stable owner-scoped symbol fact before full name resolution.
+type SourceOwnerSymbolFact {
+    file: SourceFileId,
+    owner_namespace: Option[NamespaceNameSlice],
+    name: Option[SourceNameSlice],
+    kind: SourceItemKind,
+    private: bool,
+    line: usize,
+    column: usize,
+}
+
 /// Header attributes discovered before item parsing.
 type SourceHeaderFacts {
     file: SourceFileId,
@@ -186,6 +197,7 @@ type SourceProjectFacts {
     namespace_warnings: Array[SourceNamespaceScanWarning],
     uses: Array[SourceUseScanResult],
     items: Array[SourceItemScanResult],
+    owner_symbols: Array[SourceOwnerSymbolFact],
     utf8_warnings: Array[SourceUtf8ScanWarning],
 }
 
