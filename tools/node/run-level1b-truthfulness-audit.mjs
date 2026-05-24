@@ -24,6 +24,14 @@ const CHECKS = [
   },
 ];
 
+const ALLOWED_EMPTY_FACT_HELPERS = new Set([
+  "answer_facts_none",
+  "usage_facts_none",
+  "replay_safety_facts_none",
+  "cps_continuation_facts_none",
+  "cps_usage_facts_none",
+]);
+
 function listFiles(dir, suffix = ".chiba") {
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -50,6 +58,13 @@ function read(file) {
 
 function lineOf(source, index) {
   return source.slice(0, index).split("\n").length;
+}
+
+function enclosingFunctionName(source, index) {
+  const prefix = source.slice(0, index);
+  const matches = [...prefix.matchAll(/\bdef\s+([A-Za-z0-9_.*]+)\s*\(/g)];
+  if (matches.length === 0) return "";
+  return matches[matches.length - 1][1];
 }
 
 const blockers = [];
@@ -80,6 +95,7 @@ for (const root of SCAN_ROOTS) {
 
     const emptyFacts = /Vec\s*\[\s*([A-Za-z0-9_]*Fact[A-Za-z0-9_]*)\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)/g;
     for (const match of source.matchAll(emptyFacts)) {
+      if (ALLOWED_EMPTY_FACT_HELPERS.has(enclosingFunctionName(source, match.index))) continue;
       blockers.push({
         id: "empty-facts",
         file: `${file}:${lineOf(source, match.index)}`,

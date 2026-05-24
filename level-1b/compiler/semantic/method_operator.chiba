@@ -21,8 +21,18 @@ type MethodOperatorIndex {
     operators: Array[OperatorKey],
 }
 
+/// Empty method/operator index for modules without declarations.
+def method_operator_index_empty(): MethodOperatorIndex =
+    MethodOperatorIndex(
+        Vec[MethodKey].new().freeze(),
+        Vec[OperatorKey].new().freeze())
+
 /// Build the nominal method/operator index.
 def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex, SemanticDiagnostics] =
-    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-        .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method/operator index construction absent"))
-        .freeze()))
+    if module.method_surface.len() == 0 {
+        Ok(method_operator_index_empty())
+    } else {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method/operator index construction absent"))
+            .freeze()))
+    }

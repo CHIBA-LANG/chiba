@@ -125,6 +125,7 @@ const REQUIRED_TEXT = [
   "def instantiate_field_obligation",
   "type MethodKey",
   "type OperatorKey",
+  "def method_operator_index_empty",
   "def build_method_operator_index",
   "missing-lowering: method/operator index construction absent",
   "data ExternAbi",
