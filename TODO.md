@@ -9,6 +9,25 @@
 
 已完成的 C00-C10、库边界冻结、语义/CPS/closure 主干落地、以及对应 gate 建设，统一视为历史完成项，不再继续堆在这里干扰判断。详细过程保留在 git 历史、`TODO.checkpoint.md` 和各 gate / runner 中。
 
+## P0：移除 C07 临时 scanner，改由 chibacc frontend 接管 source facts
+
+- [ ] `level-1b/compiler/source/scan.chiba` 只是 truthfulness scaffold，不是语言设计或未来 frontend；第一优先级是让 chibalex/chibacc parser 成为 C07 source facts 的 primary path，然后删除或降级 `scan.chiba`，不能让 byte-level scanner 长期承担 namespace/item/attribute 语义。
+- [ ] attribute grammar 必须先补齐 spec/golden，再实现：
+	- 已知 spec：`attributes.md` / `item-attrs.md` 规定统一 `#[attr]`、`#[attr(...)]`、file-level `#![...]`，attribute 至少可挂在函数定义、statement/expression、field/data variant、variant tuple type、namespace、block/unsafe block、lambda、call-site trailing closure 前。
+	- 已知缺口：chibalex spec 示例仍只有 `#[ident]` token，chibacc 示例只有 `attrs:item_attr*`，不足以覆盖 `#[attribute(all(someident, a=b, c=[1,2,3,4]))]` 这类 nested/list/named argument 语法。
+	- 实现顺序：先在 spec repo 明确 attribute argument AST/grammar（bare name、string/int literal、named arg、nested call、array/list、struct/object），再补 chibalex/chibacc fixtures/goldens，最后用 parser facts 替换 C07 scanner facts。
+		- `someident` == `someident = true`
+		- 总之可以抄一抄rust
+		- 之后我们反正走 proc macro
+- [ ] `std.regex` 首发路线改为 Rust-like Thompson NFA/DFA subset，以完成 frontend bootstrap 为先；Perl/PCRE2-compatible VM 作为后续 TODO，不阻塞 C05/C06 自举。
+	- 首发必须支持：literal、char class/range、concat、alternation、group/capture bookkeeping、`* + ? {m,n}` greedy/lazy 基础、anchors、UTF-8/codepoint boundary、leftmost/longest tie-break for chibalex。
+	- 首发必须拒绝：backref、conditional、recursive pattern、atomic group、possessive、variable-length lookbehind、复杂 lookaround/capture 组合等 PCRE2 VM-only 特性；parse-time hard error，不能半支持。
+	- PCRE2/Perl 兼容目标保留为 std.regex 后续阶段：单独建 feature matrix、oracle corpus、VM bytecode/backtracking stack/capture rollback 设计后再做。
+- [ ] level-1b 最小可执行链必须先复刻 level0 的正确流程，而不是继续扩大 contract gates：
+	- `AST -> one-pass CPS + beta`：meta-level continuation `(Val) => CpsExpr`，atom 直接调用 `k(atom)`，只在 call / switch / reset / shift 处物化 IR continuation。
+	- `CPS -> BIR/Core blocks`：continuation block / function return / frame-chain lower 到显式 block terminator，`ContN` 先 emit stackless resume frame，再 emit frame-chain，再 emit repeatable package。
+	- 这一路只能借鉴 `level0/src/backend/cir/lower.chiba`、`level0/src/backend/bir/lower.chiba` 的流程；不能把 level0 的 numeric bool、旧 branching bug、旧 scanner 语义搬进 level-1b。
+
 ## 当前判断
 
 - 当前必须修正前一版乐观判断：**level-1b 当前处于不可用状态**。它的 control / continuation / closure / backend 多数仍是 contract stub 或注释型 emitter，不具备作为 primary compiler behavior 的资格。
@@ -67,7 +86,7 @@
 	- pipe 可与 operator overloading 混合参与解析；
 	- placeholder 作用域按“只作用于当前 pipe 右侧表达式”处理。
 - ADT tuple bridge / ctor lowering：
-	- `Ctor(...) <-> tuple-tagged-form` 是语言级 contract；
+	- `Ctor(...) <-> (:ctor, ...)` 是语言级 contract；
 	- `tuple_to_adt` / `adt_to_tuple` 是 **compiler intrinsic**；
 	- typed 层仍要保留“这是 ADT ctor / bridge”的身份，并允许与 tuple 表示做 unify；
 	- bridge 需要双向稳定 roundtrip。

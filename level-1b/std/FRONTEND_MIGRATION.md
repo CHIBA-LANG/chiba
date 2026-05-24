@@ -6,6 +6,12 @@ live outside `std`.
 
 ## Regex
 
+Second Bootstrap target: `std.regex` should first become a Rust-like
+Thompson NFA/DFA subset suitable for chibalex and compiler frontend bootstrap.
+Perl/PCRE2-compatible VM behavior remains a later explicit project, not the
+first self-hosting target. Unsupported PCRE2-only constructs must fail at parse
+time instead of producing partial or misleading matches.
+
 | area | owner | status |
 | --- | --- | --- |
 | UTF-8 byte boundary helpers | `std/regex/utf8.chiba` | rewritten |
@@ -14,6 +20,7 @@ live outside `std`.
 | Regex parser | `std/regex/parser.chiba` | contract only |
 | Regex compiler | `std/regex/program.chiba` | contract only |
 | Regex matcher and longest match | `std/regex/matcher.chiba` | partial rewrite: find/longest_at traversal rewritten; match_at VM still builtin |
+| PCRE2/Perl VM compatibility | future `std.regex` VM design | TODO after bootstrap subset; backrefs, variable lookbehind, recursive patterns, conditionals, atomic/possessive combos must be explicit unsupported errors until then |
 
 ## Chibalex
 
