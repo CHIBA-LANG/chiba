@@ -93,6 +93,15 @@ def typed_item_skeletons_have_method_receiver_surface(skeletons: Array[TypedItem
         else { typed_item_skeletons_have_method_receiver_surface(skeletons, index + 1) }
     }
 
+/// Return true when item surfaces mention pattern parameters.
+def typed_item_skeletons_have_pattern_param_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
+    if index == skeletons.len() { false }
+    else {
+        let surface = skeletons.get(index).surface
+        if surface.has_pattern_params { true }
+        else { typed_item_skeletons_have_pattern_param_surface(skeletons, index + 1) }
+    }
+
 /// Infer HM + row types for an alpha-renamed module.
 def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule, SemanticDiagnostics] =
     let skeletons = typed_item_skeletons_from_alpha(module.origins, 0, Vec[TypedItemSkeleton].new())
@@ -111,6 +120,10 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     } else if typed_item_skeletons_have_method_receiver_surface(skeletons, 0) {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method receiver Self binding absent"))
+            .freeze()))
+    } else if typed_item_skeletons_have_pattern_param_surface(skeletons, 0) {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: function pattern parameter desugaring absent"))
             .freeze()))
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()

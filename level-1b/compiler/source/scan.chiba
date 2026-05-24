@@ -33,6 +33,10 @@ def source_is_ident_continue(byte: u8): bool =
     else if byte == 46 { true }
     else { false }
 
+/// Return true when an ASCII byte may start a constructor pattern.
+def source_is_uppercase_ident_start(byte: u8): bool =
+    byte >= 65 && byte <= 90
+
 /// Return true when byte belongs to non-ASCII UTF-8 source.
 def source_is_non_ascii(byte: u8): bool =
     byte >= 128
@@ -208,6 +212,17 @@ def source_line_has_word(text: String, offset: usize, word: str): bool =
     else if source_starts_with_at(text, offset, word, 0) && source_word_boundary_before(text, offset) && source_word_boundary_after(text, offset, word.len()) { true }
     else { source_line_has_word(text, offset + 1, word) }
 
+/// Return true when a header contains `Ctor(` before a stop byte.
+def source_line_has_uppercase_call_before_byte(text: String, offset: usize, stop: u8): bool =
+    if offset >= text.len() { false }
+    else if text.byte_at(offset) == 10 { false }
+    else if text.byte_at(offset) == stop { false }
+    else if source_is_uppercase_ident_start(text.byte_at(offset)) {
+        let end = source_scan_namespace_name_end(text, offset)
+        if end < text.len() && text.byte_at(end) == 40 { true }
+        else { source_line_has_uppercase_call_before_byte(text, offset + 1, stop) }
+    } else { source_line_has_uppercase_call_before_byte(text, offset + 1, stop) }
+
 /// Try to detect an inline namespace block unsupported by the transition scanner.
 def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceNamespaceScanWarning] =
     let start = source_skip_spaces(text, offset)
@@ -266,6 +281,7 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_method_receiver: source_line_has_text_before_byte(text, offset, ".", 40),
         has_operator_method: source_line_has_text_before_byte(text, offset, ".op_", 40),
         has_self_type: source_line_has_word(text, offset, "Self"),
+        has_pattern_params: source_line_has_uppercase_call_before_byte(text, offset, 61),
     }
 
 /// Try to scan a source item at one line start.

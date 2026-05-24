@@ -50,6 +50,8 @@ const REQUIRED_TEXT = [
   "def typed_item_skeletons_have_callable_storage_surface",
   "def typed_item_skeletons_have_method_receiver_surface",
   "missing-lowering: method receiver Self binding absent",
+  "def typed_item_skeletons_have_pattern_param_surface",
+  "missing-lowering: function pattern parameter desugaring absent",
   "missing-facts: callable storage fact generation absent",
   "missing-lowering: source item type expression and body inference absent",
   "def check_l2_types",
