@@ -166,6 +166,16 @@ type GenericSurfaceFact {
     has_generic_self_method: bool,
 }
 
+/// Generic/template obligation before body checking and instantiation discharge.
+type GenericTemplateObligation {
+    owner: BinderId,
+    file: SourceFileId,
+    requires_explicit_param_binding: bool,
+    requires_auto_generic_inference: bool,
+    requires_instantiation_discharge: bool,
+    requires_generic_self_receiver_binding: bool,
+}
+
 /// Operator use surface before overload candidate resolution.
 type OperatorUseSurfaceFact {
     owner: BinderId,
@@ -623,6 +633,22 @@ def generic_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], in
         }
     }
 
+/// Convert one generic surface fact into a template obligation.
+def generic_template_obligation_from_surface(fact: GenericSurfaceFact): GenericTemplateObligation =
+    GenericTemplateObligation {
+        owner: fact.owner,
+        file: fact.file,
+        requires_explicit_param_binding: fact.has_explicit_type_params,
+        requires_auto_generic_inference: fact.has_auto_generic_params,
+        requires_instantiation_discharge: fact.has_explicit_instantiation_call,
+        requires_generic_self_receiver_binding: fact.has_generic_self_method,
+    }
+
+/// Convert generic surface facts in stable owner order.
+def generic_template_obligations_from_surface(facts: Array[GenericSurfaceFact], index: usize, out: Vec[GenericTemplateObligation]): Array[GenericTemplateObligation] =
+    if index == facts.len() { out.freeze() }
+    else { generic_template_obligations_from_surface(facts, index + 1, out.push(generic_template_obligation_from_surface(facts.get(index)))) }
+
 /// Return true when an item uses operator overload surface.
 def typed_item_has_operator_use_surface(item: TypedItemSkeleton): bool =
     if item.surface.has_infix_operator_expr { true }
@@ -828,6 +854,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let intrinsic_surface = intrinsic_surface_facts_from_skeletons(skeletons, 0, Vec[IntrinsicSurfaceFact].new())
     let intrinsic_lowering_obligations = intrinsic_lowering_obligations_from_surface(intrinsic_surface, 0, Vec[IntrinsicLoweringObligation].new())
     let generic_surface = generic_surface_facts_from_skeletons(skeletons, 0, Vec[GenericSurfaceFact].new())
+    let generic_template_obligations = generic_template_obligations_from_surface(generic_surface, 0, Vec[GenericTemplateObligation].new())
     let operator_use_surface = operator_use_surface_facts_from_skeletons(skeletons, 0, Vec[OperatorUseSurfaceFact].new())
     let closure_surface = closure_surface_facts_from_skeletons(skeletons, 0, Vec[ClosureSurfaceFact].new())
     if skeletons.len() == 0 {
@@ -913,7 +940,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .freeze()))
         }
     } else if typed_item_skeletons_have_generic_self_method_surface(skeletons, 0) {
-        if generic_surface.len() == 0 {
+        if generic_surface.len() == 0 || generic_template_obligations.len() == 0 {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: generic surface fact generation absent"))
                 .freeze()))
@@ -943,7 +970,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .freeze()))
         }
     } else if typed_item_skeletons_have_generic_instantiation_surface(skeletons, 0) {
-        if generic_surface.len() == 0 {
+        if generic_surface.len() == 0 || generic_template_obligations.len() == 0 {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: generic surface fact generation absent"))
                 .freeze()))

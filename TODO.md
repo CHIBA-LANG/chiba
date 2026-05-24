@@ -32,6 +32,7 @@
 	- [x] typed item skeleton threading：`TypedModule.items` 保留 alpha 后的 item skeleton，后续 method/operator/branch/control pass 不再只能重扫 source。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 	- [x] generic surface facts：typed module 已记录 explicit params、auto-generic、explicit instantiation、generic Self method surface；真实 template body checking 与 instantiation discharge 仍 fail-closed。
+	- [x] generic template obligations：typed pass 已把 generic surface 转成 `GenericTemplateObligation`，区分显式参数、auto-generic、实例化 discharge、generic Self receiver binding。
 - [ ] globals/init：module-load init order、dependency/cycle、side-effect init lowering 没完整。
 	- [x] global init surface facts：typed module 已记录静态值 initializer/dependency/world_local/ref surface；真实 init order、cycle、module-load lowering 仍 fail-closed。
 	- [x] global init obligations：typed pass 已把 init surface 转成 `GlobalInitObligation`；依赖排序、cycle 检测、module-load lowering 仍未完成。
