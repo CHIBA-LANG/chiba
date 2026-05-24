@@ -17,6 +17,34 @@ type ReplaySafetyFact {
     safe: bool,
 }
 
+/// Captured value category relevant to repeatable ContN replay.
+data ReplayCaptureKind {
+    ReplayCapturePureValue,
+    ReplayCaptureSharedRefCell,
+    ReplayCaptureNonReplayState,
+}
+
+/// Replay capture classification for one continuation capture.
+type ReplayCaptureClassification {
+    binder: BinderId,
+    kind: ReplayCaptureKind,
+}
+
+/// Return true when a capture kind is legal for repeatable ContN replay.
+def ReplayCaptureKind.safe_for_contn_replay(self): bool =
+    match self {
+        ReplayCapturePureValue => true
+        ReplayCaptureSharedRefCell => true
+        ReplayCaptureNonReplayState => false
+    }
+
+/// Return true when capture semantics require shared-reference handling.
+def ReplayCaptureKind.uses_shared_reference_semantics(self): bool =
+    match self {
+        ReplayCaptureSharedRefCell => true
+        _ => false
+    }
+
 /// Check multi-shot replay-safety after world/thread boundaries are rejected.
 def check_replay_safety(module: UsageModule): Result[ReplaySafeModule, SemanticDiagnostics] =
     if module.facts.len() == 0 {
