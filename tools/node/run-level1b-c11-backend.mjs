@@ -35,6 +35,9 @@ const REQUIRED_TEXT = [
   "CoreIllegalTailCall",
   "CoreIllegalContinuationPackage",
   "def validate_wasm_gc_core",
+  "def validate_core_continuation_order",
+  "def validate_core_ops_with_contn_frame",
+  "ContN package missing preceding frame chain",
   "def emit_wat",
   "def run_wasm_gc_wat",
 ];
@@ -117,6 +120,9 @@ function checkSource(file, source) {
   }
   if (path.basename(file) === "layout.chiba" && !/kind:\s*LayoutContinuationPackage[\s\S]{0,240}"tag"[\s\S]{0,240}"payload"/.test(code)) {
     errors.push(`${file}: erased callable continuation layout must carry tag and payload fields`);
+  }
+  if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_continuation_order\b[\s\S]{0,320}core_op_is_contn_package[\s\S]{0,320}preceding frame chain/.test(code)) {
+    errors.push(`${file}: validator must reject ContN package without a preceding frame chain`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
