@@ -79,7 +79,7 @@ def validate_core_layout(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
 
 /// Validate that materialized runtime ops keep source owner provenance.
 def validate_core_owner(op: CoreOp): Option[CoreValidationError] =
-    if op.kind.requires_layout() {
+    if op.kind.requires_owner() {
         match op.owner {
             Some(_) => None
             None => Some(CoreMissingOwner("runtime Core op missing owner provenance"))

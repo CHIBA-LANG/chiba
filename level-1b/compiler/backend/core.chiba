@@ -215,3 +215,13 @@ def CoreOpKind.requires_layout(self): bool =
         CoreOpContinuationPackage => true
         _ => false
     }
+
+/// Return true when a Core op must preserve source owner provenance.
+def CoreOpKind.requires_owner(self): bool =
+    if self.requires_layout() { true }
+    else {
+        match self {
+            CoreOpStacklessFunction => true
+            _ => false
+        }
+    }

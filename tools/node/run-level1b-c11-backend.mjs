@@ -45,6 +45,7 @@ const REQUIRED_TEXT = [
   "def validate_core_continuation_order",
   "type ContNFrameChainState",
   "def validate_core_owner",
+  "def CoreOpKind.requires_owner",
   "def validate_core_runtime_state",
   "def validate_core_contn_frame_count",
   "def validate_core_contn_stackless_count",
@@ -151,8 +152,8 @@ function checkSource(file, source) {
   if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_continuation_order\b[\s\S]{0,720}frame count does not match[\s\S]{0,360}preceding frame chain/.test(code)) {
     errors.push(`${file}: validator must reject ContN package whose frame_count diverges from preceding frame chain`);
   }
-  if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_owner\b[\s\S]{0,240}requires_layout[\s\S]{0,240}CoreMissingOwner/.test(code)) {
-    errors.push(`${file}: validator must reject materialized Core ops without owner provenance`);
+  if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_owner\b[\s\S]{0,240}requires_owner[\s\S]{0,240}CoreMissingOwner/.test(code)) {
+    errors.push(`${file}: validator must reject materialized Core ops and stackless resume functions without owner provenance`);
   }
   if (path.basename(file) === "driver.chiba" && !/\bcore_validation_diagnostic\b[\s\S]{0,520}CoreIllegalRuntimeState/.test(code)) {
     errors.push(`${file}: backend driver must surface CoreIllegalRuntimeState diagnostics`);
