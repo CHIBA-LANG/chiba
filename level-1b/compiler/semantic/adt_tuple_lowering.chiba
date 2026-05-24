@@ -50,11 +50,18 @@ data AdtTupleConversionKind {
     TupleToAdt
 }
 
+/// Compiler-owned identity of one ADT tuple bridge intrinsic.
+type AdtTupleIntrinsicIdentity {
+    intrinsic_namespace: str,
+    source_name: str,
+}
+
 /// Checked conversion fact produced only after type and exhaustiveness checks.
 type AdtTupleConversion {
     kind: AdtTupleConversionKind,
     adt_type: SemType,
     tuple_type: SemType,
+    intrinsic: AdtTupleIntrinsicIdentity,
 }
 
 /// Build the canonical tuple shape for one variant.
@@ -76,6 +83,13 @@ def lower_adt_ctor(variant: AdtVariantDecl): LoweredAdtCtor =
 def lower_adt_ctors(variants: Array[AdtVariantDecl], index: usize, out: Vec[LoweredAdtCtor]): Array[LoweredAdtCtor] =
     if index == variants.len() { out.freeze() }
     else { lower_adt_ctors(variants, index + 1, out.push(lower_adt_ctor(variants.get(index)))) }
+
+/// Return the compiler intrinsic identity for a checked bridge direction.
+def adt_tuple_intrinsic_identity(kind: AdtTupleConversionKind): AdtTupleIntrinsicIdentity =
+    match kind {
+        AdtToTuple => AdtTupleIntrinsicIdentity { intrinsic_namespace: "compiler.intrinsic", source_name: "adt_to_tuple" }
+        TupleToAdt => AdtTupleIntrinsicIdentity { intrinsic_namespace: "compiler.intrinsic", source_name: "tuple_to_adt" }
+    }
 
 /// Choose mutation lowering when a constructor input is proven exactly once-used.
 def constructor_strategy_for_use(used_once: bool): ConstructorLoweringStrategy =
