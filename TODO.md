@@ -14,6 +14,7 @@
 	- [x] source parser facts blocker：`SourceProjectFacts.parser` 已显式记录 chibalex/chibacc primary path 缺失，不再让 scanner fallback 冒充 parsed AST。
 - [ ] attribute grammar：#[attr(...)] nested/named/list args 没 spec/golden/AST/parser。
 	- [x] attribute spec/golden：spec 已定义 AttrArg AST 与 nested/named/list/object grammar，并新增复杂 attribute fixture/gate。
+	- [x] chibalex attribute token fixture：lexer golden 覆盖 `#`/bracket/delimiter/literal/ident token 流，不折叠 legacy attribute token；真实 generated lexer execution 仍未完成。
 	- [x] chibacc attribute AST/fixture：`std.chibacc.ast.AttrArg` 与 mini grammar 已覆盖 bare/named/call/list/object；真实 parser 执行仍未完成。
 - [ ] namespace resolution：只有扫描和 owner slice；真实 import/name resolution、owner namespace symbol、visibility/private、冲突规则没做。
 	- [x] namespace ownership facts：alpha/typed skeleton 已把 item owner namespace 线程化进 `TypedModule.namespace_ownership`；import/name resolution 仍未完成。

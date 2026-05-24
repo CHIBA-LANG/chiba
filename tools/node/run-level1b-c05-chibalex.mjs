@@ -114,6 +114,7 @@ function checkMiniSpecs() {
   const required = new Set(["basic.chibalex", "longest.chibalex", "string-mode.chibalex"]);
   required.add("continuation-surface.chibalex");
   required.add("utf8-ident.chibalex");
+  required.add("attribute-tokens.chibalex");
   for (const spec of specs) {
     required.delete(spec);
     const source = read(path.join(MINI_ROOT, spec));
@@ -133,6 +134,12 @@ function checkMiniSpecs() {
       for (const needle of ["$XID_START", "$XID_CONTINUE", "Ident(Str)"]) {
         if (!source.includes(needle)) fail(`utf8-ident fixture missing ${needle}`);
       }
+    }
+    if (spec === "attribute-tokens.chibalex") {
+      for (const needle of ["\"#\"", "\"[\"", "\"]\"", "\"(\"", "\")\"", "\"{\"", "\"}\"", "Ident(Str)", "StringLit(Str)", "IntLit(Str)", "KwTrue", "KwFalse"]) {
+        if (!source.includes(needle)) fail(`attribute-tokens fixture missing ${needle}`);
+      }
+      if (/Attribute(Token|Lit|Start)/.test(source)) fail("attribute-tokens fixture must not collapse attributes into a legacy token");
     }
   }
   if (required.size !== 0) fail(`missing chibalex mini specs: ${[...required].join(", ")}`);

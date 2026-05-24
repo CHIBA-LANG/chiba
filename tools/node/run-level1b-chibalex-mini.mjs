@@ -130,6 +130,39 @@ const CASES = [
         _ => 6
 `,
   },
+  {
+    file: "attribute-tokens.chibalex",
+    name: "attribute",
+    namespace: "chibalexmini.attribute_tokens",
+    expected: ["Hash", "LBracket", "Ident", "LParen", "Comma", "Eq", "IntLit", "StringLit", "KwTrue", "RBracket"],
+    source: "mk_str(\"#[attribute(all(someident, a=b, c=[1,2], meta={owner=\\\"compiler\\\", stable=true}))]\", 80)",
+    check: `
+        Hash =>
+            match token_at(tokens, 1) {
+                LBracket =>
+                    match token_at(tokens, 2) {
+                        Ident(name) =>
+                            if streq(name, mk_str("attribute", 9)) != 0 {
+                                match token_at(tokens, 3) {
+                                    LParen =>
+                                        match token_at(tokens, 5) {
+                                            LParen =>
+                                                match token_at(tokens, 8) {
+                                                    Eq => 0
+                                                    _ => 6
+                                                }
+                                            _ => 5
+                                        }
+                                    _ => 4
+                                }
+                            } else { 3 }
+                        _ => 2
+                    }
+                _ => 1
+            }
+        _ => 7
+`,
+  },
 ];
 
 function run(name, command, args) {
@@ -424,6 +457,75 @@ def lex_loop(src: i64, sl: i64, file: i64, out: Vec, pos: i64): i64 =
             let end = mini_scan_ident(src, sl, utf8_next_offset(src, pos))
             let _ = lex_emit(out, Ident(mk_str(src + pos, end - pos)), file, pos, end - pos)
             lex_loop(src, sl, file, out, end)
+        } else {
+            let _ = lex_emit(out, LexError(b), file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        }
+    }
+
+def lex_all(src: i64, src_len: i64, file: i64): Vec = {
+    let out = vec_new()
+    let _ = lex_loop(src, src_len, file, out, 0)
+    let _ = lex_emit(out, Eof, file, src_len, 0)
+    out
+}
+`;
+  }
+  if (name === "attribute") {
+    return `${helpers}
+def lex_loop(src: i64, sl: i64, file: i64, out: Vec, pos: i64): i64 =
+    if pos >= sl { 0 }
+    else {
+        let b = load8(src, pos)
+        if mini_is_ws(b) != 0 { lex_loop(src, sl, file, out, pos + 1) }
+        else if mini_literal_eq_at(src, sl, pos, mk_str("true", 4), 0) != 0 {
+            let _ = lex_emit(out, KwTrue, file, pos, 4)
+            lex_loop(src, sl, file, out, pos + 4)
+        } else if mini_literal_eq_at(src, sl, pos, mk_str("false", 5), 0) != 0 {
+            let _ = lex_emit(out, KwFalse, file, pos, 5)
+            lex_loop(src, sl, file, out, pos + 5)
+        } else if b == 34 {
+            let end = mini_scan_until_quote(src, sl, pos + 1)
+            let _ = lex_emit(out, StringLit(mk_str(src + pos, end + 1 - pos)), file, pos, end + 1 - pos)
+            lex_loop(src, sl, file, out, end + 1)
+        } else if mini_is_digit(b) != 0 {
+            let end = mini_scan_digits(src, sl, pos)
+            let _ = lex_emit(out, IntLit(mk_str(src + pos, end - pos)), file, pos, end - pos)
+            lex_loop(src, sl, file, out, end)
+        } else if mini_is_ident_start(b) != 0 {
+            let end = mini_scan_ident(src, sl, utf8_next_offset(src, pos))
+            let _ = lex_emit(out, Ident(mk_str(src + pos, end - pos)), file, pos, end - pos)
+            lex_loop(src, sl, file, out, end)
+        } else if mini_literal_eq_at(src, sl, pos, mk_str("#!", 2), 0) != 0 {
+            let _ = lex_emit(out, HashBang, file, pos, 2)
+            lex_loop(src, sl, file, out, pos + 2)
+        } else if b == 35 {
+            let _ = lex_emit(out, Hash, file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        } else if b == 91 {
+            let _ = lex_emit(out, LBracket, file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        } else if b == 93 {
+            let _ = lex_emit(out, RBracket, file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        } else if b == 40 {
+            let _ = lex_emit(out, LParen, file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        } else if b == 41 {
+            let _ = lex_emit(out, RParen, file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        } else if b == 123 {
+            let _ = lex_emit(out, LBrace, file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        } else if b == 125 {
+            let _ = lex_emit(out, RBrace, file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        } else if b == 44 {
+            let _ = lex_emit(out, Comma, file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        } else if b == 61 {
+            let _ = lex_emit(out, Eq, file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
         } else {
             let _ = lex_emit(out, LexError(b), file, pos, 1)
             lex_loop(src, sl, file, out, pos + 1)
