@@ -29,6 +29,7 @@ const REQUIRED_TEXT = [
   "def alpha_convert",
   "def alpha_binders_from_source_items",
   "def elaborate_patterns",
+  "def pattern_ids_from_binders",
   "def unify",
   "def unify_rows",
   "def check_type_kind",
@@ -135,6 +136,9 @@ function checkSource(file, source) {
   }
   if (file.endsWith("alpha.chiba") && /\bdef\s+alpha_convert\b[\s\S]*AlphaModule\s*\(\s*Vec\s*\[\s*BinderId\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/.test(code)) {
     errors.push(`${file}: alpha conversion must derive binders from source item facts`);
+  }
+  if (file.endsWith("pattern.chiba") && /\bdef\s+elaborate_patterns\b[\s\S]*PatternFacts\s*\(\s*Vec\s*\[\s*PatternId\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/.test(code)) {
+    errors.push(`${file}: pattern elaboration must derive facts from alpha binders`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {

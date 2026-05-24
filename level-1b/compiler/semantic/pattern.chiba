@@ -15,4 +15,9 @@ type PatternFacts {
 
 /// Elaborate parameter, `let`, and match patterns after alpha conversion.
 def elaborate_patterns(module: AlphaModule): PatternFacts =
-    PatternFacts(Vec[PatternId].new().freeze())
+    PatternFacts(pattern_ids_from_binders(module.binders, 0, Vec[PatternId].new()))
+
+/// Build stable placeholder pattern ids from alpha binders until full pattern AST lowering lands.
+def pattern_ids_from_binders(binders: Array[BinderId], index: usize, out: Vec[PatternId]): Array[PatternId] =
+    if index == binders.len() { out.freeze() }
+    else { pattern_ids_from_binders(binders, index + 1, out.push(PatternId { index: index })) }
