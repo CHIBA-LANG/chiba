@@ -5,6 +5,8 @@ use compiler.source.project.*
 
 /// Source semantic gate error kind.
 data SourceGateErrorKind {
+    SourceGateMissingNamespace,
+    SourceGateItemScanAbsent,
     SourceGateTopLevelRefNeedsWorldLocal,
     SourceGateAtomicPayloadUnsupported,
     SourceGateAtomicLoadOrdering,
@@ -34,12 +36,29 @@ type SourceGateResult {
 def check_source_semantic_gates(project: ProjectSurface): SourceGateResult =
     SourceGateResult(
         project,
+        source_gate_errors(project))
+
+/// Return true when project source facts contain at least one namespace.
+def source_project_has_namespace(project: ProjectSurface): bool =
+    project.facts.namespaces.len() > 0
+
+/// Build fail-closed source gate diagnostics from source scan facts.
+def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
+    if source_project_has_namespace(project) {
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },
-                SourceGateUnresolvedMethod,
-                "missing-facts: source semantic gate scan absent"))
-            .freeze())
+                SourceGateItemScanAbsent,
+                "missing-facts: source item scan absent"))
+            .freeze()
+    } else {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateMissingNamespace,
+                "missing-facts: namespace scan found no namespace"))
+            .freeze()
+    }
 
 /// Return true when the gate result can continue to type checking.
 def SourceGateResult.ok(self): bool =
