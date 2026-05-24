@@ -147,6 +147,15 @@ type IntrinsicSurfaceFact {
     has_tuple_type_surface: bool,
 }
 
+/// Compiler intrinsic lowering obligation before namespace resolution.
+type IntrinsicLoweringObligation {
+    owner: BinderId,
+    file: SourceFileId,
+    intrinsic_namespace: String,
+    requires_tuple_bridge: bool,
+    requires_compiler_intrinsic_resolution: bool,
+}
+
 /// Generic/template surface before definition-time and instantiation checks.
 type GenericSurfaceFact {
     owner: BinderId,
@@ -569,6 +578,21 @@ def intrinsic_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], 
         }
     }
 
+/// Convert one intrinsic surface fact into a lowering obligation.
+def intrinsic_lowering_obligation_from_surface(fact: IntrinsicSurfaceFact): IntrinsicLoweringObligation =
+    IntrinsicLoweringObligation {
+        owner: fact.owner,
+        file: fact.file,
+        intrinsic_namespace: "compiler.intrinsic",
+        requires_tuple_bridge: fact.has_tuple_type_surface,
+        requires_compiler_intrinsic_resolution: fact.has_compiler_intrinsic_call,
+    }
+
+/// Convert intrinsic surface facts in stable owner order.
+def intrinsic_lowering_obligations_from_surface(facts: Array[IntrinsicSurfaceFact], index: usize, out: Vec[IntrinsicLoweringObligation]): Array[IntrinsicLoweringObligation] =
+    if index == facts.len() { out.freeze() }
+    else { intrinsic_lowering_obligations_from_surface(facts, index + 1, out.push(intrinsic_lowering_obligation_from_surface(facts.get(index)))) }
+
 /// Return true when an item needs generic/template checking.
 def typed_item_has_generic_surface(item: TypedItemSkeleton): bool =
     if item.surface.has_explicit_type_params { true }
@@ -802,6 +826,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let pattern_surface = pattern_surface_facts_from_skeletons(skeletons, 0, Vec[PatternSurfaceFact].new())
     let pattern_lowering_obligations = pattern_lowering_obligations_from_surface(pattern_surface, 0, Vec[PatternLoweringObligation].new())
     let intrinsic_surface = intrinsic_surface_facts_from_skeletons(skeletons, 0, Vec[IntrinsicSurfaceFact].new())
+    let intrinsic_lowering_obligations = intrinsic_lowering_obligations_from_surface(intrinsic_surface, 0, Vec[IntrinsicLoweringObligation].new())
     let generic_surface = generic_surface_facts_from_skeletons(skeletons, 0, Vec[GenericSurfaceFact].new())
     let operator_use_surface = operator_use_surface_facts_from_skeletons(skeletons, 0, Vec[OperatorUseSurfaceFact].new())
     let closure_surface = closure_surface_facts_from_skeletons(skeletons, 0, Vec[ClosureSurfaceFact].new())
@@ -814,7 +839,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: pattern coverage for typed item skeletons absent"))
             .freeze()))
     } else if typed_item_skeletons_have_compiler_intrinsic_surface(skeletons, 0) {
-        if intrinsic_surface.len() == 0 {
+        if intrinsic_surface.len() == 0 || intrinsic_lowering_obligations.len() == 0 {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: compiler intrinsic surface fact generation absent"))
                 .freeze()))
