@@ -14,6 +14,7 @@ type AlphaBinderOrigin {
     file: SourceFileId,
     kind: SourceItemKind,
     name: Option[SourceNameSlice],
+    private: bool,
     line: usize,
     column: usize,
 }
@@ -48,6 +49,7 @@ def alpha_origins_from_source_items(items: Array[SourceItemScanResult], index: u
                 file: item.file,
                 kind: item.kind,
                 name: item.name,
+                private: item.private,
                 line: item.line,
                 column: item.column,
             }))

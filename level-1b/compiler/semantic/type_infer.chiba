@@ -12,6 +12,7 @@ type TypedItemSkeleton {
     file: SourceFileId,
     kind: SourceItemKind,
     name: Option[SourceNameSlice],
+    private: bool,
     line: usize,
     column: usize,
 }
@@ -29,6 +30,7 @@ def typed_item_skeletons_from_alpha(origins: Array[AlphaBinderOrigin], index: us
                 file: origin.file,
                 kind: origin.kind,
                 name: origin.name,
+                private: origin.private,
                 line: origin.line,
                 column: origin.column,
             }))

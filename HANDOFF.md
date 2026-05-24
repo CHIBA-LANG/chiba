@@ -149,6 +149,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - C07 `compile_if` facts now keep an expression slice, top-level predicate shape, and coarse target/backend/all/or/not/unknown classification. Predicate parsing/eval against target facts is still not wired into item filtering.
 - Source semantic gate fail-closes on unknown `compile_if` predicate shape, so unsupported predicates do not pass as ordinary source facts.
 - Source scanner detects inline/indented namespace forms and fail-closes until inline namespace block assembly exists. File-header namespace remains the current transition path.
+- Source item scan preserves `private` on def/type/data/extern; alpha origins and typed item skeletons carry it forward.
 - C08 alpha origins retain source item kind/name/file/line/column. Type inference builds `TypedItemSkeleton` and checks placeholder pattern coverage, then fail-closes on missing source item type-expression/body inference rather than claiming a typed module.
 - C09 replay safety must not mark every usage fact safe. It now fail-closes until replay capture classification exists.
 - C10 CPS usage now fail-closes on missing closure/lambda/continuation subject extraction; previous continuation-only use reconstruction was not enough to prove closure directification/capture semantics.
