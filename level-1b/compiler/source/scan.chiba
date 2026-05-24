@@ -40,6 +40,20 @@ def source_starts_with_at(text: String, offset: usize, needle: str, index: usize
         source_starts_with_at(text, offset, needle, index + 1)
     } else { false }
 
+/// Return true when a source text contains a header attribute.
+def source_has_header_attr(text: String, attr: str, offset: usize): bool =
+    if offset >= text.len() { false }
+    else if source_starts_with_at(text, offset, attr, 0) { true }
+    else { source_has_header_attr(text, attr, offset + 1) }
+
+/// Scan file header attributes used by import policy and Metal isolation.
+def source_scan_header(file: SourceFile): SourceHeaderFacts =
+    SourceHeaderFacts {
+        file: file.id,
+        is_metal: source_has_header_attr(file.text, "#![Metal]", 0),
+        no_prelude_import: source_has_header_attr(file.text, "#![no_prelude_import]", 0),
+    }
+
 /// Skip horizontal whitespace after a token.
 def source_skip_spaces(text: String, offset: usize): usize =
     if offset >= text.len() { offset }
@@ -94,8 +108,14 @@ def source_scan_first_namespace(file: SourceFile): Option[NamespaceScanResult] =
 /// Build source facts from already loaded files.
 def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
     SourceProjectFacts {
+        headers: scan_project_headers(project.files, 0, Vec[SourceHeaderFacts].new()),
         namespaces: scan_project_namespaces(project.files, 0, Vec[NamespaceScanResult].new()),
     }
+
+/// Scan header facts in deterministic file order.
+def scan_project_headers(files: Array[SourceFile], index: usize, out: Vec[SourceHeaderFacts]): Array[SourceHeaderFacts] =
+    if index == files.len() { out.freeze() }
+    else { scan_project_headers(files, index + 1, out.push(source_scan_header(files.get(index)))) }
 
 /// Scan namespace facts in deterministic file order.
 def scan_project_namespaces(files: Array[SourceFile], index: usize, out: Vec[NamespaceScanResult]): Array[NamespaceScanResult] =

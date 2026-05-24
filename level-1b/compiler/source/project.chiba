@@ -40,8 +40,16 @@ type NamespaceScanResult {
     column: usize,
 }
 
+/// Header attributes discovered before item parsing.
+type SourceHeaderFacts {
+    file: SourceFileId,
+    is_metal: bool,
+    no_prelude_import: bool,
+}
+
 /// Source facts derived from byte-level source scans.
 type SourceProjectFacts {
+    headers: Array[SourceHeaderFacts],
     namespaces: Array[NamespaceScanResult],
 }
 
