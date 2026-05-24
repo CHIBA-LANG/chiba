@@ -8,15 +8,39 @@ use compiler.semantic.type_facts.*
 type TypedElaboration {
     module: TypedModule,
     facts: Array[TypedFacts],
+    obligations: Array[TypedElaborationObligation],
+}
+
+/// Typed AST elaboration obligation before expression/body traversal.
+type TypedElaborationObligation {
+    owner: BinderId,
+    requires_type_expression_lowering: bool,
+    requires_body_expression_lowering: bool,
+    requires_item_traversal: bool,
 }
 
 /// Elaborate typed expressions, facts, and obligations.
 def elaborate_typed_module(module: TypedModule): Result[TypedElaboration, SemanticDiagnostics] =
+    let obligations = typed_elaboration_obligations(module.items, 0, Vec[TypedElaborationObligation].new())
     match build_typed_facts(module) {
-        Ok(facts) => Ok(TypedElaboration(module, facts))
+        Ok(facts) => Ok(TypedElaboration(module, facts, obligations))
         Err(errors) => Err(errors)
     }
 
+/// Convert one typed skeleton into an elaboration obligation.
+def typed_elaboration_obligation_from_item(item: TypedItemSkeleton): TypedElaborationObligation =
+    TypedElaborationObligation {
+        owner: item.binder,
+        requires_type_expression_lowering: item.surface.has_type_annotation,
+        requires_body_expression_lowering: item.surface.has_body,
+        requires_item_traversal: true,
+    }
+
+/// Build typed elaboration obligations in stable item order.
+def typed_elaboration_obligations(items: Array[TypedItemSkeleton], index: usize, out: Vec[TypedElaborationObligation]): Array[TypedElaborationObligation] =
+    if index == items.len() { out.freeze() }
+    else { typed_elaboration_obligations(items, index + 1, out.push(typed_elaboration_obligation_from_item(items.get(index)))) }
+
 /// Return true when elaboration produced no structural obligations.
 def TypedElaboration.concrete_only(self): bool =
-    self.facts.all {|fact: TypedFacts| fact.has_obligations() == false }
+    self.obligations.len() == 0 && self.facts.all {|fact: TypedFacts| fact.has_obligations() == false }
