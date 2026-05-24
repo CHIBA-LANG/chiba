@@ -36,6 +36,41 @@ data CallableArrowPosition {
     CallableExplicitContStorage,
 }
 
+/// Runtime variant allowed inside erased callable storage.
+data CallableStorageVariant {
+    CallableVariantFunction,
+    CallableVariantClosure,
+    CallableVariantBoxedCont1,
+    CallableVariantContN,
+}
+
+/// Callable storage lowering obligation before backend-specific layout.
+type CallableStorageFact {
+    owner: BinderId,
+    position: CallableArrowPosition,
+    variants: Array[CallableStorageVariant],
+    sendable: bool,
+}
+
+/// Return true when a callable storage variant is a continuation.
+def CallableStorageVariant.is_continuation(self): bool =
+    match self {
+        CallableVariantBoxedCont1 => true
+        CallableVariantContN => true
+        _ => false
+    }
+
+/// Return true when a callable storage fact excludes continuation variants for send.
+def CallableStorageFact.excludes_continuations_for_send(self): bool =
+    if self.sendable { callable_storage_variants_have_continuation(self.variants, 0) == false }
+    else { true }
+
+/// Return true when a variant array contains a continuation variant.
+def callable_storage_variants_have_continuation(variants: Array[CallableStorageVariant], index: usize): bool =
+    if index == variants.len() { false }
+    else if variants.get(index).is_continuation() { true }
+    else { callable_storage_variants_have_continuation(variants, index + 1) }
+
 /// Continuation fact that must survive control, usage, and closure passes.
 type ContinuationFact {
     binder: BinderId,
