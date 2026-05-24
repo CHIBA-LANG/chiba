@@ -50,6 +50,8 @@ const REQUIRED_TEXT = [
   "def typed_item_skeletons_have_callable_storage_surface",
   "def typed_item_skeletons_have_method_receiver_surface",
   "missing-lowering: method receiver Self binding absent",
+  "def typed_item_skeletons_have_generic_self_method_surface",
+  "missing-lowering: generic method Self receiver binding absent",
   "def typed_item_skeletons_have_pattern_param_surface",
   "missing-lowering: function pattern parameter desugaring absent",
   "def typed_item_skeletons_have_explicit_type_params",
