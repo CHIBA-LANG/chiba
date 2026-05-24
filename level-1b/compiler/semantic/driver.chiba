@@ -37,6 +37,7 @@ type SemanticDiagnostics {
 /// Fully typed module after C08.
 type TypedModule {
     alpha: AlphaModule,
+    items: Array[TypedItemSkeleton],
     callable_storage: Array[CallableStorageFact],
     namespace_ownership: Array[NamespaceOwnershipFact],
 }

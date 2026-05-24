@@ -396,6 +396,15 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
             .freeze()))
     }
 
+/// Build the typed module fact surface shared by later semantic passes.
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact]): TypedModule =
+    TypedModule {
+        alpha: module,
+        items: skeletons,
+        callable_storage: callable_storage,
+        namespace_ownership: namespace_ownership,
+    }
+
 /// Run the level-2 semantic checks that require inferred types.
 def check_l2_types(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
     Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()

@@ -17,6 +17,7 @@
 - [ ] method resolution：没做。method index、receiver binding、qualified callee、Self with generics 都缺。
 - [ ] operator overloading：没做。candidate collection、operand matching、ambiguity、op_index/op_index_slice lowering 都缺。
 - [ ] typed AST elaboration：现在很多是 skeleton/facts；真实 expression/type/item traversal 不完整。
+	- [x] typed item skeleton threading：`TypedModule.items` 保留 alpha 后的 item skeleton，后续 method/operator/branch/control pass 不再只能重扫 source。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 - [ ] globals/init：module-load init order、dependency/cycle、side-effect init lowering 没完整。
 - [ ] pattern/match：deep pattern lowering、exhaustiveness、if let env 规则没完整 primary 实现。

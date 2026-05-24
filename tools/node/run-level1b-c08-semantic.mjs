@@ -46,6 +46,8 @@ const REQUIRED_TEXT = [
   "TypedItemStaticValue",
   "def classify_typed_item_skeleton_kind",
   "def typed_item_skeletons_from_alpha",
+  "items: Array[TypedItemSkeleton]",
+  "def typed_module_from_skeletons",
   "def type_inference_has_pattern_coverage",
   "def typed_item_skeletons_have_callable_storage_surface",
   "def typed_item_skeletons_have_method_receiver_surface",
