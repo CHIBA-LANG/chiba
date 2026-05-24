@@ -139,6 +139,9 @@ type SourceItemSurfaceFacts {
     has_pipe_expr: bool,
     has_pipe_placeholder: bool,
     has_pipe_chain: bool,
+    has_match_expr: bool,
+    has_if_let_expr: bool,
+    has_deep_pattern_surface: bool,
 }
 
 /// Source item discovered by the byte-level scanner.
