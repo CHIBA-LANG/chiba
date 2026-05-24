@@ -34,6 +34,7 @@ const REQUIRED_TEXT = [
   "def canonicalize_row",
   "def generalize_type",
   "def infer_types",
+  "missing-facts: HM + row type inference over source items absent",
   "def check_l2_types",
   "data AggregateKind",
   "def build_aggregate_shape",
@@ -127,6 +128,9 @@ function checkSource(file, source) {
   if (/\beffect\b/i.test(code)) errors.push(`${file}: semantic C08 must not introduce effect naming`);
   if (/\bmetalstd\b|Ptr\s*\[|UnsafeRef\s*\[|heap_alloc\s*\(|load(?:8|16|32|64)\s*\(/.test(code)) {
     errors.push(`${file}: semantic pass leaks Metal/raw memory implementation`);
+  }
+  if (/\bdef\s+infer_types\b[\s\S]*Ok\s*\(\s*TypedModule\s*\(\s*module\s*\)\s*\)/.test(code)) {
+    errors.push(`${file}: type inference must not pass through an untyped alpha module`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
