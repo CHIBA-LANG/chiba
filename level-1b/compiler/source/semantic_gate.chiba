@@ -7,6 +7,7 @@ use compiler.source.project.*
 data SourceGateErrorKind {
     SourceGateMissingNamespace,
     SourceGateItemScanAbsent,
+    SourceGateTypedItemLoweringAbsent,
     SourceGateTopLevelRefNeedsWorldLocal,
     SourceGateAtomicPayloadUnsupported,
     SourceGateAtomicLoadOrdering,
@@ -42,9 +43,20 @@ def check_source_semantic_gates(project: ProjectSurface): SourceGateResult =
 def source_project_has_namespace(project: ProjectSurface): bool =
     project.facts.namespaces.len() > 0
 
+/// Return true when project source facts contain at least one item declaration.
+def source_project_has_item(project: ProjectSurface): bool =
+    project.facts.items.len() > 0
+
 /// Build fail-closed source gate diagnostics from source scan facts.
 def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
-    if source_project_has_namespace(project) {
+    if source_project_has_namespace(project) == false {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateMissingNamespace,
+                "missing-facts: namespace scan found no namespace"))
+            .freeze()
+    } else if source_project_has_item(project) == false {
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },
@@ -55,8 +67,8 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },
-                SourceGateMissingNamespace,
-                "missing-facts: namespace scan found no namespace"))
+                SourceGateTypedItemLoweringAbsent,
+                "missing-lowering: typed item lowering absent"))
             .freeze()
     }
 

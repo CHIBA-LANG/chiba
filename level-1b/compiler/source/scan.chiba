@@ -96,6 +96,18 @@ def source_scan_namespace_at(file: SourceFileId, text: String, offset: usize, li
         } else { None }
     } else { None }
 
+/// Try to scan a source item at one line start.
+def source_scan_item_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceItemScanResult] =
+    if source_starts_with_at(text, offset, "def ", 0) {
+        Some(SourceItemScanResult { file: file, kind: SourceItemDef, line: line, column: 0 })
+    } else if source_starts_with_at(text, offset, "type ", 0) {
+        Some(SourceItemScanResult { file: file, kind: SourceItemType, line: line, column: 0 })
+    } else if source_starts_with_at(text, offset, "data ", 0) {
+        Some(SourceItemScanResult { file: file, kind: SourceItemData, line: line, column: 0 })
+    } else if source_starts_with_at(text, offset, "extern ", 0) {
+        Some(SourceItemScanResult { file: file, kind: SourceItemExtern, line: line, column: 0 })
+    } else { None }
+
 /// Advance to the start offset of the next line.
 def source_next_line_offset(text: String, offset: usize): usize =
     if offset >= text.len() { offset }
@@ -120,6 +132,23 @@ def source_scan_first_namespace_line(file: SourceFileId, text: String, offset: u
 def source_scan_first_namespace(file: SourceFile): Option[NamespaceScanResult] =
     source_scan_first_namespace_line(file.id, file.text, 0, 1)
 
+/// Scan item declarations from line starts.
+def source_scan_items_line(file: SourceFileId, text: String, offset: usize, line: usize, out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
+    if offset >= text.len() { out.freeze() }
+    else {
+        let next_out = match source_scan_item_at(file, text, offset, line) {
+            Some(result) => out.push(result)
+            None => out
+        }
+        let next = source_next_line_offset(text, offset)
+        if next == offset { next_out.freeze() }
+        else { source_scan_items_line(file, text, next, line + 1, next_out) }
+    }
+
+/// Scan source item declarations in one file.
+def source_scan_items(file: SourceFile): Array[SourceItemScanResult] =
+    source_scan_items_line(file.id, file.text, 0, 1, Vec[SourceItemScanResult].new())
+
 /// Build source facts from already loaded files.
 def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
     SourceProjectFacts {
@@ -127,6 +156,7 @@ def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
         docs: scan_project_docs(project.files, 0, Vec[SourceDocFacts].new()),
         compile_if: scan_project_compile_if(project.files, 0, Vec[SourceCompileIfFacts].new()),
         namespaces: scan_project_namespaces(project.files, 0, Vec[NamespaceScanResult].new()),
+        items: scan_project_items(project.files, 0, Vec[SourceItemScanResult].new()),
     }
 
 /// Scan header facts in deterministic file order.
@@ -143,6 +173,16 @@ def scan_project_docs(files: Array[SourceFile], index: usize, out: Vec[SourceDoc
 def scan_project_compile_if(files: Array[SourceFile], index: usize, out: Vec[SourceCompileIfFacts]): Array[SourceCompileIfFacts] =
     if index == files.len() { out.freeze() }
     else { scan_project_compile_if(files, index + 1, out.push(source_scan_compile_if_facts(files.get(index)))) }
+
+/// Append item scan results for one file.
+def scan_project_items_append(items: Array[SourceItemScanResult], index: usize, out: Vec[SourceItemScanResult]): Vec[SourceItemScanResult] =
+    if index == items.len() { out }
+    else { scan_project_items_append(items, index + 1, out.push(items.get(index))) }
+
+/// Scan item facts in deterministic file order.
+def scan_project_items(files: Array[SourceFile], index: usize, out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
+    if index == files.len() { out.freeze() }
+    else { scan_project_items(files, index + 1, scan_project_items_append(source_scan_items(files.get(index)), 0, out)) }
 
 /// Scan namespace facts in deterministic file order.
 def scan_project_namespaces(files: Array[SourceFile], index: usize, out: Vec[NamespaceScanResult]): Array[NamespaceScanResult] =
