@@ -15,6 +15,7 @@
 - `checkpoint:gates` / `level1b:c11-backend` / `level1b:cir-migration` 已绿只能说明映射、接口和部分 smoke 覆盖成立；不能说明 level-1b 已经能承载真实 continuation / closure / Wasm-GC backend 语义。
 - 当前主线应改为“**先清理 level-1b 过时代码与假成功路径 + 固定 continuation/closure/callable 语义 + 再恢复 frontend migration 与 C12 自举推进**”。
 - 当前离 checkpoint 完成大约还差：
+	- **1 轮 spec alignment audit**：语言类工作先读取 spec repo 中 continuation / callable / closure / send / CIR-BIR placement / frontend migration 规则，列出 spec 硬规则与 level-1b 实现差距；之后才能开始改 pass/gate，避免把 stub 清理成“更整齐的错实现”。
 	- **1 轮 level-1b truthfulness cleanup**：把 `Ok(module)` / 空 facts / 注释 WAT emitter / contract-only pass 从“看似已实现”改成显式 stub、真实 gate 或删除，避免继续误导路线判断。
 	- **1 轮 continuation/closure 语义落地**：`Cont1` / `ContN`、boxed one-shot state machine、erased callable ADT、`Ref[T]` shared-reference capture、one-shot continuation 与 no-capture closure 的必需优化。
 	- **1 轮未门禁语义收尾**：globals / `Self` with generics / ADT tuple bridge / compiler intrinsic surface / deep pattern lowering runtime / pipe matrix / scope shadowing / debugability / namespace ownership。
@@ -256,13 +257,38 @@
 
 - [ ] level-1b 不可用状态修复 / truthfulness cleanup
 	- **现状**: `level-1b/compiler/control/*`、`level-1b/compiler/closure/*`、`level-1b/compiler/backend/*` 中存在大量 contract-only / stub-only 实现：空 facts、直接 `Ok(module)`、只生成 layout 壳、WAT emitter 只输出注释等。
+	- **前置**: 语言类 cleanup 必须先对齐 spec repo，尤其 continuation / callable / closure / send / CIR-BIR placement。truthfulness cleanup 不是单纯搜索替换 stub，而是把实现缺口按 spec 硬规则分类。
 	- **目标**: level-1b 不再让“接口已存在”伪装成“语义已实现”。所有暂未实现 pass 必须显式 blocker/stub；所有 gate 必须区分 contract smoke 与真实语义验收。
+	- **第一轮 audit 清单**:
+		- 新增轻量反馈环：`vp run level1b:truthfulness-audit`。该 gate 当前预期失败，用 blocker taxonomy 暴露假成功路径；不要把它并入 expensive bootstrap。
+		- 当前基线计数：`legacy-compiler-execution` 已清零；剩余 `oracle-success-path` 7、`primary-path-blocked` 28；`ok-module-pass-through` / `empty-facts` / `comment-only-backend-output` 已清零为显式 blocker 或 source-contract 拒绝。
+		- `level1b:c09-control-cps` 已改成 fail-closed：缺 answer/control scan、usage subject collection、boundary scan、one-pass CPS beta lowering 时返回 blocker diagnostic；该 gate 当前只通过 source contract，真实 valid/invalid continuation gates 标记为 primary-path-blocked。
+		- `level1b:c10-closure-package` 已保留 continuation/lambda/closure subject kind，并区分 escaped boxed `Cont1` 与 repeatable `ContN` package；缺 continuation capture extraction 时 fail-closed；该 gate 当前只通过 source contract，closure/directification/nanopass 验收标记为 primary-path-blocked。
+		- `level1b:c11-backend` 现已在 source contract 阶段明确拒绝：comment-only `emit_core_op` / fake WAT backend。
+		- spec 要求 answer type checking 在 level-1 / CIR 层完成；当前 `check_answer_control` 已改为 fail-closed blocker，尚未生成真实 answer/control facts。
+		- spec 要求 continuation boundary / replay / usage 保留 control boundary、answer type、arena/world legality 与 usage；当前 boundary / usage 已改为 fail-closed blocker，replay 仍只有轻量事实壳。
+		- one-pass CPS 当前只是 `CpsModule(module)` wrapper，没有实际 CPS transform 或 administrative beta-reduction。
+		- 旧 `src/backend/cir/*` 与 level-0 可以作为 legacy reference 借鉴算法、fixture、失败模式；但每次借鉴都必须先过 spec alignment，且 level-1b 重新拥有行为，不能形成 legacy dependency。
+		- 旧 `src/backend/cir/cps.chiba` 也只是 L5 wrapper / synthetic continuation package 方向，不是可直接搬运的 spec 级 one-pass CPS + beta 实现。
+		- CPS usage 当前把 usage facts 全部转成 `UseSubjectBinder`，会丢 continuation / lambda / closure subject kind。
+		- spec 要求 `shift` 捕获 `Cont1`、`shiftn` 捕获 `ContN`，逃逸 `Cont1` boxed 且不升级；当前 control/closure 只按 UseZero/UseOne/UseMany 做壳级 decision，未承载 `Cont1` / `ContN` storage 语义。
+		- 已新增 target-independent IR contract：`ContinuationCont1` / `ContinuationContN`、`ContinuationBoxedOneShot`、`ContinuationRepeatableFrameChain`、`ContinuationFact`、sendable callable exclusion hook。
+		- continuation package 当前由 `UseMany` 直接驱动，未区分 `Cont1` escaped boxed 与 `ContN` repeatable package。
+		- closure conversion 当前对 packaged continuation 生成 empty capture fields，未抽取真实 capture set。
+		- 已新增 closure/backend contract：`StacklessResumeFunction`、`ContinuationFrame`、`ContinuationLowerBoxedCont1`、`ContinuationLowerRepeatableContN`、`CoreOpStacklessFunction`、`CoreOpContinuationFrameChain`、`CoreOpContNPackage`。
+		- `ContN` lowering 验收必须证明：repeatable frame chain 由 stackless resume functions 驱动；frame chain 可重复恢复；捕获 `Ref[T]` 是 shared-reference，不 snapshot / rollback。
+		- closure lowering 验收必须证明：no-capture closure 走 direct function / funref / inline；capturing closure 只有逃逸或确需 env 时才 materialize env；env 内 continuation / `Ref[T]` 不被能力洗白。
+		- spec 要求 `(A) -> B` 参数位置是 checked-template callable obligation，存储位置 lower 成 erased callable ADT；显式 `cont1` / `contN` storage 不走 erased callable ADT；当前未见真实 callable storage lowering。
+		- frontend grammar source 已补 `cont1 (A) -> B`、`contN (A) -> B`、`shiftn` contract 与 chibalex/chibacc mini fixtures；生成版 lexer/parser 已刷新，`shift :tag` / `shiftn :tag` label parse 已对齐 lexer 的 `Colon Ident` tokenization，且 AST 保留 tag 名；native chibalex oracle 尚未覆盖 continuation surface keywords。
+		- spec 要求 `((A) -> B) send` 排除 continuation 与 `!send` closure；当前 send/capability 与 callable storage / continuation 没有真实集成。
+		- spec 要求 no-capture closure 不分配 env，capturing closure 只有需要时 materialize env；当前 closure env layout 由 continuation packaging decision 壳生成，capture extraction 仍缺。
+		- spec 要求 CIR 承载 type / usage / send / arena / answer-type 语义，BIR materialize frame/prompt/control；当前 backend WAT emitter 已不再 comment-only 成功，但真实 Wasm-GC / continuation frame / closure env 发射仍是 missing-backend-layout blocker。
 	- **完成标准**:
 		- `check_answer_control` / usage / boundary / replay-safety / CPS / closure conversion / backend emit 不再以空 facts 或 pass-through 伪装完成；
 		- continuation lowering 能区分 `Cont1` direct、boxed `Cont1`、`ContN` package；
 		- closure lowering 能保证 no-capture closure 不分配 env，capturing closure 才 materialize env；
 		- parser / grammar 支持 `shift` / `shiftn` 与 `cont1 (A) -> B` / `contN (A) -> B` 类型糖；
-		- 已新增 grammar 契约源文件：`chiba-level1-grammar-spec/32-test.chiba` 与 `chiba-level1-grammar-error-spec/111-test.chiba`、`112-test.chiba`、`113-test.chiba`；lexer/parser golden 需等新 keyword/type grammar 实现后生成，不能伪造当前 parser 尚不支持的 spec；
+		- 已新增 grammar 契约源文件：`chiba-level1-grammar-spec/32-test.chiba` 与 `chiba-level1-grammar-error-spec/111-test.chiba`、`112-test.chiba`、`113-test.chiba`；当前 `level1c.o parse` 已支持 continuation keyword/type grammar，后续仍需 level-1b 自举主路径接管这些 fixtures；
 		- `(A) -> B` storage lower 成 erased callable ADT，并支持 function / closure / boxed `Cont1` / `ContN` dispatch；
 		- 显式 `cont1 (A) -> B` / `contN (A) -> B` storage 分别走 continuation-specific storage，不走 erased callable ADT；
 		- sendable callable storage 排除 continuation 和 `!send` closure；
@@ -282,6 +308,7 @@
 		- `std.regex` 不再把 parser/compiler/matcher 的关键能力留在 builtin/oracle；
 		- `std.chibalex` 不再只停在 parser/lowering/engine/codegen contract + mini oracle；
 		- `std.chibacc` 不再只停在 grammar IR / recovery / codegen contract + mini oracle。
+		- level-1b 完成自举后，所有 key compiler capability 的 oracle dependency 必须移除；oracle 只能保留为 fixture / diff / expected-output 对拍工具。
 	- **备注**: 这不是要推翻已完成的 C04-C06，而是把它们从“gate 已建立、主干已在”推进到“self-host 真正 primary”。
 
 - [ ] 让 level-1b backend 稳定生成 `level1c-next.wat`
@@ -325,6 +352,7 @@
 ## 当前优先级顺序
 
 1. 先修复 level-1b 不可用状态：清理 contract-only / stub-only / comment-only pass，避免假成功路径继续误导判断。
+   - 剩余清理顺序：先断 `legacy-dependency`，再断 `oracle-dependency`；comment-only backend、`Ok(module)` pass-through、empty facts 已完成第一轮 truthfulness 清理。
 2. 落地 continuation / closure / callable 语义：`Cont1` / `ContN`、boxed `Cont1` state machine、erased callable ADT、sendable callable storage、one-shot/no-capture 必需优化。
 3. 清 frontend migration 的 builtin/oracle 债务，尤其 `std.chibalex` / `std.chibacc`，但必须基于真实 continuation/closure lowering。
 4. 收掉 checkpoint checklist 里仍未门禁或未 runtime 化的语义面：ADT tuple bridge、compiler intrinsic surface、globals、`Self` generics、deep pattern / pipe 全矩阵、scope shadowing。

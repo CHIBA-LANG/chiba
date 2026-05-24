@@ -34,6 +34,26 @@ data ContinuationResumeKind {
     ContinuationMultiShot,
 }
 
+/// Surface continuation capability.
+data ContinuationCapabilityKind {
+    ContinuationCont1,
+    ContinuationContN,
+}
+
+/// Map surface continuation capability to resume kind.
+def ContinuationCapabilityKind.resume_kind(self): ContinuationResumeKind =
+    match self {
+        ContinuationCont1 => ContinuationLinear
+        ContinuationContN => ContinuationMultiShot
+    }
+
+/// Return true when a continuation capability is repeatable.
+def ContinuationCapabilityKind.repeatable(self): bool =
+    match self {
+        ContinuationContN => true
+        _ => false
+    }
+
 /// Canonical type representation.
 data TypeIr {
     TypeUnknown,

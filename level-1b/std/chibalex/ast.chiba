@@ -24,6 +24,22 @@ data LexTransition {
     LexGoto(LexMode),
 }
 
+/// Builtin Chiba keyword surfaces that the level-1 lexer contract must cover.
+data LexBuiltinKeyword {
+    LexKeywordReset,
+    LexKeywordShift,
+    LexKeywordShiftn,
+    LexKeywordCont1,
+    LexKeywordContN,
+}
+
+/// Keyword rule emitted before the generic identifier rule.
+type LexKeywordRule {
+    spelling: str,
+    token_name: str,
+    keyword: LexBuiltinKeyword,
+}
+
 /// Regex definition declared with `@name = ...`.
 type LexRegexDef {
     name: str,

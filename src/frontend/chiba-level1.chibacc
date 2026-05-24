@@ -389,7 +389,11 @@ rule param_type_opt ::=
     ;
 
 rule type_expr ::= 
-    head:Ident tail:type_expr_tail => Type_Path(head, tail)
+    KwCont1 LParen input:type_expr RParen ThinArrow answer:type_expr => Type_Cont1(input, answer)
+    | KwContN LParen input:type_expr RParen ThinArrow answer:type_expr => Type_ContN(input, answer)
+    | LParen input:type_expr RParen ThinArrow answer:type_expr => Type_Callable(input, answer)
+    | LParen RParen ThinArrow answer:type_expr => Type_Callable(Type_Unit, answer)
+    | head:Ident tail:type_expr_tail => Type_Path(head, tail)
     | KwSelf => Type_Path(mk_str("Self", 4), Type_Tail_End)
     | LBrace row:generic_row_type RBrace => Type_Row(row)
     | KwDyn contract:dyn_type_contract_list => Type_Dyn(contract)
@@ -525,7 +529,8 @@ rule for_after_kw ::=
     ;
 
 rule loop_label ::= 
-    Atom => LoopLabel_Some
+    Colon name:Ident => LoopLabel_Some(name)
+    | name:Atom => LoopLabel_Some(name)
     ;
 
 rule loop_label_opt ::= 
@@ -639,10 +644,12 @@ rule reset_expr ::=
 
 rule shift_expr ::= 
     KwShift label:control_label_opt name:Ident body:block_expr => Expr_Shift(label, name, body)
+    | KwShiftn label:control_label_opt name:Ident body:block_expr => Expr_ShiftN(label, name, body)
     ;
 
 rule control_label_opt ::= 
-    Atom => ControlLabel_Some
+    Colon name:Ident => ControlLabel_Some(name)
+    | name:Atom => ControlLabel_Some(name)
     | => ControlLabel_None
     ;
 
@@ -1104,6 +1111,9 @@ rule arg_tail ::=
         Param_End,
 
         Type_Path(Str, AST),
+        Type_Callable(AST, AST),
+        Type_Cont1(AST, AST),
+        Type_ContN(AST, AST),
         Type_Row(AST),
         Type_Dyn(AST),
         Type_Tail_Dot(AST),
@@ -1142,7 +1152,8 @@ rule arg_tail ::=
         MatchIdent_Name,
         Expr_Reset(AST, AST),
         Expr_Shift(AST, Str, AST),
-        ControlLabel_Some,
+        Expr_ShiftN(AST, Str, AST),
+        ControlLabel_Some(Str),
         ControlLabel_None,
         MatchArm_Cons(AST, AST),
         MatchArm_End,
@@ -1209,7 +1220,7 @@ rule arg_tail ::=
         Stmt_For(AST, AST, AST),
         Stmt_Break(AST),
         Stmt_Continue(AST),
-        LoopLabel_Some,
+        LoopLabel_Some(Str),
         LoopLabel_None,
         Stmt_Return(AST),
         Stmt_Expr(AST),

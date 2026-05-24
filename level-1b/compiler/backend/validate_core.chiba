@@ -32,6 +32,9 @@ def WasmGcLayoutKind.eq(self, other: WasmGcLayoutKind): bool =
         LayoutArray => match other { LayoutArray => true  _ => false }
         LayoutClosureEnv => match other { LayoutClosureEnv => true  _ => false }
         LayoutContinuationFrame => match other { LayoutContinuationFrame => true  _ => false }
+        LayoutContinuationFrameChain => match other { LayoutContinuationFrameChain => true  _ => false }
+        LayoutBoxedCont1 => match other { LayoutBoxedCont1 => true  _ => false }
+        LayoutContNPackage => match other { LayoutContNPackage => true  _ => false }
         LayoutContinuationPackage => match other { LayoutContinuationPackage => true  _ => false }
         LayoutSliceView => match other { LayoutSliceView => true  _ => false }
     }
@@ -67,6 +70,27 @@ def validate_core_layout(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
 /// Validate continuation package operations.
 def validate_core_continuation_package(op: CoreOp): Option[CoreValidationError] =
     match op.kind {
+        CoreOpBoxedCont1 =>
+            match op.layout {
+                Some(layout) =>
+                    if layout.kind.eq(LayoutBoxedCont1) { None }
+                    else { Some(CoreIllegalContinuationPackage("boxed Cont1 must use one-shot layout")) }
+                None => Some(CoreIllegalContinuationPackage("boxed Cont1 missing layout"))
+            }
+        CoreOpContinuationFrameChain =>
+            match op.layout {
+                Some(layout) =>
+                    if layout.kind.eq(LayoutContinuationFrameChain) { None }
+                    else { Some(CoreIllegalContinuationPackage("ContN frame chain must use frame-chain layout")) }
+                None => Some(CoreIllegalContinuationPackage("ContN frame chain missing layout"))
+            }
+        CoreOpContNPackage =>
+            match op.layout {
+                Some(layout) =>
+                    if layout.kind.eq(LayoutContNPackage) { None }
+                    else { Some(CoreIllegalContinuationPackage("ContN package must use repeatable package layout")) }
+                None => Some(CoreIllegalContinuationPackage("ContN package missing layout"))
+            }
         CoreOpContinuationPackage =>
             match op.layout {
                 Some(layout) =>

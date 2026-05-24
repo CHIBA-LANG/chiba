@@ -1,4 +1,4 @@
-namespace level1b.supports.chibaccmini.codegen_contract
+namespace supports.chibaccmini.codegen_contract
 
 use std.chibacc.ast.*
 use std.chibacc.codegen.*

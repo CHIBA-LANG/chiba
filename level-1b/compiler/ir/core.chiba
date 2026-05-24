@@ -10,8 +10,18 @@ data CoreLayoutKind {
     CoreLayoutArray,
     CoreLayoutClosureEnv,
     CoreLayoutContinuationFrame,
+    CoreLayoutContinuationFrameChain,
+    CoreLayoutBoxedCont1,
     CoreLayoutContinuationPackage,
     CoreLayoutSliceView,
+}
+
+/// Core continuation materialization kind.
+data CoreContinuationMaterialization {
+    CoreDirectCont1,
+    CoreBoxedCont1,
+    CoreRepeatableContNFrameChain,
+    CoreErasedCallableContinuation,
 }
 
 /// Stable layout id.

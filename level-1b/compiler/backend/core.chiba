@@ -19,9 +19,13 @@ data CoreTailPosition {
 /// Core operation class understood by the dumb backend emitter.
 data CoreOpKind {
     CoreOpFunction,
+    CoreOpStacklessFunction,
     CoreOpStructNew,
     CoreOpArrayNew,
     CoreOpClosureCall,
+    CoreOpBoxedCont1,
+    CoreOpContinuationFrameChain,
+    CoreOpContNPackage,
     CoreOpContinuationPackage,
     CoreOpTailCall,
     CoreOpImportCall(CoreImportModule),
@@ -83,6 +87,9 @@ def CoreOpKind.requires_layout(self): bool =
         CoreOpStructNew => true
         CoreOpArrayNew => true
         CoreOpClosureCall => true
+        CoreOpBoxedCont1 => true
+        CoreOpContinuationFrameChain => true
+        CoreOpContNPackage => true
         CoreOpContinuationPackage => true
         _ => false
     }

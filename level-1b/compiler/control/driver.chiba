@@ -12,10 +12,14 @@ use compiler.control.cps.*
 def run_control_cps(module: TypedModule): Result[CpsModule, SemanticDiagnostics] =
     match check_answer_control(module) {
         Ok(answer) =>
-            match check_continuation_boundary(analyze_usage(answer)) {
-                Ok(boundary_checked) =>
-                    match check_replay_safety(boundary_checked) {
-                        Ok(replay) => Ok(one_pass_cps(replay))
+            match analyze_usage(answer) {
+                Ok(usage) =>
+                    match check_continuation_boundary(usage) {
+                        Ok(boundary_checked) =>
+                            match check_replay_safety(boundary_checked) {
+                                Ok(replay) => one_pass_cps(replay)
+                                Err(errors) => Err(errors)
+                            }
                         Err(errors) => Err(errors)
                     }
                 Err(errors) => Err(errors)

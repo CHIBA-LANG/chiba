@@ -2,11 +2,13 @@
 namespace compiler.closure.continuation_simplify
 
 use compiler.closure.usage_cps.*
+use compiler.ir.type_ir.*
 
 /// Continuation simplification decision.
 data ContinuationSimplification {
     ContinuationDeleted(BinderId),
     ContinuationInlined(BinderId),
+    ContinuationBoxedOneShot(BinderId),
     ContinuationPackaged(BinderId),
 }
 
@@ -24,13 +26,25 @@ def simplify_continuations(module: CpsUsageModule): SimplifiedContinuationModule
 /// Convert one use fact into a continuation simplification decision if needed.
 def push_continuation_simplification(out: Vec[ContinuationSimplification], fact: CpsUseFact): Vec[ContinuationSimplification] =
     match fact.subject {
-        UseSubjectContinuation(binder) =>
-            match fact.count {
+        UseSubjectContinuation(binder, capability) =>
+            push_continuation_capability_simplification(out, binder, capability, fact.count)
+        _ => out
+    }
+
+/// Convert use count and continuation capability into a lowering decision.
+def push_continuation_capability_simplification(out: Vec[ContinuationSimplification], binder: BinderId, capability: ContinuationCapabilityKind, count: UsageCount): Vec[ContinuationSimplification] =
+    match capability {
+        ContinuationCont1 =>
+            match count {
                 UseZero => out.push(ContinuationDeleted(binder))
                 UseOne => out.push(ContinuationInlined(binder))
-                UseMany => out.push(ContinuationPackaged(binder))
+                UseMany => out.push(ContinuationBoxedOneShot(binder))
             }
-        _ => out
+        ContinuationContN =>
+            match count {
+                UseZero => out.push(ContinuationDeleted(binder))
+                _ => out.push(ContinuationPackaged(binder))
+            }
     }
 
 /// Build continuation simplification decisions in stable fact order.
@@ -41,6 +55,7 @@ def simplify_continuation_facts(facts: Array[CpsUseFact], index: usize, out: Vec
 /// Return true when a continuation decision allocates a runtime package.
 def ContinuationSimplification.materializes_package(self): bool =
     match self {
+        ContinuationBoxedOneShot(_) => true
         ContinuationPackaged(_) => true
         _ => false
     }

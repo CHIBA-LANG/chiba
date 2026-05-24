@@ -2,6 +2,7 @@
 namespace compiler.ir.control
 
 use compiler.ir.common.*
+use compiler.ir.type_ir.*
 use compiler.ir.typed.*
 
 /// Usage count used by control and closure passes.
@@ -19,10 +20,60 @@ data ControlBoundary {
     ControlDelimited,
 }
 
+/// Continuation storage obligation decided before backend lowering.
+data ContinuationStorageKind {
+    ContinuationDirectResume,
+    ContinuationBoxedOneShot,
+    ContinuationRepeatableFrameChain,
+    ContinuationErasedCallableVariant,
+}
+
+/// Callable arrow position that created a continuation obligation.
+data CallableArrowPosition {
+    CallableParameterPosition,
+    CallableStoragePosition,
+    CallableSendableStoragePosition,
+    CallableExplicitContStorage,
+}
+
+/// Continuation fact that must survive control, usage, and closure passes.
+type ContinuationFact {
+    binder: BinderId,
+    capability: ContinuationCapabilityKind,
+    resume_input: TypeIr,
+    answer: TypeIr,
+    boundary: ControlBoundary,
+    storage: ContinuationStorageKind,
+    arrow_position: CallableArrowPosition,
+    sendable: bool,
+}
+
+/// Return true when a continuation storage obligation materializes an object.
+def ContinuationStorageKind.materializes_runtime_object(self): bool =
+    match self {
+        ContinuationBoxedOneShot => true
+        ContinuationRepeatableFrameChain => true
+        ContinuationErasedCallableVariant => true
+        _ => false
+    }
+
+/// Return true when storage is legal for `((A) -> B) send`.
+def ContinuationFact.allowed_in_sendable_callable(self): bool = false
+
+/// Pick the default storage obligation for an explicitly typed continuation.
+def continuation_storage_for_capability(capability: ContinuationCapabilityKind, escaping: bool): ContinuationStorageKind =
+    match capability {
+        ContinuationCont1 =>
+            if escaping { ContinuationBoxedOneShot }
+            else { ContinuationDirectResume }
+        ContinuationContN => ContinuationRepeatableFrameChain
+    }
+
 /// CPS module after one-pass CPS and beta reduction.
 type CpsIrModule {
     source: TypedModule,
     usage: Array[UseFact],
+    continuations: Array[ContinuationFact],
 }
 
 /// Use fact for a binder or continuation.

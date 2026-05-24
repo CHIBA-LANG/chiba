@@ -50,6 +50,9 @@ mode STRING
 @kw_unsafe = "unsafe" @wsnl?
 @kw_reset = "reset" @wsnl?
 @kw_shift = "shift" @wsnl?
+@kw_shiftn = "shiftn" @wsnl?
+@kw_cont1 = "cont1" @wsnl?
+@kw_contn = "contN" @wsnl?
 @kw_true = "true"
 @kw_false = "false"
 @kw_dyn = "dyn" @wsnl?
@@ -137,6 +140,9 @@ tokens CODE :-
     @kw_unsafe              { KwUnsafe }
     @kw_reset               { KwReset }
     @kw_shift               { KwShift }
+    @kw_shiftn              { KwShiftn }
+    @kw_cont1               { KwCont1 }
+    @kw_contn               { KwContN }
     @kw_true                { KwTrue }
     @kw_false               { KwFalse }
     @kw_dyn                 { KwDyn }
@@ -233,6 +239,9 @@ tokens STRING :-
         KwUnsafe,
         KwReset,
         KwShift,
+        KwShiftn,
+        KwCont1,
+        KwContN,
         KwTrue,
         KwFalse,
         KwDyn,

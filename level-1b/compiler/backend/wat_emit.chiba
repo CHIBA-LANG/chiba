@@ -1,7 +1,8 @@
-/// Dumb WAT emitter for validated Wasm-GC Core.
+/// WAT emitter for validated Wasm-GC Core.
 namespace compiler.backend.wat_emit
 
 use compiler.backend.validate_core.*
+use compiler.semantic.driver.*
 
 /// Textual WAT module.
 type WatModule {
@@ -12,9 +13,13 @@ type WatModule {
 def CoreOpKind.wat_label(self): String =
     match self {
         CoreOpFunction => "function"
+        CoreOpStacklessFunction => "stackless.function"
         CoreOpStructNew => "struct.new"
         CoreOpArrayNew => "array.new"
         CoreOpClosureCall => "closure.call"
+        CoreOpBoxedCont1 => "cont1.boxed"
+        CoreOpContinuationFrameChain => "continuation.frame_chain"
+        CoreOpContNPackage => "contN.package"
         CoreOpContinuationPackage => "continuation.package"
         CoreOpTailCall => "return_call"
         CoreOpImportCall(module) =>
@@ -24,18 +29,17 @@ def CoreOpKind.wat_label(self): String =
             }
     }
 
-/// Emit one Core op as stable WAT text.
-def emit_core_op(op: CoreOp): String =
-    "  ;; core-op ".concat(op.kind.wat_label()).concat("\n")
+/// Emit one Core op as WAT text.
+def emit_core_op(op: CoreOp): Result[String, SemanticDiagnostics] =
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<backend>", 0, 0, "missing-backend-layout: WAT lowering for ".concat(op.kind.wat_label()).concat(" absent")))
+        .freeze()))
 
-/// Emit Core ops in validation order.
-def emit_core_ops(ops: Array[CoreOp], index: usize, out: String): String =
-    if index == ops.len() { out }
-    else { emit_core_ops(ops, index + 1, out.concat(emit_core_op(ops.get(index)))) }
-
-/// Emit validated Core as WAT without semantic decisions.
-def emit_wat(module: ValidatedCoreModule): WatModule =
-    WatModule { text: "(module\n".concat(emit_core_ops(module.core.ops, 0, "")).concat(")\n") }
+/// Emit validated Core as WAT.
+def emit_wat(module: ValidatedCoreModule): Result[WatModule, SemanticDiagnostics] =
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<backend>", 0, 0, "missing-backend-layout: executable WAT emission absent"))
+        .freeze()))
 
 /// Return the text carried by a WAT module.
 def WatModule.as_string(self): String = self.text

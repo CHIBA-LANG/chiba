@@ -9,6 +9,9 @@ data WasmGcLayoutKind {
     LayoutArray,
     LayoutClosureEnv,
     LayoutContinuationFrame,
+    LayoutContinuationFrameChain,
+    LayoutBoxedCont1,
+    LayoutContNPackage,
     LayoutContinuationPackage,
     LayoutSliceView,
 }
@@ -86,15 +89,39 @@ def layout_continuation_frame(): WasmGcLayout =
             .freeze(),
     }
 
+/// Repeatable frame chain used by multi-shot `ContN`.
+def layout_continuation_frame_chain(): WasmGcLayout =
+    WasmGcLayout {
+        id: 4,
+        key: "compiler.continuation.frame_chain",
+        kind: LayoutContinuationFrameChain,
+        fields: Vec[WasmGcFieldLayout].new()
+            .push(wasm_gc_field("head", "continuation-frame"))
+            .push(wasm_gc_field("parent", "continuation-frame-chain?"))
+            .freeze(),
+    }
+
+/// Boxed one-shot `Cont1` consumed-state machine.
+def layout_boxed_cont1(): WasmGcLayout =
+    WasmGcLayout {
+        id: 5,
+        key: "compiler.continuation.boxed_cont1",
+        kind: LayoutBoxedCont1,
+        fields: Vec[WasmGcFieldLayout].new()
+            .push(wasm_gc_field("frame", "continuation-frame"))
+            .push(wasm_gc_field("consumed", "bool"))
+            .freeze(),
+    }
+
 /// Multi-shot continuation package layout.
 def layout_continuation_package(): WasmGcLayout =
     WasmGcLayout {
-        id: 4,
-        key: "compiler.continuation.package",
-        kind: LayoutContinuationPackage,
+        id: 6,
+        key: "compiler.continuation.contN_package",
+        kind: LayoutContNPackage,
         fields: Vec[WasmGcFieldLayout].new()
-            .push(wasm_gc_field("frame", "continuation-frame"))
-            .push(wasm_gc_field("usage", "usize"))
+            .push(wasm_gc_field("frames", "continuation-frame-chain"))
+            .push(wasm_gc_field("repeatable", "bool"))
             .freeze(),
     }
 
@@ -106,6 +133,8 @@ def build_wasm_gc_layouts(module: OptimizedClosureModule): WasmGcLayoutTable =
             .push(layout_slice_u8())
             .push(layout_closure_env())
             .push(layout_continuation_frame())
+            .push(layout_continuation_frame_chain())
+            .push(layout_boxed_cont1())
             .push(layout_continuation_package())
             .freeze(),
     }
@@ -115,6 +144,9 @@ def WasmGcLayoutKind.is_package(self): bool =
     match self {
         LayoutClosureEnv => true
         LayoutContinuationFrame => true
+        LayoutContinuationFrameChain => true
+        LayoutBoxedCont1 => true
+        LayoutContNPackage => true
         LayoutContinuationPackage => true
         _ => false
     }

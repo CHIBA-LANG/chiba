@@ -40,7 +40,13 @@ def CapabilityUse.requires_unsafe(self): bool =
     }
 
 /// Check extern ABI signatures after type inference.
-def check_extern_abi(module: TypedModule): Result[TypedModule, SemanticDiagnostics] = Ok(module)
+def check_extern_abi(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: extern ABI signature scan absent"))
+        .freeze()))
 
 /// Check Ref/UnsafeRef/Ptr/Atomic capability rules.
-def check_capabilities(module: TypedModule): Result[TypedModule, SemanticDiagnostics] = Ok(module)
+def check_capabilities(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: builtin capability legality scan absent"))
+        .freeze()))

@@ -11,4 +11,6 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
 
 /// Run the level-2 semantic checks that require inferred types.
 def check_l2_types(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
-    Ok(module)
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: level-2 typed semantic checks absent"))
+        .freeze()))

@@ -56,7 +56,7 @@ def cir_collect_type_names_append(xs: CirTypeNameList, ys: CirTypeNameList): Cir
 
 def cir_lower_control_label(ast: AST): CirControlLabel =
     match ast {
-        ControlLabel_Some => CirLabelImplicit
+        ControlLabel_Some(name) => CirLabelNamed(name)
         ControlLabel_None => CirLabelImplicit
         _ => CirLabelImplicit
     }

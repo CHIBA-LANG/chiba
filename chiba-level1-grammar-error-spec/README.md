@@ -127,3 +127,6 @@
 - `107-test.chiba`：带泛型和 row bound 的 `data` 记录字段缺类型。应报错。
 - `108-test.chiba`：receiver generics 后的方法 generics 缺逗号。应报错。
 - `109-test.chiba`：`if let` 缺显式 `else`。应报错。
+- `111-test.chiba`：`shiftn` 缺 continuation 变量。应报错。
+- `112-test.chiba`：`cont1 (A) -> B` 类型糖缺 `->`。应报错。
+- `113-test.chiba`：`contN (A) -> B` 类型糖缺输入括号。应报错。

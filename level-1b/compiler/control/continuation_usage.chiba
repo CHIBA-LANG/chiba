@@ -2,6 +2,7 @@
 namespace compiler.control.continuation_usage
 
 use compiler.control.answer_control.*
+use compiler.semantic.driver.*
 
 /// Usage count used by CPS and continuation packaging.
 data UsageCount {
@@ -23,8 +24,10 @@ type UsageFact {
 }
 
 /// Analyze binder, lambda, closure, and continuation usage.
-def analyze_usage(module: AnswerControlModule): UsageModule =
-    UsageModule(module, Vec[UsageFact].new().freeze())
+def analyze_usage(module: AnswerControlModule): Result[UsageModule, SemanticDiagnostics] =
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<control>", 0, 0, "missing-facts: continuation usage subject collection absent"))
+        .freeze()))
 
 /// Module annotated with usage facts.
 type UsageModule {

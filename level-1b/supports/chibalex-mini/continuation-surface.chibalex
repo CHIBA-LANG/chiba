@@ -1,0 +1,33 @@
+#![CHIBALEX]
+
+{
+    namespace chibalexmini.continuation
+    use metalstd.str.*
+}
+
+@ws = $WS+
+@ident = $XID_START $XID_CONTINUE*
+
+tokens :-
+    @ws       ;
+    "shiftn"  { KwShiftn }
+    "cont1"   { KwCont1 }
+    "contN"   { KwContN }
+    "->"      { ThinArrow }
+    "("       { LParen }
+    ")"       { RParen }
+    @ident    { Ident(s) }
+
+{
+    data Token {
+        Ident(Str),
+        KwShiftn,
+        KwCont1,
+        KwContN,
+        ThinArrow,
+        LParen,
+        RParen,
+        LexError(i64),
+        Eof,
+    }
+}

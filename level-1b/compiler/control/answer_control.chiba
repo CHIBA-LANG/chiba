@@ -1,6 +1,8 @@
 /// Answer type and delimited-control checks.
 namespace compiler.control.answer_control
 
+use compiler.semantic.driver.*
+
 /// Control boundary kind observed in an expression.
 data ControlBoundary {
     ControlNone,
@@ -17,7 +19,9 @@ type AnswerFact {
 
 /// Check `reset` and `shift` answer consistency.
 def check_answer_control(module: TypedModule): Result[AnswerControlModule, SemanticDiagnostics] =
-    Ok(AnswerControlModule(module, Vec[AnswerFact].new().freeze()))
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<control>", 0, 0, "missing-facts: answer/control expression scan absent"))
+        .freeze()))
 
 /// Typed module annotated with answer/control facts.
 type AnswerControlModule {

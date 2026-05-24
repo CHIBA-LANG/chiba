@@ -21,6 +21,7 @@ live outside `std`.
 | --- | --- | --- |
 | `.chibalex` AST | `std/chibalex/ast.chiba` | rewritten |
 | `.chibalex` parser | `std/chibalex/parser.chiba` | contract only |
+| Continuation keywords (`cont1`, `contN`, `shiftn`) | `std/chibalex/ast.chiba` + frontend lexer spec | contract only |
 | Lexer IR lowering | `std/chibalex/ir.chiba` | contract only |
 | Longest-match engine | `std/chibalex/engine.chiba` | partial rewrite: state advance and continuation choice rewritten; rule matching still builtin |
 | Lexer source codegen | `std/chibalex/codegen.chiba` | partial rewrite: GeneratedLexer text wrapper owned; full lexer source serialization pending |
@@ -31,6 +32,7 @@ live outside `std`.
 | --- | --- | --- |
 | `.chibacc` AST | `std/chibacc/ast.chiba` | rewritten |
 | `.chibacc` parser | `std/chibacc/parser.chiba` | contract only |
+| Continuation type grammar (`cont1 (A) -> B`, `contN (A) -> B`) | `std/chibacc/ast.chiba` + frontend parser spec | contract only |
 | Grammar IR lowering | `std/chibacc/ir.chiba` | contract only |
 | Pratt/recovery engine | `std/chibacc/engine.chiba` | partial rewrite: recovery and continuation retry rewritten; Pratt parse still builtin |
 | Parser source codegen | `std/chibacc/codegen.chiba` | partial rewrite: GeneratedParser text wrapper owned; full parser source serialization pending |

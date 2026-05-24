@@ -32,8 +32,10 @@ type TypedFacts {
 }
 
 /// Build typed facts after inference.
-def build_typed_facts(module: TypedModule): Array[TypedFacts] =
-    Vec[TypedFacts].new().freeze()
+def build_typed_facts(module: TypedModule): Result[Array[TypedFacts], SemanticDiagnostics] =
+    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+        .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: typed fact derivation from inferred source absent"))
+        .freeze()))
 
 /// Return true when typed facts contain specialization obligations.
 def TypedFacts.has_obligations(self): bool =

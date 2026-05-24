@@ -3,11 +3,15 @@ namespace compiler.ir.closure
 
 use compiler.ir.common.*
 use compiler.ir.control.*
+use compiler.ir.type_ir.*
 
 /// Capture legality kind.
 data CaptureClass {
     CaptureValue,
     CaptureReplaySafeContinuation,
+    CaptureSharedRefCell,
+    CaptureRejectedWorldLocal,
+    CaptureRejectedThreadLocal,
 }
 
 /// Captured field in an environment.
@@ -22,8 +26,57 @@ type ClosureEnv {
     fields: Array[EnvField],
 }
 
+/// Closure lowering decision before backend-specific layout.
+data ClosureLoweringKind {
+    ClosureNoCaptureDirect,
+    ClosureCapturingEnv,
+    ClosureKnownCallableDirect,
+    ClosureErasedCallableDispatch,
+}
+
+/// Closure lowering fact consumed by backend Core lowering.
+type ClosureLoweringFact {
+    owner: BinderId,
+    kind: ClosureLoweringKind,
+    env: Option[ClosureEnv],
+}
+
+/// One stackless function used to resume a continuation frame.
+type StacklessResumeFunction {
+    owner: BinderId,
+    resume_input: TypeIr,
+    answer: TypeIr,
+}
+
+/// One frame in a repeatable `ContN` frame chain.
+type ContinuationFrame {
+    owner: BinderId,
+    resume: StacklessResumeFunction,
+    captures: Array[EnvField],
+    parent: Option[BinderId],
+}
+
+/// Runtime continuation package shape before target-specific layout.
+data ContinuationLoweringKind {
+    ContinuationLowerDirectCont1,
+    ContinuationLowerBoxedCont1,
+    ContinuationLowerRepeatableContN,
+    ContinuationLowerErasedCallableVariant,
+}
+
+/// Continuation lowering fact that preserves `Cont1` vs `ContN` semantics.
+type ContinuationLoweringFact {
+    owner: BinderId,
+    capability: ContinuationCapabilityKind,
+    kind: ContinuationLoweringKind,
+    frames: Array[ContinuationFrame],
+    consumed_state: bool,
+}
+
 /// Optimized closure module consumed by Wasm-GC Core lowering.
 type ClosureIrModule {
     source: CpsIrModule,
     envs: Array[ClosureEnv],
+    closures: Array[ClosureLoweringFact],
+    continuations: Array[ContinuationLoweringFact],
 }

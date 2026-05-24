@@ -3,6 +3,7 @@ namespace compiler.closure.closure_convert
 
 use compiler.closure.continuation_simplify.*
 use compiler.control.replay_safety.*
+use compiler.semantic.driver.*
 
 /// Captured runtime value accepted by closure conversion.
 data CaptureKind {
@@ -40,7 +41,13 @@ type ClosureConvertedModule {
 
 /// Convert escaping lambdas and packaged continuations to explicit env layouts.
 def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConvertedModule, SemanticDiagnostics] =
-    Ok(ClosureConvertedModule(module, closure_env_layouts(module.decisions, 0, Vec[ClosureEnvLayout].new())))
+    if continuation_decisions_require_capture_extraction(module.decisions, 0) {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: continuation capture extraction absent"))
+            .freeze()))
+    } else {
+        Ok(ClosureConvertedModule(module, closure_env_layouts(module.decisions, 0, Vec[ClosureEnvLayout].new())))
+    }
 
 /// Empty capture list for a directified closure or continuation package.
 def empty_capture_fields(): Array[CaptureField] =
@@ -49,9 +56,22 @@ def empty_capture_fields(): Array[CaptureField] =
 /// Append a closure environment layout for decisions that materialize.
 def push_closure_env_layout(out: Vec[ClosureEnvLayout], decision: ContinuationSimplification): Vec[ClosureEnvLayout] =
     match decision {
-        ContinuationPackaged(binder) => out.push(ClosureEnvLayout(binder, empty_capture_fields()))
         _ => out
     }
+
+/// Return true when a continuation decision needs real capture extraction.
+def continuation_decision_requires_capture_extraction(decision: ContinuationSimplification): bool =
+    match decision {
+        ContinuationBoxedOneShot(_) => true
+        ContinuationPackaged(_) => true
+        _ => false
+    }
+
+/// Return true when any decision cannot be converted without capture facts.
+def continuation_decisions_require_capture_extraction(decisions: Array[ContinuationSimplification], index: usize): bool =
+    if index == decisions.len() { false }
+    else if continuation_decision_requires_capture_extraction(decisions.get(index)) { true }
+    else { continuation_decisions_require_capture_extraction(decisions, index + 1) }
 
 /// Build closure environment layouts in stable decision order.
 def closure_env_layouts(decisions: Array[ContinuationSimplification], index: usize, out: Vec[ClosureEnvLayout]): Array[ClosureEnvLayout] =

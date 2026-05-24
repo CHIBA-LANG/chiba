@@ -68,6 +68,12 @@ requireIncludes("lexer spec", lexerSpec, [
   "DocComment(Str)",
   "DocComment(_) => 1",
   "DocComment(text) => strhasnewline(text)",
+  "@kw_cont1",
+  "@kw_contn",
+  "@kw_shiftn",
+  "KwCont1",
+  "KwContN",
+  "KwShiftn",
 ]);
 
 requireIncludes("generated lexer", lexer, [
@@ -76,6 +82,9 @@ requireIncludes("generated lexer", lexer, [
   "DocComment(_) => 1",
   "DocComment(text) => strhasnewline(text)",
   "type TokenSpan { token: Token  span: Span",
+  "KwCont1",
+  "KwContN",
+  "KwShiftn",
 ]);
 
 requireIncludes("lexer show", lexerShow, [
@@ -83,23 +92,41 @@ requireIncludes("lexer show", lexerShow, [
   "\"DocComment(\"",
   "span_to_str",
   "tokenspan_to_string",
+  "\"KwCont1\"",
+  "\"KwContN\"",
+  "\"KwShiftn\"",
 ]);
 
 requireIncludes("parser spec", parserSpec, [
   "_:DocComment => 0",
   "file_attr_list ns:namespace_decl",
   "AttrArgIdentNamedString",
+  "KwCont1 LParen input:type_expr RParen ThinArrow answer:type_expr => Type_Cont1(input, answer)",
+  "KwContN LParen input:type_expr RParen ThinArrow answer:type_expr => Type_ContN(input, answer)",
+  "KwShiftn label:control_label_opt name:Ident body:block_expr => Expr_ShiftN(label, name, body)",
+  "Colon name:Ident => ControlLabel_Some(name)",
+  "Colon name:Ident => LoopLabel_Some(name)",
 ]);
 
 requireIncludes("generated parser", parser, [
   "match_token_DocComment",
   "DocComment(v) => MatchOK",
+  "match_token_KwCont1",
+  "match_token_KwContN",
+  "match_token_KwShiftn",
+  "Type_Cont1(input, answer)",
+  "Type_ContN(input, answer)",
+  "Expr_ShiftN(label, name, body)",
+  "ControlLabel_Some(name)",
+  "LoopLabel_Some(name)",
 ]);
 
 requireIncludes("parser helpers", parserHelpers, [
   "DocComment(text) => 1",
   "LineComment(text) => 1",
   "Newline(text) => 1",
+  "ControlLabel_Some(name) => aststr1",
+  "LoopLabel_Some(name) => aststr1",
 ]);
 
 console.log("[PASS] level-1b C00 source surface");
