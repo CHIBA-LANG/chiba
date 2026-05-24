@@ -122,6 +122,28 @@ for (const root of SCAN_ROOTS) {
       });
     }
 
+    const alphaEmptyBinders = /\bdef\s+alpha_convert\b[\s\S]*?AlphaModule\s*\(\s*Vec\s*\[\s*BinderId\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/g;
+    for (const match of source.matchAll(alphaEmptyBinders)) {
+      blockers.push({
+        id: "alpha-empty-binders",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "missing-facts",
+        semantic: "alpha conversion creates an empty binder stream instead of consuming source item facts",
+        message: "missing-facts: alpha conversion creates an empty binder stream instead of consuming source item facts",
+      });
+    }
+
+    const patternEmptyFacts = /\bdef\s+elaborate_patterns\b[\s\S]*?PatternFacts\s*\(\s*Vec\s*\[\s*PatternId\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/g;
+    for (const match of source.matchAll(patternEmptyFacts)) {
+      blockers.push({
+        id: "pattern-empty-facts",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "missing-facts",
+        semantic: "pattern elaboration creates an empty pattern stream instead of consuming alpha binders",
+        message: "missing-facts: pattern elaboration creates an empty pattern stream instead of consuming alpha binders",
+      });
+    }
+
     const emptySurfaceLowering = /\bdef\s+lower_ast_to_surface\b[\s\S]*?Ok\s*\(\s*SurfaceModule\s*\(\s*""\s*,\s*Vec\s*\[\s*SurfaceItem\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)\s*\)/g;
     for (const match of source.matchAll(emptySurfaceLowering)) {
       blockers.push({
