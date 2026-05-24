@@ -40,6 +40,16 @@ type NamespaceOwnershipFact {
     owner_namespace: NamespaceNameSlice,
 }
 
+/// Source import fact before full namespace/name resolution.
+type NamespaceImportFact {
+    file: SourceFileId,
+    path: SourceNameSlice,
+    glob: bool,
+    multi: bool,
+    line: usize,
+    column: usize,
+}
+
 /// Method/operator declaration surface fact after alpha conversion.
 type MethodSurfaceFact {
     owner: BinderId,
@@ -251,6 +261,22 @@ def namespace_ownership_facts_from_skeletons(skeletons: Array[TypedItemSkeleton]
             None => namespace_ownership_facts_from_skeletons(skeletons, index + 1, out)
         }
     }
+
+/// Create one namespace import fact from a source `use`.
+def namespace_import_fact_from_use(import_use: SourceUseScanResult): NamespaceImportFact =
+    NamespaceImportFact {
+        file: import_use.file,
+        path: import_use.path,
+        glob: import_use.glob,
+        multi: import_use.multi,
+        line: import_use.line,
+        column: import_use.column,
+    }
+
+/// Generate namespace import facts in deterministic source order.
+def namespace_import_facts_from_uses(uses: Array[SourceUseScanResult], index: usize, out: Vec[NamespaceImportFact]): Array[NamespaceImportFact] =
+    if index == uses.len() { out.freeze() }
+    else { namespace_import_facts_from_uses(uses, index + 1, out.push(namespace_import_fact_from_use(uses.get(index)))) }
 
 /// Create a method/operator surface fact from a method-like item skeleton.
 def method_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[MethodSurfaceFact] =
@@ -653,6 +679,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let skeletons = typed_item_skeletons_from_alpha(module.origins, 0, Vec[TypedItemSkeleton].new())
     let callable_storage = callable_storage_facts_from_skeletons(skeletons, 0, Vec[CallableStorageFact].new())
     let namespace_ownership = namespace_ownership_facts_from_skeletons(skeletons, 0, Vec[NamespaceOwnershipFact].new())
+    let namespace_imports = namespace_import_facts_from_uses(module.uses, 0, Vec[NamespaceImportFact].new())
     let method_surface = method_surface_facts_from_skeletons(skeletons, 0, Vec[MethodSurfaceFact].new())
     let branching_surface = branching_surface_facts_from_skeletons(skeletons, 0, Vec[BranchingSurfaceFact].new())
     let control_surface = control_surface_facts_from_skeletons(skeletons, 0, Vec[ControlSurfaceFact].new())
@@ -798,6 +825,16 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
                 .freeze()))
         }
+    } else if module.uses.len() > 0 {
+        if namespace_imports.len() == 0 {
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: namespace import fact generation absent"))
+                .freeze()))
+        } else {
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: import and name resolution absent"))
+                .freeze()))
+        }
     } else if typed_item_skeletons_have_explicit_type_params(skeletons, 0) {
         if generic_surface.len() == 0 {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
@@ -815,12 +852,13 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
-def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact]): TypedModule =
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], namespace_imports: Array[NamespaceImportFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact]): TypedModule =
     TypedModule {
         alpha: module,
         items: skeletons,
         callable_storage: callable_storage,
         namespace_ownership: namespace_ownership,
+        namespace_imports: namespace_imports,
         method_surface: method_surface,
         branching_surface: branching_surface,
         control_surface: control_surface,

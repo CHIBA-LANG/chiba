@@ -15,6 +15,7 @@
 	- [x] attribute spec/golden：spec 已定义 AttrArg AST 与 nested/named/list/object grammar，并新增复杂 attribute fixture/gate。
 - [ ] namespace resolution：只有扫描和 owner slice；真实 import/name resolution、owner namespace symbol、visibility/private、冲突规则没做。
 	- [x] namespace ownership facts：alpha/typed skeleton 已把 item owner namespace 线程化进 `TypedModule.namespace_ownership`；import/name resolution 仍未完成。
+	- [x] namespace import facts：source `use` 已经穿过 alpha 进入 `TypedModule.namespace_imports`；真实 visibility/private/conflict/name lookup 仍 fail-closed。
 - [ ] method resolution：没做。method index、receiver binding、qualified callee、Self with generics 都缺。
 	- [x] method surface facts：source scan 已抽取 `def Receiver.member` 的 receiver/member slices，后续 method index 不再只靠 boolean。
 	- [x] typed method/operator facts：typed module 已聚合 `MethodSurfaceFact`，保留 owner、receiver、member、operator 标记。

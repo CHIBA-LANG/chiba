@@ -40,6 +40,7 @@ type TypedModule {
     items: Array[TypedItemSkeleton],
     callable_storage: Array[CallableStorageFact],
     namespace_ownership: Array[NamespaceOwnershipFact],
+    namespace_imports: Array[NamespaceImportFact],
     method_surface: Array[MethodSurfaceFact],
     branching_surface: Array[BranchingSurfaceFact],
     control_surface: Array[ControlSurfaceFact],
