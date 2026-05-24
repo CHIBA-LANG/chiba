@@ -12,6 +12,7 @@
 ## P0
 - [ ] chibalex/chibacc frontend：还没替换 scan.chiba；真实 source AST 还没进 primary path。
 - [ ] attribute grammar：#[attr(...)] nested/named/list args 没 spec/golden/AST/parser。
+	- [x] attribute spec/golden：spec 已定义 AttrArg AST 与 nested/named/list/object grammar，并新增复杂 attribute fixture/gate。
 - [ ] namespace resolution：只有扫描和 owner slice；真实 import/name resolution、owner namespace symbol、visibility/private、冲突规则没做。
 	- [x] namespace ownership facts：alpha/typed skeleton 已把 item owner namespace 线程化进 `TypedModule.namespace_ownership`；import/name resolution 仍未完成。
 - [ ] method resolution：没做。method index、receiver binding、qualified callee、Self with generics 都缺。

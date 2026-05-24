@@ -82,6 +82,7 @@ run("level-1b smoke", process.execPath, ["tools/node/run-level1b-smoke.mjs"]);
 run("level-1b namespace", process.execPath, ["tools/node/run-level1b-namespace-smoke.mjs"]);
 run("level-1b branching", process.execPath, ["tools/node/run-level1b-branching-gate.mjs"]);
 run("level-1b CIR boundary", process.execPath, ["tools/node/run-level1b-cir-boundary.mjs"]);
+run("level-1b attribute spec", process.execPath, ["tools/node/run-level1b-attribute-spec-gate.mjs"]);
 run("level-1b chibalex mini", process.execPath, ["tools/node/run-level1b-chibalex-mini.mjs"]);
 run("level-1b chibacc mini", process.execPath, ["tools/node/run-level1b-chibacc-mini.mjs"]);
 run("level-1b std surface", process.execPath, ["tools/node/run-level1b-std-surface.mjs"]);
