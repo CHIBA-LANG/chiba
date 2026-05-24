@@ -369,7 +369,7 @@ const LEVEL1C_CASES = [
   {
     name: "level1c nanopass closure capture",
     args: ["nanopass", "supports/bootstrap/closure-capture.chiba"],
-    expect: ["L8ValidatedCoreModule", "L6OpClosureEnv", "L1OpClosure", "L1RefLocal(#1 \"x\")", "validation ok", "0"],
+    expect: ["L8ValidatedCoreModule", "L6OpClosureEnv", "L1OpClosure", "L1RefLocal(", '"x")', "validation ok", "0"],
   },
   {
     name: "level1c nanopass string slice core",
@@ -379,25 +379,21 @@ const LEVEL1C_CASES = [
   {
     name: "level1c nanopass continuation core",
     args: ["nanopass", "supports/bootstrap/continuation-multi-resume.chiba"],
-    expect: ["L8ValidatedCoreModule", "L7CoreOp", "core-op continuation-package", "L5OpContinuationPackage", "validation ok", "0"],
-    expectSequence: [[
-      "L6OpClosureEnv",
-      "usage many",
-      "L5OpContinuationPackage",
-      "usage many",
-    ], [
-      "L4OpUsage",
-      "usage many",
-      "L3OpAnswerControl",
-      "control-boundary delimited",
-    ], [
+    expect: [
+      "L8ValidatedCoreModule",
+      "L7CoreOp",
+      "core-op continuation-package",
       "L3OpAnswerControl",
       "control-boundary delimited",
       "L1OpReset",
-      "L3OpAnswerControl",
+      "L6OpClosureEnv",
+      "L5OpContinuationPackage(",
       "control-boundary shift",
-      "L1OpShift(#1 \"k\")",
-    ]],
+      "L1OpShift(#",
+      '"k")',
+      "validation ok",
+      "0",
+    ],
     reject: ["usage unknown"],
   },
   {

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
+import { ensureBootstrapRunnerFresh } from "./bootstrap-runner-utils.mjs";
 
 const ARTIFACT_DIR = ".scratch/first-bootstrap";
 const REBUILD_RUNNERS = process.argv.includes("--rebuild-runners");
@@ -54,28 +55,21 @@ function compileArtifact(name, source) {
 
 fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
 
-if (REBUILD_RUNNERS) {
-  run("build lexer spec runner", "timeout", [
-    "120",
-    "./chibac_amd64-unknown-linux_chiba_dev.o",
-    "--project",
-    ".",
-    "--entry",
-    "chiba_level1_lexer_spec_main.chiba",
-    "--output",
-    "lexer_spec_runner.o",
-  ]);
-  run("build parser spec runner", "timeout", [
-    "120",
-    "./chibac_amd64-unknown-linux_chiba_dev.o",
-    "--project",
-    ".",
-    "--entry",
-    "chiba_level1_parser_spec_main.chiba",
-    "--output",
-    "parser_spec_runner.o",
-  ]);
-}
+ensureBootstrapRunnerFresh({
+  name: "lexer spec runner",
+  entry: "chiba_level1_lexer_spec_main.chiba",
+  output: "lexer_spec_runner.o",
+  artifactPath: "target/debug/lexer_spec_runner.o",
+  force: REBUILD_RUNNERS,
+});
+
+ensureBootstrapRunnerFresh({
+  name: "parser spec runner",
+  entry: "chiba_level1_parser_spec_main.chiba",
+  output: "parser_spec_runner.o",
+  artifactPath: "target/debug/parser_spec_runner.o",
+  force: REBUILD_RUNNERS,
+});
 
 run("bootstrap smoke", process.execPath, ["tools/node/run-bootstrap-smokes.mjs"]);
 run("bootstrap smoke opt", process.execPath, ["tools/node/run-bootstrap-smokes.mjs", "--opt"]);

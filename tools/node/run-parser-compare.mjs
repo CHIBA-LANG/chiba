@@ -2,8 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
+import { ensureBootstrapRunnerFresh } from "./bootstrap-runner-utils.mjs";
 
 const SPEC_DIR = "chiba-level1-grammar-spec";
+
+ensureBootstrapRunnerFresh({
+  name: "parser spec runner",
+  entry: "chiba_level1_parser_spec_main.chiba",
+  output: "parser_spec_runner.o",
+  artifactPath: "target/debug/parser_spec_runner.o",
+});
 
 function listSpecs() {
   return fs

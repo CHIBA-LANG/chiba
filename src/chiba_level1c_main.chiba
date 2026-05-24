@@ -462,7 +462,7 @@ def level1c_run_wat_project(root: Str): i64 = {
                                         } else {
                                             let rendered = wat_emit_module(core)
                                             let _ = str_write_to(rendered, 1)
-                                            0
+                                            exit(0)
                                         }
                                     }
                                     NamespaceProjectCheckErr(message) => {
@@ -758,7 +758,7 @@ def level1c_run_wat(path: Str): i64 =
             } else {
                 let rendered = wat_emit_module(core)
                 let _ = str_write_to(rendered, 1)
-                0
+                exit(0)
             }
         }
         Err(_, _) => {

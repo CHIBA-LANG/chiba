@@ -232,6 +232,7 @@ rule data_variant_list ::=
 
 rule data_variant_tail ::=
     _:trivia_list Comma rest:data_variant_list => rest
+    | _:trivia_list head:data_variant tail:data_variant_tail => AdtVariant_Cons(head, tail)
     | => AdtVariant_End
     ;
 

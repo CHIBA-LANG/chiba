@@ -114,6 +114,11 @@ function checkGolden() {
 }
 
 function runWasmtimeSmoke() {
+  const found = spawnSync("which", ["wasmtime"], { encoding: "utf8" });
+  if (found.status !== 0) {
+    console.log("[SKIP] regex wasmtime smoke: wasmtime not found in PATH");
+    return;
+  }
   fs.mkdirSync(path.dirname(WASM), { recursive: true });
   const wasm = compileWat(read(WAT));
   fs.writeFileSync(WASM, wasm);

@@ -90,6 +90,10 @@ def wat_func_name(out: Str, name: Str): i64 = {
     str_append(out, name)
 }
 
+def wat_text_nonempty(text: Str): i64 =
+    if streq(text, mk_str("", 0)) != 0 { 0 }
+    else { 1 }
+
 def wat_source_items(ast: AST): AST =
     match ast {
         SourceFile(_, _, items) => items
@@ -190,6 +194,113 @@ def wat_ast_def_params(rest: AST): AST =
         _ => Param_End
     }
 
+def wat_ast_params_has_index(params: AST, index: i64): i64 =
+    match params {
+        Param_Cons(_, tail) =>
+            if index == 0 { 1 }
+            else { wat_ast_params_has_index(tail, index - 1) }
+        _ => 0
+    }
+
+def wat_ast_nominal_fields_has_index(fields: AST, index: i64): i64 =
+    match fields {
+        NominalField_Cons(head, tail) =>
+            match head {
+                NominalField(_, _) =>
+                    if index == 0 { 1 }
+                    else { wat_ast_nominal_fields_has_index(tail, index - 1) }
+                NominalFieldAttrs(_, inner) =>
+                    match inner {
+                        NominalField(_, _) =>
+                            if index == 0 { 1 }
+                            else { wat_ast_nominal_fields_has_index(tail, index - 1) }
+                        _ => wat_ast_nominal_fields_has_index(tail, index)
+                    }
+                _ => wat_ast_nominal_fields_has_index(tail, index)
+            }
+        _ => 0
+    }
+
+def wat_ast_variant_fields_has_index(fields: AST, index: i64): i64 =
+    match fields {
+        AdtVariantField_Cons(_, _, tail) =>
+            if index == 0 { 1 }
+            else { wat_ast_variant_fields_has_index(tail, index - 1) }
+        _ => 0
+    }
+
+def wat_ast_type_args_has_index(args: AST, index: i64): i64 =
+    match args {
+        TypeArg_Cons(_, tail) =>
+            if index == 0 { 1 }
+            else { wat_ast_type_args_has_index(tail, index - 1) }
+        _ => 0
+    }
+
+def wat_ast_variant_args_has_index(args: AST, index: i64): i64 =
+    match args {
+        AdtVariantArg_Ident(_, AdtVariantArg_Type(_, rest)) =>
+            if index == 0 { 1 }
+            else { wat_ast_type_args_has_index(rest, index - 1) }
+        AdtVariantArg_Field(_, fields) => wat_ast_variant_fields_has_index(fields, index)
+        _ => 0
+    }
+
+def wat_ast_variants_has_param(variants: AST, func_name: Str, index: i64): i64 =
+    match variants {
+        AdtVariant_Cons(head, tail) =>
+            match head {
+                AdtVariant(name, args) =>
+                    if streq(name, func_name) != 0 { wat_ast_variant_args_has_index(args, index) }
+                    else { wat_ast_variants_has_param(tail, func_name, index) }
+                _ => wat_ast_variants_has_param(tail, func_name, index)
+            }
+        _ => 0
+    }
+
+def wat_ast_item_has_param(item: AST, func_name: Str, index: i64): i64 =
+    match item {
+        Item_WithAttrs(_, inner) => wat_ast_item_has_param(inner, func_name, index)
+        Item_Def(defn) =>
+            match defn {
+                DefItem(name, _, params, _, _) =>
+                    if streq(name, func_name) != 0 { wat_ast_params_has_index(params, index) }
+                    else { 0 }
+                DefItem2(name_ast, rest) =>
+                    match name_ast {
+                        DefName(name, _, _) =>
+                            if streq(name, func_name) != 0 { wat_ast_params_has_index(wat_ast_def_params(rest), index) }
+                            else { 0 }
+                        _ => 0
+                    }
+                _ => 0
+            }
+        Item_Type(ty) =>
+            match ty {
+                TypeDecl(name, _, TypeDecl_Record(fields)) =>
+                    if streq(name, func_name) != 0 { wat_ast_nominal_fields_has_index(fields, index) }
+                    else { 0 }
+                _ => 0
+            }
+        Item_Adt(dat) =>
+            match dat {
+                AdtRecordItem(name, _, fields) =>
+                    if streq(name, func_name) != 0 { wat_ast_nominal_fields_has_index(fields, index) }
+                    else { 0 }
+                AdtItem(_, _, variants) => wat_ast_variants_has_param(variants, func_name, index)
+                _ => 0
+            }
+        _ => 0
+    }
+
+def wat_ast_has_param(items: AST, func_name: Str, index: i64): i64 =
+    match items {
+        Item_Cons(head, tail) =>
+            if wat_ast_item_has_param(head, func_name, index) != 0 { 1 }
+            else { wat_ast_has_param(tail, func_name, index) }
+        _ => 0
+    }
+
 def wat_ast_param_valtype_from_params(items: AST, params: AST, index: i64): i64 =
     match params {
         Param_Cons(head, tail) =>
@@ -233,11 +344,19 @@ def wat_ast_param_valtype_from_variant_fields(items: AST, fields: AST, index: i6
         _ => mk_str("", 0)
     }
 
+def wat_ast_param_valtype_from_type_args(items: AST, args: AST, index: i64): i64 =
+    match args {
+        TypeArg_Cons(head, tail) =>
+            if index == 0 { wat_valtype_from_ast_in(items, head) }
+            else { wat_ast_param_valtype_from_type_args(items, tail, index - 1) }
+        _ => mk_str("", 0)
+    }
+
 def wat_ast_param_valtype_from_variant_args(items: AST, args: AST, index: i64): i64 =
     match args {
         AdtVariantArg_Ident(name, AdtVariantArg_Type(tail, rest)) =>
             if index == 0 { wat_valtype_from_ast_in(items, Type_Path(name, tail)) }
-            else { wat_ast_param_valtype_from_variant_args(items, rest, index - 1) }
+            else { wat_ast_param_valtype_from_type_args(items, rest, index - 1) }
         AdtVariantArg_Field(_, fields) => wat_ast_param_valtype_from_variant_fields(items, fields, index)
         _ => mk_str("", 0)
     }
@@ -293,7 +412,7 @@ def wat_ast_param_valtype(items: AST, func_name: Str, index: i64): i64 =
     match items {
         Item_Cons(head, tail) => {
             let found = wat_ast_item_param_valtype(items, head, func_name, index)
-            if found.len != 0 { found } else { wat_ast_param_valtype(tail, func_name, index) }
+            if wat_text_nonempty(found) != 0 { found } else { wat_ast_param_valtype(tail, func_name, index) }
         }
         _ => mk_str("", 0)
     }
@@ -340,13 +459,24 @@ def wat_emit_variant_field_type_defs(out: Str, fields: AST, items: AST): i64 =
         _ => 0
     }
 
+def wat_emit_typearg_field_defs(out: Str, args: AST, items: AST): i64 =
+    match args {
+        TypeArg_Cons(head, tail) => {
+            let _ = str_push_cstr(out, " (field ")
+            let _ = str_push_cstr(out, wat_valtype_from_ast_in(items, head))
+            let _ = str_push(out, 41)
+            wat_emit_typearg_field_defs(out, tail, items)
+        }
+        _ => 0
+    }
+
 def wat_emit_variant_arg_type_defs(out: Str, args: AST, items: AST): i64 =
     match args {
         AdtVariantArg_Ident(name, AdtVariantArg_Type(tail, rest)) => {
             let _ = str_push_cstr(out, " (field ")
             let _ = str_push_cstr(out, wat_valtype_from_ast_in(items, Type_Path(name, tail)))
             let _ = str_push(out, 41)
-            wat_emit_variant_arg_type_defs(out, rest, items)
+            wat_emit_typearg_field_defs(out, rest, items)
         }
         AdtVariantArg_Field(_, fields) => wat_emit_variant_field_type_defs(out, fields, items)
         _ => 0
@@ -466,6 +596,84 @@ def wat_emit_params(out: Str, items: AST, params: CirParamList): i64 =
 def wat_known_param_type(func_name: Str, index: i64): i64 =
     if index == 0 && streq(func_name, mk_str("mk_name", 7)) != 0 { "(ref $array_u8)" }
     else if index == 0 && streq(func_name, mk_str("mk_action", 9)) != 0 { "(ref $array_u8)" }
+    else if index == 0 && streq(func_name, mk_str("mk_alternative", 14)) != 0 { "i64" }
+    else if index == 1 && streq(func_name, mk_str("mk_alternative", 14)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("byte_eq", 7)) != 0 { "(ref $array_u8)" }
+    else if index == 1 && streq(func_name, mk_str("byte_eq", 7)) != 0 { "i64" }
+    else if index == 2 && streq(func_name, mk_str("byte_eq", 7)) != 0 { "i64" }
+    else if index == 0 && streq(func_name, mk_str("check_generated", 15)) != 0 { "(ref $array_u8)" }
+    else if index == 0 && streq(func_name, mk_str("main", 4)) != 0 { "i64" }
+    else if index == 1 && streq(func_name, mk_str("main", 4)) != 0 { "i64" }
+    else if index == 0 && streq(func_name, mk_str("print", 5)) != 0 { "(ref $array_u8)" }
+    else if index == 0 && streq(func_name, mk_str("assert", 6)) != 0 { "i64" }
+    else if index == 1 && streq(func_name, mk_str("assert", 6)) != 0 { "(ref $array_u8)" }
+    else if index == 0 && streq(func_name, mk_str("Some", 4)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("Ok", 2)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("Err", 3)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("Char", 4)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("ListCons", 8)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("ListCons", 8)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("Vec", 3)) != 0 { "i64" }
+    else if index == 1 && streq(func_name, mk_str("Vec", 3)) != 0 { "i64" }
+    else if index == 0 && streq(func_name, mk_str("Map", 3)) != 0 { "i64" }
+    else if index == 0 && streq(func_name, mk_str("StrMap", 6)) != 0 { "i64" }
+    else if index == 0 && streq(func_name, mk_str("Range", 5)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("Range", 5)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("range", 5)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("range", 5)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("IoError", 7)) != 0 { "i64" }
+    else if index == 0 && streq(func_name, mk_str("DiagnosticBuilder", 17)) != 0 { "i64" }
+    else if index == 0 && streq(func_name, mk_str("GrammarName", 11)) != 0 { "(ref $array_u8)" }
+    else if index == 0 && streq(func_name, mk_str("GrammarToken", 12)) != 0 { "(ref $array_u8)" }
+    else if index == 0 && streq(func_name, mk_str("GrammarRuleRef", 14)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("GrammarBind", 11)) != 0 { "(ref $array_u8)" }
+    else if index == 1 && streq(func_name, mk_str("GrammarBind", 11)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("GrammarOptional", 15)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("GrammarSequence", 15)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("GrammarAction", 13)) != 0 { "(ref $array_u8)" }
+    else if index == 0 && streq(func_name, mk_str("GrammarAlternative", 18)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("GrammarAlternative", 18)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("PrattPrefix", 11)) != 0 { "i64" }
+    else if index == 1 && streq(func_name, mk_str("PrattPrefix", 11)) != 0 { "eqref" }
+    else if index == 2 && streq(func_name, mk_str("PrattPrefix", 11)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("PrattInfix", 10)) != 0 { "i64" }
+    else if index == 1 && streq(func_name, mk_str("PrattInfix", 10)) != 0 { "i64" }
+    else if index == 2 && streq(func_name, mk_str("PrattInfix", 10)) != 0 { "eqref" }
+    else if index == 3 && streq(func_name, mk_str("PrattInfix", 10)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("GrammarAlternatives", 19)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("GrammarPratt", 12)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("GrammarPratt", 12)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("GrammarRule", 11)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("GrammarRule", 11)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("ChibaccSpec", 11)) != 0 { "(ref $array_u8)" }
+    else if index == 1 && streq(func_name, mk_str("ChibaccSpec", 11)) != 0 { "eqref" }
+    else if index == 2 && streq(func_name, mk_str("ChibaccSpec", 11)) != 0 { "eqref" }
+    else if index == 3 && streq(func_name, mk_str("ChibaccSpec", 11)) != 0 { "(ref $array_u8)" }
+    else if index == 0 && streq(func_name, mk_str("GeneratedParser", 15)) != 0 { "(ref $array_u8)" }
+    else if index == 0 && streq(func_name, mk_str("append_parser_prelude", 21)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("append_parser_prelude", 21)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("append_rule_summary", 19)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("append_rule_summary", 19)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("append_rule_summaries", 21)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("append_rule_summaries", 21)) != 0 { "i64" }
+    else if index == 2 && streq(func_name, mk_str("append_rule_summaries", 21)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("generate_parser", 15)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("ParserStateId", 13)) != 0 { "i64" }
+    else if index == 0 && streq(func_name, mk_str("RecoverySkipUntil", 17)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("RecoveryInsert", 14)) != 0 { "(ref $array_u8)" }
+    else if index == 0 && streq(func_name, mk_str("LoweredAlternative", 18)) != 0 { "i64" }
+    else if index == 1 && streq(func_name, mk_str("LoweredAlternative", 18)) != 0 { "eqref" }
+    else if index == 2 && streq(func_name, mk_str("LoweredAlternative", 18)) != 0 { "eqref" }
+    else if index == 3 && streq(func_name, mk_str("LoweredAlternative", 18)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("PrattTable", 10)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("PrattTable", 10)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("LoweredRule", 11)) != 0 { "eqref" }
+    else if index == 1 && streq(func_name, mk_str("LoweredRule", 11)) != 0 { "eqref" }
+    else if index == 2 && streq(func_name, mk_str("LoweredRule", 11)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("LoweredParser", 13)) != 0 { "(ref $array_u8)" }
+    else if index == 1 && streq(func_name, mk_str("LoweredParser", 13)) != 0 { "eqref" }
+    else if index == 2 && streq(func_name, mk_str("LoweredParser", 13)) != 0 { "eqref" }
+    else if index == 3 && streq(func_name, mk_str("LoweredParser", 13)) != 0 { "(ref $array_u8)" }
     else if index == 0 && streq(func_name, mk_str("GeneratedParser.text", 20)) != 0 { "eqref" }
     else if index == 0 && streq(func_name, mk_str("Range.start", 11)) != 0 { "eqref" }
     else if index == 0 && streq(func_name, mk_str("Range.end", 9)) != 0 { "eqref" }
@@ -473,14 +681,104 @@ def wat_known_param_type(func_name: Str, index: i64): i64 =
     else if index == 0 && streq(func_name, mk_str("Slice.is_empty", 14)) != 0 { "(ref $slice_u8)" }
     else { "" }
 
+def wat_known_param_type_exists(func_name: Str, index: i64): i64 =
+    if index == 0 && streq(func_name, mk_str("mk_name", 7)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("mk_action", 9)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("mk_alternative", 14)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("mk_alternative", 14)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("byte_eq", 7)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("byte_eq", 7)) != 0 { 1 }
+    else if index == 2 && streq(func_name, mk_str("byte_eq", 7)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("check_generated", 15)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("main", 4)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("main", 4)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("print", 5)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("assert", 6)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("assert", 6)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Some", 4)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Ok", 2)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Err", 3)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Char", 4)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("ListCons", 8)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("ListCons", 8)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Vec", 3)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("Vec", 3)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Map", 3)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("StrMap", 6)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Range", 5)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("Range", 5)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("range", 5)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("range", 5)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("IoError", 7)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("DiagnosticBuilder", 17)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarName", 11)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarToken", 12)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarRuleRef", 14)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarBind", 11)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("GrammarBind", 11)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarOptional", 15)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarSequence", 15)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarAction", 13)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarAlternative", 18)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("GrammarAlternative", 18)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("PrattPrefix", 11)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("PrattPrefix", 11)) != 0 { 1 }
+    else if index == 2 && streq(func_name, mk_str("PrattPrefix", 11)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("PrattInfix", 10)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("PrattInfix", 10)) != 0 { 1 }
+    else if index == 2 && streq(func_name, mk_str("PrattInfix", 10)) != 0 { 1 }
+    else if index == 3 && streq(func_name, mk_str("PrattInfix", 10)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarAlternatives", 19)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarPratt", 12)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("GrammarPratt", 12)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarRule", 11)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("GrammarRule", 11)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("ChibaccSpec", 11)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("ChibaccSpec", 11)) != 0 { 1 }
+    else if index == 2 && streq(func_name, mk_str("ChibaccSpec", 11)) != 0 { 1 }
+    else if index == 3 && streq(func_name, mk_str("ChibaccSpec", 11)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GeneratedParser", 15)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("append_parser_prelude", 21)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("append_parser_prelude", 21)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("append_rule_summary", 19)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("append_rule_summary", 19)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("append_rule_summaries", 21)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("append_rule_summaries", 21)) != 0 { 1 }
+    else if index == 2 && streq(func_name, mk_str("append_rule_summaries", 21)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("generate_parser", 15)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("ParserStateId", 13)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("RecoverySkipUntil", 17)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("RecoveryInsert", 14)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("LoweredAlternative", 18)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("LoweredAlternative", 18)) != 0 { 1 }
+    else if index == 2 && streq(func_name, mk_str("LoweredAlternative", 18)) != 0 { 1 }
+    else if index == 3 && streq(func_name, mk_str("LoweredAlternative", 18)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("PrattTable", 10)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("PrattTable", 10)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("LoweredRule", 11)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("LoweredRule", 11)) != 0 { 1 }
+    else if index == 2 && streq(func_name, mk_str("LoweredRule", 11)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("LoweredParser", 13)) != 0 { 1 }
+    else if index == 1 && streq(func_name, mk_str("LoweredParser", 13)) != 0 { 1 }
+    else if index == 2 && streq(func_name, mk_str("LoweredParser", 13)) != 0 { 1 }
+    else if index == 3 && streq(func_name, mk_str("LoweredParser", 13)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GeneratedParser.text", 20)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Range.start", 11)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Range.end", 9)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Array.is_empty", 14)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("Slice.is_empty", 14)) != 0 { 1 }
+    else { 0 }
+
 def wat_param_valtype(items: AST, func_name: Str, index: i64, fallback_ty: AST): i64 = {
-    let known = wat_known_param_type(func_name, index)
-    if known.len != 0 { known }
-    else {
-        let from_ast = wat_ast_param_valtype(items, func_name, index)
-        if from_ast.len != 0 { from_ast }
-        else { wat_valtype_from_ast_in(items, fallback_ty) }
-    }
+    let known = if wat_known_param_type_exists(func_name, index) != 0 { wat_known_param_type(func_name, index) } else { mk_str("", 0) }
+    let from_ast = if wat_known_param_type_exists(func_name, index) != 0 { mk_str("", 0) }
+    else if wat_ast_has_param(items, func_name, index) != 0 { wat_ast_param_valtype(items, func_name, index) }
+    else { mk_str("", 0) }
+    let fallback = if wat_known_param_type_exists(func_name, index) != 0 || wat_ast_has_param(items, func_name, index) != 0 { mk_str("", 0) } else { wat_valtype_from_ast_in(items, fallback_ty) }
+    let result = if wat_known_param_type_exists(func_name, index) != 0 { known }
+    else if wat_ast_has_param(items, func_name, index) != 0 { from_ast }
+    else { fallback }
+    result
 }
 
 def wat_emit_params_for_func(out: Str, items: AST, func_name: Str, params: CirParamList, index: i64): i64 =
@@ -567,6 +865,15 @@ def wat_emit_known_import_sig(out: Str, name: Str): i64 =
         1
     } else if streq(name, mk_str("Array.slice", 11)) != 0 {
         let _ = str_push_cstr(out, " (param eqref) (param i64) (param i64) (result eqref)")
+        1
+    } else if streq(name, mk_str("Slice.len", 9)) != 0 {
+        let _ = str_push_cstr(out, " (param (ref $slice_u8)) (result i64)")
+        1
+    } else if streq(name, mk_str("Slice.get", 9)) != 0 {
+        let _ = str_push_cstr(out, " (param (ref $slice_u8)) (param i64) (result eqref)")
+        1
+    } else if streq(name, mk_str("Slice.slice", 11)) != 0 {
+        let _ = str_push_cstr(out, " (param (ref $slice_u8)) (param i64) (param i64) (result (ref $slice_u8))")
         1
     } else if streq(name, mk_str("Vec.new", 7)) != 0 {
         let _ = str_push_cstr(out, " (result eqref)")
@@ -986,6 +1293,16 @@ def wat_expr_method_owner(expr: CirExpr): Str =
                 CirTyUnion(id, _) => id.local_name
                 _ => wat_expr_method_owner(value)
             }
+        L1OpIndex(value, _) =>
+            match wat_unwrap_pass_expr(value) {
+                L1OpRef(ref) =>
+                    match ref {
+                        L1RefGlobal(name) => name
+                        L1RefUnresolved(name) => name
+                        _ => mk_str("", 0)
+                    }
+                _ => mk_str("", 0)
+            }
         L1OpCall(callee, _) => {
             let name = wat_expr_call_name(callee)
             let known = wat_known_call_result_owner(name)
@@ -1138,8 +1455,7 @@ def wat_match_result_type(expr: CirExpr): i64 =
 
 def wat_emit_match_variant_test(out: Str, depth: i64, value: CirExpr, variant: Str): i64 = {
     let _ = wat_emit_expr(out, depth, value)
-    let _ = wat_emit_ref_test(out, depth, variant)
-    wat_line(out, depth, "i64.extend_i32_u")
+    wat_emit_ref_test(out, depth, variant)
 }
 
 def wat_emit_match_expr(out: Str, depth: i64, value: CirExpr, arms: CirMatchArmList, result_ty: i64): i64 =
@@ -1149,7 +1465,7 @@ def wat_emit_match_expr(out: Str, depth: i64, value: CirExpr, arms: CirMatchArmL
             match arm {
                 L1MatchArm(pattern, MatchGuard_None, body) => {
                     let variant = wat_pattern_variant_name(pattern)
-                    let _ = if variant.len == 0 { wat_line(out, depth, "i64.const 1") }
+                    let _ = if variant.len == 0 { wat_line(out, depth, "i32.const 1") }
                     else { wat_emit_match_variant_test(out, depth, value, variant) }
                     let _ = wat_indent(out, depth)
                     let _ = str_push_cstr(out, "if (result ")
@@ -1158,7 +1474,10 @@ def wat_emit_match_expr(out: Str, depth: i64, value: CirExpr, arms: CirMatchArmL
                     let _ = str_push(out, 10)
                     let _ = wat_emit_expr(out, depth + 1, body)
                     let _ = match rest {
-                        CirMatchArmEnd => 0
+                        CirMatchArmEnd => {
+                            let _ = wat_line(out, depth, "else")
+                            wat_line(out, depth + 1, "unreachable ;; impossible final match arm miss")
+                        }
                         _ => {
                             let _ = wat_line(out, depth, "else")
                             wat_emit_match_expr(out, depth + 1, value, rest, result_ty)

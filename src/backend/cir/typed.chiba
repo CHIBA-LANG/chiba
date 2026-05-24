@@ -60,6 +60,7 @@ def cir_typed_type_from_ast(ty: AST, fallback: CirType): CirType =
             else if streq(name, mk_str("Atomic", 6)) != 0 { CirTyAtomic(cir_typed_type_first_arg(ty, fallback)) }
             else { CirTyConst(name) }
         }
+        Type_Row(_) => fallback
         Type_Atom(name) => {
             if streq(name, mk_str("i64", 3)) != 0 { CirTyI64 }
             else if streq(name, mk_str("i32", 3)) != 0 { CirTyI32 }
@@ -204,7 +205,13 @@ def cir_type_env_from_params_for_item(params: CirParamList, item_name: Str, inde
         CirParamCons(head, tail) =>
             match head {
                 L1Param(binder, ty) => {
-                    let fallback = if index == 0 { cir_typed_method_receiver_type(item_name) } else { CirTyVar(CirTyVarId { id: binder.id }) }
+                    let receiver_fallback = cir_typed_method_receiver_type(item_name)
+                    let fallback = if index == 0 {
+                        match receiver_fallback {
+                            CirTyUnknown => CirTyVar(CirTyVarId { id: binder.id })
+                            _ => receiver_fallback
+                        }
+                    } else { CirTyVar(CirTyVarId { id: binder.id }) }
                     let inferred = cir_typed_type_from_ast(ty, fallback)
                     cir_type_env_add(cir_type_env_from_params_for_item(tail, item_name, index + 1), binder, inferred)
                 }
@@ -287,33 +294,53 @@ def cir_typed_value_owner_name(expr: CirExpr): Str =
         _ => cir_typed_owner_name_from_type(cir_typed_expr_type(expr))
     }
 
+def cir_typed_known_callee_result(name: Str): CirType =
+    if streq(name, mk_str("Vec.new", 7)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("Vec.push", 8)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("Vec.freeze", 10)) != 0 { CirTyConst(mk_str("Array", 5)) }
+    else if streq(name, mk_str("GeneratedParser.text", 20)) != 0 { CirTyString }
+    else if streq(name, mk_str("DiagnosticBuilder.push_str", 26)) != 0 { CirTyConst(mk_str("DiagnosticBuilder", 17)) }
+    else if streq(name, mk_str("DiagnosticBuilder.finish", 24)) != 0 { CirTyString }
+    else if streq(name, mk_str("Array.len", 9)) != 0 { CirTyI64 }
+    else if streq(name, mk_str("Slice.len", 9)) != 0 { CirTyI64 }
+    else { CirTyUnknown }
+
+def cir_typed_lookup_global_result(globals: CirGlobalTypeEnv, name: Str): CirType =
+    {
+        let looked = cir_global_type_env_lookup(globals, name)
+        match looked {
+            CirTyUnknown => cir_typed_known_callee_result(name)
+            _ => looked
+        }
+    }
+
 def cir_typed_callee_result(callee: CirExpr, globals: CirGlobalTypeEnv): CirType =
     match callee {
         L2OpTyped(inner, ty) =>
             match inner {
                 L1OpRef(ref) =>
                     match ref {
-                        L1RefGlobal(name) => cir_global_type_env_lookup(globals, name)
-                        L1RefUnresolved(name) => cir_global_type_env_lookup(globals, name)
+                        L1RefGlobal(name) => cir_typed_lookup_global_result(globals, name)
+                        L1RefUnresolved(name) => cir_typed_lookup_global_result(globals, name)
                         _ => ty
                     }
                 L1OpField(value, field) => {
                     let owner = cir_typed_value_owner_name(value)
                     if owner.len == 0 { ty }
-                    else { cir_global_type_env_lookup(globals, cir_typed_method_name(owner, field)) }
+                    else { cir_typed_lookup_global_result(globals, cir_typed_method_name(owner, field)) }
                 }
                 _ => ty
             }
         L1OpRef(ref) =>
             match ref {
-                L1RefGlobal(name) => cir_global_type_env_lookup(globals, name)
-                L1RefUnresolved(name) => cir_global_type_env_lookup(globals, name)
+                L1RefGlobal(name) => cir_typed_lookup_global_result(globals, name)
+                L1RefUnresolved(name) => cir_typed_lookup_global_result(globals, name)
                 _ => CirTyUnknown
             }
         L1OpField(value, field) => {
             let owner = cir_typed_value_owner_name(value)
             if owner.len == 0 { CirTyUnknown }
-            else { cir_global_type_env_lookup(globals, cir_typed_method_name(owner, field)) }
+            else { cir_typed_lookup_global_result(globals, cir_typed_method_name(owner, field)) }
         }
         _ => CirTyUnknown
     }

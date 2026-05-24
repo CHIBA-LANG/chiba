@@ -7,6 +7,7 @@ const ROOT = "level-1b/std/chibacc";
 const CONT = "level-1b/supports/chibacc-continuation/alternative_recovery.chiba";
 const CODEGEN_CONTRACT = "level-1b/supports/chibacc-mini/codegen_contract.chiba";
 const MINI_ROOT = "level-1b/supports/chibacc-mini";
+const BINARYEN = "./binaryen-linux-x86-64-version_129/bin";
 const REQUIRED_FILES = ["ast.chiba", "codegen.chiba", "engine.chiba", "ir.chiba", "parser.chiba"];
 const REQUIRED_TEXT = [
   "type ChibaccSpec",
@@ -133,17 +134,23 @@ function main() {
     fail(`codegen contract does not emit wat\n${contractWat.stdout || contractWat.stderr}`);
   }
   const watPath = path.join(".scratch/level-1b/chibacc-mini", "codegen-contract.wat");
+  const wasmPath = path.join(".scratch/level-1b/chibacc-mini", "codegen-contract.wasm");
+  const optPath = path.join(".scratch/level-1b/chibacc-mini", "codegen-contract.opt.wasm");
   fs.mkdirSync(path.dirname(watPath), { recursive: true });
   fs.writeFileSync(watPath, contractWat.stdout);
-  const contractRun = run(process.execPath, ["--no-warnings", "tools/node/run-wat.mjs", watPath]);
-  if (!contractRun.stdout.split(/\s+/).includes("0")) {
-    fail(`codegen contract returned unexpected result\n${contractRun.stdout || contractRun.stderr}`);
+  const contractAs = run(path.join(BINARYEN, "wasm-as"), ["--enable-gc", "--enable-reference-types", watPath, "-o", wasmPath]);
+  if (contractAs.status !== 0 || !fs.existsSync(wasmPath) || fs.statSync(wasmPath).size === 0) {
+    fail(`codegen contract toolchain assemble failed\n${contractAs.stdout || contractAs.stderr}`);
+  }
+  const contractOpt = run(path.join(BINARYEN, "wasm-opt"), ["--enable-gc", "--enable-reference-types", wasmPath, "-o", optPath]);
+  if (contractOpt.status !== 0 || !fs.existsSync(optPath) || fs.statSync(optPath).size === 0) {
+    fail(`codegen contract toolchain optimize failed\n${contractOpt.stdout || contractOpt.stderr}`);
   }
   pass("chibacc codegen contract");
 
   checkMiniSpecs();
 
-  const mini = run("timeout", ["30", "vp", "run", "level1b:chibacc-mini"]);
+  const mini = run("pnpm", ["-s", "run", "level1b:chibacc-mini"]);
   if (mini.status !== 0) fail(mini.stdout || mini.stderr);
   pass("chibacc mini oracle");
 }

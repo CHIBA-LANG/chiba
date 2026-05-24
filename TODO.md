@@ -7,12 +7,12 @@
 
 ## 当前判断
 
-- 当前主线已经不是“架构还没搭起来”，而是“**C11 后端闭环 + C12 自举验证 + 一轮 checkpoint checklist 收口**”。
+- 当前主线已经不是“架构还没搭起来”，而是“**checkpoint gate 已绿后的未门禁语义收尾 + frontend migration builtin/oracle 债务清理 + C12 自举验证**”。
 - 当前离 checkpoint 完成大约还差：
-	- **1 个核心后端 blocker**：`std.chibacc` / `codegen_contract` 的 nominal / record / data constructor/value lowering 与 Core symbol synthesis 闭环。
-	- **1 轮 checklist 验收与补实现**：methods / operators / generics / globals / ADT tuple bridge / pattern lowering / deep pattern / pipe consistency。
+	- **1 轮未门禁语义收尾**：globals / `Self` with generics / ADT tuple bridge / compiler intrinsic surface / deep pattern lowering runtime / pipe matrix / scope shadowing / debugability / namespace ownership。
+	- **1 轮 TODO 与 gate 对齐**：把已经被 `checkpoint:gates` / `level1b:c11-backend` / `level1b:cir-migration` 验证通过的项从“核心 blocker”降级为历史完成或窄化为剩余边角。
 - 当前离 Second Bootstrap 完成大约还差：
-	- **C11 真正迁移清零**：level-1b backend 成为 primary behavior，旧 `src/backend/cir` 不再承担核心语义路径。
+	- **C11 真正迁移清零**：虽然 `level1b:c11-backend` 与 `level1b:cir-migration` 已绿，但 level-1b backend 还需要继续巩固成 unquestioned primary behavior，旧 `src/backend/cir` 不再承担核心语义路径。
 	- **C12 两轮 bootstrap 对拍**：`level1c.wasm -> level1c-next -> level1c-next2`。
 
 ## 工具链原则更新
@@ -26,32 +26,9 @@
 
 ## 剩余 checkpoint 收口
 
-### 1. `std.chibacc` contract 的后端闭环
-
-- [ ] 打通 `level-1b/supports/chibacc-mini/codegen_contract.chiba` 的 `wat/run`
-	- **现状**: `parse` / `check` 已经通过；真正卡点不在 parser，而在 backend/Core lowering。
-	- **当前 blocker**:
-		- imported nominal / record / data constructor 与 runtime value 的 lowering 仍不完整；
-		- `LoweredParser`、`LoweredRule`、`GeneratedParser`、`RecoveryInsert`、`RecoveryNone` 等值层符号在 L8 validated Core 里仍可能落成 `dangling symbol`；
-		- `wat` 路径仍可能因 `validated Core required for wat emit` 被拦住。
-	- **完成标准**:
-		- `level1c.o wat level-1b/supports/chibacc-mini/codegen_contract.chiba` 通过；
-		- 生成的 `.wat` 可经 Binaryen v129 构建并运行；
-		- `std.chibacc` runtime values 的 constructor / field access / show path 不再依赖 parser 特判或 source 改写兜底。
-
-### 2. checkpoint checklist：剩余语言/语义面收口
+### checkpoint checklist：剩余语言/语义面收口
 
 这些项里有些是“补实现”，有些是“补 fixture / 补 gate / 补 compiler-side lowering 验收”。目标不是把所有条目都重新发明一遍，而是把它们全部收进稳定 gate。
-
-- [ ] string interpolation
-	- **目标**: `"a {y} b" == "a " + Y.to_string(y) + " b"`
-	- **备注**: 除了 surface parse，还要确认 lowering / return ABI / WAT payload 与跨函数 String 返回路径一致。
-
-- [ ] methods
-	- **目标**:
-		- 未导入 namespace 上的方法不可见；
-		- method 定义 / 调用路径完全走 type-based resolution；
-		- duplicate method definition 稳定报错。
 
 - [ ] operator overloading
 	- **目标**:
@@ -63,7 +40,7 @@
 	- **目标**:
 		- `def id(x) = x` 与 auto-generic surface 对齐；
 		- `x[T](v)` 明确走 explicit instantiation；
-		- row-bound generic 返回 `r` 的 case 有稳定 type + runtime 验收。
+		- checkpoint 已覆盖 row shorthand / type inference / checked instantiation；剩余是 explicit instantiation、auto-generic surface 与更深 runtime 验收。
 
 - [ ] global variable / init block 规则
 	- **目标**:
@@ -150,6 +127,7 @@
 ### C11: wasm-gc Core/backend rewrite 收口
 
 - [ ] 完成 `src/backend/cir` 迁移清零
+	- **现状**: `level1b:c11-backend` 与 `level1b:cir-migration` 已通过，说明 gate 和映射覆盖已打通；剩余问题是“primary behavior 身份收尾”，不是 checkpoint blocker。
 	- **目标**: `compiler/MIGRATION.md` 中旧 pass 不再停留在 `missing rewrite` / `contract only`；C08-C11 gate 不再把旧 `src/backend/cir` 当 primary behavior。
 	- **完成标准**:
 		- level-1b backend 成为主路径；
@@ -191,8 +169,8 @@
 
 ## 当前优先级顺序
 
-1. 先打通 `codegen_contract` 的 nominal/data/runtime value backend blocker。
-2. 把 checkpoint checklist 中和 backend 强耦合的项一起收掉：ADT tuple bridge、constructor lowering、pattern/method/operator 相关语义面。
-3. 完成 `src/backend/cir` 迁移清零，让 level-1b backend 成为 primary path。
-4. 清 frontend migration 的 builtin/oracle 债务，尤其 `std.chibalex` / `std.chibacc`。
+1. 清 frontend migration 的 builtin/oracle 债务，尤其 `std.chibalex` / `std.chibacc`。
+2. 收掉 checkpoint checklist 里仍未门禁或未 runtime 化的语义面：ADT tuple bridge、compiler intrinsic surface、globals、`Self` generics、deep pattern / pipe 全矩阵、scope shadowing。
+3. 继续完成 `src/backend/cir` 的 primary-path 清零，让 level-1b backend 成为 unquestioned primary path。
+4. 让 level-1b backend 稳定生成并跑通 `level1c-next` / `level1c-next2`。
 5. 做 C12 两轮 bootstrap 对拍。
