@@ -62,6 +62,13 @@ def source_scan_doc_facts(file: SourceFile): SourceDocFacts =
         has_doc_path: source_has_header_attr(file.text, "#[doc(path=", 0),
     }
 
+/// Scan compile_if attributes before item filtering.
+def source_scan_compile_if_facts(file: SourceFile): SourceCompileIfFacts =
+    SourceCompileIfFacts {
+        file: file.id,
+        has_compile_if: source_has_header_attr(file.text, "#[compile_if(", 0),
+    }
+
 /// Skip horizontal whitespace after a token.
 def source_skip_spaces(text: String, offset: usize): usize =
     if offset >= text.len() { offset }
@@ -118,6 +125,7 @@ def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
     SourceProjectFacts {
         headers: scan_project_headers(project.files, 0, Vec[SourceHeaderFacts].new()),
         docs: scan_project_docs(project.files, 0, Vec[SourceDocFacts].new()),
+        compile_if: scan_project_compile_if(project.files, 0, Vec[SourceCompileIfFacts].new()),
         namespaces: scan_project_namespaces(project.files, 0, Vec[NamespaceScanResult].new()),
     }
 
@@ -130,6 +138,11 @@ def scan_project_headers(files: Array[SourceFile], index: usize, out: Vec[Source
 def scan_project_docs(files: Array[SourceFile], index: usize, out: Vec[SourceDocFacts]): Array[SourceDocFacts] =
     if index == files.len() { out.freeze() }
     else { scan_project_docs(files, index + 1, out.push(source_scan_doc_facts(files.get(index)))) }
+
+/// Scan compile_if facts in deterministic file order.
+def scan_project_compile_if(files: Array[SourceFile], index: usize, out: Vec[SourceCompileIfFacts]): Array[SourceCompileIfFacts] =
+    if index == files.len() { out.freeze() }
+    else { scan_project_compile_if(files, index + 1, out.push(source_scan_compile_if_facts(files.get(index)))) }
 
 /// Scan namespace facts in deterministic file order.
 def scan_project_namespaces(files: Array[SourceFile], index: usize, out: Vec[NamespaceScanResult]): Array[NamespaceScanResult] =

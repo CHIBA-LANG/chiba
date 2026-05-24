@@ -54,10 +54,17 @@ type SourceDocFacts {
     has_doc_path: bool,
 }
 
+/// Compile-if attributes discovered before item filtering.
+type SourceCompileIfFacts {
+    file: SourceFileId,
+    has_compile_if: bool,
+}
+
 /// Source facts derived from byte-level source scans.
 type SourceProjectFacts {
     headers: Array[SourceHeaderFacts],
     docs: Array[SourceDocFacts],
+    compile_if: Array[SourceCompileIfFacts],
     namespaces: Array[NamespaceScanResult],
 }
 
