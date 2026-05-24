@@ -11,20 +11,6 @@ type SourceScanCursor {
     column: usize,
 }
 
-/// Namespace name slice discovered in source text.
-type NamespaceNameSlice {
-    offset: usize,
-    len: usize,
-}
-
-/// Result of scanning for one namespace declaration.
-type NamespaceScanResult {
-    file: SourceFileId,
-    name: NamespaceNameSlice,
-    line: usize,
-    column: usize,
-}
-
 /// Return true when an ASCII byte is whitespace inside source headers.
 def source_is_space(byte: u8): bool =
     if byte == 32 { true }
@@ -104,3 +90,19 @@ def source_scan_first_namespace_line(file: SourceFileId, text: String, offset: u
 /// Scan the first namespace declaration in one source file.
 def source_scan_first_namespace(file: SourceFile): Option[NamespaceScanResult] =
     source_scan_first_namespace_line(file.id, file.text, 0, 1)
+
+/// Build source facts from already loaded files.
+def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
+    SourceProjectFacts {
+        namespaces: scan_project_namespaces(project.files, 0, Vec[NamespaceScanResult].new()),
+    }
+
+/// Scan namespace facts in deterministic file order.
+def scan_project_namespaces(files: Array[SourceFile], index: usize, out: Vec[NamespaceScanResult]): Array[NamespaceScanResult] =
+    if index == files.len() { out.freeze() }
+    else {
+        match source_scan_first_namespace(files.get(index)) {
+            Some(result) => scan_project_namespaces(files, index + 1, out.push(result))
+            None => scan_project_namespaces(files, index + 1, out)
+        }
+    }

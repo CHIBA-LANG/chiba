@@ -8,12 +8,14 @@ const DRIVER_ROOT = "level-1b/compiler/driver";
 const FIXTURE = "level-1b/supports/pre-c07-smokes/doc_compile_if.chiba";
 const REQUIRED_TEXT = [
   "type ProjectSurface",
+  "type SourceProjectFacts",
   "type NamespaceSurface",
   "def load_project",
   "type SourceScanCursor",
   "type NamespaceScanResult",
   "def source_starts_with_at",
   "def source_scan_first_namespace",
+  "def scan_project_source_facts",
   "type DocCommentBlock",
   "def attach_namespace_doc",
   "data SourceGateErrorKind",

@@ -26,10 +26,30 @@ type NamespaceSurface {
     file: SourceFileId,
 }
 
+/// Namespace name slice discovered in source text.
+type NamespaceNameSlice {
+    offset: usize,
+    len: usize,
+}
+
+/// Result of scanning for one namespace declaration.
+type NamespaceScanResult {
+    file: SourceFileId,
+    name: NamespaceNameSlice,
+    line: usize,
+    column: usize,
+}
+
+/// Source facts derived from byte-level source scans.
+type SourceProjectFacts {
+    namespaces: Array[NamespaceScanResult],
+}
+
 /// Source-level project summary.
 type ProjectSurface {
     files: Array[SourceFile],
     namespaces: Array[NamespaceSurface],
+    facts: SourceProjectFacts,
 }
 
 /// Load project files in deterministic path order.
