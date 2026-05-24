@@ -34,3 +34,85 @@ def PreludeImportPolicy.should_inject(self): bool =
 
 /// Fully qualified namespace imported by the default prelude rule.
 def default_prelude_namespace(): Str = "prelude"
+
+/// Import scope input collected before real name resolution.
+type SourceImportScopeInput {
+    file: SourceFileId,
+    owner_namespace: Option[NamespaceNameSlice],
+    explicit_uses: Array[SourceUseScanResult],
+    prelude_policy: PreludeImportPolicy,
+}
+
+/// Import/name resolution blocker emitted while the resolver is not implemented.
+type SourceImportResolutionBlocker {
+    file: SourceFileId,
+    message: String,
+}
+
+/// Import/name resolution transition result.
+type SourceImportResolution {
+    scopes: Array[SourceImportScopeInput],
+    blockers: Array[SourceImportResolutionBlocker],
+}
+
+/// Return true when one scanned use belongs to a file.
+def source_use_belongs_to_file(import_use: SourceUseScanResult, file: SourceFileId): bool =
+    import_use.file.index == file.index
+
+/// Collect explicit use declarations for one file.
+def source_uses_for_file(uses: Array[SourceUseScanResult], file: SourceFileId, index: usize, out: Vec[SourceUseScanResult]): Array[SourceUseScanResult] =
+    if index == uses.len() { out.freeze() }
+    else if source_use_belongs_to_file(uses.get(index), file) {
+        source_uses_for_file(uses, file, index + 1, out.push(uses.get(index)))
+    } else {
+        source_uses_for_file(uses, file, index + 1, out)
+    }
+
+/// Find the scanned file-header namespace for one file.
+def source_owner_namespace_for_file(namespaces: Array[NamespaceScanResult], file: SourceFileId, index: usize): Option[NamespaceNameSlice] =
+    if index == namespaces.len() { None }
+    else if namespaces.get(index).file.index == file.index { Some(namespaces.get(index).name) }
+    else { source_owner_namespace_for_file(namespaces, file, index + 1) }
+
+/// Build one import scope input from header, namespace, and use facts.
+def source_import_scope_for_header(project: ProjectSurface, header: SourceHeaderFacts): SourceImportScopeInput =
+    SourceImportScopeInput {
+        file: header.file,
+        owner_namespace: source_owner_namespace_for_file(project.facts.namespaces, header.file, 0),
+        explicit_uses: source_uses_for_file(project.facts.uses, header.file, 0, Vec[SourceUseScanResult].new()),
+        prelude_policy: header.prelude_policy(),
+    }
+
+/// Build import scope inputs in deterministic file order.
+def source_import_scope_inputs(headers: Array[SourceHeaderFacts], project: ProjectSurface, index: usize, out: Vec[SourceImportScopeInput]): Array[SourceImportScopeInput] =
+    if index == headers.len() { out.freeze() }
+    else { source_import_scope_inputs(headers, project, index + 1, out.push(source_import_scope_for_header(project, headers.get(index)))) }
+
+/// Return true when one import scope needs unresolved name visibility work.
+def source_import_scope_needs_resolution(scope: SourceImportScopeInput): bool =
+    if scope.explicit_uses.len() > 0 { true }
+    else { scope.prelude_policy.should_inject() }
+
+/// Collect blockers for import scopes while real resolution is absent.
+def source_import_resolution_blockers(scopes: Array[SourceImportScopeInput], index: usize, out: Vec[SourceImportResolutionBlocker]): Array[SourceImportResolutionBlocker] =
+    if index == scopes.len() { out.freeze() }
+    else {
+        let scope = scopes.get(index)
+        let next_out =
+            if source_import_scope_needs_resolution(scope) {
+                out.push(SourceImportResolutionBlocker(scope.file, "missing-lowering: source import/name resolution absent"))
+            } else { out }
+        source_import_resolution_blockers(scopes, index + 1, next_out)
+    }
+
+/// Build fail-closed import/name resolution result from source facts.
+def resolve_source_imports(project: ProjectSurface): SourceImportResolution =
+    let scopes = source_import_scope_inputs(project.facts.headers, project, 0, Vec[SourceImportScopeInput].new())
+    SourceImportResolution {
+        scopes: scopes,
+        blockers: source_import_resolution_blockers(scopes, 0, Vec[SourceImportResolutionBlocker].new()),
+    }
+
+/// Return true when import/name resolution is still blocking source semantics.
+def source_project_needs_import_resolution(project: ProjectSurface): bool =
+    resolve_source_imports(project).blockers.len() > 0

@@ -2,13 +2,14 @@
 namespace compiler.source.semantic_gate
 
 use compiler.source.project.*
+use compiler.source.import_policy.*
 
 /// Source semantic gate error kind.
 data SourceGateErrorKind {
     SourceGateUtf8ScannerUnsupported,
     SourceGateUnknownCompileIfPredicate,
     SourceGateInlineNamespaceUnsupported,
-    SourceGateUseResolutionAbsent,
+    SourceGateImportResolutionAbsent,
     SourceGateMissingNamespace,
     SourceGateItemScanAbsent,
     SourceGateTypedItemLoweringAbsent,
@@ -50,10 +51,6 @@ def source_project_has_namespace(project: ProjectSurface): bool =
 /// Return true when project source facts contain at least one item declaration.
 def source_project_has_item(project: ProjectSurface): bool =
     project.facts.items.len() > 0
-
-/// Return true when project source facts contain explicit use declarations.
-def source_project_has_use(project: ProjectSurface): bool =
-    project.facts.uses.len() > 0
 
 /// Return true when byte-level scanner saw non-ASCII source before UTF-8 scanner support exists.
 def source_project_has_utf8_warning(project: ProjectSurface): bool =
@@ -115,12 +112,12 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceGateItemScanAbsent,
                 "missing-facts: source item scan absent"))
             .freeze()
-    } else if source_project_has_use(project) {
+    } else if source_project_needs_import_resolution(project) {
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },
-                SourceGateUseResolutionAbsent,
-                "missing-lowering: explicit use resolution absent"))
+                SourceGateImportResolutionAbsent,
+                "missing-lowering: source import/name resolution absent"))
             .freeze()
     } else {
         Vec[SourceGateError].new()

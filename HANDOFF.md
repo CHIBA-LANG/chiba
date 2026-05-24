@@ -151,7 +151,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - Source scanner detects inline/indented namespace forms and fail-closes until inline namespace block assembly exists. File-header namespace remains the current transition path.
 - Source item scan preserves `private` on def/type/data/union/interface/extern; alpha origins and typed item skeletons carry it forward.
 - Source scanner now derives `use` declaration facts with path slice, glob marker, and multi-import marker. Actual import resolution still absent.
-- Source semantic gate fail-closes on explicit `use` facts until import/name resolution exists.
+- Source import policy now builds import scope inputs from owner namespace, explicit uses, and prelude policy. Source semantic gate fail-closes on explicit `use` or default prelude injection until import/name resolution exists.
 - Source item scan now attaches line-start `#[compile_if(...)]` facts to the following item. This preserves item-level conditional compilation evidence; real compile_if eval/filtering is still absent.
 - Source item scan now attaches the file-header namespace as `owner_namespace`; inline namespace ownership remains fail-closed until block assembly exists.
 - C08 alpha origins retain source item kind/name/file/owner_namespace/line/column/private/attributes. Type inference builds `TypedItemSkeleton` and checks placeholder pattern coverage, then fail-closes on missing source item type-expression/body inference rather than claiming a typed module.
