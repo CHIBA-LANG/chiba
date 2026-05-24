@@ -624,6 +624,13 @@ def tokeniskwreturn(tokens: Vec, i: i64): i64 =
         match ts.token { KwReturn => 1 _ => 0 }
     }
 
+def tokeniskwif(tokens: Vec, i: i64): i64 =
+    if i < 0 || i >= vec_len(tokens) { 0 }
+    else {
+        let ts = vec_get(tokens, i) as TokenSpan
+        match ts.token { KwIf => 1 _ => 0 }
+    }
+
 def tokeniskwbreak(tokens: Vec, i: i64): i64 =
     if i < 0 || i >= vec_len(tokens) { 0 }
     else {
@@ -665,6 +672,7 @@ def same_line_block_stmt_without_separator(tokens: Vec, i: i64): i64 =
     else {
         let prev = prevnontrivia(tokens, i - 1)
         if prev < 0 { 0 }
+        else if tokeniskwlet(tokens, i) != 0 && tokeniskwif(tokens, prev) != 0 { 0 }
         else if tokensameline(tokens, prev, i) == 0 { 0 }
         else if tokenislbrace(tokens, prev) != 0 { 0 }
         else if tokenissemicolon(tokens, prev) != 0 { 0 }
