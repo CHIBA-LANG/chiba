@@ -24,6 +24,7 @@
 	- **level-1b 不可用状态修复**：control / continuation / closure / backend 的 contract-only 代码必须先清理并替换成真实 lowering 或明确 blocker。
 	- **frontend migration builtin/oracle 债务**：`std.regex` / `std.chibalex` / `std.chibacc` 还需要从“gate 已成立”继续推进到“self-host truly primary”，但不能继续假设当前 level-1b backend 已可承载真实 continuation。
 	- **C11 primary-path / C12 second bootstrap**：first-bootstrap 过关不等于 second bootstrap 完成，后续重点是 `level1c-next` / `level1c-next2`。
+- 命名边界备注：这里的 **level-1c 指当前 `src/` / `level1c` legacy 产物线**，它只是 first-bootstrap seed / 对拍来源；不是 C12 后继续保留的新主线。C12 验收完成后，`src/` / `level1c` 与 `level0/` 一起删除，最终只保留 `level-1b/` 作为 primary implementation。
 - 当前离 Second Bootstrap 完成大约还差：
 	- **C11 真正迁移清零**：虽然 `level1b:c11-backend` 与 `level1b:cir-migration` 已绿，但 level-1b backend 当前仍不可用；必须先清掉 contract-only / stub-only / comment-only path，再让旧 `src/backend/cir` 不再承担核心语义路径。
 	- **C12 两轮 bootstrap 对拍**：`level1c.wasm -> level1c-next -> level1c-next2`。
