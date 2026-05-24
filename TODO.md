@@ -11,13 +11,11 @@
 - 当前离 checkpoint 完成大约还差：
 	- **1 轮未门禁语义收尾**：globals / `Self` with generics / ADT tuple bridge / compiler intrinsic surface / deep pattern lowering runtime / pipe matrix / scope shadowing / debugability / namespace ownership。
 	- **1 轮 TODO 与 gate 对齐**：把已经被 `checkpoint:gates` / `level1b:c11-backend` / `level1b:cir-migration` 验证通过的项从“核心 blocker”降级为历史完成或窄化为剩余边角。
-- 当前 first-bootstrap 的最新前沿不是 backend 主干失效，而是：
-	- **parser error smoke 已阶段性收口**：当前 `node tools/node/run-parser-error-smoke.mjs` 已通过（110 specs）；此前的 `UNEXPECTED OK` / crash 已被 recent precheck 修补收住。
-	- **semantic gates 已阶段性收口**：当前 `node tools/node/run-semantic-gates.mjs` 已全绿；最近两处失败（string/slice、pipe lowering）都已确认为 brittle harness 对内部 binder/ref 表示绑死，而不是语义回归。
-	- **checkpoint gates 已阶段性收口**：当前 `node tools/node/run-checkpoint-gates.mjs` 已全绿；最近一处失败是 parser precheck 把合法 `if let` 误判成 same-line `let` 语法错误，现已修正。
-	- **all-wat 已阶段性收口**：当前 `node tools/node/run-all-wat.mjs` 已通过；最近几处失败已确认为 runner 对 scratch 产物/`main -> None` 结构模块/专属 Binaryen runner 工件的扫描与执行边界不清，而不是 backend 主路径语义错误。
-	- **下一处 first-bootstrap 前沿待下一轮提交后重判**：当前 parser / semantic / checkpoint / all-wat 四层都已推进，新的 bootstrap blocker 需要在下一次 committed rerun 后再定位。
+- 当前 **`validate:first-bootstrap` 已全绿**：parser compare / parser error smoke / semantic gates / checkpoint gates / all-wat / level1c.wasm smoke 均已通过，说明 first-bootstrap 主链路现阶段已经打通。
+- 当前自举后的主要剩余压力转为：
 	- **type-system 稳定化**：`level1b:type-system` 仍存在 typed golden/dump 漂移（目前集中在 type inference / explicit generics / row shorthand），不能只看 `check ok` 就当作 typed 语义已完全收稳。
+	- **frontend migration builtin/oracle 债务**：`std.regex` / `std.chibalex` / `std.chibacc` 还需要从“gate 已成立”继续推进到“self-host truly primary”。
+	- **C11 primary-path / C12 second bootstrap**：first-bootstrap 过关不等于 second bootstrap 完成，后续重点是 `level1c-next` / `level1c-next2`。
 - 当前离 Second Bootstrap 完成大约还差：
 	- **C11 真正迁移清零**：虽然 `level1b:c11-backend` 与 `level1b:cir-migration` 已绿，但 level-1b backend 还需要继续巩固成 unquestioned primary behavior，旧 `src/backend/cir` 不再承担核心语义路径。
 	- **C12 两轮 bootstrap 对拍**：`level1c.wasm -> level1c-next -> level1c-next2`。
@@ -228,16 +226,6 @@
 	- **目标**: 
 		- `def x(x:X):X = ...` 且 x 只用了一次，这个函数应该变成传入x的mutation
 
-- [ ] parser error smoke / invalid-source discipline 收口
-	- **目标**:
-		- 缺逗号、缺右括号、非法 label、same-line construct、ADT/data/union malformed body 等 invalid fixture 一律稳定返回 `Err(...)` 或明确 `check` 诊断；
-		- 不再出现 `UNEXPECTED OK`；
-		- 更重要的是：invalid syntax 永远不能再触发 segfault / crash。
-	- **当前已知前沿**:
-		- 当前 `parser error smoke` 已通过 110 specs；
-		- 最近补了 same-line block stmt、`break/continue` 缺 `:` label、malformed `data` body 等 precheck；
-		- 后续要做的是把这类 invalid-source discipline 固化进 broader bootstrap / spec 流程，而不是回退成偶然修好。
-
 - [ ] type-system typed/golden 稳定化
 	- **目标**:
 		- `level1b:type-system` 全绿，不只 `check ok`，还包括 typed/golden dump 稳定；
@@ -307,11 +295,10 @@
 
 ## 当前优先级顺序
 
-1. 先收掉 `validate:first-bootstrap` 当前真 blocker：`parser error smoke` 的 false accept / invalid-source discipline。
-2. 再收掉 `level1b:type-system` 当前 typed/golden 漂移，尤其 type inference / explicit generics / row shorthand。
-3. 清 frontend migration 的 builtin/oracle 债务，尤其 `std.chibalex` / `std.chibacc`。
-4. 收掉 checkpoint checklist 里仍未门禁或未 runtime 化的语义面：ADT tuple bridge、compiler intrinsic surface、globals、`Self` generics、deep pattern / pipe 全矩阵、scope shadowing。
-5. 继续完成 `src/backend/cir` 的 primary-path 清零，让 level-1b backend 成为 unquestioned primary path。
-6. 让 level-1b backend 稳定生成并跑通 `level1c-next` / `level1c-next2`。
-7. 做 C12 两轮 bootstrap 对拍。
-8. 做 post-C12 repository cleanup，让 `level-1b/` 成为唯一 primary compiler tree。
+1. 先收掉 `level1b:type-system` 当前 typed/golden 漂移，尤其 type inference / explicit generics / row shorthand。
+2. 清 frontend migration 的 builtin/oracle 债务，尤其 `std.chibalex` / `std.chibacc`。
+3. 收掉 checkpoint checklist 里仍未门禁或未 runtime 化的语义面：ADT tuple bridge、compiler intrinsic surface、globals、`Self` generics、deep pattern / pipe 全矩阵、scope shadowing。
+4. 继续完成 `src/backend/cir` 的 primary-path 清零，让 level-1b backend 成为 unquestioned primary path。
+5. 让 level-1b backend 稳定生成并跑通 `level1c-next` / `level1c-next2`。
+6. 做 C12 两轮 bootstrap 对拍。
+7. 做 post-C12 repository cleanup，让 `level-1b/` 成为唯一 primary compiler tree。
