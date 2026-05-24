@@ -2,6 +2,7 @@
 namespace compiler.control.continuation_usage
 
 use compiler.control.answer_control.*
+use compiler.ir.control.*
 use compiler.semantic.driver.*
 
 /// Usage count used by CPS and continuation packaging.
@@ -23,11 +24,47 @@ type UsageFact {
     count: UsageCount,
 }
 
+/// Pick a conservative use count from callable/continuation storage facts.
+def callable_storage_usage_count(fact: CallableStorageFact): UsageCount =
+    if callable_storage_variants_have_continuation(fact.variants, 0) {
+        match fact.position {
+            CallableExplicitContStorage =>
+                if callable_storage_variants_have_contn(fact.variants, 0) { UseMany }
+                else { UseOne }
+            CallableStoragePosition => UseMany
+            CallableParameterPosition => UseOne
+            CallableSendableStoragePosition => UseOne
+        }
+    } else { UseOne }
+
+/// Return true when a callable storage fact can contain `ContN`.
+def callable_storage_variants_have_contn(variants: Array[CallableStorageVariant], index: usize): bool =
+    if index == variants.len() { false }
+    else {
+        match variants.get(index) {
+            CallableVariantContN => true
+            _ => callable_storage_variants_have_contn(variants, index + 1)
+        }
+    }
+
+/// Convert one callable storage fact into the coarse usage fact available before expression traversal.
+def usage_fact_from_callable_storage(fact: CallableStorageFact): UsageFact =
+    UsageFact(fact.owner, callable_storage_usage_count(fact))
+
+/// Build coarse usage facts from typed callable/continuation storage obligations.
+def usage_facts_from_callable_storage(facts: Array[CallableStorageFact], index: usize, out: Vec[UsageFact]): Array[UsageFact] =
+    if index == facts.len() { out.freeze() }
+    else { usage_facts_from_callable_storage(facts, index + 1, out.push(usage_fact_from_callable_storage(facts.get(index)))) }
+
 /// Analyze binder, lambda, closure, and continuation usage.
 def analyze_usage(module: AnswerControlModule): Result[UsageModule, SemanticDiagnostics] =
-    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-        .push(SemanticDiagnostic("<control>", 0, 0, "missing-facts: continuation usage subject collection absent"))
-        .freeze()))
+    if module.typed.callable_storage.len() == 0 {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<control>", 0, 0, "missing-facts: continuation usage subject collection absent"))
+            .freeze()))
+    } else {
+        Ok(UsageModule(module, usage_facts_from_callable_storage(module.typed.callable_storage, 0, Vec[UsageFact].new())))
+    }
 
 /// Module annotated with usage facts.
 type UsageModule {
