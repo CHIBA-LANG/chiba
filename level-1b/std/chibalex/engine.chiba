@@ -6,6 +6,7 @@ namespace std.chibalex.engine
 
 use std.chibalex.ir.*
 use std.regex.matcher.*
+use std.regex.utf8.*
 
 /// Candidate match for one rule.
 type LexCandidate {
@@ -46,15 +47,19 @@ def choose_with_backtracking(candidate: LexCandidate): LexCandidate = reset {
 /// Find the best rule at the current state.
 def find_best_rule(lexer: LoweredLexer, input: str, state: LexState): Option[LexCandidate] = __compiler_builtin("std.chibalex_find_best_rule")
 
-/// Advance one byte of line/column state.
-def LexState.advance_byte(self, byte: u8): LexState =
-    if byte == 10 { lex_state(self.mode, self.offset + 1, self.line + 1, 0) }
-    else { lex_state(self.mode, self.offset + 1, self.line, self.column + 1) }
+/// Advance one UTF-8 codepoint of line/column state.
+def LexState.advance_char(self, input: str): LexState =
+    if self.offset >= input.len() { self }
+    else {
+        let next = input.next_char_offset(self.offset)
+        if input.byte_at(self.offset) == 10 { lex_state(self.mode, next, self.line + 1, 0) }
+        else { lex_state(self.mode, next, self.line, self.column + 1) }
+    }
 
-/// Advance lexer state byte-by-byte until `end`.
+/// Advance lexer state codepoint-by-codepoint until `end`.
 def LexState.advance_until(self, input: str, end: usize): LexState =
     if self.offset >= end { self }
-    else { self.advance_byte(input.byte_at(self.offset)).advance_until(input, end) }
+    else { self.advance_char(input).advance_until(input, end) }
 
 /// Advance lexer state after a chosen match.
 def LexState.advance(self, input: str, end: usize): LexState =

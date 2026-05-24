@@ -77,6 +77,7 @@ const CASES = [
     name: "continuation",
     namespace: "chibalexmini.continuation",
     sourceOnly: true,
+    sourceOnlyReason: "native chibalex reference does not yet cover continuation surface keywords",
     expected: ["KwShiftn", "KwCont1", "KwContN", "ThinArrow"],
     source: "mk_str(\"cont1 (A) -> B contN shiftn\", 27)",
     check: `
@@ -104,6 +105,33 @@ const CASES = [
                 _ => 2
             }
         _ => 1
+`,
+  },
+  {
+    file: "utf8-ident.chibalex",
+    name: "utf8ident",
+    namespace: "chibalexmini.utf8_ident",
+    sourceOnly: true,
+    sourceOnlyReason: "native chibalex reference does not yet prove UTF-8 XID identifiers",
+    expected: ["KwLet", "Ident", "Eq"],
+    source: "mk_str(\"let café = λ\", 14)",
+    check: `
+        KwLet =>
+            match token_at(tokens, 1) {
+                Ident(name) =>
+                    if streq(name, mk_str("café", 5)) != 0 {
+                        match token_at(tokens, 2) {
+                            Eq =>
+                                match token_at(tokens, 3) {
+                                    Ident(lambda) => if streq(lambda, mk_str("λ", 2)) != 0 { 0 } else { 5 }
+                                    _ => 4
+                                }
+                            _ => 3
+                        }
+                    } else { 2 }
+                _ => 1
+            }
+        _ => 6
 `,
   },
 ];
@@ -305,7 +333,7 @@ def is_alpha(b: i64): i64 =
     if b >= 65 && b <= 90 { 1 } else if b >= 97 && b <= 122 { 1 } else { 0 }
 
 def mini_is_ident_start(b: i64): i64 =
-    if mini_is_alpha(b) != 0 { 1 } else if b == 95 { 1 } else { 0 }
+    if mini_is_alpha(b) != 0 { 1 } else if b == 95 { 1 } else if b >= 128 { 1 } else { 0 }
 
 def mini_is_ident_continue(b: i64): i64 =
     if mini_is_ident_start(b) != 0 { 1 } else { mini_is_digit(b) }
@@ -357,6 +385,37 @@ def lex_loop(src: i64, sl: i64, file: i64, out: Vec, pos: i64): i64 =
         } else if b == 61 {
             let _ = lex_emit(out, Eq, file, pos, 1)
             lex_loop(src, sl, file, out, pos + 1)
+        } else {
+            let _ = lex_emit(out, LexError(b), file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        }
+    }
+
+def lex_all(src: i64, src_len: i64, file: i64): Vec = {
+    let out = vec_new()
+    let _ = lex_loop(src, src_len, file, out, 0)
+    let _ = lex_emit(out, Eof, file, src_len, 0)
+    out
+}
+`;
+  }
+  if (name === "utf8ident") {
+    return `${helpers}
+def lex_loop(src: i64, sl: i64, file: i64, out: Vec, pos: i64): i64 =
+    if pos >= sl { 0 }
+    else {
+        let b = load8(src, pos)
+        if mini_is_ws(b) != 0 { lex_loop(src, sl, file, out, pos + 1) }
+        else if mini_literal_eq_at(src, sl, pos, mk_str("let", 3), 0) != 0 {
+            let _ = lex_emit(out, KwLet, file, pos, 3)
+            lex_loop(src, sl, file, out, pos + 3)
+        } else if b == 61 {
+            let _ = lex_emit(out, Eq, file, pos, 1)
+            lex_loop(src, sl, file, out, pos + 1)
+        } else if mini_is_ident_start(b) != 0 {
+            let end = mini_scan_ident(src, sl, pos + 1)
+            let _ = lex_emit(out, Ident(mk_str(src + pos, end - pos)), file, pos, end - pos)
+            lex_loop(src, sl, file, out, end)
         } else {
             let _ = lex_emit(out, LexError(b), file, pos, 1)
             lex_loop(src, sl, file, out, pos + 1)
@@ -493,7 +552,7 @@ for (const caseInfo of CASES) {
   const input = path.join(ROOT, file);
   const nativeOutput = path.join(OUT, file.replace(/\.chibalex$/, ".native.chiba"));
   if (caseInfo.sourceOnly === true) {
-    oracleReferenceFailed("native chibalex reference does not yet cover continuation surface keywords");
+    oracleReferenceFailed(caseInfo.sourceOnlyReason);
   } else {
     run(`native chibalex oracle ${file}`, "timeout", ["10", "./chibalex.o", input, "-o", nativeOutput]);
     const nativeGenerated = fs.readFileSync(nativeOutput, "utf8");

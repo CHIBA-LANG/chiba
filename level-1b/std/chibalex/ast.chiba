@@ -33,6 +33,19 @@ data LexBuiltinKeyword {
     LexKeywordContN,
 }
 
+/// UTF-8 handling required by generated lexers.
+data LexUtf8Policy {
+    LexUtf8Required,
+    LexUtf8RejectInvalid,
+}
+
+/// Identifier policy used by `$XID_START` and `$XID_CONTINUE`.
+type LexIdentifierPolicy {
+    utf8: LexUtf8Policy,
+    xid_start: String,
+    xid_continue: String,
+}
+
 /// Keyword rule emitted before the generic identifier rule.
 type LexKeywordRule {
     spelling: str,
@@ -59,6 +72,7 @@ type LexRule {
 type ChibalexSpec {
     namespace_name: str,
     modes: List[LexMode],
+    identifier_policy: LexIdentifierPolicy,
     regex_defs: List[LexRegexDef],
     rules: List[LexRule],
     token_data: String,

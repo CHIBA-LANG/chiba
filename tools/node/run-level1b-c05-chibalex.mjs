@@ -15,9 +15,15 @@ const REQUIRED_TEXT = [
   "LexKeywordCont1",
   "LexKeywordContN",
   "LexKeywordShiftn",
+  "data LexUtf8Policy",
+  "type LexIdentifierPolicy",
+  "LexUtf8Required",
+  "LexUtf8RejectInvalid",
   "type LoweredLexer",
   "def lower_chibalex",
   "def find_best_rule",
+  "def LexState.advance_char",
+  "next_char_offset",
   "def generate_lexer",
   "reset",
   "shift retry",
@@ -103,6 +109,7 @@ function checkMiniSpecs() {
   const specs = fs.readdirSync(MINI_ROOT).filter((name) => name.endsWith(".chibalex")).sort();
   const required = new Set(["basic.chibalex", "longest.chibalex", "string-mode.chibalex"]);
   required.add("continuation-surface.chibalex");
+  required.add("utf8-ident.chibalex");
   for (const spec of specs) {
     required.delete(spec);
     const source = read(path.join(MINI_ROOT, spec));
@@ -116,6 +123,11 @@ function checkMiniSpecs() {
     if (spec === "continuation-surface.chibalex") {
       for (const needle of ["\"cont1\"", "\"contN\"", "\"shiftn\"", "\"->\"", "KwCont1", "KwContN", "KwShiftn", "ThinArrow"]) {
         if (!source.includes(needle)) fail(`continuation-surface fixture missing ${needle}`);
+      }
+    }
+    if (spec === "utf8-ident.chibalex") {
+      for (const needle of ["$XID_START", "$XID_CONTINUE", "Ident(Str)"]) {
+        if (!source.includes(needle)) fail(`utf8-ident fixture missing ${needle}`);
       }
     }
   }
