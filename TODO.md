@@ -37,6 +37,7 @@
 - [ ] CIR nanopass IR：清晰分层还不够；需要语言级 CPS/CIR facts，且保证不耦合 Wasm。
 	- [x] CIR/backend boundary gate：compiler/ir/control/closure 不允许出现 Wasm/WAT/Binaryen/funcref/eqref/backend opcode；backend 细节只允许在 backend 层。
 - [ ] closure conversion：no-capture direct、capturing env、env field extraction、call rewrite 没完整。
+	- [x] no-continuation closure usage path：无 runtime closure/continuation subjects 的 CPS module 可通过 C10 usage/simplification 空事实路径；真实 closure extraction 仍未完成。
 - [ ] Cont1 lowering：direct resume / boxed one-shot consumed state machine 没完整。
 - [ ] ContN lowering：stackless resume frame、frame chain、repeatable package 没完整 primary。
 - [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。

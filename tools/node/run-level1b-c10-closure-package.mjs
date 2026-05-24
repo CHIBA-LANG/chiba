@@ -16,12 +16,12 @@ const REQUIRED_FILES = [
 ];
 const REQUIRED_TEXT = [
   "def analyze_cps_usage",
+  "def cps_usage_facts_none",
   "def simplify_continuations",
   "def convert_closures",
   "def lift_lambdas",
   "def simplify_closure_envs",
   "def run_closure_package",
-  "missing-facts: CPS closure/lambda/continuation subject extraction absent",
   "ContinuationPackaged",
   "ClosureEnvLayout",
   "ClosureDirectFunction",

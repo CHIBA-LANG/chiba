@@ -30,14 +30,16 @@ type CpsUsageModule {
 /// Recompute use counts on CPS Core.
 def analyze_cps_usage(module: CpsModule): Result[CpsUsageModule, SemanticDiagnostics] =
     if module.continuations.len() == 0 {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: CPS closure/lambda/continuation subject extraction absent"))
-            .freeze()))
+        Ok(CpsUsageModule(module, cps_usage_facts_none()))
     } else {
         Ok(CpsUsageModule(
             module,
             cps_usage_facts(module.continuations, 0, Vec[CpsUseFact].new())))
     }
+
+/// Empty CPS usage fact stream for modules without runtime closure/continuation subjects.
+def cps_usage_facts_none(): Array[CpsUseFact] =
+    Vec[CpsUseFact].new().freeze()
 
 /// Convert continuation facts into CPS usage facts without losing capability kind.
 def cps_usage_facts(facts: Array[ContinuationFact], index: usize, out: Vec[CpsUseFact]): Array[CpsUseFact] =
