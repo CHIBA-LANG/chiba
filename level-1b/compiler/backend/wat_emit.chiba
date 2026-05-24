@@ -59,9 +59,17 @@ def emit_core_op(op: CoreOp): Result[String, SemanticDiagnostics] =
 
 /// Emit validated Core as WAT.
 def emit_wat(module: ValidatedCoreModule): Result[WatModule, SemanticDiagnostics] =
-    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-        .push(SemanticDiagnostic("<backend>", 0, 0, "missing-backend-layout: executable WAT emission absent"))
-        .freeze()))
+    if module.core.ops.len() == 0 {
+        Ok(empty_wat_module())
+    } else {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<backend>", 0, 0, "missing-backend-layout: executable WAT emission absent"))
+            .freeze()))
+    }
+
+/// Minimal executable module for an empty validated Core program.
+def empty_wat_module(): WatModule =
+    WatModule { text: "(module)\n" }
 
 /// Return the text carried by a WAT module.
 def WatModule.as_string(self): String = self.text

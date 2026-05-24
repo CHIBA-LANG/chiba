@@ -45,6 +45,7 @@
 - [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。
 - [ ] Wasm-GC backend layout：layout 有一部分；真实 lowering 到 Wasm-GC object/funcref/eqref 不完整。
 - [ ] WAT emit：没有 executable WAT；现在 fail-closed。
+	- [x] empty Core WAT baseline：空 validated Core module 现在 emits 最小 `(module)`；真实 Core op WAT lowering 仍 fail-closed。
 
 - [ ] `level-1b/compiler/source/scan.chiba` 只是 truthfulness scaffold，不是语言设计或未来 frontend；第一优先级是让 chibalex/chibacc parser 成为 C07 source facts 的 primary path，然后删除或降级 `scan.chiba`，不能让 byte-level scanner 长期承担 namespace/item/attribute 语义。
 - [ ] attribute grammar 必须先补齐 spec/golden，再实现：

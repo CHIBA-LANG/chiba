@@ -70,6 +70,7 @@ const REQUIRED_TEXT = [
   "def build_symbol_debug_manifest",
   "def symbol_debug_manifest_as_text",
   "def emit_wat",
+  "def empty_wat_module",
   "def run_wasm_gc_wat",
 ];
 
