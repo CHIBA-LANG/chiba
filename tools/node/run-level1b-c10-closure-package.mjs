@@ -35,6 +35,7 @@ const REQUIRED_TEXT = [
   "ContinuationLowerRepeatableContN",
   "def continuation_lowering_fact",
   "def continuation_lowering_kind",
+  "def continuation_decision_emits_lowering_fact",
   "def ContinuationSimplification.capability",
   "def continuation_capture_extraction_blocker",
   "def continuation_capture_extraction_blockers",

@@ -163,6 +163,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - C09 replay safety must not mark every usage fact safe. It now fail-closes until replay capture classification exists.
 - C09 replay capture taxonomy distinguishes pure value, shared `Ref` cell, and non-replay state. Shared `Ref` is legal for ContN as shared-reference semantics, not snapshot/rollback.
 - C10 CPS usage now fail-closes on missing closure/lambda/continuation subject extraction; previous continuation-only use reconstruction was not enough to prove closure directification/capture semantics.
+- C10 closure conversion no longer emits backend lowering facts for deleted continuations, preventing deleted continuations from leaking as default direct Cont1 lowering.
 - C11 Core ops retain runtime state machine facts. Boxed `Cont1` must carry `CoreConsumedStateMachine`; non-Cont1 ops must not.
 - No-capture closure must optimize to direct function/funref/inline; no env allocation.
 - Non-escaping exactly-once `Cont1` must optimize to direct resume/inline/tail jump; no continuation package.

@@ -89,10 +89,24 @@ def continuation_lowering_fact(decision: ContinuationSimplification): Continuati
         consumed_state: continuation_lowering_consumed_state(decision),
     }
 
+/// Return true when a simplification decision must still reach backend lowering.
+def continuation_decision_emits_lowering_fact(decision: ContinuationSimplification): bool =
+    match decision {
+        ContinuationDeleted(_, _) => false
+        _ => true
+    }
+
 /// Build continuation lowering facts in stable decision order.
 def continuation_lowering_facts(decisions: Array[ContinuationSimplification], index: usize, out: Vec[ContinuationLoweringFact]): Array[ContinuationLoweringFact] =
     if index == decisions.len() { out.freeze() }
-    else { continuation_lowering_facts(decisions, index + 1, out.push(continuation_lowering_fact(decisions.get(index)))) }
+    else {
+        let decision = decisions.get(index)
+        if continuation_decision_emits_lowering_fact(decision) {
+            continuation_lowering_facts(decisions, index + 1, out.push(continuation_lowering_fact(decision)))
+        } else {
+            continuation_lowering_facts(decisions, index + 1, out)
+        }
+    }
 
 /// Return true when a continuation decision needs real capture extraction.
 def continuation_decision_requires_capture_extraction(decision: ContinuationSimplification): bool =

@@ -302,6 +302,7 @@
 		- closure conversion 当前对 packaged continuation 生成 empty capture fields，未抽取真实 capture set。
 		- 已新增 closure/backend contract：`StacklessResumeFunction`、`ContinuationFrame`、`ContinuationLowerBoxedCont1`、`ContinuationLowerRepeatableContN`、`CoreOpStacklessFunction`、`CoreOpContinuationFrameChain`、`CoreOpContNPackage`。
 		- C10/C11 source path 已把 `ContinuationSimplification` 转成 `ContinuationLoweringFact` 并贯穿到 backend Core op lowering；boxed `Cont1` 保留 consumed-state，`ContN` lower 为 frame-chain op + repeatable package op，但真实 capture extraction / frame body / WAT emission 仍是 blocker。
+		- C10 closure conversion 现在不会为 deleted continuation 生成 backend lowering fact，避免已删除 continuation 以默认 DirectCont1 形态泄漏到 backend。
 		- C10 capture model 已区分 `CaptureSharedRefCell`，并把 materialized continuation blocker 拆成 boxed `Cont1` capture extraction 与 `ContN` frame-chain capture extraction；这只提高 fail-closed 诊断精度，尚未实现真实 capture set / frame body 抽取。
 		- C11 已修正 erased callable continuation package layout：`ContinuationLowerErasedCallableVariant` 不再复用 closure env layout，而是进入独立 `LayoutContinuationPackage`（tag + payload）；真实 callable ADT dispatch / WAT emission 仍是 blocker。
 		- C11 validator 已补 `ContN` ordering invariant：`CoreOpContNPackage` 必须在已见同 owner 的 `CoreOpContinuationFrameChain` 后出现；`CoreOp` 现在保留 owner provenance，防止其他 lowering path 用不相关 frame-chain 绕过 repeatable frame-chain 语义。
