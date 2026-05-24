@@ -33,10 +33,13 @@ const REQUIRED_TEXT = [
   "def layout_erased_continuation_package",
   "data CoreValidationError",
   "CoreDanglingLayout",
+  "CoreMissingOwner",
   "CoreIllegalTailCall",
   "CoreIllegalContinuationPackage",
   "def validate_wasm_gc_core",
   "def validate_core_continuation_order",
+  "def validate_core_owner",
+  "runtime Core op missing owner provenance",
   "def validate_core_ops_with_contn_frame",
   "ContN package owner does not match preceding frame chain",
   "ContN package missing preceding frame chain",
@@ -128,6 +131,9 @@ function checkSource(file, source) {
   }
   if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_continuation_order\b[\s\S]{0,520}core_op_is_contn_package[\s\S]{0,520}owner does not match[\s\S]{0,520}preceding frame chain/.test(code)) {
     errors.push(`${file}: validator must reject ContN package without same-owner preceding frame chain`);
+  }
+  if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_owner\b[\s\S]{0,240}requires_layout[\s\S]{0,240}CoreMissingOwner/.test(code)) {
+    errors.push(`${file}: validator must reject materialized Core ops without owner provenance`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {

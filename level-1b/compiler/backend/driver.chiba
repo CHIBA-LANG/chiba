@@ -12,6 +12,7 @@ def core_validation_diagnostic(error: CoreValidationError): SemanticDiagnostic =
     match error {
         CoreDanglingLayout(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreDanglingSymbol(message) => SemanticDiagnostic("<backend>", 0, 0, message)
+        CoreMissingOwner(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreIllegalTailCall(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreIllegalContinuationPackage(message) => SemanticDiagnostic("<backend>", 0, 0, message)
     }

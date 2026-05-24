@@ -8,6 +8,7 @@ use compiler.ir.common.*
 data CoreValidationError {
     CoreDanglingLayout(str),
     CoreDanglingSymbol(str),
+    CoreMissingOwner(str),
     CoreIllegalTailCall(str),
     CoreIllegalContinuationPackage(str),
 }
@@ -67,6 +68,15 @@ def validate_core_layout(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
             if module.layouts.contains_layout(layout, 0) { None }
             else { Some(CoreDanglingLayout(layout.key)) }
     }
+
+/// Validate that materialized runtime ops keep source owner provenance.
+def validate_core_owner(op: CoreOp): Option[CoreValidationError] =
+    if op.kind.requires_layout() {
+        match op.owner {
+            Some(_) => None
+            None => Some(CoreMissingOwner("runtime Core op missing owner provenance"))
+        }
+    } else { None }
 
 /// Validate continuation package operations.
 def validate_core_continuation_package(op: CoreOp): Option[CoreValidationError] =
@@ -150,6 +160,7 @@ def push_validation_error(out: Vec[CoreValidationError], error: Option[CoreValid
 def validate_core_op(module: WasmGcCoreModule, op: CoreOp, out: Vec[CoreValidationError]): Vec[CoreValidationError] =
     out
         |> push_validation_error(validate_core_layout(module, op))
+        |> push_validation_error(validate_core_owner(op))
         |> push_validation_error(validate_core_tail(op))
         |> push_validation_error(validate_core_continuation_package(op))
 
