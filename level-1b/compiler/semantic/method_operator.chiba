@@ -1,6 +1,9 @@
 /// Nominal method and operator index.
 namespace compiler.semantic.method_operator
 
+use compiler.source.project.*
+use compiler.semantic.alpha.*
+use compiler.semantic.type_infer.*
 use compiler.semantic.types.*
 
 /// Method index key. Receiver identity is nominal and namespace-qualified.
@@ -15,23 +18,59 @@ type OperatorKey {
     operator_name: String,
 }
 
+/// Method/operator declaration entry before nominal receiver resolution.
+type MethodOperatorSurfaceEntry {
+    owner: BinderId,
+    file: SourceFileId,
+    receiver: SourceNameSlice,
+    member: SourceNameSlice,
+    operator: bool,
+}
+
 /// Method/operator index for one project.
 type MethodOperatorIndex {
     methods: Array[MethodKey],
     operators: Array[OperatorKey],
+    surface_entries: Array[MethodOperatorSurfaceEntry],
 }
 
 /// Empty method/operator index for modules without declarations.
 def method_operator_index_empty(): MethodOperatorIndex =
-    MethodOperatorIndex(
-        Vec[MethodKey].new().freeze(),
-        Vec[OperatorKey].new().freeze())
+    MethodOperatorIndex {
+        methods: Vec[MethodKey].new().freeze(),
+        operators: Vec[OperatorKey].new().freeze(),
+        surface_entries: Vec[MethodOperatorSurfaceEntry].new().freeze(),
+    }
+
+/// Convert one typed surface fact into a method/operator index input.
+def method_operator_surface_entry_from_fact(fact: MethodSurfaceFact): MethodOperatorSurfaceEntry =
+    MethodOperatorSurfaceEntry {
+        owner: fact.owner,
+        file: fact.file,
+        receiver: fact.receiver,
+        member: fact.member,
+        operator: fact.operator,
+    }
+
+/// Convert typed method/operator facts in stable owner order.
+def method_operator_surface_entries_from_facts(facts: Array[MethodSurfaceFact], index: usize, out: Vec[MethodOperatorSurfaceEntry]): Array[MethodOperatorSurfaceEntry] =
+    if index == facts.len() { out.freeze() }
+    else { method_operator_surface_entries_from_facts(facts, index + 1, out.push(method_operator_surface_entry_from_fact(facts.get(index)))) }
+
+/// Build an index object that preserves unresolved method/operator declarations.
+def method_operator_index_from_surface(facts: Array[MethodSurfaceFact]): MethodOperatorIndex =
+    MethodOperatorIndex {
+        methods: Vec[MethodKey].new().freeze(),
+        operators: Vec[OperatorKey].new().freeze(),
+        surface_entries: method_operator_surface_entries_from_facts(facts, 0, Vec[MethodOperatorSurfaceEntry].new()),
+    }
 
 /// Build the nominal method/operator index.
 def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex, SemanticDiagnostics] =
     if module.method_surface.len() == 0 {
         Ok(method_operator_index_empty())
     } else {
+        let _ = method_operator_index_from_surface(module.method_surface)
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method/operator index construction absent"))
             .freeze()))

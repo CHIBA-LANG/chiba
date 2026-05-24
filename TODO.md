@@ -22,6 +22,7 @@
 - [ ] method resolution：没做。method index、receiver binding、qualified callee、Self with generics 都缺。
 	- [x] method surface facts：source scan 已抽取 `def Receiver.member` 的 receiver/member slices，后续 method index 不再只靠 boolean。
 	- [x] typed method/operator facts：typed module 已聚合 `MethodSurfaceFact`，保留 owner、receiver、member、operator 标记。
+	- [x] method/operator index surface entries：index builder 已把 `MethodSurfaceFact` 转成稳定 `MethodOperatorSurfaceEntry`；nominal receiver binding/candidate lookup 仍未完成。
 	- [x] no-method index baseline：无 method/operator declarations 的 module 现在得到空 MethodOperatorIndex；有 method surface 仍 fail-closed。
 - [ ] operator overloading：没做。candidate collection、operand matching、ambiguity、op_index/op_index_slice lowering 都缺。
 	- [x] operator method surface facts：`.op_*` 现在和普通 method 共用 receiver/member slices；真实 overload resolution 仍未完成。
