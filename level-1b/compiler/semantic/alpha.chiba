@@ -8,16 +8,47 @@ type BinderId {
     index: usize,
 }
 
+/// Source origin retained for one alpha binder.
+type AlphaBinderOrigin {
+    binder: BinderId,
+    file: SourceFileId,
+    kind: SourceItemKind,
+    name: Option[SourceNameSlice],
+    line: usize,
+    column: usize,
+}
+
 /// Alpha-renamed module.
 type AlphaModule {
     binders: Array[BinderId],
+    origins: Array[AlphaBinderOrigin],
 }
 
 /// Convert every source binder to a stable id before type checking.
 def alpha_convert(project: ProjectSurface): AlphaModule =
-    AlphaModule(alpha_binders_from_source_items(project.facts.items, 0, Vec[BinderId].new()))
+    AlphaModule(
+        alpha_binders_from_source_items(project.facts.items, 0, Vec[BinderId].new()),
+        alpha_origins_from_source_items(project.facts.items, 0, Vec[AlphaBinderOrigin].new()))
 
 /// Build deterministic binder ids from source item scan facts.
 def alpha_binders_from_source_items(items: Array[SourceItemScanResult], index: usize, out: Vec[BinderId]): Array[BinderId] =
     if index == items.len() { out.freeze() }
     else { alpha_binders_from_source_items(items, index + 1, out.push(BinderId { index: index })) }
+
+/// Build source origins for alpha binders from item scan facts.
+def alpha_origins_from_source_items(items: Array[SourceItemScanResult], index: usize, out: Vec[AlphaBinderOrigin]): Array[AlphaBinderOrigin] =
+    if index == items.len() { out.freeze() }
+    else {
+        let item = items.get(index)
+        alpha_origins_from_source_items(
+            items,
+            index + 1,
+            out.push(AlphaBinderOrigin {
+                binder: BinderId { index: index },
+                file: item.file,
+                kind: item.kind,
+                name: item.name,
+                line: item.line,
+                column: item.column,
+            }))
+    }

@@ -32,6 +32,12 @@ type NamespaceNameSlice {
     len: usize,
 }
 
+/// Source item name slice discovered in source text.
+type SourceNameSlice {
+    offset: usize,
+    len: usize,
+}
+
 /// Result of scanning for one namespace declaration.
 type NamespaceScanResult {
     file: SourceFileId,
@@ -72,6 +78,7 @@ data SourceItemKind {
 type SourceItemScanResult {
     file: SourceFileId,
     kind: SourceItemKind,
+    name: Option[SourceNameSlice],
     line: usize,
     column: usize,
 }

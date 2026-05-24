@@ -9,6 +9,7 @@ const FIXTURE = "level-1b/supports/pre-c07-smokes/doc_compile_if.chiba";
 const REQUIRED_TEXT = [
   "type ProjectSurface",
   "type SourceProjectFacts",
+  "type SourceNameSlice",
   "type SourceHeaderFacts",
   "type SourceDocFacts",
   "type SourceCompileIfFacts",
@@ -24,6 +25,7 @@ const REQUIRED_TEXT = [
   "def source_scan_doc_facts",
   "def source_scan_compile_if_facts",
   "def source_scan_item_at",
+  "def source_scan_item_name",
   "def source_scan_items",
   "def source_scan_utf8_warnings",
   "def scan_project_utf8_warnings",

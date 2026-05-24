@@ -103,13 +103,21 @@ def source_scan_namespace_at(file: SourceFileId, text: String, offset: usize, li
 /// Try to scan a source item at one line start.
 def source_scan_item_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceItemScanResult] =
     if source_starts_with_at(text, offset, "def ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemDef, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, kind: SourceItemDef, name: source_scan_item_name(text, offset + "def".len()), line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "type ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemType, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, kind: SourceItemType, name: source_scan_item_name(text, offset + "type".len()), line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "data ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemData, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, kind: SourceItemData, name: source_scan_item_name(text, offset + "data".len()), line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "extern ", 0) {
-        Some(SourceItemScanResult { file: file, kind: SourceItemExtern, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, kind: SourceItemExtern, name: source_scan_item_name(text, offset + "extern".len()), line: line, column: 0 })
+    } else { None }
+
+/// Try to scan the first ASCII item name after an item keyword.
+def source_scan_item_name(text: String, offset: usize): Option[SourceNameSlice] =
+    let start = source_skip_spaces(text, offset)
+    if start < text.len() && source_is_ident_start(text.byte_at(start)) {
+        let end = source_scan_namespace_name_end(text, start)
+        Some(SourceNameSlice { offset: start, len: end - start })
     } else { None }
 
 /// Advance to the start offset of the next line.

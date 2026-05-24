@@ -28,6 +28,8 @@ const REQUIRED_FILES = [
 const REQUIRED_TEXT = [
   "def alpha_convert",
   "def alpha_binders_from_source_items",
+  "type AlphaBinderOrigin",
+  "def alpha_origins_from_source_items",
   "def elaborate_patterns",
   "def pattern_ids_from_binders",
   "def unify",
