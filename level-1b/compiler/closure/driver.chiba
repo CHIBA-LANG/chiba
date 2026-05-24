@@ -13,8 +13,12 @@ use compiler.closure.env_simplify.*
 def run_closure_package(module: TypedModule): Result[OptimizedClosureModule, SemanticDiagnostics] =
     match run_control_cps(module) {
         Ok(cps) =>
-            match convert_closures(simplify_continuations(analyze_cps_usage(cps))) {
-                Ok(converted) => Ok(simplify_closure_envs(lift_lambdas(converted)))
+            match analyze_cps_usage(cps) {
+                Ok(usage) =>
+                    match convert_closures(simplify_continuations(usage)) {
+                        Ok(converted) => Ok(simplify_closure_envs(lift_lambdas(converted)))
+                        Err(errors) => Err(errors)
+                    }
                 Err(errors) => Err(errors)
             }
         Err(errors) => Err(errors)

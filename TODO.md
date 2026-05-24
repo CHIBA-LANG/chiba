@@ -282,6 +282,7 @@
 		- 旧 `src/backend/cir/*` 与 level-0 可以作为 legacy reference 借鉴算法、fixture、失败模式；但每次借鉴都必须先过 spec alignment，且 level-1b 重新拥有行为，不能形成 legacy dependency。
 		- 旧 `src/backend/cir/cps.chiba` 也只是 L5 wrapper / synthetic continuation package 方向，不是可直接搬运的 spec 级 one-pass CPS + beta 实现。
 		- CPS usage 当前把 usage facts 全部转成 `UseSubjectBinder`，会丢 continuation / lambda / closure subject kind。
+		- C10 CPS usage 当前已 fail-closed 于 closure/lambda/continuation subject extraction absent；之前只从 continuation facts 重建 usage，完全没证明 closure/lambda 捕获与 no-capture directification。
 		- spec 要求 `shift` 捕获 `Cont1`、`shiftn` 捕获 `ContN`，逃逸 `Cont1` boxed 且不升级；当前 control/closure 只按 UseZero/UseOne/UseMany 做壳级 decision，未承载 `Cont1` / `ContN` storage 语义。
 		- 已新增 target-independent IR contract：`ContinuationCont1` / `ContinuationContN`、`ContinuationBoxedOneShot`、`ContinuationRepeatableFrameChain`、`ContinuationFact`、sendable callable exclusion hook。
 		- continuation package 当前由 `UseMany` 直接驱动，未区分 `Cont1` escaped boxed 与 `ContN` repeatable package。

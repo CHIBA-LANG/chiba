@@ -21,6 +21,7 @@ const REQUIRED_TEXT = [
   "def lift_lambdas",
   "def simplify_closure_envs",
   "def run_closure_package",
+  "missing-facts: CPS closure/lambda/continuation subject extraction absent",
   "ContinuationPackaged",
   "ClosureEnvLayout",
   "ClosureDirectFunction",
