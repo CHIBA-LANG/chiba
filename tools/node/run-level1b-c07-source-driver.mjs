@@ -51,6 +51,7 @@ const REQUIRED_TEXT = [
   "has_operator_method",
   "has_self_type",
   "def source_line_has_text_before_byte",
+  "def source_line_has_word",
   "def source_scan_item_has_body",
   "def source_scan_item_at",
   "def source_scan_private_item_at",
