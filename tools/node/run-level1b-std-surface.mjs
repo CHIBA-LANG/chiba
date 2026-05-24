@@ -85,6 +85,7 @@ for (const file of smokeFiles) {
 fs.mkdirSync(WAT_DIR, { recursive: true });
 const stringSmoke = path.join(SMOKE_ROOT, "string_slice.chiba");
 const wat = run("./target/debug/level1c.o", ["wat", stringSmoke]);
+const stringParamSig = /\(func \$string_slice_smoke \(param \$v\d+ \(ref \$array_u8\)\)/;
 if (wat.status !== 0 || !wat.stdout.includes("(module")) {
   fail(`Pre-C01 string/slice WAT emit failed\n${wat.stdout || wat.stderr}`);
 }
@@ -92,7 +93,7 @@ fs.writeFileSync(path.join(WAT_DIR, "string_slice.wat"), wat.stdout);
 if (!wat.stdout.includes("(type $array_u8 (array (mut i8)))")) fail("String backing Array[u8] layout missing from Pre-C01 WAT");
 if (!wat.stdout.includes("(type $slice_u8 (struct (field (ref $array_u8)) (field i32) (field i32)))")) fail("str Slice[u8] layout missing from Pre-C01 WAT");
 if (!wat.stdout.includes("array.new_fixed $array_u8 21")) fail("String literal does not lower real Array[u8] payload in Pre-C01 WAT");
-if (!wat.stdout.includes("(param $v1 (ref $array_u8))")) fail("String parameter does not lower to Array[u8] ref");
+if (!stringParamSig.test(wat.stdout)) fail("String parameter does not lower to Array[u8] ref");
 if (!wat.stdout.includes("call $__chiba_string_byte_at")) fail("String byte index does not lower through bounds helper");
 if (!wat.stdout.includes("call $__chiba_string_slice")) fail("String range slice does not lower through bounds helper");
 if (!wat.stdout.includes("array.get_u $array_u8")) fail("String byte helper does not read Array[u8]");

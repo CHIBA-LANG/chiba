@@ -299,6 +299,7 @@ function checkCheckedTemplateInstantiation() {
 function checkStringSlice() {
   const name = "string interpolation and slice gates";
   const source = read(path.join(ROOT, "string_slice.chiba"));
+  const stringParamSig = /\(func \$string_slice_smoke \(param \$v\d+ \(ref \$array_u8\)\)/;
   assert(name, source.includes("${text}"), "string interpolation smoke missing");
   assert(name, source.includes('r#"raw ${text} stays raw"#'), "raw string smoke missing");
   assert(name, /text\[0\]/.test(source), "string byte index smoke missing");
@@ -310,7 +311,7 @@ function checkStringSlice() {
   assert(name, wat.includes("array.new_fixed $array_u8 21"), "raw string literal does not lower to real Array[u8] payload");
   assert(name, wat.includes("i32.const 114") && wat.includes("i32.const 119"), "raw string literal byte payload missing");
   assert(name, wat.includes("call $__chiba_string_concat2"), "string interpolation does not call concat runtime");
-  assert(name, wat.includes("(param $v1 (ref $array_u8))"), "String parameter does not lower to Array[u8] ref");
+  assert(name, stringParamSig.test(wat), "String parameter does not lower to Array[u8] ref");
   assert(name, wat.includes("call $__chiba_string_byte_at"), "string byte index does not lower to byte-at helper");
   assert(name, wat.includes("call $__chiba_string_slice"), "string range index does not lower to slice helper");
   assert(name, wat.includes("struct.new $slice_u8"), "string slice does not build slice_u8 object");
@@ -333,6 +334,9 @@ function checkStringReturnAbi() {
 function checkPipeLowering() {
   const name = "pipe parser and codegen gates";
   const file = path.join(ROOT, "pipe.chiba");
+  const refInc = /L1Ref(?:Global|Unresolved)\("inc"\)/;
+  const refAdd = /L1Ref(?:Global|Unresolved)\("add"\)/;
+  const refWeakParam = /L1Ref(?:Global|Unresolved)\("weak_param"\)/;
   const parsed = run("./target/debug/level1c.o", ["parse", file]);
   assert(name, parsed.status === 0 && parsed.stdout.includes("OpPipeGt"), parsed.stdout || parsed.stderr);
   assert(name, parsed.stdout.includes("Expr_PipeHole"), "pipe placeholder must parse as Expr_PipeHole");
@@ -342,9 +346,9 @@ function checkPipeLowering() {
   const cir = run("./target/debug/level1c.o", ["cir", file]);
   assert(name, cir.status === 0, cir.stdout || cir.stderr);
   assert(name, !cir.stdout.includes("binary |>"), "pipe must desugar before CIR binary lowering");
-  assert(name, cir.stdout.includes('L1RefUnresolved("inc")'), "default pipe must lower to inc(lhs)");
-  assert(name, cir.stdout.includes('L1RefUnresolved("add")'), "placeholder pipe must lower to add(...lhs...)");
-  assert(name, cir.stdout.includes("L1StmtExpr") && cir.stdout.includes('L1RefUnresolved("weak_param")'), "let _ must lower as a discard expression statement");
+  assert(name, refInc.test(cir.stdout), "default pipe must lower to inc(lhs)");
+  assert(name, refAdd.test(cir.stdout), "placeholder pipe must lower to add(...lhs...)");
+  assert(name, cir.stdout.includes("L1StmtExpr") && refWeakParam.test(cir.stdout), "let _ must lower as a discard expression statement");
 
   const wat = read(path.join(WAT_DIR, "pipe.wat"));
   assert(name, !wat.includes("unsupported-binary"), "pipe WAT must not use unsupported binary fallback");
