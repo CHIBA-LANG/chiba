@@ -43,6 +43,8 @@ const REQUIRED_TEXT = [
   "def source_scan_compile_if_expr_end",
   "def source_line_has_text",
   "def source_scan_item_surface",
+  "has_callable_arrow",
+  "has_explicit_continuation_type",
   "def source_scan_item_has_body",
   "def source_scan_item_at",
   "def source_scan_private_item_at",

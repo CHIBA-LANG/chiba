@@ -47,6 +47,8 @@ const REQUIRED_TEXT = [
   "def classify_typed_item_skeleton_kind",
   "def typed_item_skeletons_from_alpha",
   "def type_inference_has_pattern_coverage",
+  "def typed_item_skeletons_have_callable_storage_surface",
+  "missing-facts: callable storage fact generation absent",
   "missing-lowering: source item type expression and body inference absent",
   "def check_l2_types",
   "data AggregateKind",

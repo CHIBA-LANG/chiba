@@ -125,6 +125,8 @@ type SourceItemSurfaceFacts {
     has_type_annotation: bool,
     has_body: bool,
     has_ref_type: bool,
+    has_callable_arrow: bool,
+    has_explicit_continuation_type: bool,
 }
 
 /// Source item discovered by the byte-level scanner.

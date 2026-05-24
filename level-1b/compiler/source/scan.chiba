@@ -220,6 +220,13 @@ def source_scan_item_has_body(text: String, offset: usize): bool =
     if source_line_has_byte(text, offset, 61) { true }
     else { source_line_has_byte(text, offset, 123) }
 
+/// Return true when one item line mentions explicit continuation storage type sugar.
+def source_scan_item_has_explicit_continuation_type(text: String, offset: usize): bool =
+    if source_line_has_text(text, offset, "cont1 ") { true }
+    else if source_line_has_text(text, offset, "contN ") { true }
+    else if source_line_has_text(text, offset, "Cont1[") { true }
+    else { source_line_has_text(text, offset, "ContN[") }
+
 /// Scan item surface shape on one source line.
 def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFacts =
     let end = source_scan_use_end(text, offset)
@@ -229,6 +236,8 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_type_annotation: source_line_has_byte(text, offset, 58),
         has_body: source_scan_item_has_body(text, offset),
         has_ref_type: source_line_has_text(text, offset, "Ref["),
+        has_callable_arrow: source_line_has_text(text, offset, "->"),
+        has_explicit_continuation_type: source_scan_item_has_explicit_continuation_type(text, offset),
     }
 
 /// Try to scan a source item at one line start.
