@@ -146,6 +146,8 @@ type SourceItemSurfaceFacts {
     has_string_interpolation: bool,
     has_string_slice_surface: bool,
     has_char_at_surface: bool,
+    has_index_expr: bool,
+    has_index_slice_expr: bool,
 }
 
 /// Source item discovered by the byte-level scanner.

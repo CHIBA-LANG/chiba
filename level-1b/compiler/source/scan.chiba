@@ -352,6 +352,22 @@ def source_scan_item_has_string_slice_surface(text: String, offset: usize): bool
 def source_scan_item_has_char_at_surface(text: String, offset: usize): bool =
     source_region_has_text(text, offset, source_scan_item_region_end(text, offset), ".char_at(")
 
+/// Return the start of an item body/initializer region when it is on the header line.
+def source_scan_item_body_region_start(text: String, offset: usize): usize =
+    let eq = source_line_find_byte_or_end(text, offset, 61)
+    if eq >= text.len() { offset }
+    else { eq + 1 }
+
+/// Return true when an item body contains indexing surface.
+def source_scan_item_has_index_expr(text: String, offset: usize): bool =
+    source_region_has_text(text, source_scan_item_body_region_start(text, offset), source_scan_item_region_end(text, offset), "[")
+
+/// Return true when an item body contains range indexing surface.
+def source_scan_item_has_index_slice_expr(text: String, offset: usize): bool =
+    if source_scan_item_has_index_expr(text, offset) {
+        source_region_has_text(text, source_scan_item_body_region_start(text, offset), source_scan_item_region_end(text, offset), "..")
+    } else { false }
+
 /// Try to detect an inline namespace block unsupported by the transition scanner.
 def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceNamespaceScanWarning] =
     let start = source_skip_spaces(text, offset)
@@ -426,6 +442,8 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_string_interpolation: source_scan_item_has_string_interpolation(text, offset),
         has_string_slice_surface: source_scan_item_has_string_slice_surface(text, offset),
         has_char_at_surface: source_scan_item_has_char_at_surface(text, offset),
+        has_index_expr: source_scan_item_has_index_expr(text, offset),
+        has_index_slice_expr: source_scan_item_has_index_slice_expr(text, offset),
     }
 
 /// Try to scan a source item at one line start.

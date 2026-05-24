@@ -66,6 +66,8 @@ const REQUIRED_TEXT = [
   "missing-lowering: deep pattern match and if-let lowering absent",
   "def typed_item_skeletons_have_string_slice_surface",
   "missing-lowering: string interpolation and slice lowering absent",
+  "def typed_item_skeletons_have_index_operator_surface",
+  "missing-lowering: index operator dispatch lowering absent",
   "missing-facts: callable storage fact generation absent",
   "missing-lowering: source item type expression and body inference absent",
   "def check_l2_types",
