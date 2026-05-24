@@ -100,6 +100,39 @@ for (const root of SCAN_ROOTS) {
       });
     }
 
+    const sourceGatePassThrough = /\bdef\s+check_source_semantic_gates\b[\s\S]*?SourceGateResult\s*\(\s*project\s*,\s*Vec\s*\[\s*SourceGateError\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/g;
+    for (const match of source.matchAll(sourceGatePassThrough)) {
+      blockers.push({
+        id: "source-gate-empty-pass-through",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "missing-facts",
+        semantic: "source semantic gates pass through without parsed source facts",
+        message: "missing-facts: source semantic gates pass through without parsed source facts",
+      });
+    }
+
+    const typeInferPassThrough = /\bdef\s+infer_types\b[\s\S]*?Ok\s*\(\s*TypedModule\s*\(\s*module\s*\)\s*\)/g;
+    for (const match of source.matchAll(typeInferPassThrough)) {
+      blockers.push({
+        id: "type-inference-pass-through",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "missing-facts",
+        semantic: "type inference passes an alpha module through as a typed module",
+        message: "missing-facts: type inference passes an alpha module through as a typed module",
+      });
+    }
+
+    const emptySurfaceLowering = /\bdef\s+lower_ast_to_surface\b[\s\S]*?Ok\s*\(\s*SurfaceModule\s*\(\s*""\s*,\s*Vec\s*\[\s*SurfaceItem\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)\s*\)/g;
+    for (const match of source.matchAll(emptySurfaceLowering)) {
+      blockers.push({
+        id: "empty-surface-lowering",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "missing-lowering",
+        semantic: "AST lowering returns an empty SurfaceModule instead of source items",
+        message: "missing-lowering: AST lowering returns an empty SurfaceModule instead of source items",
+      });
+    }
+
     const emptyCapturePackage = /ContinuationPackaged\s*\(\s*binder\s*\)\s*=>\s*out\.push\s*\(\s*ClosureEnvLayout\s*\(\s*binder\s*,\s*empty_capture_fields\s*\(\s*\)\s*\)\s*\)/g;
     for (const match of source.matchAll(emptyCapturePackage)) {
       blockers.push({

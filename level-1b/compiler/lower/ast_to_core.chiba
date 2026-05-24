@@ -1,8 +1,18 @@
 /// AST-to-surface lowering entry for level-1b.
 namespace compiler.lower.ast_to_core
 
+use compiler.ir.common.*
 use compiler.ir.surface.*
+
+/// Parsed source file placeholder until level-1b owns parser output.
+type ParsedSourceFile {
+    path: String,
+}
 
 /// Lower a parsed source file to Surface IR.
 def lower_ast_to_surface(ast: ParsedSourceFile): Result[SurfaceModule, Array[IrDiagnostic]] =
-    Ok(SurfaceModule("", Vec[SurfaceItem].new().freeze()))
+    Err(Vec[IrDiagnostic].new()
+        .push(IrDiagnostic(
+            SourceSpan { file: ast.path, start: 0, end: 0 },
+            "missing-lowering: AST to Surface IR lowering absent"))
+        .freeze())
