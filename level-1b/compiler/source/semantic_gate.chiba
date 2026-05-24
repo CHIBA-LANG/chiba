@@ -5,6 +5,7 @@ use compiler.source.project.*
 
 /// Source semantic gate error kind.
 data SourceGateErrorKind {
+    SourceGateUtf8ScannerUnsupported,
     SourceGateMissingNamespace,
     SourceGateItemScanAbsent,
     SourceGateTypedItemLoweringAbsent,
@@ -47,9 +48,20 @@ def source_project_has_namespace(project: ProjectSurface): bool =
 def source_project_has_item(project: ProjectSurface): bool =
     project.facts.items.len() > 0
 
+/// Return true when byte-level scanner saw non-ASCII source before UTF-8 scanner support exists.
+def source_project_has_utf8_warning(project: ProjectSurface): bool =
+    project.facts.utf8_warnings.len() > 0
+
 /// Build fail-closed source gate diagnostics from source scan facts.
 def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
-    if source_project_has_namespace(project) == false {
+    if source_project_has_utf8_warning(project) {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateUtf8ScannerUnsupported,
+                "missing-facts: UTF-8 aware source scanner absent"))
+            .freeze()
+    } else if source_project_has_namespace(project) == false {
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },

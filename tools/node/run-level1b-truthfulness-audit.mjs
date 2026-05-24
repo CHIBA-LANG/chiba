@@ -111,6 +111,16 @@ for (const root of SCAN_ROOTS) {
       });
     }
 
+    if (file.endsWith("source/scan.chiba") && source.includes("def source_is_ident_start") && !source.includes("def source_scan_utf8_warnings")) {
+      blockers.push({
+        id: "ascii-source-scanner-without-utf8-blocker",
+        file,
+        blocker: "missing-facts",
+        semantic: "ASCII byte-level source scanner has no UTF-8 fact or fail-closed blocker",
+        message: "missing-facts: ASCII byte-level source scanner has no UTF-8 fact or fail-closed blocker",
+      });
+    }
+
     const typeInferPassThrough = /\bdef\s+infer_types\b[\s\S]*?Ok\s*\(\s*TypedModule\s*\(\s*module\s*\)\s*\)/g;
     for (const match of source.matchAll(typeInferPassThrough)) {
       blockers.push({

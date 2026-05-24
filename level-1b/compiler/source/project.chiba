@@ -76,6 +76,13 @@ type SourceItemScanResult {
     column: usize,
 }
 
+/// Non-ASCII byte discovered by the transition scanner before UTF-8 support lands.
+type SourceUtf8ScanWarning {
+    file: SourceFileId,
+    line: usize,
+    column: usize,
+}
+
 /// Source facts derived from byte-level source scans.
 type SourceProjectFacts {
     headers: Array[SourceHeaderFacts],
@@ -83,6 +90,7 @@ type SourceProjectFacts {
     compile_if: Array[SourceCompileIfFacts],
     namespaces: Array[NamespaceScanResult],
     items: Array[SourceItemScanResult],
+    utf8_warnings: Array[SourceUtf8ScanWarning],
 }
 
 /// Source-level project summary.

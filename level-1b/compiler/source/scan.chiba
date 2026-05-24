@@ -32,6 +32,10 @@ def source_is_ident_continue(byte: u8): bool =
     else if byte == 46 { true }
     else { false }
 
+/// Return true when byte belongs to non-ASCII UTF-8 source.
+def source_is_non_ascii(byte: u8): bool =
+    byte >= 128
+
 /// Match a byte string at a source offset.
 def source_starts_with_at(text: String, offset: usize, needle: str, index: usize): bool =
     if index == needle.len() { true }
@@ -114,6 +118,30 @@ def source_next_line_offset(text: String, offset: usize): usize =
     else if text.byte_at(offset) == 10 { offset + 1 }
     else { source_next_line_offset(text, offset + 1) }
 
+/// Scan non-ASCII bytes so the transition scanner cannot silently miss UTF-8 identifiers.
+def source_scan_utf8_warnings_loop(file: SourceFileId, text: String, offset: usize, line: usize, column: usize, out: Vec[SourceUtf8ScanWarning]): Array[SourceUtf8ScanWarning] =
+    if offset >= text.len() { out.freeze() }
+    else {
+        let byte = text.byte_at(offset)
+        if byte == 10 {
+            source_scan_utf8_warnings_loop(file, text, offset + 1, line + 1, 0, out)
+        } else if source_is_non_ascii(byte) {
+            source_scan_utf8_warnings_loop(
+                file,
+                text,
+                offset + 1,
+                line,
+                column + 1,
+                out.push(SourceUtf8ScanWarning { file: file, line: line, column: column }))
+        } else {
+            source_scan_utf8_warnings_loop(file, text, offset + 1, line, column + 1, out)
+        }
+    }
+
+/// Scan non-ASCII bytes in one file.
+def source_scan_utf8_warnings(file: SourceFile): Array[SourceUtf8ScanWarning] =
+    source_scan_utf8_warnings_loop(file.id, file.text, 0, 1, 0, Vec[SourceUtf8ScanWarning].new())
+
 /// Scan line starts until the first namespace declaration is found.
 def source_scan_first_namespace_line(file: SourceFileId, text: String, offset: usize, line: usize): Option[NamespaceScanResult] =
     if offset >= text.len() { None }
@@ -157,6 +185,7 @@ def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
         compile_if: scan_project_compile_if(project.files, 0, Vec[SourceCompileIfFacts].new()),
         namespaces: scan_project_namespaces(project.files, 0, Vec[NamespaceScanResult].new()),
         items: scan_project_items(project.files, 0, Vec[SourceItemScanResult].new()),
+        utf8_warnings: scan_project_utf8_warnings(project.files, 0, Vec[SourceUtf8ScanWarning].new()),
     }
 
 /// Scan header facts in deterministic file order.
@@ -183,6 +212,16 @@ def scan_project_items_append(items: Array[SourceItemScanResult], index: usize, 
 def scan_project_items(files: Array[SourceFile], index: usize, out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
     if index == files.len() { out.freeze() }
     else { scan_project_items(files, index + 1, scan_project_items_append(source_scan_items(files.get(index)), 0, out)) }
+
+/// Append UTF-8 scan warnings for one file.
+def scan_project_utf8_warnings_append(warnings: Array[SourceUtf8ScanWarning], index: usize, out: Vec[SourceUtf8ScanWarning]): Vec[SourceUtf8ScanWarning] =
+    if index == warnings.len() { out }
+    else { scan_project_utf8_warnings_append(warnings, index + 1, out.push(warnings.get(index))) }
+
+/// Scan UTF-8 warnings in deterministic file order.
+def scan_project_utf8_warnings(files: Array[SourceFile], index: usize, out: Vec[SourceUtf8ScanWarning]): Array[SourceUtf8ScanWarning] =
+    if index == files.len() { out.freeze() }
+    else { scan_project_utf8_warnings(files, index + 1, scan_project_utf8_warnings_append(source_scan_utf8_warnings(files.get(index)), 0, out)) }
 
 /// Scan namespace facts in deterministic file order.
 def scan_project_namespaces(files: Array[SourceFile], index: usize, out: Vec[NamespaceScanResult]): Array[NamespaceScanResult] =
