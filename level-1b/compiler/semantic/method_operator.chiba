@@ -27,6 +27,16 @@ type MethodOperatorSurfaceEntry {
     operator: bool,
 }
 
+/// Operator use obligation before overload candidate collection.
+type OperatorResolutionObligation {
+    owner: BinderId,
+    file: SourceFileId,
+    has_infix_operator: bool,
+    has_operator_obligation: bool,
+    has_index: bool,
+    has_index_slice: bool,
+}
+
 /// Method/operator index for one project.
 type MethodOperatorIndex {
     methods: Array[MethodKey],
@@ -65,12 +75,33 @@ def method_operator_index_from_surface(facts: Array[MethodSurfaceFact]): MethodO
         surface_entries: method_operator_surface_entries_from_facts(facts, 0, Vec[MethodOperatorSurfaceEntry].new()),
     }
 
+/// Convert one operator-use surface fact into a resolver obligation.
+def operator_resolution_obligation_from_surface(fact: OperatorUseSurfaceFact): OperatorResolutionObligation =
+    OperatorResolutionObligation {
+        owner: fact.owner,
+        file: fact.file,
+        has_infix_operator: fact.has_infix_operator,
+        has_operator_obligation: fact.has_operator_obligation,
+        has_index: fact.has_index,
+        has_index_slice: fact.has_index_slice,
+    }
+
+/// Convert operator-use facts in stable owner order.
+def operator_resolution_obligations_from_facts(facts: Array[OperatorUseSurfaceFact], index: usize, out: Vec[OperatorResolutionObligation]): Array[OperatorResolutionObligation] =
+    if index == facts.len() { out.freeze() }
+    else { operator_resolution_obligations_from_facts(facts, index + 1, out.push(operator_resolution_obligation_from_surface(facts.get(index)))) }
+
+/// Build overload-resolution obligations from typed operator surfaces.
+def build_operator_resolution_obligations(module: TypedModule): Array[OperatorResolutionObligation] =
+    operator_resolution_obligations_from_facts(module.operator_use_surface, 0, Vec[OperatorResolutionObligation].new())
+
 /// Build the nominal method/operator index.
 def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex, SemanticDiagnostics] =
     if module.method_surface.len() == 0 {
         Ok(method_operator_index_empty())
     } else {
         let _ = method_operator_index_from_surface(module.method_surface)
+        let _ = build_operator_resolution_obligations(module)
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method/operator index construction absent"))
             .freeze()))

@@ -27,6 +27,7 @@
 - [ ] operator overloading：没做。candidate collection、operand matching、ambiguity、op_index/op_index_slice lowering 都缺。
 	- [x] operator method surface facts：`.op_*` 现在和普通 method 共用 receiver/member slices；真实 overload resolution 仍未完成。
 	- [x] operator use surface facts：typed module 已记录 infix/operator/index/slice use surface；真实 candidate collection、operand matching、ambiguity 仍 fail-closed。
+	- [x] operator resolution obligations：`OperatorUseSurfaceFact` 已转成稳定 overload-resolution obligation；candidate collection / operand matching / ambiguity 仍未完成。
 - [ ] typed AST elaboration：现在很多是 skeleton/facts；真实 expression/type/item traversal 不完整。
 	- [x] typed item skeleton threading：`TypedModule.items` 保留 alpha 后的 item skeleton，后续 method/operator/branch/control pass 不再只能重扫 source。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
