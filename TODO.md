@@ -274,6 +274,7 @@
 		- C07 source item scanner 现在把 line-start `#[compile_if(...)]` 作为 item attribute fact 挂到后续 item；这只是保留条件编译证据，尚未执行 compile_if eval/filter。
 		- C07 source item scanner 现在把 file-header namespace 作为 `owner_namespace` 挂到 item fact；inline namespace 仍 fail-closed，真实 nested namespace ownership 还没完成。
 		- C07 source item scanner 现在保留 item header slice 与粗粒度 surface shape（是否有参数、类型标注、body/initializer），为后续 def/static/type/data lowering 提供输入；参数 pattern、type expr、body AST 仍未解析。
+		- C07 source semantic gate 现在拒绝缺少任何扫描到的类型标注的 `extern` item，符合 spec 中 extern ABI 边界必须显式标注的方向；真实 ABI signature parse 仍未完成。
 		- C08 alpha conversion 已开始消费 C07 source item facts：`alpha_convert` 由 `ProjectSurface.facts.items` 派生稳定 binder ids，不再创建空 binder stream；HM + row inference 仍 fail-closed，尚未产 typed item facts。
 		- C08 alpha origins 现在保留 source item kind/name/file/owner_namespace/line/column/private/attributes/surface；type inference 先构造 `TypedItemSkeleton` 并检查 pattern coverage，再 fail-closed 于 source item type expression/body inference absent，避免把只有 binder index 的骨架伪装成 typed module。
 		- C08 pattern elaboration 已开始消费 alpha binders：`elaborate_patterns` 由 binder stream 派生稳定 pattern ids，不再创建空 pattern stream；这仍是骨架 facts，不等于完整 pattern AST lowering。

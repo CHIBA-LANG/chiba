@@ -10,6 +10,7 @@ data SourceGateErrorKind {
     SourceGateUnknownCompileIfPredicate,
     SourceGateInlineNamespaceUnsupported,
     SourceGateImportResolutionAbsent,
+    SourceGateExternAbiSignatureAbsent,
     SourceGateMissingNamespace,
     SourceGateItemScanAbsent,
     SourceGateTypedItemLoweringAbsent,
@@ -75,6 +76,24 @@ def source_compile_if_has_unknown(facts: Array[SourceCompileIfFacts], index: usi
 def source_project_has_unknown_compile_if(project: ProjectSurface): bool =
     source_compile_if_has_unknown(project.facts.compile_if, 0)
 
+/// Return true when an extern item lacks any scanned ABI type annotation.
+def source_items_have_extern_without_type_annotation(items: Array[SourceItemScanResult], index: usize): bool =
+    if index == items.len() { false }
+    else {
+        let item = items.get(index)
+        match item.kind {
+            SourceItemExtern => {
+                if item.surface.has_type_annotation { source_items_have_extern_without_type_annotation(items, index + 1) }
+                else { true }
+            }
+            _ => source_items_have_extern_without_type_annotation(items, index + 1)
+        }
+    }
+
+/// Return true when project source facts contain an extern requiring ABI signature parsing.
+def source_project_has_extern_without_type_annotation(project: ProjectSurface): bool =
+    source_items_have_extern_without_type_annotation(project.facts.items, 0)
+
 /// Build fail-closed source gate diagnostics from source scan facts.
 def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
     if source_project_has_utf8_warning(project) {
@@ -111,6 +130,13 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceFileId { index: 0 },
                 SourceGateItemScanAbsent,
                 "missing-facts: source item scan absent"))
+            .freeze()
+    } else if source_project_has_extern_without_type_annotation(project) {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateExternAbiSignatureAbsent,
+                "missing-facts: extern ABI signature type annotations absent"))
             .freeze()
     } else if source_project_needs_import_resolution(project) {
         Vec[SourceGateError].new()
