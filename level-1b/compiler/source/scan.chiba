@@ -368,6 +368,21 @@ def source_scan_item_has_index_slice_expr(text: String, offset: usize): bool =
         source_region_has_text(text, source_scan_item_body_region_start(text, offset), source_scan_item_region_end(text, offset), "..")
     } else { false }
 
+/// Return true when an item body contains an infix operator surface.
+def source_scan_item_has_infix_operator_expr(text: String, offset: usize): bool =
+    let start = source_scan_item_body_region_start(text, offset)
+    let end = source_scan_item_region_end(text, offset)
+    if source_region_has_text(text, start, end, " + ") { true }
+    else if source_region_has_text(text, start, end, " - ") { true }
+    else if source_region_has_text(text, start, end, " * ") { true }
+    else if source_region_has_text(text, start, end, " / ") { true }
+    else { source_region_has_text(text, start, end, ".*") }
+
+/// Return true when operator surface needs typed obligation resolution.
+def source_scan_item_has_operator_obligation_surface(text: String, offset: usize): bool =
+    if source_scan_item_has_infix_operator_expr(text, offset) { true }
+    else { source_line_has_text_before_byte(text, offset, ".op_", 40) }
+
 /// Try to detect an inline namespace block unsupported by the transition scanner.
 def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceNamespaceScanWarning] =
     let start = source_skip_spaces(text, offset)
@@ -444,6 +459,8 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_char_at_surface: source_scan_item_has_char_at_surface(text, offset),
         has_index_expr: source_scan_item_has_index_expr(text, offset),
         has_index_slice_expr: source_scan_item_has_index_slice_expr(text, offset),
+        has_infix_operator_expr: source_scan_item_has_infix_operator_expr(text, offset),
+        has_operator_obligation_surface: source_scan_item_has_operator_obligation_surface(text, offset),
     }
 
 /// Try to scan a source item at one line start.

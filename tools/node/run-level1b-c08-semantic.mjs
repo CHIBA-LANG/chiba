@@ -68,6 +68,8 @@ const REQUIRED_TEXT = [
   "missing-lowering: string interpolation and slice lowering absent",
   "def typed_item_skeletons_have_index_operator_surface",
   "missing-lowering: index operator dispatch lowering absent",
+  "def typed_item_skeletons_have_operator_obligation_surface",
+  "missing-lowering: operator obligation resolution absent",
   "missing-facts: callable storage fact generation absent",
   "missing-lowering: source item type expression and body inference absent",
   "def check_l2_types",

@@ -148,6 +148,8 @@ type SourceItemSurfaceFacts {
     has_char_at_surface: bool,
     has_index_expr: bool,
     has_index_slice_expr: bool,
+    has_infix_operator_expr: bool,
+    has_operator_obligation_surface: bool,
 }
 
 /// Source item discovered by the byte-level scanner.
