@@ -1,6 +1,8 @@
 /// Alpha conversion pass for level-1b semantic analysis.
 namespace compiler.semantic.alpha
 
+use compiler.source.project.*
+
 /// Stable binder identifier after alpha conversion.
 type BinderId {
     index: usize,
@@ -13,4 +15,9 @@ type AlphaModule {
 
 /// Convert every source binder to a stable id before type checking.
 def alpha_convert(project: ProjectSurface): AlphaModule =
-    AlphaModule(Vec[BinderId].new().freeze())
+    AlphaModule(alpha_binders_from_source_items(project.facts.items, 0, Vec[BinderId].new()))
+
+/// Build deterministic binder ids from source item scan facts.
+def alpha_binders_from_source_items(items: Array[SourceItemScanResult], index: usize, out: Vec[BinderId]): Array[BinderId] =
+    if index == items.len() { out.freeze() }
+    else { alpha_binders_from_source_items(items, index + 1, out.push(BinderId { index: index })) }

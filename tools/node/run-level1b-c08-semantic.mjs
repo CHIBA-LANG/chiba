@@ -27,6 +27,7 @@ const REQUIRED_FILES = [
 ];
 const REQUIRED_TEXT = [
   "def alpha_convert",
+  "def alpha_binders_from_source_items",
   "def elaborate_patterns",
   "def unify",
   "def unify_rows",
@@ -131,6 +132,9 @@ function checkSource(file, source) {
   }
   if (/\bdef\s+infer_types\b[\s\S]*Ok\s*\(\s*TypedModule\s*\(\s*module\s*\)\s*\)/.test(code)) {
     errors.push(`${file}: type inference must not pass through an untyped alpha module`);
+  }
+  if (file.endsWith("alpha.chiba") && /\bdef\s+alpha_convert\b[\s\S]*AlphaModule\s*\(\s*Vec\s*\[\s*BinderId\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/.test(code)) {
+    errors.push(`${file}: alpha conversion must derive binders from source item facts`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
