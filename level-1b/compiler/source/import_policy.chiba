@@ -49,9 +49,20 @@ type SourceImportResolutionBlocker {
     message: String,
 }
 
+/// Import/name-resolution obligation before symbol lookup.
+type SourceNameResolutionObligation {
+    file: SourceFileId,
+    owner_namespace: Option[NamespaceNameSlice],
+    explicit_use_count: usize,
+    prelude_injected: bool,
+    requires_visibility_check: bool,
+    requires_conflict_check: bool,
+}
+
 /// Import/name resolution transition result.
 type SourceImportResolution {
     scopes: Array[SourceImportScopeInput],
+    obligations: Array[SourceNameResolutionObligation],
     blockers: Array[SourceImportResolutionBlocker],
 }
 
@@ -93,6 +104,22 @@ def source_import_scope_needs_resolution(scope: SourceImportScopeInput): bool =
     if scope.explicit_uses.len() > 0 { true }
     else { scope.prelude_policy.should_inject() }
 
+/// Convert one import scope into a name-resolution obligation.
+def source_name_resolution_obligation_from_scope(scope: SourceImportScopeInput): SourceNameResolutionObligation =
+    SourceNameResolutionObligation {
+        file: scope.file,
+        owner_namespace: scope.owner_namespace,
+        explicit_use_count: scope.explicit_uses.len(),
+        prelude_injected: scope.prelude_policy.should_inject(),
+        requires_visibility_check: source_import_scope_needs_resolution(scope),
+        requires_conflict_check: source_import_scope_needs_resolution(scope),
+    }
+
+/// Build name-resolution obligations in deterministic file order.
+def source_name_resolution_obligations(scopes: Array[SourceImportScopeInput], index: usize, out: Vec[SourceNameResolutionObligation]): Array[SourceNameResolutionObligation] =
+    if index == scopes.len() { out.freeze() }
+    else { source_name_resolution_obligations(scopes, index + 1, out.push(source_name_resolution_obligation_from_scope(scopes.get(index)))) }
+
 /// Collect blockers for import scopes while real resolution is absent.
 def source_import_resolution_blockers(scopes: Array[SourceImportScopeInput], index: usize, out: Vec[SourceImportResolutionBlocker]): Array[SourceImportResolutionBlocker] =
     if index == scopes.len() { out.freeze() }
@@ -110,6 +137,7 @@ def resolve_source_imports(project: ProjectSurface): SourceImportResolution =
     let scopes = source_import_scope_inputs(project.facts.headers, project, 0, Vec[SourceImportScopeInput].new())
     SourceImportResolution {
         scopes: scopes,
+        obligations: source_name_resolution_obligations(scopes, 0, Vec[SourceNameResolutionObligation].new()),
         blockers: source_import_resolution_blockers(scopes, 0, Vec[SourceImportResolutionBlocker].new()),
     }
 
