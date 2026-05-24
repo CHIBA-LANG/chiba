@@ -25,6 +25,7 @@
 	- [x] typed item skeleton threading：`TypedModule.items` 保留 alpha 后的 item skeleton，后续 method/operator/branch/control pass 不再只能重扫 source。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 - [ ] globals/init：module-load init order、dependency/cycle、side-effect init lowering 没完整。
+	- [x] global init surface facts：typed module 已记录静态值 initializer/dependency/world_local/ref surface；真实 init order、cycle、module-load lowering 仍 fail-closed。
 - [ ] pattern/match：deep pattern lowering、exhaustiveness、if let env 规则没完整 primary 实现。
 - [ ] pipe lowering：placeholder、receiver-first method pipe、operator/method interaction 还没完整 primary lowering。
 - [ ] ADT tuple bridge：Ctor <-> (:ctor, ...)、tuple_to_adt/adt_to_tuple intrinsic lowering 没完整。

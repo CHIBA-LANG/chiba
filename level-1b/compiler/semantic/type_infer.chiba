@@ -70,6 +70,16 @@ type ControlSurfaceFact {
     has_shiftn: bool,
 }
 
+/// Static value surface fact before module-load init dependency analysis.
+type GlobalInitSurfaceFact {
+    owner: BinderId,
+    file: SourceFileId,
+    has_initializer: bool,
+    has_dependency: bool,
+    world_local: bool,
+    has_ref_type: bool,
+}
+
 /// Classify a scanned source item into the first typed-lowering bucket.
 def classify_typed_item_skeleton_kind(item: AlphaBinderOrigin): TypedItemSkeletonKind =
     match item.kind {
@@ -284,6 +294,35 @@ def control_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], in
         }
     }
 
+/// Return true when a static value needs module-load init handling.
+def typed_item_has_global_init_surface(item: TypedItemSkeleton): bool =
+    if item.skeleton_kind != TypedItemStaticValue { false }
+    else if item.surface.has_global_value_initializer { true }
+    else { item.surface.has_global_value_dependency }
+
+/// Create one global-init surface fact from a static value skeleton.
+def global_init_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[GlobalInitSurfaceFact] =
+    if typed_item_has_global_init_surface(item) {
+        Some(GlobalInitSurfaceFact {
+            owner: item.binder,
+            file: item.file,
+            has_initializer: item.surface.has_global_value_initializer,
+            has_dependency: item.surface.has_global_value_dependency,
+            world_local: item.attributes.world_local,
+            has_ref_type: item.surface.has_ref_type,
+        })
+    } else { None }
+
+/// Generate global-init surface facts in stable binder order.
+def global_init_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[GlobalInitSurfaceFact]): Array[GlobalInitSurfaceFact] =
+    if index == skeletons.len() { out.freeze() }
+    else {
+        match global_init_surface_fact_from_skeleton(skeletons.get(index)) {
+            Some(fact) => global_init_surface_facts_from_skeletons(skeletons, index + 1, out.push(fact))
+            None => global_init_surface_facts_from_skeletons(skeletons, index + 1, out)
+        }
+    }
+
 /// Return true when item surfaces mention method-style receiver definitions.
 def typed_item_skeletons_have_method_receiver_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
     if index == skeletons.len() { false }
@@ -366,9 +405,7 @@ def typed_item_skeletons_have_compiler_intrinsic_surface(skeletons: Array[TypedI
 def typed_item_skeletons_have_global_init_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
     if index == skeletons.len() { false }
     else {
-        let item = skeletons.get(index)
-        if item.surface.has_global_value_initializer { true }
-        else if item.surface.has_global_value_dependency { true }
+        if typed_item_has_global_init_surface(skeletons.get(index)) { true }
         else { typed_item_skeletons_have_global_init_surface(skeletons, index + 1) }
     }
 
@@ -433,6 +470,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let method_surface = method_surface_facts_from_skeletons(skeletons, 0, Vec[MethodSurfaceFact].new())
     let branching_surface = branching_surface_facts_from_skeletons(skeletons, 0, Vec[BranchingSurfaceFact].new())
     let control_surface = control_surface_facts_from_skeletons(skeletons, 0, Vec[ControlSurfaceFact].new())
+    let global_init_surface = global_init_surface_facts_from_skeletons(skeletons, 0, Vec[GlobalInitSurfaceFact].new())
     if skeletons.len() == 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: typed item skeletons absent"))
@@ -446,9 +484,15 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: compiler intrinsic surface lowering absent"))
             .freeze()))
     } else if typed_item_skeletons_have_global_init_surface(skeletons, 0) {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: global initialization dependency and cycle analysis absent"))
-            .freeze()))
+        if global_init_surface.len() == 0 {
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: global initialization surface fact generation absent"))
+                .freeze()))
+        } else {
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: global initialization dependency and cycle analysis absent"))
+                .freeze()))
+        }
     } else if typed_item_skeletons_have_pipe_surface(skeletons, 0) {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: pipe placeholder and receiver-first desugaring absent"))
@@ -526,7 +570,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
-def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact]): TypedModule =
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact]): TypedModule =
     TypedModule {
         alpha: module,
         items: skeletons,
@@ -535,6 +579,7 @@ def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemS
         method_surface: method_surface,
         branching_surface: branching_surface,
         control_surface: control_surface,
+        global_init_surface: global_init_surface,
     }
 
 /// Run the level-2 semantic checks that require inferred types.
