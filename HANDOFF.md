@@ -157,6 +157,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - Source item scan now preserves item header slices and coarse surface shape: params present, type annotation present, body/initializer present. It still does not parse parameter patterns, type expressions, or body AST.
 - Source semantic gate now rejects `extern` items with no scanned type annotation, matching the spec rule that extern ABI boundaries require explicit types. Real ABI signature parsing remains absent.
 - Source scanner/gate now recognises `#[world_local]` and `Ref[` in static def headers, then rejects top-level static `Ref` without world-local. Real type-expression parsing remains absent.
+- Source semantic gate now rejects `def` items with no scanned body/initializer marker, so typed lowering cannot consume bodyless def skeletons.
 - C08 typed item skeletons now classify scanned items as function/static value/extern function/nominal type/data/union/interface before real HM + row inference.
 - C08 alpha origins retain source item kind/name/file/owner_namespace/line/column/private/attributes/surface. Type inference builds `TypedItemSkeleton` and checks placeholder pattern coverage, then fail-closes on missing source item type-expression/body inference rather than claiming a typed module.
 - C09 replay safety must not mark every usage fact safe. It now fail-closes until replay capture classification exists.
