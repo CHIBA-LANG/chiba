@@ -183,6 +183,14 @@ def source_line_has_text(text: String, offset: usize, needle: str): bool =
     else if source_starts_with_at(text, offset, needle, 0) { true }
     else { source_line_has_text(text, offset + 1, needle) }
 
+/// Return true when one source line contains an ASCII token before a stop byte.
+def source_line_has_text_before_byte(text: String, offset: usize, needle: str, stop: u8): bool =
+    if offset >= text.len() { false }
+    else if text.byte_at(offset) == 10 { false }
+    else if text.byte_at(offset) == stop { false }
+    else if source_starts_with_at(text, offset, needle, 0) { true }
+    else { source_line_has_text_before_byte(text, offset + 1, needle, stop) }
+
 /// Try to detect an inline namespace block unsupported by the transition scanner.
 def source_scan_namespace_warning_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceNamespaceScanWarning] =
     let start = source_skip_spaces(text, offset)
@@ -238,6 +246,8 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_ref_type: source_line_has_text(text, offset, "Ref["),
         has_callable_arrow: source_line_has_text(text, offset, "->"),
         has_explicit_continuation_type: source_scan_item_has_explicit_continuation_type(text, offset),
+        has_method_receiver: source_line_has_text_before_byte(text, offset, ".", 40),
+        has_operator_method: source_line_has_text_before_byte(text, offset, ".op_", 40),
     }
 
 /// Try to scan a source item at one line start.
