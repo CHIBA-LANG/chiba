@@ -143,6 +143,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - Storage-position `(A) -> B` lowers to erased callable ADT with variants at least function / closure / boxed `Cont1` / `ContN`.
 - `((A) -> B) send` excludes `Cont1`, boxed `Cont1`, `ContN`, and `!send` closures.
 - chibalex must support UTF-8 source and identifiers. The current C07 `scan.chiba` is only an ASCII byte-level transition scanner; before it becomes authoritative for namespace/item facts, it must either become UTF-8 aware or fail-closed on non-ASCII facts instead of silently missing them.
+- C08 alpha origins retain source item kind/name/file/line/column. Type inference builds `TypedItemSkeleton` and checks placeholder pattern coverage, then fail-closes on missing source item type-expression/body inference rather than claiming a typed module.
 - No-capture closure must optimize to direct function/funref/inline; no env allocation.
 - Non-escaping exactly-once `Cont1` must optimize to direct resume/inline/tail jump; no continuation package.
 - CIR must stay target-independent. It must not contain Wasm-GC layout ids, `funcref`/`eqref`, WAT opcodes, Binaryen feature flags, or target ABI details. Those belong in BIR/LIR/backend layout.
