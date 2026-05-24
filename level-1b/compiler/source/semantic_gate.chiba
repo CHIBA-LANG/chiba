@@ -15,6 +15,7 @@ data SourceGateErrorKind {
     SourceGateTopLevelRefNeedsWorldLocal,
     SourceGateDefBodyAbsent,
     SourceGateSelfOutsideMethod,
+    SourceGateDuplicateItem,
     SourceGateMissingNamespace,
     SourceGateItemScanAbsent,
     SourceGateTypedItemLoweringAbsent,
@@ -165,6 +166,96 @@ def source_items_have_self_outside_method(items: Array[SourceItemScanResult], in
 def source_project_has_self_outside_method(project: ProjectSurface): bool =
     source_items_have_self_outside_method(project.facts.items, 0)
 
+/// Return the source text for a scanned file id.
+def source_project_file_text(files: Array[SourceFile], file: SourceFileId, index: usize): String =
+    if index == files.len() { "" }
+    else {
+        let item = files.get(index)
+        if item.id.index == file.index { item.text }
+        else { source_project_file_text(files, file, index + 1) }
+    }
+
+/// Compare two source slices byte-for-byte.
+def source_slices_equal(left_text: String, left_offset: usize, right_text: String, right_offset: usize, len: usize, index: usize): bool =
+    if index == len { true }
+    else if left_offset + index >= left_text.len() { false }
+    else if right_offset + index >= right_text.len() { false }
+    else if left_text.byte_at(left_offset + index) == right_text.byte_at(right_offset + index) {
+        source_slices_equal(left_text, left_offset, right_text, right_offset, len, index + 1)
+    } else { false }
+
+/// Compare two source item name slices by source text.
+def source_name_slices_equal(project: ProjectSurface, left_file: SourceFileId, left: SourceNameSlice, right_file: SourceFileId, right: SourceNameSlice): bool =
+    if left.len != right.len { false }
+    else {
+        source_slices_equal(
+            source_project_file_text(project.files, left_file, 0),
+            left.offset,
+            source_project_file_text(project.files, right_file, 0),
+            right.offset,
+            left.len,
+            0)
+    }
+
+/// Compare two namespace owner slices by source text.
+def source_namespace_slices_equal(project: ProjectSurface, left_file: SourceFileId, left: NamespaceNameSlice, right_file: SourceFileId, right: NamespaceNameSlice): bool =
+    if left.len != right.len { false }
+    else {
+        source_slices_equal(
+            source_project_file_text(project.files, left_file, 0),
+            left.offset,
+            source_project_file_text(project.files, right_file, 0),
+            right.offset,
+            left.len,
+            0)
+    }
+
+/// Return true when two optional owner namespaces are the same namespace.
+def source_owner_namespace_equal(project: ProjectSurface, left: SourceItemScanResult, right: SourceItemScanResult): bool =
+    match left.owner_namespace {
+        None =>
+            match right.owner_namespace {
+                None => true
+                Some(_) => false
+            }
+        Some(left_ns) =>
+            match right.owner_namespace {
+                Some(right_ns) => source_namespace_slices_equal(project, left.file, left_ns, right.file, right_ns)
+                None => false
+            }
+    }
+
+/// Return true when two scanned items have the same source-facing name.
+def source_item_name_equal(project: ProjectSurface, left: SourceItemScanResult, right: SourceItemScanResult): bool =
+    match left.name {
+        None => false
+        Some(left_name) =>
+            match right.name {
+                Some(right_name) => source_name_slices_equal(project, left.file, left_name, right.file, right_name)
+                None => false
+            }
+    }
+
+/// Return true when one item duplicates a later item in the same namespace.
+def source_item_has_later_duplicate(project: ProjectSurface, items: Array[SourceItemScanResult], left_index: usize, right_index: usize): bool =
+    if right_index == items.len() { false }
+    else {
+        let left = items.get(left_index)
+        let right = items.get(right_index)
+        if source_owner_namespace_equal(project, left, right) && source_item_name_equal(project, left, right) { true }
+        else { source_item_has_later_duplicate(project, items, left_index, right_index + 1) }
+    }
+
+/// Return true when scanned items contain a duplicate in one namespace.
+def source_items_have_duplicate_item(project: ProjectSurface, items: Array[SourceItemScanResult], index: usize): bool =
+    if index == items.len() { false }
+    else if source_item_has_later_duplicate(project, items, index, index + 1) { true }
+    else { source_items_have_duplicate_item(project, items, index + 1) }
+
+/// Return true when project source facts contain duplicate item names.
+def source_project_has_duplicate_item(project: ProjectSurface): bool =
+    source_items_have_duplicate_item(project, project.facts.items, 0)
+
 /// Build fail-closed source gate diagnostics from source scan facts.
 def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
     if source_project_has_utf8_warning(project) {
@@ -236,6 +327,13 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceFileId { index: 0 },
                 SourceGateSelfOutsideMethod,
                 "invalid-surface: Self only valid in method receiver scope"))
+            .freeze()
+    } else if source_project_has_duplicate_item(project) {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateDuplicateItem,
+                "invalid-surface: duplicate item in namespace"))
             .freeze()
     } else if source_project_needs_import_resolution(project) {
         Vec[SourceGateError].new()
