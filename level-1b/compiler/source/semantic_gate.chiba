@@ -32,7 +32,14 @@ type SourceGateResult {
 
 /// Check source-level capability and surface rules using parsed project facts.
 def check_source_semantic_gates(project: ProjectSurface): SourceGateResult =
-    SourceGateResult(project, Vec[SourceGateError].new().freeze())
+    SourceGateResult(
+        project,
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateUnresolvedMethod,
+                "missing-facts: source semantic gate scan absent"))
+            .freeze())
 
 /// Return true when the gate result can continue to type checking.
 def SourceGateResult.ok(self): bool =
