@@ -219,6 +219,9 @@
 		- local 可以 shadow `use` 导入名。
 
 - [ ] 不再出现 `i64` 和 `1` `0` 还有 `if x != 0` 这种历史遗留代码
+	- **进展**:
+		- `level1b:truthfulness-audit` 已新增 `historical-numeric-conditional` / `historical-numeric-bool-arm` detector，防止 compiler primary path 继续新增 `if x != 0` / `if x == 1` / raw `=> 0|1` 这类数字布尔编码。
+		- `check_unsafe_type` 已把临时 `unsafe_depth != 0` 改成显式 `UnsafeContext` fact；剩余 `i64` / `0` / `1` 需要继续区分 ABI/exit-code/count/index 等合法 target surface 与历史 magic value。
 
 - [ ] mangling / symbol debugability 收口
 	- **目标**:

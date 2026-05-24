@@ -198,6 +198,28 @@ for (const root of SCAN_ROOTS) {
       });
     }
 
+    const numericConditional = /\bif\s+([^\n{}]+?)\s*(?:!=\s*0|==\s*1)\b/g;
+    for (const match of source.matchAll(numericConditional)) {
+      blockers.push({
+        id: "historical-numeric-conditional",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "missing-lowering",
+        semantic: `compiler primary path uses numeric boolean encoding in condition '${match[0].trim()}'`,
+        message: `missing-lowering: compiler primary path uses numeric boolean encoding in condition '${match[0].trim()}'`,
+      });
+    }
+
+    const numericBoolArm = /=>\s*(?:0|1)\b/g;
+    for (const match of source.matchAll(numericBoolArm)) {
+      blockers.push({
+        id: "historical-numeric-bool-arm",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "missing-lowering",
+        semantic: "compiler primary path returns raw 0/1 from a match arm instead of bool/domain enum",
+        message: "missing-lowering: compiler primary path returns raw 0/1 from a match arm instead of bool/domain enum",
+      });
+    }
+
     const emptyCapturePackage = /ContinuationPackaged\s*\(\s*binder\s*\)\s*=>\s*out\.push\s*\(\s*ClosureEnvLayout\s*\(\s*binder\s*,\s*empty_capture_fields\s*\(\s*\)\s*\)\s*\)/g;
     for (const match of source.matchAll(emptyCapturePackage)) {
       blockers.push({

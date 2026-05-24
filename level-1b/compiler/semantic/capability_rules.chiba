@@ -20,6 +20,26 @@ data CapabilityCheck {
     CapabilityErr(String),
 }
 
+/// Unsafe lexical context derived by the parser/type checker.
+data UnsafeContext {
+    UnsafeOutside,
+    UnsafeInside,
+}
+
+/// Convert the temporary depth counter into an explicit context fact.
+def unsafe_context_from_depth(unsafe_depth: usize): UnsafeContext =
+    match unsafe_depth {
+        0 => UnsafeOutside
+        _ => UnsafeInside
+    }
+
+/// Return true when unsafe-only capabilities are currently legal.
+def UnsafeContext.active(self): bool =
+    match self {
+        UnsafeOutside => false
+        UnsafeInside => true
+    }
+
 /// Check assignment through `Ref[T]`.
 def check_ref_assignment(lhs: SemType, rhs: SemType): CapabilityCheck =
     match lhs {
@@ -55,12 +75,13 @@ def check_atomic_payload(ty: SemType): CapabilityCheck =
 
 /// Check whether a type is legal outside an unsafe block.
 def check_unsafe_type(ty: SemType, unsafe_depth: usize): CapabilityCheck =
+    let context = unsafe_context_from_depth(unsafe_depth)
     match ty {
         TyPtr(_) =>
-            if unsafe_depth != 0 { CapabilityOk }
+            if context.active() { CapabilityOk }
             else { CapabilityErr("Ptr requires unsafe block") }
         TyUnsafeRef(_) =>
-            if unsafe_depth != 0 { CapabilityOk }
+            if context.active() { CapabilityOk }
             else { CapabilityErr("UnsafeRef requires unsafe block") }
         _ => CapabilityOk
     }
