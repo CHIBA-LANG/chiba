@@ -16,6 +16,7 @@
 	- [x] attribute spec/golden：spec 已定义 AttrArg AST 与 nested/named/list/object grammar，并新增复杂 attribute fixture/gate。
 	- [x] chibalex attribute token fixture：lexer golden 覆盖 `#`/bracket/delimiter/literal/ident token 流，不折叠 legacy attribute token；真实 generated lexer execution 仍未完成。
 	- [x] chibacc attribute AST/fixture：`std.chibacc.ast.AttrArg` 与 mini grammar 已覆盖 bare/named/call/list/object；真实 parser 执行仍未完成。
+	- [x] chibacc attribute native oracle：`attribute-args.chibacc` 已纳入 chibacc-mini native oracle；generated parser execution 仍 blocked。
 - [ ] namespace resolution：只有扫描和 owner slice；真实 import/name resolution、owner namespace symbol、visibility/private、冲突规则没做。
 	- [x] namespace ownership facts：alpha/typed skeleton 已把 item owner namespace 线程化进 `TypedModule.namespace_ownership`；import/name resolution 仍未完成。
 	- [x] namespace import facts：source `use` 已经穿过 alpha 进入 `TypedModule.namespace_imports`；真实 visibility/private/conflict/name lookup 仍 fail-closed。
