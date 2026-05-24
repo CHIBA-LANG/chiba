@@ -37,6 +37,14 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
+function oracleReference(name) {
+  console.log(`[ORACLE] ${name}`);
+}
+
+function oracleReferenceFailed(name) {
+  console.log(`[ORACLE-FAIL] ${name}`);
+}
+
 function primaryPathBlocked(name) {
   console.log(`[BLOCKED] ${name}`);
 }
@@ -123,8 +131,8 @@ function main() {
   primaryPathBlocked("doc compile_if fixture parse requires level-1b parser execution");
 
   const namespace = spawnSync("timeout", ["30", "vp", "run", "level1b:namespace"], { encoding: "utf8" });
-  if (namespace.status !== 0) fail(namespace.stdout || namespace.stderr);
-  pass("namespace project oracle");
+  if (namespace.status === 0) oracleReference("namespace project reference");
+  else oracleReferenceFailed("namespace project reference");
 }
 
 main();

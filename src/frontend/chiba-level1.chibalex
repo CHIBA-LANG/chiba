@@ -14,8 +14,8 @@ mode STRING
 @ws = [ \t]+
 @wsnl = [ \t]* "\r"? "\n" ([ \t]* "\r"? "\n")* [ \t]*
 @opws = [ \t\r\n]*
-@doccom = "///" [^\n]* ("\r"? "\n" [ \t]* "///" [^\n]*)*
-@linecom = "//" [^\n]* ("\r"? "\n" [ \t]* "//" [^\n]*)*
+@doccom = [ \t]* "///" [^\n]* ("\r"? "\n" [ \t]* "///" [^\n]*)*
+@linecom = [ \t]* "//" [^\n]* ("\r"? "\n" [ \t]* "//" [^\n]*)*
 @ident = $XID_START $XID_CONTINUE*
 @suffix = @ident
 
@@ -89,7 +89,7 @@ mode STRING
 @op_plus = @opws "+" @opws
 @op_minus = @opws "-" @opws
 @op_star = @opws "*" @opws
-@op_slash = @opws "/" @opws
+@op_slash = [ \t]* "/" [ \t]*
 @op_percent = @opws "%" @opws
 @op_lt = @opws "<" @opws
 @op_gt = @opws ">" @opws

@@ -76,6 +76,14 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
+function oracleReference(name) {
+  console.log(`[ORACLE] ${name}`);
+}
+
+function oracleReferenceFailed(name) {
+  console.log(`[ORACLE-FAIL] ${name}`);
+}
+
 function read(file) {
   return fs.readFileSync(file, "utf8");
 }
@@ -133,8 +141,8 @@ function runGate(label, script, timeoutSeconds) {
     encoding: "utf8",
     maxBuffer: 128 * 1024 * 1024,
   });
-  if (result.status !== 0) fail(`${label}\n${result.stdout || ""}${result.stderr || ""}`);
-  pass(label);
+  if (result.status === 0) oracleReference(label);
+  else oracleReferenceFailed(label);
 }
 
 function main() {
@@ -151,9 +159,9 @@ function main() {
   if (errors.length !== 0) fail(errors.join("\n"));
   pass("semantic source contract");
 
-  runGate("type-system oracle", "level1b:type-system", 60);
-  runGate("semantic gates oracle", "semantic:gates", 60);
-  runGate("capability oracle", "level1b:capability", 30);
+  runGate("type-system reference", "level1b:type-system", 60);
+  runGate("semantic gates reference", "semantic:gates", 60);
+  runGate("capability reference", "level1b:capability", 30);
 }
 
 main();

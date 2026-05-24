@@ -327,10 +327,10 @@ def lex_init_patterns(): Vec = {
     let p1 = mk_str("(?:[ \\t]+)", 10)
     let _ = vec_push(pats, lex_compile_pat(p1) as i64)
     // rule 2
-    let p2 = mk_str("(?:///[^\\n]*(\r?\n[ \\t]*///[^\\n]*)*)", 34)
+    let p2 = mk_str("(?:[ \\t]*///[^\\n]*(\r?\n[ \\t]*///[^\\n]*)*)", 40)
     let _ = vec_push(pats, lex_compile_pat(p2) as i64)
     // rule 3
-    let p3 = mk_str("(?://[^\\n]*(\r?\n[ \\t]*//[^\\n]*)*)", 32)
+    let p3 = mk_str("(?:[ \\t]*//[^\\n]*(\r?\n[ \\t]*//[^\\n]*)*)", 38)
     let _ = vec_push(pats, lex_compile_pat(p3) as i64)
     // rule 4
     let p4 = mk_str("(?:#*\")", 7)
@@ -513,7 +513,7 @@ def lex_init_patterns(): Vec = {
     let p63 = mk_str("(?:(?:[ \\t\\r\\n]*)\\*(?:[ \\t\\r\\n]*))", 34)
     let _ = vec_push(pats, lex_compile_pat(p63) as i64)
     // rule 64
-    let p64 = mk_str("(?:(?:[ \\t\\r\\n]*)/(?:[ \\t\\r\\n]*))", 33)
+    let p64 = mk_str("(?:[ \\t]*/[ \\t]*)", 17)
     let _ = vec_push(pats, lex_compile_pat(p64) as i64)
     // rule 65
     let p65 = mk_str("(?:(?:[ \\t\\r\\n]*)%(?:[ \\t\\r\\n]*))", 33)

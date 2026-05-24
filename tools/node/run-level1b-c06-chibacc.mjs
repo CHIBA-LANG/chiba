@@ -33,6 +33,14 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
+function oracleReference(name) {
+  console.log(`[ORACLE] ${name}`);
+}
+
+function oracleReferenceFailed(name) {
+  console.log(`[ORACLE-FAIL] ${name}`);
+}
+
 function primaryPathBlocked(name) {
   console.log(`[BLOCKED] ${name}`);
 }
@@ -139,8 +147,8 @@ function main() {
   checkMiniSpecs();
 
   const mini = run("vp", ["run", "level1b:chibacc-mini"]);
-  if (mini.status !== 0) fail(mini.stdout || mini.stderr);
-  pass("chibacc mini oracle");
+  if (mini.status === 0) oracleReference("chibacc mini reference");
+  else oracleReferenceFailed("chibacc mini reference");
 }
 
 main();

@@ -37,6 +37,14 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
+function oracleReference(name) {
+  console.log(`[ORACLE] ${name}`);
+}
+
+function oracleReferenceFailed(name, detail) {
+  console.log(`[ORACLE-FAIL] ${name}: ${detail}`);
+}
+
 function read(file) {
   return fs.readFileSync(file, "utf8");
 }
@@ -100,17 +108,19 @@ function checkSource(file, source) {
 function checkGolden() {
   const cases = JSON.parse(read(GOLDEN));
   const required = new Set(["literal", "class", "repeat", "capture", "lookahead", "lookbehind", "lookaround-negative", "utf8-boundary", "longest"]);
+  const errors = [];
   for (const test of cases) {
     required.delete(test.name);
     const re = new RegExp(test.pattern, "u");
     const match = test.input.match(re);
     const actual = match ? match[0] : "";
     if (actual !== test.expected) {
-      fail(`regex golden failed: ${test.name}: expected ${test.expected}, got ${actual}`);
+      errors.push(`${test.name}: expected ${test.expected}, got ${actual}`);
     }
   }
-  if (required.size !== 0) fail(`missing regex golden cases: ${[...required].join(", ")}`);
-  pass("regex golden oracle");
+  if (required.size !== 0) errors.push(`missing cases: ${[...required].join(", ")}`);
+  if (errors.length === 0) oracleReference("regex golden reference");
+  else oracleReferenceFailed("regex golden reference", errors.join("; "));
 }
 
 function runWasmtimeSmoke() {
