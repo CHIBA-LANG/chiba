@@ -277,6 +277,7 @@
 		- `level1b:c11-backend` 现已在 source contract 阶段明确拒绝：comment-only `emit_core_op` / fake WAT backend。
 		- spec 要求 answer type checking 在 level-1 / CIR 层完成；当前 `check_answer_control` 已改为 fail-closed blocker，尚未生成真实 answer/control facts。
 		- spec 要求 continuation boundary / replay / usage 保留 control boundary、answer type、arena/world legality 与 usage；当前 boundary / usage 已改为 fail-closed blocker，replay 仍只有轻量事实壳。
+		- C09 replay safety 不再把 usage facts 全部标成 `safe=true`；缺 usage facts 或 capture classification 时 fail-closed，避免 multi-shot replay legality 假通过。
 		- one-pass CPS 当前只是 `CpsModule(module)` wrapper，没有实际 CPS transform 或 administrative beta-reduction。
 		- 旧 `src/backend/cir/*` 与 level-0 可以作为 legacy reference 借鉴算法、fixture、失败模式；但每次借鉴都必须先过 spec alignment，且 level-1b 重新拥有行为，不能形成 legacy dependency。
 		- 旧 `src/backend/cir/cps.chiba` 也只是 L5 wrapper / synthetic continuation package 方向，不是可直接搬运的 spec 级 one-pass CPS + beta 实现。

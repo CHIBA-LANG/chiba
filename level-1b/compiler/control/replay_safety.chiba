@@ -19,7 +19,15 @@ type ReplaySafetyFact {
 
 /// Check multi-shot replay-safety after world/thread boundaries are rejected.
 def check_replay_safety(module: UsageModule): Result[ReplaySafeModule, SemanticDiagnostics] =
-    Ok(ReplaySafeModule(module, replay_safety_facts(module.facts, 0, Vec[ReplaySafetyFact].new())))
+    if module.facts.len() == 0 {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<control>", 0, 0, "missing-facts: replay-safety usage facts absent"))
+            .freeze()))
+    } else {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: replay-safety capture classification absent"))
+            .freeze()))
+    }
 
 /// Convert usage facts into replay-safety facts in stable order.
 def replay_safety_facts(facts: Array[UsageFact], index: usize, out: Vec[ReplaySafetyFact]): Array[ReplaySafetyFact] =

@@ -41,6 +41,7 @@ const REQUIRED_TEXT = [
   "ControlCrossThread",
   "ControlNonReplayState",
   "def check_replay_safety",
+  "missing-lowering: replay-safety capture classification absent",
   "def one_pass_cps",
   "def run_control_cps",
 ];
