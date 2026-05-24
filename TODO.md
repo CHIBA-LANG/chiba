@@ -55,6 +55,7 @@
 	- [x] CPS closure usage subjects：CPS usage pass 已把 lambda/trailing closure surface 转成 `UseSubjectLambda` / `UseSubjectClosure` facts；真实 capture/use-count traversal 仍未完成。
 	- [x] no-continuation usage path：无 callable/continuation obligations 的 module 现在可通过 usage/boundary/replay no-op path；有 continuation facts 仍 fail-closed 等真实分析。
 - [ ] continuation boundary：world/thread/send boundary 检查没做。
+	- [x] continuation boundary obligations：usage facts 已转成 world/thread/send boundary scan obligations；真实表达式级 boundary scan 仍未完成。
 - [ ] ContN replay safety：capture classification、Ref[T] shared-reference、non-replay reject 没做。
 - [ ] one-pass CPS + beta：没做。现在还是 fail-closed，不是 level0 那条真实 CPS。
 	- [x] no-continuation CPS baseline：无 control obligations 的 module 现在生成空 `CpsModule`；真实 expression CPS + beta 仍未完成。

@@ -15,6 +15,15 @@ type ActiveContinuationSet {
     binders: Array[BinderId],
 }
 
+/// Boundary scan obligation derived before expression traversal.
+type ContinuationBoundaryObligation {
+    binder: BinderId,
+    count: UsageCount,
+    requires_world_boundary_check: bool,
+    requires_thread_boundary_check: bool,
+    requires_send_boundary_check: bool,
+}
+
 /// Boundary check result.
 data ContinuationBoundaryCheck {
     BoundaryOk,
@@ -23,12 +32,28 @@ data ContinuationBoundaryCheck {
 
 /// Check whether active continuations cross a world/thread boundary.
 def check_continuation_boundary(module: UsageModule): Result[UsageModule, SemanticDiagnostics] =
-    if module.facts.len() == 0 { Ok(module) }
+    let obligations = continuation_boundary_obligations(module.facts, 0, Vec[ContinuationBoundaryObligation].new())
+    if obligations.len() == 0 { Ok(module) }
     else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: continuation boundary scan absent"))
+            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: continuation world/thread/send boundary scan absent"))
             .freeze()))
     }
+
+/// Convert one usage fact into a continuation boundary scan obligation.
+def continuation_boundary_obligation_from_usage(fact: UsageFact): ContinuationBoundaryObligation =
+    ContinuationBoundaryObligation {
+        binder: fact.binder,
+        count: fact.count,
+        requires_world_boundary_check: true,
+        requires_thread_boundary_check: true,
+        requires_send_boundary_check: true,
+    }
+
+/// Build boundary scan obligations in stable usage-fact order.
+def continuation_boundary_obligations(facts: Array[UsageFact], index: usize, out: Vec[ContinuationBoundaryObligation]): Array[ContinuationBoundaryObligation] =
+    if index == facts.len() { out.freeze() }
+    else { continuation_boundary_obligations(facts, index + 1, out.push(continuation_boundary_obligation_from_usage(facts.get(index)))) }
 
 /// Return true when the boundary is illegal for continuation capture/resume.
 def ContinuationBoundary.illegal_for_continuation(self): bool = true
