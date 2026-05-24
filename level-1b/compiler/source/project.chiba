@@ -117,6 +117,14 @@ type SourceItemAttributeFacts {
     compile_if: Option[SourceCompileIfFacts],
 }
 
+/// Surface slices for source item lowering before full AST parsing.
+type SourceItemSurfaceFacts {
+    header: SourceNameSlice,
+    has_params: bool,
+    has_type_annotation: bool,
+    has_body: bool,
+}
+
 /// Source item discovered by the byte-level scanner.
 type SourceItemScanResult {
     file: SourceFileId,
@@ -125,6 +133,7 @@ type SourceItemScanResult {
     name: Option[SourceNameSlice],
     private: bool,
     attributes: SourceItemAttributeFacts,
+    surface: SourceItemSurfaceFacts,
     line: usize,
     column: usize,
 }

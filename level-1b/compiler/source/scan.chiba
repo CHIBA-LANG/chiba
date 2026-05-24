@@ -208,39 +208,55 @@ def source_scan_use_at(file: SourceFileId, text: String, offset: usize, line: us
         })
     } else { None }
 
+/// Return true when one item line already opens an inline body or initializer.
+def source_scan_item_has_body(text: String, offset: usize): bool =
+    if source_line_has_byte(text, offset, 61) { true }
+    else { source_line_has_byte(text, offset, 123) }
+
+/// Scan item surface shape on one source line.
+def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFacts =
+    let end = source_scan_use_end(text, offset)
+    SourceItemSurfaceFacts {
+        header: SourceNameSlice { offset: offset, len: end - offset },
+        has_params: source_line_has_byte(text, offset, 40),
+        has_type_annotation: source_line_has_byte(text, offset, 58),
+        has_body: source_scan_item_has_body(text, offset),
+    }
+
 /// Try to scan a source item at one line start.
 def source_scan_item_at(file: SourceFileId, owner_namespace: Option[NamespaceNameSlice], text: String, offset: usize, line: usize, attributes: SourceItemAttributeFacts): Option[SourceItemScanResult] =
+    let surface = source_scan_item_surface(text, offset)
     if source_starts_with_at(text, offset, "private ", 0) {
-        source_scan_private_item_at(file, owner_namespace, text, offset + "private".len(), line, attributes)
+        source_scan_private_item_at(file, owner_namespace, text, offset + "private".len(), line, attributes, surface)
     } else if source_starts_with_at(text, offset, "def ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemDef, name: source_scan_item_name(text, offset + "def".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemDef, name: source_scan_item_name(text, offset + "def".len()), private: false, attributes: attributes, surface: surface, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "type ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemType, name: source_scan_item_name(text, offset + "type".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemType, name: source_scan_item_name(text, offset + "type".len()), private: false, attributes: attributes, surface: surface, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "data ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemData, name: source_scan_item_name(text, offset + "data".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemData, name: source_scan_item_name(text, offset + "data".len()), private: false, attributes: attributes, surface: surface, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "union ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemUnion, name: source_scan_item_name(text, offset + "union".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemUnion, name: source_scan_item_name(text, offset + "union".len()), private: false, attributes: attributes, surface: surface, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "interface ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemInterface, name: source_scan_item_name(text, offset + "interface".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemInterface, name: source_scan_item_name(text, offset + "interface".len()), private: false, attributes: attributes, surface: surface, line: line, column: 0 })
     } else if source_starts_with_at(text, offset, "extern ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemExtern, name: source_scan_item_name(text, offset + "extern".len()), private: false, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemExtern, name: source_scan_item_name(text, offset + "extern".len()), private: false, attributes: attributes, surface: surface, line: line, column: 0 })
     } else { None }
 
 /// Try to scan an item after a private visibility modifier.
-def source_scan_private_item_at(file: SourceFileId, owner_namespace: Option[NamespaceNameSlice], text: String, offset: usize, line: usize, attributes: SourceItemAttributeFacts): Option[SourceItemScanResult] =
+def source_scan_private_item_at(file: SourceFileId, owner_namespace: Option[NamespaceNameSlice], text: String, offset: usize, line: usize, attributes: SourceItemAttributeFacts, surface: SourceItemSurfaceFacts): Option[SourceItemScanResult] =
     let start = source_skip_spaces(text, offset)
     if source_starts_with_at(text, start, "def ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemDef, name: source_scan_item_name(text, start + "def".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemDef, name: source_scan_item_name(text, start + "def".len()), private: true, attributes: attributes, surface: surface, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "type ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemType, name: source_scan_item_name(text, start + "type".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemType, name: source_scan_item_name(text, start + "type".len()), private: true, attributes: attributes, surface: surface, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "data ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemData, name: source_scan_item_name(text, start + "data".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemData, name: source_scan_item_name(text, start + "data".len()), private: true, attributes: attributes, surface: surface, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "union ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemUnion, name: source_scan_item_name(text, start + "union".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemUnion, name: source_scan_item_name(text, start + "union".len()), private: true, attributes: attributes, surface: surface, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "interface ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemInterface, name: source_scan_item_name(text, start + "interface".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemInterface, name: source_scan_item_name(text, start + "interface".len()), private: true, attributes: attributes, surface: surface, line: line, column: 0 })
     } else if source_starts_with_at(text, start, "extern ", 0) {
-        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemExtern, name: source_scan_item_name(text, start + "extern".len()), private: true, attributes: attributes, line: line, column: 0 })
+        Some(SourceItemScanResult { file: file, owner_namespace: owner_namespace, kind: SourceItemExtern, name: source_scan_item_name(text, start + "extern".len()), private: true, attributes: attributes, surface: surface, line: line, column: 0 })
     } else { None }
 
 /// Try to scan the first ASCII item name after an item keyword.

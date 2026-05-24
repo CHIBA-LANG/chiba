@@ -31,6 +31,7 @@ const REQUIRED_TEXT = [
   "type AlphaBinderOrigin",
   "owner_namespace: Option[NamespaceNameSlice]",
   "attributes: SourceItemAttributeFacts",
+  "surface: SourceItemSurfaceFacts",
   "def alpha_origins_from_source_items",
   "def elaborate_patterns",
   "def pattern_ids_from_binders",

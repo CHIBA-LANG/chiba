@@ -15,6 +15,7 @@ type TypedItemSkeleton {
     name: Option[SourceNameSlice],
     private: bool,
     attributes: SourceItemAttributeFacts,
+    surface: SourceItemSurfaceFacts,
     line: usize,
     column: usize,
 }
@@ -35,6 +36,7 @@ def typed_item_skeletons_from_alpha(origins: Array[AlphaBinderOrigin], index: us
                 name: origin.name,
                 private: origin.private,
                 attributes: origin.attributes,
+                surface: origin.surface,
                 line: origin.line,
                 column: origin.column,
             }))

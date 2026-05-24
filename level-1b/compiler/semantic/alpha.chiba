@@ -17,6 +17,7 @@ type AlphaBinderOrigin {
     name: Option[SourceNameSlice],
     private: bool,
     attributes: SourceItemAttributeFacts,
+    surface: SourceItemSurfaceFacts,
     line: usize,
     column: usize,
 }
@@ -54,6 +55,7 @@ def alpha_origins_from_source_items(items: Array[SourceItemScanResult], index: u
                 name: item.name,
                 private: item.private,
                 attributes: item.attributes,
+                surface: item.surface,
                 line: item.line,
                 column: item.column,
             }))
