@@ -752,9 +752,35 @@ def source_scan_file_owner_namespace(file: SourceFile): Option[NamespaceNameSlic
 def source_scan_items(file: SourceFile): Array[SourceItemScanResult] =
     source_scan_items_line(file.id, source_scan_file_owner_namespace(file), file.text, 0, 1, None, false, Vec[SourceItemScanResult].new())
 
+/// Build one parser placeholder fact for a source file.
+def source_parsed_module_facts_absent(file: SourceFile): SourceParsedModuleFacts =
+    SourceParsedModuleFacts {
+        file: file.id,
+        has_token_stream: false,
+        has_ast: false,
+        has_recoverable_errors: false,
+    }
+
+/// Build parser placeholder facts in deterministic file order.
+def scan_project_parsed_modules_absent(files: Array[SourceFile], index: usize, out: Vec[SourceParsedModuleFacts]): Array[SourceParsedModuleFacts] =
+    if index == files.len() { out.freeze() }
+    else { scan_project_parsed_modules_absent(files, index + 1, out.push(source_parsed_module_facts_absent(files.get(index)))) }
+
+/// Record that source facts still come from scanner fallback, not generated parser AST.
+def scan_project_parser_facts_absent(files: Array[SourceFile]): SourceParserFacts =
+    SourceParserFacts {
+        mode: SourceFrontendScannerFallback,
+        modules: scan_project_parsed_modules_absent(files, 0, Vec[SourceParsedModuleFacts].new()),
+        chibalex_spec: "src/frontend/chiba-level1.chibalex",
+        chibacc_spec: "src/frontend/chiba-level1.chibacc",
+        primary_path_blocked: true,
+        diagnostic: "missing-lowering: chibalex/chibacc source parser primary path absent",
+    }
+
 /// Build source facts from already loaded files.
 def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
     SourceProjectFacts {
+        parser: scan_project_parser_facts_absent(project.files),
         headers: scan_project_headers(project.files, 0, Vec[SourceHeaderFacts].new()),
         docs: scan_project_docs(project.files, 0, Vec[SourceDocFacts].new()),
         compile_if: scan_project_compile_if(project.files, 0, Vec[SourceCompileIfFacts].new()),

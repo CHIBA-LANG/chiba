@@ -202,8 +202,33 @@ type SourceUtf8ScanWarning {
     column: usize,
 }
 
+/// Frontend source mode used to derive project facts.
+data SourceFrontendMode {
+    SourceFrontendScannerFallback,
+    SourceFrontendChibalexChibaccPrimary,
+}
+
+/// Parsed module fact expected from the chibalex/chibacc primary path.
+type SourceParsedModuleFacts {
+    file: SourceFileId,
+    has_token_stream: bool,
+    has_ast: bool,
+    has_recoverable_errors: bool,
+}
+
+/// Parser facts for the eventual generated frontend primary path.
+type SourceParserFacts {
+    mode: SourceFrontendMode,
+    modules: Array[SourceParsedModuleFacts],
+    chibalex_spec: String,
+    chibacc_spec: String,
+    primary_path_blocked: bool,
+    diagnostic: String,
+}
+
 /// Source facts derived from byte-level source scans.
 type SourceProjectFacts {
+    parser: SourceParserFacts,
     headers: Array[SourceHeaderFacts],
     docs: Array[SourceDocFacts],
     compile_if: Array[SourceCompileIfFacts],

@@ -11,6 +11,7 @@
 
 ## P0
 - [ ] chibalex/chibacc frontend：还没替换 scan.chiba；真实 source AST 还没进 primary path。
+	- [x] source parser facts blocker：`SourceProjectFacts.parser` 已显式记录 chibalex/chibacc primary path 缺失，不再让 scanner fallback 冒充 parsed AST。
 - [ ] attribute grammar：#[attr(...)] nested/named/list args 没 spec/golden/AST/parser。
 	- [x] attribute spec/golden：spec 已定义 AttrArg AST 与 nested/named/list/object grammar，并新增复杂 attribute fixture/gate。
 	- [x] chibacc attribute AST/fixture：`std.chibacc.ast.AttrArg` 与 mini grammar 已覆盖 bare/named/call/list/object；真实 parser 执行仍未完成。

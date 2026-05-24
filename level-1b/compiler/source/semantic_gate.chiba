@@ -6,6 +6,7 @@ use compiler.source.import_policy.*
 
 /// Source semantic gate error kind.
 data SourceGateErrorKind {
+    SourceGateParserPrimaryPathAbsent,
     SourceGateUtf8ScannerUnsupported,
     SourceGateUnknownCompileIfPredicate,
     SourceGateCompileIfFilteringAbsent,
@@ -60,6 +61,10 @@ def source_project_has_item(project: ProjectSurface): bool =
 /// Return true when byte-level scanner saw non-ASCII source before UTF-8 scanner support exists.
 def source_project_has_utf8_warning(project: ProjectSurface): bool =
     project.facts.utf8_warnings.len() > 0
+
+/// Return true when project facts still come from scanner fallback.
+def source_project_parser_primary_blocked(project: ProjectSurface): bool =
+    project.facts.parser.primary_path_blocked
 
 /// Return true when project source facts contain namespace forms needing full parser assembly.
 def source_project_has_namespace_warning(project: ProjectSurface): bool =
@@ -341,6 +346,13 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceFileId { index: 0 },
                 SourceGateImportResolutionAbsent,
                 "missing-lowering: source import/name resolution absent"))
+            .freeze()
+    } else if source_project_parser_primary_blocked(project) {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateParserPrimaryPathAbsent,
+                project.facts.parser.diagnostic))
             .freeze()
     } else {
         Vec[SourceGateError].new()
