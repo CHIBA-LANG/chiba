@@ -261,7 +261,7 @@
 	- **目标**: level-1b 不再让“接口已存在”伪装成“语义已实现”。所有暂未实现 pass 必须显式 blocker/stub；所有 gate 必须区分 contract smoke 与真实语义验收。
 	- **第一轮 audit 清单**:
 		- 新增轻量反馈环：`vp run level1b:truthfulness-audit`。该 gate 当前预期失败，用 blocker taxonomy 暴露假成功路径；不要把它并入 expensive bootstrap。
-		- 当前基线计数：`legacy-compiler-execution` / `oracle-success-path` 已清零；剩余 `primary-path-blocked` 27；`ok-module-pass-through` / `empty-facts` / `comment-only-backend-output` 已清零为显式 blocker 或 source-contract 拒绝。
+		- 当前基线计数：`legacy-compiler-execution` / `oracle-success-path` 已清零；剩余 `primary-path-blocked` 26；`ok-module-pass-through` / `empty-facts` / `comment-only-backend-output` 已清零为显式 blocker 或 source-contract 拒绝。
 		- `level1b:c09-control-cps` 已改成 fail-closed：缺 answer/control scan、usage subject collection、boundary scan、one-pass CPS beta lowering 时返回 blocker diagnostic；该 gate 当前只通过 source contract，真实 valid/invalid continuation gates 标记为 primary-path-blocked。
 		- `level1b:c10-closure-package` 已保留 continuation/lambda/closure subject kind，并区分 escaped boxed `Cont1` 与 repeatable `ContN` package；缺 continuation capture extraction 时 fail-closed；该 gate 当前只通过 source contract，closure/directification/nanopass 验收标记为 primary-path-blocked。
 		- `level1b:c11-backend` 现已在 source contract 阶段明确拒绝：comment-only `emit_core_op` / fake WAT backend。

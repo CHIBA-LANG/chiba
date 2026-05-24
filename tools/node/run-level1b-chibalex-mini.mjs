@@ -123,6 +123,10 @@ function primaryPathBlocked(name) {
   console.log(`[BLOCKED] ${name}`);
 }
 
+function oracleReferenceFailed(name) {
+  console.log(`[ORACLE-FAIL] ${name}`);
+}
+
 fs.mkdirSync(OUT, { recursive: true });
 fs.mkdirSync(RUNNERS, { recursive: true });
 
@@ -489,7 +493,7 @@ for (const caseInfo of CASES) {
   const input = path.join(ROOT, file);
   const nativeOutput = path.join(OUT, file.replace(/\.chibalex$/, ".native.chiba"));
   if (caseInfo.sourceOnly === true) {
-    primaryPathBlocked("native chibalex oracle does not yet cover continuation surface keywords");
+    oracleReferenceFailed("native chibalex reference does not yet cover continuation surface keywords");
   } else {
     run(`native chibalex oracle ${file}`, "timeout", ["10", "./chibalex.o", input, "-o", nativeOutput]);
     const nativeGenerated = fs.readFileSync(nativeOutput, "utf8");
