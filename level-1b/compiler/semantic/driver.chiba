@@ -41,6 +41,7 @@ type TypedModule {
     callable_storage: Array[CallableStorageFact],
     namespace_ownership: Array[NamespaceOwnershipFact],
     method_surface: Array[MethodSurfaceFact],
+    branching_surface: Array[BranchingSurfaceFact],
 }
 
 /// Run alpha, pattern, inference, template, method/operator, ABI, and capability passes.

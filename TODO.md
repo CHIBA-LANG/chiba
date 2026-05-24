@@ -66,6 +66,7 @@
 	- 这一路只能借鉴 `level0/src/backend/cir/lower.chiba`、`level0/src/backend/bir/lower.chiba` 的流程；不能把 level0 的 numeric bool、旧 branching bug、旧 scanner 语义搬进 level-1b。
 - [ ] branching 分析必须作为本轮 primary lowering 的硬门槛：
 	- [x] branching gate fixtures：覆盖 if/else、else-if、if-let、match、short-circuit、nested branch；用于防止只看 happy path。
+	- [x] branching surface facts：source/typed facts 已记录 if/else/else-if/if-let/match/short-circuit，供 typed lowering 和 CPS join planning 使用。
 	- 不能只看 `if` then/happy path；必须同时覆盖 `else`、`else if`、`if let` 成功/失败分支、`match` 每个 arm、default/fallback、短路逻辑和 nested branch。
 	- typed env、pattern binding scope、exhaustiveness/warning、CPS join continuation、branch result type unify 必须一起验收。
 	- 所有 branching lowering gate 必须包含 “then/else 都有副作用或不同 binder” 的 fixture，避免再出现看了 if 不看 else、match branching 一坨但漏分支的情况。

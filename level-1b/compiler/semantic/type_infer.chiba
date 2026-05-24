@@ -49,6 +49,18 @@ type MethodSurfaceFact {
     operator: bool,
 }
 
+/// Branching surface fact used by typed lowering and CPS join planning.
+type BranchingSurfaceFact {
+    owner: BinderId,
+    file: SourceFileId,
+    has_if: bool,
+    has_else: bool,
+    has_else_if: bool,
+    has_if_let: bool,
+    has_match: bool,
+    has_short_circuit: bool,
+}
+
 /// Classify a scanned source item into the first typed-lowering bucket.
 def classify_typed_item_skeleton_kind(item: AlphaBinderOrigin): TypedItemSkeletonKind =
     match item.kind {
@@ -201,6 +213,40 @@ def method_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], ind
         }
     }
 
+/// Return true when an item has branching syntax relevant to typed/CPS lowering.
+def typed_item_has_branching_surface(item: TypedItemSkeleton): bool =
+    if item.surface.has_if_expr { true }
+    else if item.surface.has_else_expr { true }
+    else if item.surface.has_else_if_expr { true }
+    else if item.surface.has_if_let_expr { true }
+    else if item.surface.has_match_expr { true }
+    else { item.surface.has_short_circuit_expr }
+
+/// Create one branching surface fact from a typed item skeleton.
+def branching_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[BranchingSurfaceFact] =
+    if typed_item_has_branching_surface(item) {
+        Some(BranchingSurfaceFact {
+            owner: item.binder,
+            file: item.file,
+            has_if: item.surface.has_if_expr,
+            has_else: item.surface.has_else_expr,
+            has_else_if: item.surface.has_else_if_expr,
+            has_if_let: item.surface.has_if_let_expr,
+            has_match: item.surface.has_match_expr,
+            has_short_circuit: item.surface.has_short_circuit_expr,
+        })
+    } else { None }
+
+/// Generate branching surface facts in stable binder order.
+def branching_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[BranchingSurfaceFact]): Array[BranchingSurfaceFact] =
+    if index == skeletons.len() { out.freeze() }
+    else {
+        match branching_surface_fact_from_skeleton(skeletons.get(index)) {
+            Some(fact) => branching_surface_facts_from_skeletons(skeletons, index + 1, out.push(fact))
+            None => branching_surface_facts_from_skeletons(skeletons, index + 1, out)
+        }
+    }
+
 /// Return true when item surfaces mention method-style receiver definitions.
 def typed_item_skeletons_have_method_receiver_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
     if index == skeletons.len() { false }
@@ -348,6 +394,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let callable_storage = callable_storage_facts_from_skeletons(skeletons, 0, Vec[CallableStorageFact].new())
     let namespace_ownership = namespace_ownership_facts_from_skeletons(skeletons, 0, Vec[NamespaceOwnershipFact].new())
     let method_surface = method_surface_facts_from_skeletons(skeletons, 0, Vec[MethodSurfaceFact].new())
+    let branching_surface = branching_surface_facts_from_skeletons(skeletons, 0, Vec[BranchingSurfaceFact].new())
     if skeletons.len() == 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: typed item skeletons absent"))
@@ -441,13 +488,14 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
-def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], method_surface: Array[MethodSurfaceFact]): TypedModule =
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact]): TypedModule =
     TypedModule {
         alpha: module,
         items: skeletons,
         callable_storage: callable_storage,
         namespace_ownership: namespace_ownership,
         method_surface: method_surface,
+        branching_surface: branching_surface,
     }
 
 /// Run the level-2 semantic checks that require inferred types.

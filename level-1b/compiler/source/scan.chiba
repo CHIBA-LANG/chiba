@@ -345,6 +345,18 @@ def source_scan_item_has_pipe_placeholder(text: String, offset: usize): bool =
 def source_scan_item_has_pipe_chain(text: String, offset: usize): bool =
     source_region_count_text(text, offset, source_scan_item_region_end(text, offset), "|>", 0) > 1
 
+/// Return true when an item region contains an if expression.
+def source_scan_item_has_if_expr(text: String, offset: usize): bool =
+    source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "if ")
+
+/// Return true when an item region contains an else branch.
+def source_scan_item_has_else_expr(text: String, offset: usize): bool =
+    source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "else")
+
+/// Return true when an item region contains an else-if branch.
+def source_scan_item_has_else_if_expr(text: String, offset: usize): bool =
+    source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "else if")
+
 /// Return true when an item region contains a match expression.
 def source_scan_item_has_match_expr(text: String, offset: usize): bool =
     source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "match ")
@@ -361,6 +373,12 @@ def source_scan_item_has_deep_pattern_surface(text: String, offset: usize): bool
     else if source_region_has_text(text, offset, end, "{ ") { true }
     else if source_region_has_text(text, offset, end, " @ ") { true }
     else { source_region_has_text(text, offset, end, "=>") }
+
+/// Return true when an item region contains short-circuit boolean branching.
+def source_scan_item_has_short_circuit_expr(text: String, offset: usize): bool =
+    let end = source_scan_item_region_end(text, offset)
+    if source_region_has_text(text, offset, end, "&&") { true }
+    else { source_region_has_text(text, offset, end, "||") }
 
 /// Return true when an item region contains a reset expression.
 def source_scan_item_has_reset_expr(text: String, offset: usize): bool =
@@ -529,9 +547,13 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_pipe_expr: source_scan_item_has_pipe_expr(text, offset),
         has_pipe_placeholder: source_scan_item_has_pipe_placeholder(text, offset),
         has_pipe_chain: source_scan_item_has_pipe_chain(text, offset),
+        has_if_expr: source_scan_item_has_if_expr(text, offset),
+        has_else_expr: source_scan_item_has_else_expr(text, offset),
+        has_else_if_expr: source_scan_item_has_else_if_expr(text, offset),
         has_match_expr: source_scan_item_has_match_expr(text, offset),
         has_if_let_expr: source_scan_item_has_if_let_expr(text, offset),
         has_deep_pattern_surface: source_scan_item_has_deep_pattern_surface(text, offset),
+        has_short_circuit_expr: source_scan_item_has_short_circuit_expr(text, offset),
         has_reset_expr: source_scan_item_has_reset_expr(text, offset),
         has_shift_expr: source_scan_item_has_shift_expr(text, offset),
         has_shiftn_expr: source_scan_item_has_shiftn_expr(text, offset),
