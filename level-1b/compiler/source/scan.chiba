@@ -332,6 +332,18 @@ def source_scan_item_has_deep_pattern_surface(text: String, offset: usize): bool
     else if source_region_has_text(text, offset, end, " @ ") { true }
     else { source_region_has_text(text, offset, end, "=>") }
 
+/// Return true when an item region contains a reset expression.
+def source_scan_item_has_reset_expr(text: String, offset: usize): bool =
+    source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "reset ")
+
+/// Return true when an item region contains a one-shot shift expression.
+def source_scan_item_has_shift_expr(text: String, offset: usize): bool =
+    source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "shift ")
+
+/// Return true when an item region contains a multi-shot shiftn expression.
+def source_scan_item_has_shiftn_expr(text: String, offset: usize): bool =
+    source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "shiftn ")
+
 /// Return true when a method receiver uses generic owner syntax and `Self`.
 def source_scan_item_has_generic_self_method(text: String, offset: usize): bool =
     source_line_has_text_before_byte(text, offset, ".", 40)
@@ -488,6 +500,9 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_match_expr: source_scan_item_has_match_expr(text, offset),
         has_if_let_expr: source_scan_item_has_if_let_expr(text, offset),
         has_deep_pattern_surface: source_scan_item_has_deep_pattern_surface(text, offset),
+        has_reset_expr: source_scan_item_has_reset_expr(text, offset),
+        has_shift_expr: source_scan_item_has_shift_expr(text, offset),
+        has_shiftn_expr: source_scan_item_has_shiftn_expr(text, offset),
         has_generic_self_method: source_scan_item_has_generic_self_method(text, offset),
         has_string_interpolation: source_scan_item_has_string_interpolation(text, offset),
         has_string_slice_surface: source_scan_item_has_string_slice_surface(text, offset),

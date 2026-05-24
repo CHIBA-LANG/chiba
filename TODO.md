@@ -25,6 +25,7 @@
 - [ ] ADT tuple bridge：Ctor <-> (:ctor, ...)、tuple_to_adt/adt_to_tuple intrinsic lowering 没完整。
 - [ ] compiler intrinsic namespace：有部分 contract；真实 intrinsic resolution/lowering 没完整。
 - [ ] answer/control scan：reset/shift/shiftn answer facts 没做。
+	- [x] control surface detection：source/typed surface 已标记 reset/shift/shiftn；无 delimited-control syntax 的 module 可越过 answer_control，出现 control syntax 仍 fail-closed。
 - [ ] usage analysis：只有粗 fact threading；真实 binder/lambda/closure/continuation usage count 没做。
 - [ ] continuation boundary：world/thread/send boundary 检查没做。
 - [ ] ContN replay safety：capture classification、Ref[T] shared-reference、non-replay reject 没做。
