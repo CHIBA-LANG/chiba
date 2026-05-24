@@ -54,6 +54,7 @@ const REQUIRED_TEXT = [
   "def ReplayCaptureKind.uses_shared_reference_semantics",
   "missing-lowering: replay-safety capture classification absent",
   "def one_pass_cps",
+  "def cps_continuation_facts_none",
   "def run_control_cps",
 ];
 

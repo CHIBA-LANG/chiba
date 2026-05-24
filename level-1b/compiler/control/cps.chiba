@@ -20,9 +20,17 @@ type CpsModule {
 
 /// Transform a replay-safe module to CPS while beta-reducing administrative continuations.
 def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostics] =
-    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-        .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: one-pass CPS with administrative beta-reduction absent"))
-        .freeze()))
+    if module.usage.facts.len() == 0 && module.replay.len() == 0 {
+        Ok(CpsModule(module, cps_continuation_facts_none()))
+    } else {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: one-pass CPS with administrative beta-reduction absent"))
+            .freeze()))
+    }
+
+/// Empty CPS continuation fact stream for modules without control obligations.
+def cps_continuation_facts_none(): Array[ContinuationFact] =
+    Vec[ContinuationFact].new().freeze()
 
 /// Return true when a continuation must materialize as a package.
 def CpsContinuation.materialized(self): bool =
