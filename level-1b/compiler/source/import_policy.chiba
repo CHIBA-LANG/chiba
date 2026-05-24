@@ -5,6 +5,8 @@
 /// are deterministic and Metal files stay isolated.
 namespace compiler.source.import_policy
 
+use compiler.source.project.*
+
 /// Default prelude import decision for one source file.
 data PreludeImportPolicy {
     PreludeImportDefault,
@@ -17,6 +19,10 @@ def prelude_policy_for_header(is_metal: bool, no_prelude_import: bool): PreludeI
     if is_metal { PreludeImportMetal }
     else if no_prelude_import { PreludeImportDisabled }
     else { PreludeImportDefault }
+
+/// Decide the prelude import policy from scanned source header facts.
+def SourceHeaderFacts.prelude_policy(self): PreludeImportPolicy =
+    prelude_policy_for_header(self.is_metal, self.no_prelude_import)
 
 /// Return true when the source driver must inject `use prelude.*`.
 def PreludeImportPolicy.should_inject(self): bool =

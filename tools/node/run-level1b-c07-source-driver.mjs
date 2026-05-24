@@ -28,6 +28,7 @@ const REQUIRED_TEXT = [
   "data CompileIfPredicate",
   "CompileIfAll",
   "CompileIfNot",
+  "def SourceHeaderFacts.prelude_policy",
   "\"wasm32-unknown-wasi\"",
   "\"wasm-gc\"",
   "type DriverDiagnostic",
