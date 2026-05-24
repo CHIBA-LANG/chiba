@@ -18,11 +18,12 @@ export const BINARYEN_PORTABLE_FEATURES =
 
 export function extractModule(text) {
   const start = text.indexOf("(module");
-  const end = text.lastIndexOf("\n)");
+  const trimmed = text.trimEnd();
+  const end = trimmed.lastIndexOf(")");
   if (start < 0 || end < start) {
     throw new Error("input does not contain a complete wat module");
   }
-  return text.slice(start, end + 2);
+  return trimmed.slice(start, end + 1);
 }
 
 function validateModule(module, label) {

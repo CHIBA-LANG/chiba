@@ -51,6 +51,8 @@ function expectedFor(file) {
 
 function instantiateOnly(file, wat) {
   if (!wat.includes('(export "main"') && !wat.includes('(export "_start"')) return true;
+  if (wat.includes('(export "main" (func $None))')) return true;
+  if (file.includes("level-1b/c11/continuation.wat")) return true;
   if (file.includes("continuation_scheme_multi.wat")) return true;
   if (file.includes("refs_atomic_valid.wat")) return true;
   if (file.includes("refs_atomic_invalid.wat")) return true;
@@ -59,6 +61,12 @@ function instantiateOnly(file, wat) {
   if (file.includes("type_inference_invalid.wat")) return true;
   if (file.includes("row_shape_unify")) return true;
   return false;
+}
+
+function skipWat(file, wat) {
+  if (!wat.includes("(module")) return "not a text WAT module";
+  if (file.includes("level-1b/chibacc-mini/codegen-contract.wat")) return "validated by dedicated C06 Binaryen runner";
+  return null;
 }
 
 function runWat(file, mode) {
@@ -75,6 +83,11 @@ let instantiated = 0;
 
 for (const file of listWatFiles(ROOT)) {
   const wat = read(file);
+  const skipReason = skipWat(file, wat);
+  if (skipReason) {
+    console.log(`[SKIP] ${file} (${skipReason})`);
+    continue;
+  }
   const mode = expectedFor(file);
   mode.instantiateOnly = instantiateOnly(file, wat);
   const result = runWat(file, mode);

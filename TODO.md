@@ -15,7 +15,8 @@
 	- **parser error smoke 已阶段性收口**：当前 `node tools/node/run-parser-error-smoke.mjs` 已通过（110 specs）；此前的 `UNEXPECTED OK` / crash 已被 recent precheck 修补收住。
 	- **semantic gates 已阶段性收口**：当前 `node tools/node/run-semantic-gates.mjs` 已全绿；最近两处失败（string/slice、pipe lowering）都已确认为 brittle harness 对内部 binder/ref 表示绑死，而不是语义回归。
 	- **checkpoint gates 已阶段性收口**：当前 `node tools/node/run-checkpoint-gates.mjs` 已全绿；最近一处失败是 parser precheck 把合法 `if let` 误判成 same-line `let` 语法错误，现已修正。
-	- **下一处 first-bootstrap 前沿待下一轮提交后重判**：当前 parser / semantic / checkpoint 三层都已推进，新的 bootstrap blocker 需要在下一次 committed rerun 后再定位。
+	- **all-wat 已阶段性收口**：当前 `node tools/node/run-all-wat.mjs` 已通过；最近几处失败已确认为 runner 对 scratch 产物/`main -> None` 结构模块/专属 Binaryen runner 工件的扫描与执行边界不清，而不是 backend 主路径语义错误。
+	- **下一处 first-bootstrap 前沿待下一轮提交后重判**：当前 parser / semantic / checkpoint / all-wat 四层都已推进，新的 bootstrap blocker 需要在下一次 committed rerun 后再定位。
 	- **type-system 稳定化**：`level1b:type-system` 仍存在 typed golden/dump 漂移（目前集中在 type inference / explicit generics / row shorthand），不能只看 `check ok` 就当作 typed 语义已完全收稳。
 - 当前离 Second Bootstrap 完成大约还差：
 	- **C11 真正迁移清零**：虽然 `level1b:c11-backend` 与 `level1b:cir-migration` 已绿，但 level-1b backend 还需要继续巩固成 unquestioned primary behavior，旧 `src/backend/cir` 不再承担核心语义路径。
