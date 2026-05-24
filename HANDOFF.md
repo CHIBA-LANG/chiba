@@ -153,6 +153,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - Source scanner now derives `use` declaration facts with path slice, glob marker, and multi-import marker. Actual import resolution still absent.
 - Source import policy now builds import scope inputs from owner namespace, explicit uses, and prelude policy. Source semantic gate fail-closes on explicit `use` or default prelude injection until import/name resolution exists.
 - Source item scan now attaches line-start `#[compile_if(...)]` facts to the following item. This preserves item-level conditional compilation evidence; real compile_if eval/filtering is still absent.
+- Source semantic gate now fail-closes when item-level `compile_if` facts are present but item filtering has not run, preventing disabled items from producing binders/exports/backend symbols.
 - Source item scan now attaches the file-header namespace as `owner_namespace`; inline namespace ownership remains fail-closed until block assembly exists.
 - Source item scan now preserves item header slices and coarse surface shape: params present, type annotation present, body/initializer present. It still does not parse parameter patterns, type expressions, or body AST.
 - Source semantic gate now rejects `extern` items with no scanned type annotation, matching the spec rule that extern ABI boundaries require explicit types. Real ABI signature parsing remains absent.

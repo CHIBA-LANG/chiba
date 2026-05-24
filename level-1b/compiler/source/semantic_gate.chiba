@@ -8,6 +8,7 @@ use compiler.source.import_policy.*
 data SourceGateErrorKind {
     SourceGateUtf8ScannerUnsupported,
     SourceGateUnknownCompileIfPredicate,
+    SourceGateCompileIfFilteringAbsent,
     SourceGateInlineNamespaceUnsupported,
     SourceGateImportResolutionAbsent,
     SourceGateExternAbiSignatureAbsent,
@@ -76,6 +77,20 @@ def source_compile_if_has_unknown(facts: Array[SourceCompileIfFacts], index: usi
 /// Return true when project source facts contain an unsupported compile_if predicate.
 def source_project_has_unknown_compile_if(project: ProjectSurface): bool =
     source_compile_if_has_unknown(project.facts.compile_if, 0)
+
+/// Return true when item scan has compile_if attributes that have not been filtered.
+def source_items_have_compile_if(items: Array[SourceItemScanResult], index: usize): bool =
+    if index == items.len() { false }
+    else {
+        match items.get(index).attributes.compile_if {
+            Some(_) => true
+            None => source_items_have_compile_if(items, index + 1)
+        }
+    }
+
+/// Return true when project items still need compile_if filtering.
+def source_project_has_unfiltered_compile_if_items(project: ProjectSurface): bool =
+    source_items_have_compile_if(project.facts.items, 0)
 
 /// Return true when an extern item lacks any scanned ABI type annotation.
 def source_items_have_extern_without_type_annotation(items: Array[SourceItemScanResult], index: usize): bool =
@@ -172,6 +187,13 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceFileId { index: 0 },
                 SourceGateItemScanAbsent,
                 "missing-facts: source item scan absent"))
+            .freeze()
+    } else if source_project_has_unfiltered_compile_if_items(project) {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateCompileIfFilteringAbsent,
+                "missing-lowering: item compile_if filtering absent"))
             .freeze()
     } else if source_project_has_extern_without_type_annotation(project) {
         Vec[SourceGateError].new()
