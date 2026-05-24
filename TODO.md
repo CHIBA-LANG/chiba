@@ -250,6 +250,8 @@
 - [ ] constructor like `once` used value lower to mutation
 	- **目标**: 
 		- `def x(x:X):X = ...` 且 x 只用了一次，这个函数应该变成传入x的mutation
+	- **进展**:
+		- C08 ADT/constructor lowering contract 已新增 `ConstructorMutationObligation` 与 `ConstructorMutateOnceUsedInput` strategy，用于承载 exactly-once input -> mutation lowering 事实；真实 usage fact 接入与 mutation backend lowering 仍未完成。
 
 
 ## Second Bootstrap 剩余项

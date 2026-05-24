@@ -29,6 +29,19 @@ type LoweredAdtCtor {
     helper_name: str,
 }
 
+/// Constructor lowering strategy after usage analysis.
+data ConstructorLoweringStrategy {
+    ConstructorAllocateValue,
+    ConstructorMutateOnceUsedInput,
+}
+
+/// Usage-sensitive constructor lowering obligation.
+type ConstructorMutationObligation {
+    ctor: AdtVariantDecl,
+    input: SemType,
+    strategy: ConstructorLoweringStrategy,
+}
+
 /// Direction of checked ADT/tuple conversion.
 data AdtTupleConversionKind {
     AdtToTuple
@@ -61,6 +74,19 @@ def lower_adt_ctor(variant: AdtVariantDecl): LoweredAdtCtor =
 def lower_adt_ctors(variants: Array[AdtVariantDecl], index: usize, out: Vec[LoweredAdtCtor]): Array[LoweredAdtCtor] =
     if index == variants.len() { out.freeze() }
     else { lower_adt_ctors(variants, index + 1, out.push(lower_adt_ctor(variants.get(index)))) }
+
+/// Choose mutation lowering when a constructor input is proven exactly once-used.
+def constructor_strategy_for_use(used_once: bool): ConstructorLoweringStrategy =
+    if used_once { ConstructorMutateOnceUsedInput }
+    else { ConstructorAllocateValue }
+
+/// Build the constructor mutation obligation after type and usage facts exist.
+def constructor_mutation_obligation(ctor: AdtVariantDecl, input: SemType, used_once: bool): ConstructorMutationObligation =
+    ConstructorMutationObligation {
+        ctor: ctor,
+        input: input,
+        strategy: constructor_strategy_for_use(used_once),
+    }
 
 /// Return true when the conversion may be emitted.
 def AdtTupleConversion.checked(self): bool =
