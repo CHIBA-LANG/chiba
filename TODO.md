@@ -57,6 +57,7 @@
 - [ ] continuation boundary：world/thread/send boundary 检查没做。
 	- [x] continuation boundary obligations：usage facts 已转成 world/thread/send boundary scan obligations；真实表达式级 boundary scan 仍未完成。
 - [ ] ContN replay safety：capture classification、Ref[T] shared-reference、non-replay reject 没做。
+	- [x] ContN replay obligations：UseMany continuation usage 已转成 `ContNReplaySafetyObligation`，明确 Ref[T] capture 是 shared-reference semantics；真实 capture classification/non-replay reject 仍未完成。
 - [ ] one-pass CPS + beta：没做。现在还是 fail-closed，不是 level0 那条真实 CPS。
 	- [x] no-continuation CPS baseline：无 control obligations 的 module 现在生成空 `CpsModule`；真实 expression CPS + beta 仍未完成。
 - [ ] CIR nanopass IR：清晰分层还不够；需要语言级 CPS/CIR facts，且保证不耦合 Wasm。

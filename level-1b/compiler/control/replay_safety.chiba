@@ -30,6 +30,14 @@ type ReplayCaptureClassification {
     kind: ReplayCaptureKind,
 }
 
+/// ContN replay-safety obligation before capture classification.
+type ContNReplaySafetyObligation {
+    binder: BinderId,
+    count: UsageCount,
+    requires_capture_classification: bool,
+    ref_capture_uses_shared_reference_semantics: bool,
+}
+
 /// Return true when a capture kind is legal for repeatable ContN replay.
 def ReplayCaptureKind.safe_for_contn_replay(self): bool =
     match self {
@@ -47,12 +55,41 @@ def ReplayCaptureKind.uses_shared_reference_semantics(self): bool =
 
 /// Check multi-shot replay-safety after world/thread boundaries are rejected.
 def check_replay_safety(module: UsageModule): Result[ReplaySafeModule, SemanticDiagnostics] =
-    if module.facts.len() == 0 {
+    let obligations = contn_replay_safety_obligations(module.facts, 0, Vec[ContNReplaySafetyObligation].new())
+    if obligations.len() == 0 {
         Ok(ReplaySafeModule(module, replay_safety_facts_none()))
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: replay-safety capture classification absent"))
+            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: ContN replay-safety capture classification absent"))
             .freeze()))
+    }
+
+/// Return true when a usage count may require repeatable replay checks.
+def usage_count_requires_replay_check(count: UsageCount): bool =
+    match count {
+        UseMany => true
+        _ => false
+    }
+
+/// Convert one usage fact into a ContN replay-safety obligation when needed.
+def contn_replay_safety_obligation_from_usage(fact: UsageFact): Option[ContNReplaySafetyObligation] =
+    if usage_count_requires_replay_check(fact.count) {
+        Some(ContNReplaySafetyObligation {
+            binder: fact.binder,
+            count: fact.count,
+            requires_capture_classification: true,
+            ref_capture_uses_shared_reference_semantics: true,
+        })
+    } else { None }
+
+/// Build ContN replay-safety obligations in stable usage-fact order.
+def contn_replay_safety_obligations(facts: Array[UsageFact], index: usize, out: Vec[ContNReplaySafetyObligation]): Array[ContNReplaySafetyObligation] =
+    if index == facts.len() { out.freeze() }
+    else {
+        match contn_replay_safety_obligation_from_usage(facts.get(index)) {
+            Some(obligation) => contn_replay_safety_obligations(facts, index + 1, out.push(obligation))
+            None => contn_replay_safety_obligations(facts, index + 1, out)
+        }
     }
 
 /// Module whose continuations are legal for lowering.
