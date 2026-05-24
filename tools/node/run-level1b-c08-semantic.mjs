@@ -64,6 +64,8 @@ const REQUIRED_TEXT = [
   "missing-lowering: pipe placeholder and receiver-first desugaring absent",
   "def typed_item_skeletons_have_deep_pattern_surface",
   "missing-lowering: deep pattern match and if-let lowering absent",
+  "def typed_item_skeletons_have_string_slice_surface",
+  "missing-lowering: string interpolation and slice lowering absent",
   "missing-facts: callable storage fact generation absent",
   "missing-lowering: source item type expression and body inference absent",
   "def check_l2_types",

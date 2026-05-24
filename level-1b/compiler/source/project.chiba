@@ -143,6 +143,9 @@ type SourceItemSurfaceFacts {
     has_if_let_expr: bool,
     has_deep_pattern_surface: bool,
     has_generic_self_method: bool,
+    has_string_interpolation: bool,
+    has_string_slice_surface: bool,
+    has_char_at_surface: bool,
 }
 
 /// Source item discovered by the byte-level scanner.
