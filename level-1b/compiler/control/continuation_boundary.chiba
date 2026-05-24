@@ -23,9 +23,12 @@ data ContinuationBoundaryCheck {
 
 /// Check whether active continuations cross a world/thread boundary.
 def check_continuation_boundary(module: UsageModule): Result[UsageModule, SemanticDiagnostics] =
-    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-        .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: continuation boundary scan absent"))
-        .freeze()))
+    if module.facts.len() == 0 { Ok(module) }
+    else {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: continuation boundary scan absent"))
+            .freeze()))
+    }
 
 /// Return true when the boundary is illegal for continuation capture/resume.
 def ContinuationBoundary.illegal_for_continuation(self): bool = true

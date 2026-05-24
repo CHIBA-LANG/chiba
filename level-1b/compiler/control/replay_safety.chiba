@@ -48,9 +48,7 @@ def ReplayCaptureKind.uses_shared_reference_semantics(self): bool =
 /// Check multi-shot replay-safety after world/thread boundaries are rejected.
 def check_replay_safety(module: UsageModule): Result[ReplaySafeModule, SemanticDiagnostics] =
     if module.facts.len() == 0 {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<control>", 0, 0, "missing-facts: replay-safety usage facts absent"))
-            .freeze()))
+        Ok(ReplaySafeModule(module, replay_safety_facts_none()))
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: replay-safety capture classification absent"))
@@ -62,3 +60,7 @@ type ReplaySafeModule {
     usage: UsageModule,
     replay: Array[ReplaySafetyFact],
 }
+
+/// Empty replay-safety fact stream for modules without captured continuations.
+def replay_safety_facts_none(): Array[ReplaySafetyFact] =
+    Vec[ReplaySafetyFact].new().freeze()
