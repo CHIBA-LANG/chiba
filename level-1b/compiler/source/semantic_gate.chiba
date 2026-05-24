@@ -6,6 +6,7 @@ use compiler.source.project.*
 /// Source semantic gate error kind.
 data SourceGateErrorKind {
     SourceGateUtf8ScannerUnsupported,
+    SourceGateUnknownCompileIfPredicate,
     SourceGateMissingNamespace,
     SourceGateItemScanAbsent,
     SourceGateTypedItemLoweringAbsent,
@@ -52,6 +53,21 @@ def source_project_has_item(project: ProjectSurface): bool =
 def source_project_has_utf8_warning(project: ProjectSurface): bool =
     project.facts.utf8_warnings.len() > 0
 
+/// Return true when any compile_if fact contains an unknown predicate shape.
+def source_compile_if_has_unknown(facts: Array[SourceCompileIfFacts], index: usize): bool =
+    if index == facts.len() { false }
+    else if facts.get(index).has_unknown_predicate { true }
+    else {
+        match facts.get(index).shape {
+            SourceCompileIfUnknown => true
+            _ => source_compile_if_has_unknown(facts, index + 1)
+        }
+    }
+
+/// Return true when project source facts contain an unsupported compile_if predicate.
+def source_project_has_unknown_compile_if(project: ProjectSurface): bool =
+    source_compile_if_has_unknown(project.facts.compile_if, 0)
+
 /// Build fail-closed source gate diagnostics from source scan facts.
 def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
     if source_project_has_utf8_warning(project) {
@@ -60,6 +76,13 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceFileId { index: 0 },
                 SourceGateUtf8ScannerUnsupported,
                 "missing-facts: UTF-8 aware source scanner absent"))
+            .freeze()
+    } else if source_project_has_unknown_compile_if(project) {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateUnknownCompileIfPredicate,
+                "missing-facts: unknown compile_if predicate shape"))
             .freeze()
     } else if source_project_has_namespace(project) == false {
         Vec[SourceGateError].new()
