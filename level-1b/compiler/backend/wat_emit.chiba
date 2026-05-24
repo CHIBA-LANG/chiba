@@ -9,6 +9,13 @@ type WatModule {
     text: String,
 }
 
+/// Executable WAT emission obligation for non-empty Core programs.
+type WatEmissionObligation {
+    op: CoreOpKind,
+    requires_executable_instruction: bool,
+    requires_layout_serialization: bool,
+}
+
 /// One source-facing symbol mapping for diagnostics and WAT comments.
 type SymbolDebugEntry {
     source_symbol: String,
@@ -57,9 +64,23 @@ def emit_core_op(op: CoreOp): Result[String, SemanticDiagnostics] =
         .push(SemanticDiagnostic("<backend>", 0, 0, "missing-backend-layout: WAT lowering for ".concat(op.kind.wat_label()).concat(" absent")))
         .freeze()))
 
+/// Convert one Core op into an executable WAT emission obligation.
+def wat_emission_obligation_from_op(op: CoreOp): WatEmissionObligation =
+    WatEmissionObligation {
+        op: op.kind,
+        requires_executable_instruction: true,
+        requires_layout_serialization: op.kind.requires_layout(),
+    }
+
+/// Build WAT emission obligations in stable Core op order.
+def wat_emission_obligations(ops: Array[CoreOp], index: usize, out: Vec[WatEmissionObligation]): Array[WatEmissionObligation] =
+    if index == ops.len() { out.freeze() }
+    else { wat_emission_obligations(ops, index + 1, out.push(wat_emission_obligation_from_op(ops.get(index)))) }
+
 /// Emit validated Core as WAT.
 def emit_wat(module: ValidatedCoreModule): Result[WatModule, SemanticDiagnostics] =
-    if module.core.ops.len() == 0 {
+    let obligations = wat_emission_obligations(module.core.ops, 0, Vec[WatEmissionObligation].new())
+    if obligations.len() == 0 {
         Ok(empty_wat_module())
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
