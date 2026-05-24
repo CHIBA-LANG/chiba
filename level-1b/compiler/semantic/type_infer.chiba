@@ -90,6 +90,15 @@ type GlobalInitSurfaceFact {
     has_ref_type: bool,
 }
 
+/// Global initialization obligation before dependency sorting and cycle checks.
+type GlobalInitObligation {
+    owner: BinderId,
+    file: SourceFileId,
+    requires_module_load_init: bool,
+    requires_dependency_edge: bool,
+    requires_world_local_ref: bool,
+}
+
 /// Pipe surface fact before placeholder and receiver-first desugaring.
 type PipeSurfaceFact {
     owner: BinderId,
@@ -415,6 +424,21 @@ def global_init_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton]
             None => global_init_surface_facts_from_skeletons(skeletons, index + 1, out)
         }
     }
+
+/// Convert one global init surface fact into an init graph obligation.
+def global_init_obligation_from_surface(fact: GlobalInitSurfaceFact): GlobalInitObligation =
+    GlobalInitObligation {
+        owner: fact.owner,
+        file: fact.file,
+        requires_module_load_init: fact.has_initializer,
+        requires_dependency_edge: fact.has_dependency,
+        requires_world_local_ref: fact.has_ref_type && fact.world_local,
+    }
+
+/// Convert global init facts in stable owner order.
+def global_init_obligations_from_surface(facts: Array[GlobalInitSurfaceFact], index: usize, out: Vec[GlobalInitObligation]): Array[GlobalInitObligation] =
+    if index == facts.len() { out.freeze() }
+    else { global_init_obligations_from_surface(facts, index + 1, out.push(global_init_obligation_from_surface(facts.get(index)))) }
 
 /// Return true when an item body contains pipe syntax.
 def typed_item_has_pipe_surface(item: TypedItemSkeleton): bool =
@@ -744,6 +768,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let branching_surface = branching_surface_facts_from_skeletons(skeletons, 0, Vec[BranchingSurfaceFact].new())
     let control_surface = control_surface_facts_from_skeletons(skeletons, 0, Vec[ControlSurfaceFact].new())
     let global_init_surface = global_init_surface_facts_from_skeletons(skeletons, 0, Vec[GlobalInitSurfaceFact].new())
+    let global_init_obligations = global_init_obligations_from_surface(global_init_surface, 0, Vec[GlobalInitObligation].new())
     let pipe_surface = pipe_surface_facts_from_skeletons(skeletons, 0, Vec[PipeSurfaceFact].new())
     let pipe_lowering_obligations = pipe_lowering_obligations_from_surface(pipe_surface, 0, Vec[PipeLoweringObligation].new())
     let pattern_surface = pattern_surface_facts_from_skeletons(skeletons, 0, Vec[PatternSurfaceFact].new())
@@ -770,7 +795,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .freeze()))
         }
     } else if typed_item_skeletons_have_global_init_surface(skeletons, 0) {
-        if global_init_surface.len() == 0 {
+        if global_init_surface.len() == 0 || global_init_obligations.len() == 0 {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: global initialization surface fact generation absent"))
                 .freeze()))

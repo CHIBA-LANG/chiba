@@ -34,6 +34,7 @@
 	- [x] generic surface facts：typed module 已记录 explicit params、auto-generic、explicit instantiation、generic Self method surface；真实 template body checking 与 instantiation discharge 仍 fail-closed。
 - [ ] globals/init：module-load init order、dependency/cycle、side-effect init lowering 没完整。
 	- [x] global init surface facts：typed module 已记录静态值 initializer/dependency/world_local/ref surface；真实 init order、cycle、module-load lowering 仍 fail-closed。
+	- [x] global init obligations：typed pass 已把 init surface 转成 `GlobalInitObligation`；依赖排序、cycle 检测、module-load lowering 仍未完成。
 - [ ] pattern/match：deep pattern lowering、exhaustiveness、if let env 规则没完整 primary 实现。
 	- [x] pattern surface facts：typed module 已记录 match/if-let/deep-pattern/function-pattern/wildcard-let surface；真实 DFT lowering、exhaustiveness、if-let 失败分支 env 仍 fail-closed。
 - [ ] pipe lowering：placeholder、receiver-first method pipe、operator/method interaction 还没完整 primary lowering。
