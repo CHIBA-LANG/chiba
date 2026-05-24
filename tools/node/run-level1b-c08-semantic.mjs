@@ -63,6 +63,7 @@ const REQUIRED_TEXT = [
   "def check_unsafe_type",
   "def check_sendable_callable_storage",
   "def check_sendable_callable_storages",
+  "def capability_check_diagnostic",
   "callable_storage: Array[CallableStorageFact]",
   "sendable callable storage excludes continuations",
   "data TemplateObligation",

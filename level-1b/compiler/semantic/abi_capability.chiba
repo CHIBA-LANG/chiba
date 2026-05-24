@@ -45,8 +45,22 @@ def check_extern_abi(module: TypedModule): Result[TypedModule, SemanticDiagnosti
         .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: extern ABI signature scan absent"))
         .freeze()))
 
+/// Convert a capability check failure into semantic diagnostics.
+def capability_check_diagnostic(check: CapabilityCheck): Option[SemanticDiagnostics] =
+    match check {
+        CapabilityOk => None
+        CapabilityErr(message) =>
+            Some(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, message))
+                .freeze()))
+    }
+
 /// Check Ref/UnsafeRef/Ptr/Atomic capability rules.
 def check_capabilities(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
-    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-        .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: builtin capability legality scan absent"))
-        .freeze()))
+    match capability_check_diagnostic(check_sendable_callable_storages(module.callable_storage, 0)) {
+        Some(errors) => Err(errors)
+        None =>
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: builtin capability legality scan absent"))
+                .freeze()))
+    }
