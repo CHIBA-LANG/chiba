@@ -29,14 +29,6 @@ def check_replay_safety(module: UsageModule): Result[ReplaySafeModule, SemanticD
             .freeze()))
     }
 
-/// Convert usage facts into replay-safety facts in stable order.
-def replay_safety_facts(facts: Array[UsageFact], index: usize, out: Vec[ReplaySafetyFact]): Array[ReplaySafetyFact] =
-    if index == facts.len() { out.freeze() }
-    else {
-        let fact = facts.get(index)
-        replay_safety_facts(facts, index + 1, out.push(ReplaySafetyFact(fact.binder, true)))
-    }
-
 /// Module whose continuations are legal for lowering.
 type ReplaySafeModule {
     usage: UsageModule,
