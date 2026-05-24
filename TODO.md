@@ -50,6 +50,7 @@
 - [ ] answer/control scan：reset/shift/shiftn answer facts 没做。
 	- [x] control surface detection：source/typed surface 已标记 reset/shift/shiftn；无 delimited-control syntax 的 module 可越过 answer_control，出现 control syntax 仍 fail-closed。
 	- [x] control surface facts：`TypedModule.control_surface` 聚合 reset/shift/shiftn owner facts，answer_control 以后消费该事实流。
+	- [x] answer/control obligations：control surface 已转成 reset/shift/shiftn answer obligations；真实表达式级 answer scan 仍未完成。
 - [ ] usage analysis：只有粗 fact threading；真实 binder/lambda/closure/continuation usage count 没做。
 	- [x] closure/lambda surface facts：source/typed facts 已记录 lambda 与 trailing closure surface，usage/capture analysis 不再只能靠 callable storage 猜。
 	- [x] CPS closure usage subjects：CPS usage pass 已把 lambda/trailing closure surface 转成 `UseSubjectLambda` / `UseSubjectClosure` facts；真实 capture/use-count traversal 仍未完成。

@@ -17,6 +17,15 @@ type AnswerFact {
     answer: SemType,
 }
 
+/// Answer/control obligation before expression-level answer inference.
+type AnswerControlObligation {
+    owner: BinderId,
+    file: SourceFileId,
+    requires_reset_answer: bool,
+    requires_shift_answer: bool,
+    requires_multishot_answer: bool,
+}
+
 /// Return true when a typed item mentions reset/shift/shiftn control syntax.
 def typed_item_has_control_surface(item: TypedItemSkeleton): bool =
     if item.surface.has_reset_expr { true }
@@ -35,13 +44,29 @@ def answer_facts_none(): Array[AnswerFact] =
 
 /// Check `reset` and `shift` answer consistency.
 def check_answer_control(module: TypedModule): Result[AnswerControlModule, SemanticDiagnostics] =
-    if module.control_surface.len() > 0 {
+    let obligations = answer_control_obligations(module.control_surface, 0, Vec[AnswerControlObligation].new())
+    if module.control_surface.len() > 0 && obligations.len() > 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<control>", 0, 0, "missing-facts: answer/control expression scan absent"))
             .freeze()))
     } else {
         Ok(AnswerControlModule(module, answer_facts_none()))
     }
+
+/// Convert one control surface fact into answer/control obligations.
+def answer_control_obligation_from_surface(fact: ControlSurfaceFact): AnswerControlObligation =
+    AnswerControlObligation {
+        owner: fact.owner,
+        file: fact.file,
+        requires_reset_answer: fact.has_reset,
+        requires_shift_answer: fact.has_shift,
+        requires_multishot_answer: fact.has_shiftn,
+    }
+
+/// Build answer/control obligations in stable owner order.
+def answer_control_obligations(facts: Array[ControlSurfaceFact], index: usize, out: Vec[AnswerControlObligation]): Array[AnswerControlObligation] =
+    if index == facts.len() { out.freeze() }
+    else { answer_control_obligations(facts, index + 1, out.push(answer_control_obligation_from_surface(facts.get(index)))) }
 
 /// Typed module annotated with answer/control facts.
 type AnswerControlModule {
