@@ -17,6 +17,7 @@ data ClosureSimplification {
 type OptimizedClosureModule {
     source: LiftedClosureModule,
     simplifications: Array[ClosureSimplification],
+    closures: Array[ClosureLoweringFact],
     continuations: Array[ContinuationLoweringFact],
 }
 
@@ -26,6 +27,7 @@ def simplify_closure_envs(module: LiftedClosureModule): OptimizedClosureModule =
     OptimizedClosureModule(
         module,
         closure_simplifications(module.functions, 0, Vec[ClosureSimplification].new()),
+        closure_lowering_facts(module.functions, 0, Vec[ClosureLoweringFact].new()),
         module.source.continuations)
 
 /// Pick the final simplification for one lifted closure.
@@ -37,6 +39,57 @@ def lifted_function_simplification(function: LiftedFunction): ClosureSimplificat
 def closure_simplifications(functions: Array[LiftedFunction], index: usize, out: Vec[ClosureSimplification]): Array[ClosureSimplification] =
     if index == functions.len() { out.freeze() }
     else { closure_simplifications(functions, index + 1, out.push(lifted_function_simplification(functions.get(index)))) }
+
+/// Convert closure-conversion capture legality into backend-independent IR facts.
+def closure_capture_class(kind: CaptureKind): CaptureClass =
+    match kind {
+        CaptureValue => CaptureValue
+        CaptureReplaySafeContinuation => CaptureReplaySafeContinuation
+        CaptureSharedRefCell => CaptureSharedRefCell
+        CaptureWorldLocalRejected => CaptureRejectedWorldLocal
+        CaptureThreadLocalRejected => CaptureRejectedThreadLocal
+        CaptureUnsafeRejected => CaptureRejectedUnsafe
+    }
+
+/// Convert one closure env field into the IR env representation.
+def closure_env_field_from_capture(field: CaptureField): EnvField =
+    EnvField {
+        binder: field.binder,
+        class: closure_capture_class(field.kind),
+    }
+
+/// Convert capture fields into IR env fields.
+def closure_env_fields_from_captures(fields: Array[CaptureField], index: usize, out: Vec[EnvField]): Array[EnvField] =
+    if index == fields.len() { out.freeze() }
+    else { closure_env_fields_from_captures(fields, index + 1, out.push(closure_env_field_from_capture(fields.get(index)))) }
+
+/// Convert one closure-conversion layout into a backend-independent env.
+def closure_env_from_layout(layout: ClosureEnvLayout): ClosureEnv =
+    ClosureEnv {
+        owner: layout.owner,
+        fields: closure_env_fields_from_captures(layout.fields, 0, Vec[EnvField].new()),
+    }
+
+/// Build the backend-consumable closure lowering fact for one lifted function.
+def closure_lowering_fact(function: LiftedFunction): ClosureLoweringFact =
+    if function.no_capture() {
+        ClosureLoweringFact {
+            owner: function.owner,
+            kind: ClosureNoCaptureDirect,
+            env: None,
+        }
+    } else {
+        ClosureLoweringFact {
+            owner: function.owner,
+            kind: ClosureCapturingEnv,
+            env: Some(closure_env_from_layout(function.env)),
+        }
+    }
+
+/// Build closure lowering facts in stable lifted-function order.
+def closure_lowering_facts(functions: Array[LiftedFunction], index: usize, out: Vec[ClosureLoweringFact]): Array[ClosureLoweringFact] =
+    if index == functions.len() { out.freeze() }
+    else { closure_lowering_facts(functions, index + 1, out.push(closure_lowering_fact(functions.get(index)))) }
 
 /// Return true when a simplification removes runtime allocation.
 def ClosureSimplification.removes_allocation(self): bool =

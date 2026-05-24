@@ -12,6 +12,7 @@ data CaptureClass {
     CaptureSharedRefCell,
     CaptureRejectedWorldLocal,
     CaptureRejectedThreadLocal,
+    CaptureRejectedUnsafe,
 }
 
 /// Captured field in an environment.
