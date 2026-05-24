@@ -392,6 +392,14 @@ def source_scan_item_has_shift_expr(text: String, offset: usize): bool =
 def source_scan_item_has_shiftn_expr(text: String, offset: usize): bool =
     source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "shiftn ")
 
+/// Return true when an item region contains lambda arrow surface.
+def source_scan_item_has_lambda_expr(text: String, offset: usize): bool =
+    source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "=>")
+
+/// Return true when an item region contains trailing closure surface.
+def source_scan_item_has_trailing_closure_expr(text: String, offset: usize): bool =
+    source_region_has_text(text, offset, source_scan_item_region_end(text, offset), "{|")
+
 /// Return true when a method receiver uses generic owner syntax and `Self`.
 def source_scan_item_has_generic_self_method(text: String, offset: usize): bool =
     source_line_has_text_before_byte(text, offset, ".", 40)
@@ -557,6 +565,8 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_reset_expr: source_scan_item_has_reset_expr(text, offset),
         has_shift_expr: source_scan_item_has_shift_expr(text, offset),
         has_shiftn_expr: source_scan_item_has_shiftn_expr(text, offset),
+        has_lambda_expr: source_scan_item_has_lambda_expr(text, offset),
+        has_trailing_closure_expr: source_scan_item_has_trailing_closure_expr(text, offset),
         has_generic_self_method: source_scan_item_has_generic_self_method(text, offset),
         has_string_interpolation: source_scan_item_has_string_interpolation(text, offset),
         has_string_slice_surface: source_scan_item_has_string_slice_surface(text, offset),

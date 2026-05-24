@@ -165,6 +165,8 @@ type SourceItemSurfaceFacts {
     has_reset_expr: bool,
     has_shift_expr: bool,
     has_shiftn_expr: bool,
+    has_lambda_expr: bool,
+    has_trailing_closure_expr: bool,
     has_generic_self_method: bool,
     has_string_interpolation: bool,
     has_string_slice_surface: bool,

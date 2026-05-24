@@ -40,6 +40,7 @@
 	- [x] control surface detection：source/typed surface 已标记 reset/shift/shiftn；无 delimited-control syntax 的 module 可越过 answer_control，出现 control syntax 仍 fail-closed。
 	- [x] control surface facts：`TypedModule.control_surface` 聚合 reset/shift/shiftn owner facts，answer_control 以后消费该事实流。
 - [ ] usage analysis：只有粗 fact threading；真实 binder/lambda/closure/continuation usage count 没做。
+	- [x] closure/lambda surface facts：source/typed facts 已记录 lambda 与 trailing closure surface，usage/capture analysis 不再只能靠 callable storage 猜。
 	- [x] no-continuation usage path：无 callable/continuation obligations 的 module 现在可通过 usage/boundary/replay no-op path；有 continuation facts 仍 fail-closed 等真实分析。
 - [ ] continuation boundary：world/thread/send boundary 检查没做。
 - [ ] ContN replay safety：capture classification、Ref[T] shared-reference、non-replay reject 没做。
