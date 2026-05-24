@@ -18,6 +18,13 @@ data CoreTailPosition {
     CorePlainCall,
 }
 
+/// Backend-neutral block terminator required after Core lowering.
+data CoreBlockTerminator {
+    CoreBlockReturn,
+    CoreBlockTailCall,
+    CoreBlockContinue,
+}
+
 /// Runtime state machine required by a materialized Core operation.
 data CoreRuntimeState {
     CoreNoRuntimeState,
@@ -54,6 +61,15 @@ type WasmGcCoreModule {
     source: OptimizedClosureModule,
     layouts: WasmGcLayoutTable,
     ops: Array[CoreOp],
+    block_obligations: Array[CoreBlockLoweringObligation],
+}
+
+/// Core-to-block lowering obligation before executable WAT emission.
+type CoreBlockLoweringObligation {
+    owner: Option[BinderId],
+    terminator: CoreBlockTerminator,
+    requires_function_return: bool,
+    requires_tail_call: bool,
 }
 
 /// Return the closure environment layout used by escaping closures.
@@ -186,6 +202,32 @@ def lower_continuation_facts(facts: Array[ContinuationLoweringFact], index: usiz
     if index == facts.len() { out.freeze() }
     else { lower_continuation_facts(facts, index + 1, push_continuation_core_ops(out, facts.get(index))) }
 
+/// Pick the block terminator required by one Core op.
+def core_block_terminator_for_op(op: CoreOp): CoreBlockTerminator =
+    match op.tail {
+        CoreTailCall => CoreBlockTailCall
+        CorePlainCall =>
+            match op.kind {
+                CoreOpTailCall => CoreBlockTailCall
+                _ => CoreBlockContinue
+            }
+    }
+
+/// Convert one Core op into a block-lowering obligation.
+def core_block_lowering_obligation_from_op(op: CoreOp): CoreBlockLoweringObligation =
+    let terminator = core_block_terminator_for_op(op)
+    CoreBlockLoweringObligation {
+        owner: op.owner,
+        terminator: terminator,
+        requires_function_return: false,
+        requires_tail_call: terminator == CoreBlockTailCall,
+    }
+
+/// Convert Core ops into block-lowering obligations in stable order.
+def core_block_lowering_obligations(ops: Array[CoreOp], index: usize, out: Vec[CoreBlockLoweringObligation]): Array[CoreBlockLoweringObligation] =
+    if index == ops.len() { out.freeze() }
+    else { core_block_lowering_obligations(ops, index + 1, out.push(core_block_lowering_obligation_from_op(ops.get(index)))) }
+
 /// Append one Core op array to another builder.
 def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[CoreOp] =
     if index == ops.len() { out }
@@ -195,11 +237,13 @@ def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[Cor
 def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
     let closure_ops = lower_closure_facts(module.closures, 0, Vec[CoreOp].new())
     let continuation_ops = lower_continuation_facts(module.continuations, 0, Vec[CoreOp].new())
+    let ops = append_core_ops(Vec[CoreOp].new(), closure_ops, 0)
+        |> append_core_ops(continuation_ops, 0)
     WasmGcCoreModule {
         source: module,
         layouts: build_wasm_gc_layouts(module),
-        ops: append_core_ops(Vec[CoreOp].new(), closure_ops, 0)
-            |> append_core_ops(continuation_ops, 0),
+        ops: ops,
+        block_obligations: core_block_lowering_obligations(ops, 0, Vec[CoreBlockLoweringObligation].new()),
     }
 
 /// Return true when a Core op requires a layout reference.
