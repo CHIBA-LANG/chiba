@@ -33,6 +33,7 @@
 	- [x] pattern surface facts：typed module 已记录 match/if-let/deep-pattern/function-pattern/wildcard-let surface；真实 DFT lowering、exhaustiveness、if-let 失败分支 env 仍 fail-closed。
 - [ ] pipe lowering：placeholder、receiver-first method pipe、operator/method interaction 还没完整 primary lowering。
 	- [x] pipe surface facts：typed module 已记录 pipe/placeholder/chain surface；真实 placeholder expansion、receiver-first desugar、operator/method interaction 仍 fail-closed。
+	- [x] pipe repeated-placeholder gate：spec 与 checkpoint fixture 已锁定 `a |> f(b,_,_) == f(b,a,a)`；真实 lowering 仍未完成。
 - [ ] ADT tuple bridge：Ctor <-> (:ctor, ...)、tuple_to_adt/adt_to_tuple intrinsic lowering 没完整。
 - [ ] compiler intrinsic namespace：有部分 contract；真实 intrinsic resolution/lowering 没完整。
 	- [x] compiler intrinsic surface facts：typed module 已记录 compiler intrinsic call 与 tuple type surface；真实 intrinsic namespace resolution/lowering 仍 fail-closed。

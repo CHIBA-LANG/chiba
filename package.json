@@ -25,6 +25,7 @@
     "level1b:c10-closure-package": "node tools/node/run-level1b-c10-closure-package.mjs",
     "level1b:c11-backend": "node tools/node/run-level1b-c11-backend.mjs",
     "level1b:branching": "node tools/node/run-level1b-branching-gate.mjs",
+    "level1b:pipe": "node tools/node/run-level1b-pipe-gate.mjs",
     "level1b:cir-boundary": "node tools/node/run-level1b-cir-boundary.mjs",
     "level1b:attribute-spec": "node tools/node/run-level1b-attribute-spec-gate.mjs",
     "level1b:truthfulness-audit": "node tools/node/run-level1b-truthfulness-audit.mjs",
