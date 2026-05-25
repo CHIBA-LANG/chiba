@@ -335,6 +335,14 @@ function checkParam0TailcallWatSmoke() {
   pass("param0 tailcall WAT parse");
 }
 
+function checkMultiParamFunctionWatSmoke() {
+  const wat = `(module
+(func $chiba.add2 (param i32) (param i32) (result i32) local.get 0)
+)`;
+  compileWat(wat);
+  pass("multi-param function WAT parse");
+}
+
 function functionWat(symbol, body, exportName = "") {
   const exportText = exportName.length === 0 ? "" : ` (export "${exportName}")`;
   return `(func $chiba.${symbol}${exportText} (result i32) ${body})`;
@@ -460,6 +468,7 @@ function main() {
   checkTailcallWatSmoke();
   checkParamTailcallWatSmoke();
   checkParam0TailcallWatSmoke();
+  checkMultiParamFunctionWatSmoke();
   checkSyntheticTailcallTargetWatFixture();
   checkBranchWatSmoke();
   checkParamConditionBranchWatSmoke();

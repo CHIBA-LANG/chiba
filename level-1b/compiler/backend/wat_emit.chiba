@@ -200,7 +200,7 @@ def emit_core_if_else_tail_call_i32_const(condition: CoreBranchCondition, then_t
 /// Emit parameters for the first executable i32 function slice.
 def emit_core_function_params(i32_param_count: usize): String =
     if i32_param_count == 0 { "" }
-    else { "(param i32) " }
+    else { "(param i32) ".concat(emit_core_function_params(i32_param_count - 1)) }
 
 /// Emit the body instructions for one lowered Core function.
 def emit_core_function_body(body: Option[CoreFunctionBody]): String =
