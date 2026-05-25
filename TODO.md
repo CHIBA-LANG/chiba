@@ -387,6 +387,9 @@
 	- **已确认**:
 		- 方向上参考 TypeScript 的 source-facing 体验；
 		- 优先让用户可理解的名字、报错、调试体验正确，再补 manifest/debug map。
+	- **已落地切片**:
+		- C11 `SymbolDebugManifest` 已可从 validated Core function symbols 生成 `source -> lowered -> $chiba.*` 映射，不再直接 fail 于 manifest generation absent；
+		- 完整 import / method / ctor / intrinsic debug path 仍待 namespace/name resolution 接入。
 
 - [ ] namespace ownership / isolation 收口
 	- **目标**:

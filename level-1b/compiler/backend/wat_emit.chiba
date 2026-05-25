@@ -30,15 +30,51 @@ type SymbolDebugManifest {
     entries: Array[SymbolDebugEntry],
 }
 
-/// Build the symbol debug manifest once real name resolution owns symbol paths.
+/// Build one source-facing debug entry for a Core function symbol.
+def symbol_debug_entry_from_op(op: CoreOp): Option[SymbolDebugEntry] =
+    match op.function_symbol {
+        Some(symbol) =>
+            Some(SymbolDebugEntry {
+                source_symbol: symbol.name,
+                lowered_symbol: symbol.name,
+                mangled_symbol: "$chiba.".concat(symbol.name),
+            })
+        None => None
+    }
+
+/// Collect symbol debug entries in Core op order.
+def build_symbol_debug_entries(ops: Array[CoreOp], index: usize, out: Vec[SymbolDebugEntry]): Array[SymbolDebugEntry] =
+    if index == ops.len() { out.freeze() }
+    else {
+        match symbol_debug_entry_from_op(ops.get(index)) {
+            Some(entry) => build_symbol_debug_entries(ops, index + 1, out.push(entry))
+            None => build_symbol_debug_entries(ops, index + 1, out)
+        }
+    }
+
+/// Build the symbol debug manifest from validated Core symbols.
 def build_symbol_debug_manifest(module: ValidatedCoreModule): Result[SymbolDebugManifest, SemanticDiagnostics] =
-    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-        .push(SemanticDiagnostic("<backend>", 0, 0, "missing-backend-layout: symbol debug manifest generation absent"))
-        .freeze()))
+    Ok(SymbolDebugManifest {
+        entries: build_symbol_debug_entries(module.core.ops, 0, Vec[SymbolDebugEntry].new()),
+    })
+
+/// Render one debug symbol mapping.
+def symbol_debug_entry_as_text(entry: SymbolDebugEntry): String =
+    entry.source_symbol
+        .concat(" -> ")
+        .concat(entry.lowered_symbol)
+        .concat(" -> ")
+        .concat(entry.mangled_symbol)
+        .concat("\n")
+
+/// Render debug symbol entries in stable order.
+def symbol_debug_entries_as_text(entries: Array[SymbolDebugEntry], index: usize, out: String): String =
+    if index == entries.len() { out }
+    else { symbol_debug_entries_as_text(entries, index + 1, out.concat(symbol_debug_entry_as_text(entries.get(index)))) }
 
 /// Render a symbol debug manifest in source/lowered/mangled order.
 def symbol_debug_manifest_as_text(manifest: SymbolDebugManifest): String =
-    "source symbol -> lowered symbol -> final mangled name\n"
+    symbol_debug_entries_as_text(manifest.entries, 0, "source symbol -> lowered symbol -> final mangled name\n")
 
 /// Return the WAT type label for a backend layout kind.
 def WasmGcLayoutKind.wat_type_label(self): str =
