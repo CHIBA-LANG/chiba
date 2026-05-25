@@ -80,6 +80,7 @@
 	- [x] CPS tail-form invariant facts：无 multi-shot continuation 的普通函数现在生成 `CpsTailFormFact`，明确 `all_non_multishot_calls_are_tail`；真实 call graph CPS / administrative beta 仍未完成。
 	- [x] CPS tail-call fact：`TypedFunctionTailCall(target)` 会在 C09 标成 `CpsTailCall(target)`，普通非 multi-shot 调用必须保持尾位置。
 	- [x] CPS multi-shot exception fact：ContN continuation facts 会追加 `CpsMaterializedMultiShotFrame`，把 multi-shot frame/package 作为尾递归规则的显式例外。
+	- [x] CPS pattern decision facts：typed DFT pattern facts 现在进入 `CpsPatternDecisionFact`，显式要求 deep pattern lower 成 test-chain + if/else + field extract，并保留 if-let 失败分支无 binding 与 match 缺失静态 case error。
 - [ ] CIR nanopass IR：清晰分层还不够；需要语言级 CPS/CIR facts，且保证不耦合 Wasm。
 	- [x] CIR/backend boundary gate：compiler/ir/control/closure 不允许出现 Wasm/WAT/Binaryen/funcref/eqref/backend opcode；backend 细节只允许在 backend 层。
 - [ ] closure conversion：no-capture direct、capturing env、env field extraction、call rewrite 没完整。

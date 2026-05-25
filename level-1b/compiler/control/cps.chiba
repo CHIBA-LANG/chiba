@@ -18,6 +18,7 @@ type CpsModule {
     continuations: Array[ContinuationFact],
     tail_forms: Array[CpsTailFormFact],
     branch_joins: Array[CpsBranchJoinFact],
+    pattern_decisions: Array[CpsPatternDecisionFact],
 }
 
 /// Tail shape after one-pass CPS and administrative beta reduction.
@@ -63,6 +64,16 @@ type CpsBranchJoinFact {
     kind: BranchJoinKind,
     requires_join_continuation: bool,
     all_arms_resume_to_same_tail: bool,
+}
+
+/// CPS-level pattern decision fact.
+type CpsPatternDecisionFact {
+    owner: BinderId,
+    file: SourceFileId,
+    requires_test_chain: bool,
+    lowers_to_if_else_and_field_extract: bool,
+    failure_env_has_no_bindings: bool,
+    missing_static_case_is_error: bool,
 }
 
 /// Pick the primary branch-join kind for a coarse branching plan.
@@ -121,7 +132,8 @@ def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostic
             module,
             continuations,
             cps_tail_form_facts_from_continuations(continuations, 0, tail_builder),
-            cps_branch_join_facts_from_plans(branches, 0, Vec[CpsBranchJoinFact].new())))
+            cps_branch_join_facts_from_plans(branches, 0, Vec[CpsBranchJoinFact].new()),
+            cps_pattern_decision_facts(module.usage.answer.typed)))
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: one-pass CPS with administrative beta-reduction absent"))
@@ -190,3 +202,35 @@ def CpsContinuation.materialized(self): bool =
         CpsPackage(_) => true
         _ => false
     }
+
+/// Return true when an exhaustiveness fact for an owner requires static missing-case errors.
+def pattern_exhaustiveness_requires_error(facts: Array[PatternExhaustivenessFact], owner: BinderId, index: usize): bool =
+    if index == facts.len() { false }
+    else if facts.get(index).owner.index == owner.index { facts.get(index).missing_case_is_error }
+    else { pattern_exhaustiveness_requires_error(facts, owner, index + 1) }
+
+/// Return true when one pattern environment fact proves failure has no bindings.
+def pattern_failure_env_has_no_bindings(facts: Array[PatternEnvFact], owner: BinderId, index: usize): bool =
+    if index == facts.len() { true }
+    else if facts.get(index).owner.index == owner.index { facts.get(index).failure_branch_introduces_bindings == false }
+    else { pattern_failure_env_has_no_bindings(facts, owner, index + 1) }
+
+/// Convert one DFT step into a CPS decision fact.
+def cps_pattern_decision_fact_from_step(module: TypedModule, step: PatternDftStep): CpsPatternDecisionFact =
+    CpsPatternDecisionFact {
+        owner: step.owner,
+        file: step.file,
+        requires_test_chain: step.test != PatternTestNone,
+        lowers_to_if_else_and_field_extract: step.continues_depth_first || step.extracts_field,
+        failure_env_has_no_bindings: pattern_failure_env_has_no_bindings(module.pattern_envs, step.owner, 0),
+        missing_static_case_is_error: pattern_exhaustiveness_requires_error(module.pattern_exhaustiveness, step.owner, 0),
+    }
+
+/// Build CPS pattern decision facts in typed pattern order.
+def cps_pattern_decision_facts_from_steps(module: TypedModule, steps: Array[PatternDftStep], index: usize, out: Vec[CpsPatternDecisionFact]): Array[CpsPatternDecisionFact] =
+    if index == steps.len() { out.freeze() }
+    else { cps_pattern_decision_facts_from_steps(module, steps, index + 1, out.push(cps_pattern_decision_fact_from_step(module, steps.get(index)))) }
+
+/// Build all CPS pattern decision facts from typed pattern facts.
+def cps_pattern_decision_facts(module: TypedModule): Array[CpsPatternDecisionFact] =
+    cps_pattern_decision_facts_from_steps(module, module.pattern_dft_steps, 0, Vec[CpsPatternDecisionFact].new())
