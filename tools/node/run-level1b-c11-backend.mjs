@@ -35,7 +35,9 @@ const REQUIRED_TEXT = [
   "data CoreI32ConstAtom",
   "data CoreBranchCondition",
   "CoreFunctionReturnI32FortyTwo",
+  "CoreFunctionReturnParam0",
   "CoreFunctionTailCall",
+  "CoreFunctionTailCallI32Const",
   "CoreFunctionIfElseI32Const",
   "CoreFunctionBranchJoinPending",
   "def core_i32_const_atom_from_typed",
@@ -44,7 +46,9 @@ const REQUIRED_TEXT = [
   "function_body: Option[CoreFunctionBody]",
   "type CoreFunctionSymbol",
   "function_symbol: Option[CoreFunctionSymbol]",
+  "i32_param_count: usize",
   "def emit_core_function_symbol",
+  "def emit_core_function_params",
   "frame_count: usize",
   "CoreOpFunction",
   "CoreOpStacklessFunction",
@@ -268,6 +272,15 @@ function checkTailcallWatSmoke() {
   pass("tailcall WAT parse");
 }
 
+function checkParamTailcallWatSmoke() {
+  const wat = `(module
+(func $chiba.id (param i32) (result i32) local.get 0)
+(func $chiba.main (export "main") (result i32) i32.const 42 return_call $chiba.id)
+)`;
+  compileWat(wat);
+  pass("param tailcall WAT parse");
+}
+
 function checkBranchWatSmoke() {
   const wat = `(module
 (func (export "main") (result i32) (if (result i32) (i32.const 1) (then (i32.const 42)) (else (i32.const 0))))
@@ -303,6 +316,7 @@ function main() {
   pass("backend source contract");
   checkMinimalFunctionWatSmoke();
   checkTailcallWatSmoke();
+  checkParamTailcallWatSmoke();
   checkBranchWatSmoke();
   checkContNPackageWatSmoke();
 

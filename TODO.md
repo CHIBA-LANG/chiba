@@ -37,6 +37,7 @@
 	- [x] typed elaboration obligations：`TypedElaboration` 现在携带 item/type/body traversal obligations；真实 typed AST expression lowering 仍未完成。
 	- [x] minimal codegen typed function fact：C08 现在为无复杂 surface 的简单 `def` 生成 `TypedFunctionBodyFact`，能保留 `main` 与 `i32.const 42` 竖切；完整 type expression / expression AST traversal 仍未完成。
 	- [x] minimal tail-call body fact：C08 现在能把极窄 `callee()` body 标成 `TypedFunctionTailCall(target)`，用于验证 CPS tail-call lowering；完整 typed call graph / namespace-aware callee resolution 仍未完成。
+	- [x] minimal i32 param/tail-call fact：C08 现在能保留 `id(x: i32)=x` 与 `main=id(42)` 这类一参 i32 tail-call 竖切；完整 param AST / call argument lowering 仍未完成。
 	- [x] minimal callee symbol check：极窄尾调用 target 必须能在当前 typed function set 中解析到同名函数；同 namespace 裸调用会解析成 owner-qualified symbol，完整 import/mangle-aware call graph 仍未完成。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 	- [x] generic surface facts：typed module 已记录 explicit params、auto-generic、explicit instantiation、generic Self method surface；真实 template body checking 与 instantiation discharge 仍 fail-closed。
@@ -96,6 +97,7 @@
 	- [x] minimal function WAT parse smoke：C11 gate 现在用 Binaryen parse/validate canonical layout + exported `main` 常量返回 WAT，避免 WAT skeleton 语法回归。
 	- [x] tailcall WAT parse smoke：C11 gate 现在用 Binaryen parse/validate `return_call` WAT；真实 typed call graph / tail-position lowering 仍 blocked。
 	- [x] minimal tail-call WAT emission：`CoreFunctionTailCall(target)` 现在 emit `return_call $chiba.<target>`，用于锁住尾调用代码生成形状；完整 namespace/mangle resolution 仍未完成。
+	- [x] minimal param tail-call WAT emission：C11 可 emit 一参 i32 function、`local.get 0` 与 `i32.const 42 return_call $target`；多参/非 const arg/普通 call 仍未完成。
 	- [x] Core tail-call symbol validation：C11 validator 已拒绝未定义的 `CoreFunctionTailCall(target)`，避免悬空 `return_call` 进入 WAT emission。
 	- [x] Core duplicate symbol validation：C11 validator 已拒绝重复 function symbol，避免 namespace/callee lowering 生成 ambiguous WAT labels。
 	- [x] ContN package WAT parse smoke：C11 gate 现在 parse/validate stackless resume + frame-chain/package layout WAT，明确 multi-shot continuation 是 materialized 例外；真实 capture/frame body extraction 仍 blocked。

@@ -86,6 +86,9 @@ def validate_core_cps_tail_form(op: CoreOp): Option[CoreValidationError] =
 def validate_core_function_body(op: CoreOp): Option[CoreValidationError] =
     match op.function_body {
         Some(CoreFunctionBranchJoinPending) => Some(CoreMissingBranchBody("branch join function body lowering absent"))
+        Some(CoreFunctionReturnParam0) =>
+            if op.i32_param_count == 0 { Some(CoreMissingBranchBody("parameter return body requires i32 param")) }
+            else { None }
         _ => None
     }
 
@@ -140,6 +143,9 @@ def validate_core_duplicate_symbol(module: WasmGcCoreModule, op: CoreOp, next_in
 def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValidationError] =
     match op.function_body {
         Some(CoreFunctionTailCall(target)) =>
+            if core_module_contains_symbol(module, target, 0) { None }
+            else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
+        Some(CoreFunctionTailCallI32Const(target, _)) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
         _ => None

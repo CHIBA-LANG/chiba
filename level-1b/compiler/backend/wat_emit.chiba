@@ -126,12 +126,23 @@ def emit_core_if_else_i32_const(condition: CoreBranchCondition, then_atom: CoreI
         .concat(emit_core_i32_const_atom(else_atom))
         .concat(")))")
 
+/// Emit parameters for the first executable i32 function slice.
+def emit_core_function_params(i32_param_count: usize): String =
+    if i32_param_count == 0 { "" }
+    else { "(param i32) " }
+
 /// Emit the body instructions for one lowered Core function.
 def emit_core_function_body(body: Option[CoreFunctionBody]): String =
     match body {
         Some(CoreFunctionReturnI32FortyTwo) => "(result i32) i32.const 42"
         Some(CoreFunctionReturnI32Zero) => "(result i32) i32.const 0"
+        Some(CoreFunctionReturnParam0) => "(result i32) local.get 0"
         Some(CoreFunctionTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
+        Some(CoreFunctionTailCallI32Const(target, arg)) =>
+            "(result i32) "
+                .concat(emit_core_i32_const_atom(arg))
+                .concat(" return_call $chiba.")
+                .concat(target)
         Some(CoreFunctionIfElseI32Const(condition, then_atom, else_atom)) => emit_core_if_else_i32_const(condition, then_atom, else_atom)
         Some(CoreFunctionBranchJoinPending) => "(result i32) unreachable"
         Some(CoreFunctionReturnUnit) => ""
@@ -149,7 +160,7 @@ def emit_core_function_symbol(symbol: Option[CoreFunctionSymbol]): String =
 def emit_core_function(op: CoreOp): String =
     let head = if op.export_main { "(func ".concat(emit_core_function_symbol(op.function_symbol)).concat("(export \"main\") ") }
         else { "(func ".concat(emit_core_function_symbol(op.function_symbol)) }
-    head.concat(emit_core_function_body(op.function_body)).concat(")\n")
+    head.concat(emit_core_function_params(op.i32_param_count)).concat(emit_core_function_body(op.function_body)).concat(")\n")
 
 /// Emit one Core op as WAT text.
 def emit_core_op(op: CoreOp): Result[String, SemanticDiagnostics] =

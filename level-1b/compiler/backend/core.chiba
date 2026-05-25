@@ -51,7 +51,9 @@ data CoreFunctionBody {
     CoreFunctionReturnUnit,
     CoreFunctionReturnI32Zero,
     CoreFunctionReturnI32FortyTwo,
+    CoreFunctionReturnParam0,
     CoreFunctionTailCall(str),
+    CoreFunctionTailCallI32Const(str, CoreI32ConstAtom),
     CoreFunctionIfElseI32Const(CoreBranchCondition, CoreI32ConstAtom, CoreI32ConstAtom),
     CoreFunctionBranchJoinPending,
 }
@@ -82,6 +84,7 @@ type CoreOp {
     kind: CoreOpKind,
     export_main: bool,
     function_symbol: Option[CoreFunctionSymbol],
+    i32_param_count: usize,
     function_body: Option[CoreFunctionBody],
     layout: Option[WasmGcLayout],
     tail: CoreTailPosition,
@@ -145,7 +148,9 @@ def core_function_body_from_typed(body: TypedFunctionBodyKind): CoreFunctionBody
         TypedFunctionReturnUnit => CoreFunctionReturnUnit
         TypedFunctionReturnI32Zero => CoreFunctionReturnI32Zero
         TypedFunctionReturnI32FortyTwo => CoreFunctionReturnI32FortyTwo
+        TypedFunctionReturnParam0 => CoreFunctionReturnParam0
         TypedFunctionTailCall(target) => CoreFunctionTailCall(target)
+        TypedFunctionTailCallI32Const(target, arg) => CoreFunctionTailCallI32Const(target, core_i32_const_atom_from_typed(arg))
         TypedFunctionIfElseI32Const(condition, then_atom, else_atom) =>
             CoreFunctionIfElseI32Const(
                 core_branch_condition_from_typed(condition),
@@ -161,6 +166,7 @@ def lower_typed_function_fact(fact: TypedFunctionBodyFact): CoreOp =
         kind: CoreOpFunction,
         export_main: fact.is_main,
         function_symbol: Some(CoreFunctionSymbol { name: fact.symbol }),
+        i32_param_count: fact.i32_param_count,
         function_body: Some(core_function_body_from_typed(fact.body)),
         layout: None,
         tail: CoreTailCall,
@@ -185,6 +191,7 @@ def lower_closure_fact(fact: ClosureLoweringFact): Option[CoreOp] =
                 kind: CoreOpClosureCall,
                 export_main: false,
                 function_symbol: None,
+                i32_param_count: 0,
                 function_body: None,
                 layout: Some(closure_env_layout()),
                 tail: CorePlainCall,
@@ -229,6 +236,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 kind: CoreOpBoxedCont1,
                 export_main: false,
                 function_symbol: None,
+                i32_param_count: 0,
                 function_body: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
@@ -241,6 +249,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 kind: CoreOpContNPackage,
                 export_main: false,
                 function_symbol: None,
+                i32_param_count: 0,
                 function_body: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
@@ -253,6 +262,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 kind: CoreOpContinuationPackage,
                 export_main: false,
                 function_symbol: None,
+                i32_param_count: 0,
                 function_body: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
@@ -272,6 +282,7 @@ def push_continuation_frame_core_ops(out: Vec[CoreOp], frames: Array[Continuatio
                 kind: CoreOpStacklessFunction,
                 export_main: false,
                 function_symbol: None,
+                i32_param_count: 0,
                 function_body: None,
                 layout: None,
                 tail: CorePlainCall,
@@ -292,6 +303,7 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     kind: CoreOpContinuationFrameChain,
                     export_main: false,
                     function_symbol: None,
+                    i32_param_count: 0,
                     function_body: None,
                     layout: continuation_frame_chain_layout(fact.kind),
                     tail: CorePlainCall,
@@ -303,6 +315,7 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     kind: CoreOpContNPackage,
                     export_main: false,
                     function_symbol: None,
+                    i32_param_count: 0,
                     function_body: None,
                     layout: continuation_core_layout(fact.kind),
                     tail: CorePlainCall,
