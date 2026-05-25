@@ -295,6 +295,37 @@ def typed_function_first_param_name(text: String, item: TypedItemSkeleton): Opti
     if open >= header_end { None }
     else { source_scan_ident_slice(text, open + 1) }
 
+/// Return the close paren for a function header parameter list.
+def typed_function_param_list_close(text: String, item: TypedItemSkeleton): usize =
+    let header_start = item.surface.header.offset
+    let header_end = item.surface.header.offset + item.surface.header.len
+    let open = typed_source_region_find_byte_or_end(text, header_start, header_end, 40)
+    if open >= header_end { header_end }
+    else { typed_source_region_find_byte_or_end(text, open + 1, header_end, 41) }
+
+/// Return the first byte after one simple parameter declaration.
+def typed_function_param_decl_end(text: String, offset: usize, end: usize): usize =
+    let comma = typed_source_region_find_byte_or_end(text, offset, end, 44)
+    if comma < end { comma }
+    else { end }
+
+/// Return true when a parameter declaration contains an i32/bool ABI type.
+def typed_function_param_decl_is_i32_like(text: String, start: usize, end: usize): bool =
+    if source_region_has_text(text, start, end, "i32") { true }
+    else { source_region_has_text(text, start, end, "bool") }
+
+/// Count simple i32-like parameters in declaration order.
+def typed_function_i32_param_count_loop(text: String, offset: usize, close: usize, count: usize): usize =
+    let start = source_skip_spaces(text, offset)
+    if start >= close { count }
+    else {
+        let item_end = typed_function_param_decl_end(text, start, close)
+        let next_count = if typed_function_param_decl_is_i32_like(text, start, item_end) { count + 1 } else { count }
+        let next = source_skip_spaces(text, item_end)
+        if next < close && text.byte_at(next) == 44 { typed_function_i32_param_count_loop(text, next + 1, close, next_count) }
+        else { next_count }
+    }
+
 /// Return true when a function header has a first i32 parameter.
 def typed_function_has_i32_param0(text: String, item: TypedItemSkeleton): bool =
     let header_end = item.surface.header.offset + item.surface.header.len
@@ -305,9 +336,12 @@ def typed_function_has_i32_param0(text: String, item: TypedItemSkeleton): bool =
 
 /// Count the narrow i32 params understood by the first executable function slice.
 def typed_function_i32_param_count(text: String, item: TypedItemSkeleton): usize =
-    if typed_function_has_i32_param0(text, item) { 1 }
-    else if typed_function_has_bool_param0(text, item) { 1 }
-    else { 0 }
+    let header_start = item.surface.header.offset
+    let header_end = item.surface.header.offset + item.surface.header.len
+    let open = typed_source_region_find_byte_or_end(text, header_start, header_end, 40)
+    let close = typed_function_param_list_close(text, item)
+    if open >= header_end { 0 }
+    else { typed_function_i32_param_count_loop(text, open + 1, close, 0) }
 
 /// Return true when a function header has a first bool parameter.
 def typed_function_has_bool_param0(text: String, item: TypedItemSkeleton): bool =
@@ -338,11 +372,27 @@ def typed_source_region_is_param(text: String, param: SourceNameSlice, start: us
 
 /// Pick a typed indexed parameter expression from a bounded source region.
 def typed_function_param_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
-    match typed_function_first_param_name(text, item) {
-        Some(param) =>
-            if typed_source_region_is_param(text, param, start, end) { Some(TypedExprParam(0)) }
-            else { None }
-        None => None
+    typed_function_param_expr_from_region_loop(text, item, start, end, item.surface.header.offset, 0)
+
+/// Pick a typed indexed parameter expression by scanning the function header.
+def typed_function_param_expr_from_region_loop(text: String, item: TypedItemSkeleton, start: usize, end: usize, offset: usize, index: usize): Option[TypedExprKind] =
+    let close = typed_function_param_list_close(text, item)
+    let param_start = source_skip_spaces(text, offset)
+    let open = typed_source_region_find_byte_or_end(text, item.surface.header.offset, item.surface.header.offset + item.surface.header.len, 40)
+    let scan_start = if param_start <= open { source_skip_spaces(text, open + 1) } else { param_start }
+    if scan_start >= close { None }
+    else {
+        match source_scan_ident_slice(text, scan_start) {
+            Some(param) =>
+                if typed_source_region_is_param(text, param, start, end) { Some(TypedExprParam(index)) }
+                else {
+                    let decl_end = typed_function_param_decl_end(text, source_name_slice_end(param), close)
+                    let next = source_skip_spaces(text, decl_end)
+                    if next < close && text.byte_at(next) == 44 { typed_function_param_expr_from_region_loop(text, item, start, end, next + 1, index + 1) }
+                    else { None }
+                }
+            None => None
+        }
     }
 
 /// Scan a function-slice one-i32-const-argument tail-call target from a function body.
