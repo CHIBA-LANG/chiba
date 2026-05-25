@@ -1432,7 +1432,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: callable storage fact generation absent"))
                 .freeze()))
         } else if callable_storage.len() == 0 && closure_surface.len() > 0 && closure_surface_all_syntactic_no_capture(closure_surface, 0) && functions.len() > 0 {
-            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
+            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
         } else {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: callable storage type expression and body integration absent"))
@@ -1488,7 +1488,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: namespace ownership fact generation absent"))
                 .freeze()))
         } else if functions.len() > 0 && module.uses.len() == 0 {
-            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
+            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
         } else {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
@@ -1516,7 +1516,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
         }
     } else {
         if functions.len() > 0 {
-            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
+            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
         } else {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
@@ -1525,7 +1525,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
-def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], functions: Array[TypedFunctionBodyFact], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], namespace_imports: Array[NamespaceImportFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact], closure_surface: Array[ClosureSurfaceFact]): TypedModule =
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], functions: Array[TypedFunctionBodyFact], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], namespace_imports: Array[NamespaceImportFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], patterns: PatternFacts, intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact], closure_surface: Array[ClosureSurfaceFact]): TypedModule =
     TypedModule {
         alpha: module,
         items: skeletons,
@@ -1539,6 +1539,9 @@ def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemS
         global_init_surface: global_init_surface,
         pipe_surface: pipe_surface,
         pattern_surface: pattern_surface,
+        pattern_dft_steps: patterns.dft_steps,
+        pattern_exhaustiveness: patterns.exhaustiveness,
+        pattern_envs: patterns.envs,
         intrinsic_surface: intrinsic_surface,
         generic_surface: generic_surface,
         operator_use_surface: operator_use_surface,

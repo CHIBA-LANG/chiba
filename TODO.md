@@ -54,6 +54,7 @@
 	- [x] pattern surface facts：typed module 已记录 match/if-let/deep-pattern/function-pattern/wildcard-let surface；真实 DFT lowering、exhaustiveness、if-let 失败分支 env 仍 fail-closed。
 	- [x] pattern lowering obligations：typed pass 已把 pattern surface 转成 `PatternLoweringObligation`，显式区分 match exhaustiveness、if-let 双分支 env、deep DFT、函数参数 desugar。
 	- [x] pattern DFT/exhaustiveness fact stream：pattern pass 现在从 alpha origins 生成 `PatternDftStep` / `PatternExhaustivenessFact` / `PatternEnvFact`，明确 match 缺失静态 case 是 error、`if let` 失败分支不引入 binding；真实 decision-tree/body lowering 仍未完成。
+	- [x] typed pattern fact threading：C08 `TypedModule` 现在保留 DFT steps、exhaustiveness facts 与 pattern env facts，后续 CPS/Core 不再只能重扫 source surface。
 - [ ] pipe lowering：placeholder、receiver-first method pipe、operator/method interaction 还没完整 primary lowering。
 	- [x] pipe surface facts：typed module 已记录 pipe/placeholder/chain surface；真实 placeholder expansion、receiver-first desugar、operator/method interaction 仍 fail-closed。
 	- [x] pipe repeated-placeholder gate：spec 与 checkpoint fixture 已锁定 `a |> f(b,_,_) == f(b,a,a)`；真实 lowering 仍未完成。
