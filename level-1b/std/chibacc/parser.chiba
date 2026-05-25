@@ -112,6 +112,7 @@ def chibacc_parse_atom_suffix(source: str, offset: usize, end: usize, atom: Gram
     let suffix = chibacc_skip_ws(source, offset)
     if suffix < end && source.byte_at(suffix) == 63 { GrammarOptional(atom) }
     else if suffix < end && source.byte_at(suffix) == 42 { GrammarRepeatZeroOrMore(atom) }
+    else if suffix < end && source.byte_at(suffix) == 43 { GrammarRepeatOneOrMore(atom) }
     else { atom }
 
 /// Parse namespace declaration from the header block.
@@ -193,11 +194,13 @@ def chibacc_atom_token_end(source: str, start: usize, end: usize): usize =
             let suffix = chibacc_skip_ws(source, rhs_end)
             if suffix < end && source.byte_at(suffix) == 63 { suffix + 1 }
             else if suffix < end && source.byte_at(suffix) == 42 { suffix + 1 }
+            else if suffix < end && source.byte_at(suffix) == 43 { suffix + 1 }
             else { rhs_end }
         } else {
             let suffix = chibacc_skip_ws(source, ident_end)
             if suffix < end && source.byte_at(suffix) == 63 { suffix + 1 }
             else if suffix < end && source.byte_at(suffix) == 42 { suffix + 1 }
+            else if suffix < end && source.byte_at(suffix) == 43 { suffix + 1 }
             else { ident_end }
         }
     }

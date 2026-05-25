@@ -13,6 +13,7 @@ data GrammarAtom {
     GrammarBind(str, GrammarAtom),
     GrammarOptional(GrammarAtom),
     GrammarRepeatZeroOrMore(GrammarAtom),
+    GrammarRepeatOneOrMore(GrammarAtom),
 }
 
 /// Sequence of grammar atoms.

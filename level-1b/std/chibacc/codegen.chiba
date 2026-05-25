@@ -105,6 +105,7 @@ def append_atom_parse_call(builder: DiagnosticBuilder, atom: GrammarAtom, positi
         GrammarBind(_, inner) => append_atom_parse_call(builder, inner, position_expr)
         GrammarOptional(inner) => append_atom_parse_call(builder, inner, position_expr)
         GrammarRepeatZeroOrMore(inner) => append_atom_parse_call(builder, inner, position_expr)
+        GrammarRepeatOneOrMore(inner) => append_atom_parse_call(builder, inner, position_expr)
     }
 
 /// Return the binding name for an atom when it has one.
@@ -160,6 +161,8 @@ def append_repeat_consumer_functions(builder: DiagnosticBuilder, prefix: str, at
             let atom = parser_atom_unbind(head)
             match atom {
                 GrammarRepeatZeroOrMore(inner) =>
+                    append_repeat_consumer_functions(append_repeat_consumer_function(builder, prefix, step, inner), prefix, tail, step + 1)
+                GrammarRepeatOneOrMore(inner) =>
                     append_repeat_consumer_functions(append_repeat_consumer_function(builder, prefix, step, inner), prefix, tail, step + 1)
                 _ => append_repeat_consumer_functions(builder, prefix, tail, step + 1)
             }
@@ -220,6 +223,34 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                         .push_str("            }\n")
                         .push_str("            Err(error) => Err(error)\n")
                         .push_str("        }\n")
+                GrammarRepeatOneOrMore(inner) =>
+                    append_alt_steps(
+                        append_repeat_consumer_name(
+                            append_atom_parse_call(builder.push_str("        match "), inner, position_expr)
+                                .push_str(" {\n")
+                                .push_str("            Ok(")
+                                .push_str(step_name)
+                                .push_str("_first) => {\n")
+                                .push_str("                match "),
+                            repeat_prefix,
+                            step)
+                            .push_str("(tokens, ")
+                            .push_str(step_name)
+                            .push_str("_first.position) {\n")
+                            .push_str("                    Ok(")
+                            .push_str(step_name)
+                            .push_str(") => {\n"),
+                        tail,
+                        action,
+                        step + 1,
+                        step_name.concat(".position"),
+                        repeat_prefix)
+                        .push_str("                    }\n")
+                        .push_str("                    Err(error) => Err(error)\n")
+                        .push_str("                }\n")
+                        .push_str("            }\n")
+                        .push_str("            Err(error) => Err(error)\n")
+                        .push_str("        }\n")
                 GrammarToken(name) =>
                     if parser_atom_is_empty_token(name) {
                         append_alt_steps(builder, tail, action, step + 1, position_expr, repeat_prefix)
@@ -274,6 +305,7 @@ def append_pratt_infix_atom_parse_call(builder: DiagnosticBuilder, atom: Grammar
         GrammarBind(_, inner) => append_pratt_infix_atom_parse_call(builder, inner, position_expr, rule, right_power)
         GrammarOptional(inner) => append_pratt_infix_atom_parse_call(builder, inner, position_expr, rule, right_power)
         GrammarRepeatZeroOrMore(inner) => append_pratt_infix_atom_parse_call(builder, inner, position_expr, rule, right_power)
+        GrammarRepeatOneOrMore(inner) => append_pratt_infix_atom_parse_call(builder, inner, position_expr, rule, right_power)
         _ => append_atom_parse_call(builder, atom, position_expr)
     }
 
@@ -309,6 +341,36 @@ def append_pratt_infix_steps(builder: DiagnosticBuilder, rule: LoweredRule, atom
                         step_name.concat(".position"),
                         right_power,
                         repeat_prefix)
+                        .push_str("            }\n")
+                        .push_str("            Err(error) => Err(error)\n")
+                        .push_str("        }\n")
+                GrammarRepeatOneOrMore(inner) =>
+                    append_pratt_infix_steps(
+                        append_repeat_consumer_name(
+                            append_pratt_infix_atom_parse_call(builder.push_str("        match "), inner, position_expr, rule, right_power)
+                                .push_str(" {\n")
+                                .push_str("            Ok(")
+                                .push_str(step_name)
+                                .push_str("_first) => {\n")
+                                .push_str("                match "),
+                            repeat_prefix,
+                            step)
+                            .push_str("(tokens, ")
+                            .push_str(step_name)
+                            .push_str("_first.position) {\n")
+                            .push_str("                    Ok(")
+                            .push_str(step_name)
+                            .push_str(") => {\n"),
+                        rule,
+                        tail,
+                        action,
+                        step + 1,
+                        step_name.concat(".position"),
+                        right_power,
+                        repeat_prefix)
+                        .push_str("                    }\n")
+                        .push_str("                    Err(error) => Err(error)\n")
+                        .push_str("                }\n")
                         .push_str("            }\n")
                         .push_str("            Err(error) => Err(error)\n")
                         .push_str("        }\n")

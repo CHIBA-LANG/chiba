@@ -629,6 +629,8 @@ def wat_known_param_type(func_name: Str, index: i64): i64 =
     else if index == 0 && streq(func_name, mk_str("GrammarBind", 11)) != 0 { "(ref $array_u8)" }
     else if index == 1 && streq(func_name, mk_str("GrammarBind", 11)) != 0 { "eqref" }
     else if index == 0 && streq(func_name, mk_str("GrammarOptional", 15)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("GrammarRepeatZeroOrMore", 23)) != 0 { "eqref" }
+    else if index == 0 && streq(func_name, mk_str("GrammarRepeatOneOrMore", 22)) != 0 { "eqref" }
     else if index == 0 && streq(func_name, mk_str("GrammarSequence", 15)) != 0 { "eqref" }
     else if index == 0 && streq(func_name, mk_str("GrammarAction", 13)) != 0 { "(ref $array_u8)" }
     else if index == 0 && streq(func_name, mk_str("GrammarAlternative", 18)) != 0 { "eqref" }
@@ -717,6 +719,8 @@ def wat_known_param_type_exists(func_name: Str, index: i64): i64 =
     else if index == 0 && streq(func_name, mk_str("GrammarBind", 11)) != 0 { 1 }
     else if index == 1 && streq(func_name, mk_str("GrammarBind", 11)) != 0 { 1 }
     else if index == 0 && streq(func_name, mk_str("GrammarOptional", 15)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarRepeatZeroOrMore", 23)) != 0 { 1 }
+    else if index == 0 && streq(func_name, mk_str("GrammarRepeatOneOrMore", 22)) != 0 { 1 }
     else if index == 0 && streq(func_name, mk_str("GrammarSequence", 15)) != 0 { 1 }
     else if index == 0 && streq(func_name, mk_str("GrammarAction", 13)) != 0 { 1 }
     else if index == 0 && streq(func_name, mk_str("GrammarAlternative", 18)) != 0 { 1 }
