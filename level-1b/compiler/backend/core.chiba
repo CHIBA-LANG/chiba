@@ -56,6 +56,7 @@ data CoreExprKind {
     CoreExprI32FortyTwo,
     CoreExprI32Const(CoreI32ConstAtom),
     CoreExprParam0,
+    CoreExprParam(usize),
     CoreExprTailCall(str),
     CoreExprTailCallI32Const(str, CoreI32ConstAtom),
     CoreExprTailCallParam0(str),
@@ -181,6 +182,7 @@ def core_expr_from_cps_atom(atom: CpsAtom): CoreExprKind =
         CpsAtomI32Const(TypedI32ConstFortyTwo) => CoreExprI32FortyTwo
         CpsAtomI32Const(atom) => CoreExprI32Const(core_i32_const_atom_from_typed(atom))
         CpsAtomParam0 => CoreExprParam0
+        CpsAtomParam(index) => CoreExprParam(index)
     }
 
 /// Convert a small resume result into an executable Core atom.
@@ -202,6 +204,7 @@ def core_expr_from_cps_tail_call_arg(target: str, args: Array[CpsAtom]): CoreExp
         match args.get(0) {
             CpsAtomI32Const(atom) => CoreExprTailCallI32Const(target, core_i32_const_atom_from_typed(atom))
             CpsAtomParam0 => CoreExprTailCallParam0(target)
+            CpsAtomParam(index) => CoreExprTailCallArgs(target, Vec[CoreExprKind].new().push(CoreExprParam(index)).freeze())
             _ => CoreExprBranchJoinPending
         }
     }

@@ -56,6 +56,7 @@ data TypedExprKind {
     TypedExprI32FortyTwo,
     TypedExprI32Const(TypedI32ConstAtom),
     TypedExprParam0,
+    TypedExprParam(usize),
     TypedExprTailCall(str),
     TypedExprTailCallArgs(str, Array[TypedExprKind]),
     TypedExprTailCallI32Const(str, TypedI32ConstAtom),
@@ -99,6 +100,7 @@ def typed_expr_visit_kind(expr: TypedExprKind): TypedExprVisitKind =
         TypedExprI32FortyTwo => TypedVisitAtom
         TypedExprI32Const(_) => TypedVisitAtom
         TypedExprParam0 => TypedVisitAtom
+        TypedExprParam(_) => TypedVisitAtom
         TypedExprTailCall(_) => TypedVisitTailCall
         TypedExprTailCallArgs(_, _) => TypedVisitTailCall
         TypedExprTailCallI32Const(_, _) => TypedVisitTailCall
@@ -327,6 +329,22 @@ def typed_function_body_returns_param0(text: String, item: TypedItemSkeleton, st
         None => false
     }
 
+/// Return true when a bounded source region exactly names one parameter.
+def typed_source_region_is_param(text: String, param: SourceNameSlice, start: usize, end: usize): bool =
+    let offset = source_skip_spaces(text, start)
+    if source_starts_with_at(text, offset, typed_function_tail_call_target_text(text, param), 0) == false { false }
+    else if source_word_boundary_after(text, offset, param.len) == false { false }
+    else { typed_source_region_only_spaces(text, offset + param.len, end) }
+
+/// Pick a typed indexed parameter expression from a bounded source region.
+def typed_function_param_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    match typed_function_first_param_name(text, item) {
+        Some(param) =>
+            if typed_source_region_is_param(text, param, start, end) { Some(TypedExprParam(0)) }
+            else { None }
+        None => None
+    }
+
 /// Scan a function-slice one-i32-const-argument tail-call target from a function body.
 def typed_function_tail_call_i32_const_slice(text: String, offset: usize, end: usize): Option[SourceNameSlice] =
     if offset >= end { None }
@@ -374,8 +392,9 @@ def typed_call_arg_end(text: String, offset: usize, end: usize): usize =
 
 /// Parse one atom argument in a source-slice call.
 def typed_call_arg_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
-    if typed_function_body_returns_param0(text, item, start, end) { Some(TypedExprParam0) }
-    else {
+    match typed_function_param_expr_from_region(text, item, start, end) {
+        Some(param) => Some(param)
+        None =>
         match typed_i32_const_atom_exact_from_region(text, start, end) {
             Some(TypedI32ConstFortyTwo) => Some(TypedExprI32FortyTwo)
             Some(TypedI32ConstZero) => Some(TypedExprI32Zero)
@@ -470,8 +489,9 @@ def typed_branch_condition_from_item_region(text: String, item: TypedItemSkeleto
 
 /// Pick a non-branch typed expression from a bounded source region.
 def typed_function_non_branch_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
-    if typed_function_body_returns_param0(text, item, start, end) { Some(TypedExprParam0) }
-    else {
+    match typed_function_param_expr_from_region(text, item, start, end) {
+        Some(param) => Some(param)
+        None =>
         match typed_i32_const_atom_exact_from_region(text, start, end) {
             Some(TypedI32ConstFortyTwo) => Some(TypedExprI32FortyTwo)
             Some(TypedI32ConstZero) => Some(TypedExprI32Zero)

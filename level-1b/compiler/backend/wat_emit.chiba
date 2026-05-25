@@ -172,6 +172,10 @@ def emit_core_branch_condition(condition: CoreBranchCondition): String =
         CoreBranchConditionParam0 => "local.get 0"
     }
 
+/// Emit a local.get instruction for one indexed i32 parameter.
+def emit_core_param(index: usize): String =
+    "local.get ".concat(emit_core_small_usize(index))
+
 /// Emit Core tail-call arguments in evaluation order.
 def emit_core_tail_call_args(args: Array[CoreExprKind], index: usize): String =
     if index == args.len() { "" }
@@ -192,6 +196,7 @@ def emit_core_expr_instruction(body: CoreExprKind): String =
         CoreExprI32Zero => "i32.const 0"
         CoreExprI32Const(atom) => emit_core_i32_const_atom(atom)
         CoreExprParam0 => "local.get 0"
+        CoreExprParam(index) => emit_core_param(index)
         CoreExprTailCall(target) => "return_call $chiba.".concat(target)
         CoreExprTailCallI32Const(target, arg) => emit_core_i32_const_atom(arg).concat(" return_call $chiba.").concat(target)
         CoreExprTailCallParam0(target) => "local.get 0 return_call $chiba.".concat(target)
@@ -223,6 +228,7 @@ def emit_core_function_body(body: Option[CoreExprKind]): String =
         Some(CoreExprI32Zero) => "(result i32) i32.const 0"
         Some(CoreExprI32Const(atom)) => "(result i32) ".concat(emit_core_i32_const_atom(atom))
         Some(CoreExprParam0) => "(result i32) local.get 0"
+        Some(CoreExprParam(index)) => "(result i32) ".concat(emit_core_param(index))
         Some(CoreExprTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
         Some(CoreExprTailCallI32Const(target, arg)) =>
             "(result i32) "

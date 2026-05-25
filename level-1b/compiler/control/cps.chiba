@@ -31,6 +31,7 @@ data CpsAtom {
     CpsAtomUnit,
     CpsAtomI32Const(TypedI32ConstAtom),
     CpsAtomParam0,
+    CpsAtomParam(usize),
 }
 
 /// CPS term kind after one-pass CPS and administrative beta.
@@ -360,6 +361,7 @@ def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
         TypedExprI32FortyTwo => CpsTermReturn(CpsAtomI32Const(TypedI32ConstFortyTwo))
         TypedExprI32Const(atom) => CpsTermReturn(CpsAtomI32Const(atom))
         TypedExprParam0 => CpsTermReturn(CpsAtomParam0)
+        TypedExprParam(index) => CpsTermReturn(CpsAtomParam(index))
         TypedExprTailCall(target) => CpsTermTailCall(target, Vec[CpsAtom].new().freeze())
         TypedExprTailCallI32Const(target, arg) => CpsTermTailCall(target, Vec[CpsAtom].new().push(CpsAtomI32Const(arg)).freeze())
         TypedExprTailCallArgs(target, args) => CpsTermTailCall(target, cps_atoms_from_typed_args(args, 0, Vec[CpsAtom].new()))
@@ -377,6 +379,7 @@ def cps_atoms_from_typed_args(args: Array[TypedExprKind], index: usize, out: Vec
             TypedExprI32FortyTwo => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomI32Const(TypedI32ConstFortyTwo)))
             TypedExprI32Const(atom) => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomI32Const(atom)))
             TypedExprParam0 => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomParam0))
+            TypedExprParam(param_index) => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomParam(param_index)))
             _ => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomUnit))
         }
     }

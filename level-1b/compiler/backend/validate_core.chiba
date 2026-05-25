@@ -96,6 +96,7 @@ def core_branch_condition_requires_param0(condition: CoreBranchCondition): bool 
 def core_function_body_requires_param0(body: CoreExprKind): bool =
     match body {
         CoreExprParam0 => true
+        CoreExprParam(index) => index == 0
         CoreExprTailCallParam0(_) => true
         CoreExprTailCallI32Const(_, _) => false
         CoreExprTailCallArgs(_, args) => core_function_body_args_require_param0(args, 0)
@@ -118,9 +119,27 @@ def validate_core_function_body(op: CoreOp): Option[CoreValidationError] =
         Some(CoreExprBranchJoinPending) => Some(CoreMissingBranchBody("branch join function body lowering absent"))
         Some(body) =>
             if core_function_body_requires_param0(body) && op.i32_param_count == 0 { Some(CoreMissingBranchBody("param0 function body requires i32 param")) }
+            else if core_function_body_max_param_index(body, 0) >= op.i32_param_count && op.i32_param_count > 0 { Some(CoreMissingBranchBody("function body reads missing i32 param")) }
             else { None }
         _ => None
     }
+
+/// Return the largest parameter index read by a Core expression.
+def core_function_body_max_param_index(body: CoreExprKind, current: usize): usize =
+    match body {
+        CoreExprParam(index) => if index > current { index } else { current }
+        CoreExprParam0 => if current > 0 { current } else { 0 }
+        CoreExprTailCallParam0(_) => if current > 0 { current } else { 0 }
+        CoreExprTailCallArgs(_, args) => core_function_body_args_max_param_index(args, 0, current)
+        CoreExprIfElse(_, then_expr, else_expr) =>
+            core_function_body_max_param_index(else_expr, core_function_body_max_param_index(then_expr, current))
+        _ => current
+    }
+
+/// Return the largest parameter index read by Core expression arguments.
+def core_function_body_args_max_param_index(args: Array[CoreExprKind], index: usize, current: usize): usize =
+    if index == args.len() { current }
+    else { core_function_body_args_max_param_index(args, index + 1, core_function_body_max_param_index(args.get(index), current)) }
 
 /// Validate a layout reference required by a Core operation.
 def validate_core_layout(module: WasmGcCoreModule, op: CoreOp): Option[CoreValidationError] =
