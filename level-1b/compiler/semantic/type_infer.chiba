@@ -55,7 +55,6 @@ data TypedExprKind {
     TypedExprI32Zero,
     TypedExprI32FortyTwo,
     TypedExprI32Const(TypedI32ConstAtom),
-    TypedExprParam0,
     TypedExprParam(usize),
     TypedExprTailCall(str),
     TypedExprTailCallArgs(str, Array[TypedExprKind]),
@@ -98,7 +97,6 @@ def typed_expr_visit_kind(expr: TypedExprKind): TypedExprVisitKind =
         TypedExprI32Zero => TypedVisitAtom
         TypedExprI32FortyTwo => TypedVisitAtom
         TypedExprI32Const(_) => TypedVisitAtom
-        TypedExprParam0 => TypedVisitAtom
         TypedExprParam(_) => TypedVisitAtom
         TypedExprTailCall(_) => TypedVisitTailCall
         TypedExprTailCallArgs(_, _) => TypedVisitTailCall
@@ -505,7 +503,6 @@ def typed_expr_is_atom_arg(expr: TypedExprKind): bool =
         TypedExprI32Zero => true
         TypedExprI32FortyTwo => true
         TypedExprI32Const(_) => true
-        TypedExprParam0 => true
         TypedExprParam(_) => true
         _ => false
     }

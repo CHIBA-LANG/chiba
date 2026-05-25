@@ -30,7 +30,6 @@ type CpsModule {
 data CpsAtom {
     CpsAtomUnit,
     CpsAtomI32Const(TypedI32ConstAtom),
-    CpsAtomParam0,
     CpsAtomParam(usize),
 }
 
@@ -288,7 +287,7 @@ def cps_tail_form_kind_from_expr(body: TypedExprKind): CpsTailFormKind =
     match body {
         TypedExprTailCall(target) => CpsTailCall(target)
         TypedExprTailCallArgs(target, _) => CpsTailCall(target)
-        TypedExprParam0 => CpsTailReturn
+        TypedExprParam(_) => CpsTailReturn
         TypedExprIfElse(_, then_expr, else_expr) => cps_tail_form_kind_from_branch(then_expr, else_expr)
         TypedExprBranchJoinPending => CpsTailReturn
         _ => CpsTailReturn
@@ -351,7 +350,6 @@ def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
         TypedExprI32Zero => CpsTermReturn(CpsAtomI32Const(TypedI32ConstZero))
         TypedExprI32FortyTwo => CpsTermReturn(CpsAtomI32Const(TypedI32ConstFortyTwo))
         TypedExprI32Const(atom) => CpsTermReturn(CpsAtomI32Const(atom))
-        TypedExprParam0 => CpsTermReturn(CpsAtomParam0)
         TypedExprParam(index) => CpsTermReturn(CpsAtomParam(index))
         TypedExprTailCall(target) => CpsTermTailCall(target, Vec[CpsAtom].new().freeze())
         TypedExprTailCallArgs(target, args) =>
@@ -370,7 +368,6 @@ def cps_atom_from_typed_arg(arg: TypedExprKind): Option[CpsAtom] =
         TypedExprI32Zero => Some(CpsAtomI32Const(TypedI32ConstZero))
         TypedExprI32FortyTwo => Some(CpsAtomI32Const(TypedI32ConstFortyTwo))
         TypedExprI32Const(atom) => Some(CpsAtomI32Const(atom))
-        TypedExprParam0 => Some(CpsAtomParam0)
         TypedExprParam(param_index) => Some(CpsAtomParam(param_index))
         _ => None
     }

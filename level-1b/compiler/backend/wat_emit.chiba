@@ -195,10 +195,8 @@ def emit_core_expr_instruction(body: CoreExprKind): String =
         CoreExprI32FortyTwo => "i32.const 42"
         CoreExprI32Zero => "i32.const 0"
         CoreExprI32Const(atom) => emit_core_i32_const_atom(atom)
-        CoreExprParam0 => "local.get 0"
         CoreExprParam(index) => emit_core_param(index)
         CoreExprTailCall(target) => "return_call $chiba.".concat(target)
-        CoreExprTailCallParam0(target) => "local.get 0 return_call $chiba.".concat(target)
         CoreExprTailCallArgs(target, args) => emit_core_tail_call_args_expr(target, args)
         CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_expr(condition, then_expr, else_expr)
         CoreExprBranchJoinPending => "unreachable"
@@ -226,11 +224,8 @@ def emit_core_function_body(body: Option[CoreExprKind]): String =
         Some(CoreExprI32FortyTwo) => "(result i32) i32.const 42"
         Some(CoreExprI32Zero) => "(result i32) i32.const 0"
         Some(CoreExprI32Const(atom)) => "(result i32) ".concat(emit_core_i32_const_atom(atom))
-        Some(CoreExprParam0) => "(result i32) local.get 0"
         Some(CoreExprParam(index)) => "(result i32) ".concat(emit_core_param(index))
         Some(CoreExprTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
-        Some(CoreExprTailCallParam0(target)) =>
-            "(result i32) local.get 0 return_call $chiba.".concat(target)
         Some(CoreExprTailCallArgs(target, args)) =>
             "(result i32) ".concat(emit_core_tail_call_args_expr(target, args))
         Some(CoreExprIfElse(condition, then_expr, else_expr)) => emit_core_if_else_expr(condition, then_expr, else_expr)
