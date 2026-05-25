@@ -35,11 +35,24 @@ type TypedItemSkeleton {
 }
 
 /// Minimal typed body shape accepted by the first codegen vertical slice.
+data TypedI32ConstAtom {
+    TypedI32ConstZero,
+    TypedI32ConstFortyTwo,
+}
+
+/// Minimal branch condition accepted by the first branch codegen slice.
+data TypedBranchCondition {
+    TypedBranchConditionTrue,
+    TypedBranchConditionFalse,
+}
+
+/// Minimal typed body shape accepted by the first codegen vertical slice.
 data TypedFunctionBodyKind {
     TypedFunctionReturnUnit,
     TypedFunctionReturnI32Zero,
     TypedFunctionReturnI32FortyTwo,
     TypedFunctionTailCall(str),
+    TypedFunctionIfElseI32Const(TypedBranchCondition, TypedI32ConstAtom, TypedI32ConstAtom),
     TypedFunctionBranchJoinPending,
 }
 
@@ -75,6 +88,58 @@ def typed_function_body_starts_with_atom(text: String, start: usize, end: usize,
     if offset + atom.len() > end { false }
     else if source_starts_with_at(text, offset, atom, 0) == false { false }
     else { source_word_boundary_after(text, offset, atom.len()) }
+
+/// Pick the minimal i32 const atom at the start of a source region.
+def typed_i32_const_atom_from_region(text: String, start: usize, end: usize): Option[TypedI32ConstAtom] =
+    if typed_function_body_starts_with_atom(text, start, end, "42") { Some(TypedI32ConstFortyTwo) }
+    else if typed_function_body_starts_with_atom(text, start, end, "0") { Some(TypedI32ConstZero) }
+    else { None }
+
+/// Find one byte in a bounded source region.
+def typed_source_region_find_byte_or_end(text: String, offset: usize, end: usize, byte: u8): usize =
+    if offset >= end { end }
+    else if offset >= text.len() { end }
+    else if text.byte_at(offset) == byte { offset }
+    else { typed_source_region_find_byte_or_end(text, offset + 1, end, byte) }
+
+/// Find an ASCII token in a bounded source region.
+def typed_source_region_find_text_or_end(text: String, offset: usize, end: usize, needle: str): usize =
+    if offset >= end { end }
+    else if offset >= text.len() { end }
+    else if source_starts_with_at(text, offset, needle, 0) { offset }
+    else { typed_source_region_find_text_or_end(text, offset + 1, end, needle) }
+
+/// Parse the literal condition of the first executable branch slice.
+def typed_branch_condition_from_region(text: String, start: usize, end: usize): Option[TypedBranchCondition] =
+    let offset = source_skip_spaces(text, start)
+    if source_starts_with_at(text, offset, "if true", 0) { Some(TypedBranchConditionTrue) }
+    else if source_starts_with_at(text, offset, "if false", 0) { Some(TypedBranchConditionFalse) }
+    else { None }
+
+/// Parse a narrow `if true/false { const } else { const }` body.
+def typed_function_if_else_const_body(text: String, start: usize, end: usize): Option[TypedFunctionBodyKind] =
+    match typed_branch_condition_from_region(text, start, end) {
+        Some(condition) => {
+            let then_open = typed_source_region_find_byte_or_end(text, start, end, 123)
+            let then_close = typed_source_region_find_byte_or_end(text, then_open, end, 125)
+            let else_offset = typed_source_region_find_text_or_end(text, then_close, end, "else")
+            let else_open = typed_source_region_find_byte_or_end(text, else_offset, end, 123)
+            let else_close = typed_source_region_find_byte_or_end(text, else_open, end, 125)
+            if then_open >= end || then_close >= end || else_offset >= end || else_open >= end || else_close > end {
+                None
+            } else {
+                match typed_i32_const_atom_from_region(text, then_open + 1, then_close) {
+                    Some(then_atom) =>
+                        match typed_i32_const_atom_from_region(text, else_open + 1, else_close) {
+                            Some(else_atom) => Some(TypedFunctionIfElseI32Const(condition, then_atom, else_atom))
+                            None => None
+                        }
+                    None => None
+                }
+            }
+        }
+        None => None
+    }
 
 /// Compare two minimal source symbols byte-for-byte.
 def typed_function_symbol_eq(left: str, right: str, index: usize): bool =
@@ -332,7 +397,12 @@ def typed_item_surface_returns_i32(text: String, item: TypedItemSkeleton): bool 
 def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton): TypedFunctionBodyKind =
     let start = source_scan_item_body_region_start(text, item.surface.header.offset)
     let end = source_scan_item_region_end(text, item.surface.header.offset)
-    if typed_item_has_branching_surface(item) { TypedFunctionBranchJoinPending }
+    if typed_item_has_branching_surface(item) {
+        match typed_function_if_else_const_body(text, start, end) {
+            Some(body) => body
+            None => TypedFunctionBranchJoinPending
+        }
+    }
     else if typed_function_body_starts_with_atom(text, start, end, "42") { TypedFunctionReturnI32FortyTwo }
     else if typed_function_body_starts_with_atom(text, start, end, "0") { TypedFunctionReturnI32Zero }
     else {

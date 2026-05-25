@@ -103,11 +103,36 @@ def CoreOpKind.wat_label(self): String =
     }
 
 /// Emit the body instructions for one lowered Core function.
+def emit_core_i32_const_atom(atom: CoreI32ConstAtom): String =
+    match atom {
+        CoreI32ConstZero => "i32.const 0"
+        CoreI32ConstFortyTwo => "i32.const 42"
+    }
+
+/// Emit the literal condition for the first executable branch slice.
+def emit_core_branch_condition(condition: CoreBranchCondition): String =
+    match condition {
+        CoreBranchConditionTrue => "i32.const 1"
+        CoreBranchConditionFalse => "i32.const 0"
+    }
+
+/// Emit a minimal executable if/else expression.
+def emit_core_if_else_i32_const(condition: CoreBranchCondition, then_atom: CoreI32ConstAtom, else_atom: CoreI32ConstAtom): String =
+    "(result i32) (if (result i32) ("
+        .concat(emit_core_branch_condition(condition))
+        .concat(") (then (")
+        .concat(emit_core_i32_const_atom(then_atom))
+        .concat(")) (else (")
+        .concat(emit_core_i32_const_atom(else_atom))
+        .concat(")))")
+
+/// Emit the body instructions for one lowered Core function.
 def emit_core_function_body(body: Option[CoreFunctionBody]): String =
     match body {
         Some(CoreFunctionReturnI32FortyTwo) => "(result i32) i32.const 42"
         Some(CoreFunctionReturnI32Zero) => "(result i32) i32.const 0"
         Some(CoreFunctionTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
+        Some(CoreFunctionIfElseI32Const(condition, then_atom, else_atom)) => emit_core_if_else_i32_const(condition, then_atom, else_atom)
         Some(CoreFunctionBranchJoinPending) => "(result i32) unreachable"
         Some(CoreFunctionReturnUnit) => ""
         None => ""
