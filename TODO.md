@@ -15,6 +15,11 @@
 	- [ ] gate TODO：等 level-1b parser/driver primary path 可执行后，把 synthetic C11 tailcall fixture 升级成 source `callee()` -> typed/CPS/Core/WAT end-to-end fixture。
 - [ ] chibalex/chibacc frontend：还没替换 scan.chiba；真实 source AST 还没进 primary path。
 	- [x] source parser facts blocker：`SourceProjectFacts.parser` 已显式记录 chibalex/chibacc primary path 缺失，不再让 scanner fallback 冒充 parsed AST。
+- [ ] UTF8, `level-1b/compiler/semantic/adt_tuple_lowering.chiba`, ADT ctor tag canonicalization 当前按 ASCII byte 做 BigCamel -> snake_case，UTF-8 ctor 名会逐 byte 变成 `_` 或错误分词；fix：ctor tag 由 chibacc AST 的 UTF-8/XID identifier token 派生，使用 Unicode-aware case fold / word-boundary 规则，或在该规则落地前对非-ASCII ctor fail-closed。
+- [ ] UTF8, `level-1b/compiler/source/scan.chiba`, C07 transition scanner 仍用 ASCII `source_is_ident_start/continue`、uppercase ctor scan、byte-level item/name scan；day0 UTF-8 identifier 会被漏扫或误分类；fix：让 chibalex/chibacc 成为 source facts primary path，scanner fallback 遇到非-ASCII identifier/source semantic region 必须 fail-closed，不得产完整 facts。
+- [ ] UTF8, `level-1b/compiler/semantic/type_infer.chiba`, C08 minimal body/callee/data-ctor scanner 复用 ASCII source scanner 和 `byte_at` identifier 判断，tail-call target、namespace-qualified symbol、data ctor arity/name 在 UTF-8 下不可靠；fix：改为消费 parser AST/typed identifier facts，临时路径遇到非-ASCII owner/name/callee/ctor 时 fail-closed。
+- [ ] UTF8, `tools/node/run-level1b-chibalex-mini.mjs`, mini lexer runner 只用 UTF-8 lead-byte 宽度推进，XID 表与 invalid sequence validation 仍是近似；fix：接入真实 `std.regex.utf8` / Unicode XID table 生成物，并补 invalid UTF-8 / combining mark / non-ASCII keyword-boundary fixtures。
+- [ ] UTF8, `level-1b/std/regex/utf8.chiba`, regex UTF-8 helper 已有 codepoint boundary，但 Unicode property / XID / invalid-sequence policy 仍未成为 parser+lexer 共享真源；fix：把 UTF-8 decode、XID_Start/XID_Continue、boundary、invalid sequence diagnostics 提升为 std/frontend 共享模块。
 - [ ] attribute grammar：#[attr(...)] nested/named/list args 没 spec/golden/AST/parser。
 	- [x] attribute spec/golden：spec 已定义 AttrArg AST 与 nested/named/list/object grammar，并新增复杂 attribute fixture/gate。
 	- [x] chibalex attribute token fixture：lexer golden 覆盖 `#`/bracket/delimiter/literal/ident token 流，不折叠 legacy attribute token；真实 generated lexer execution 仍未完成。
