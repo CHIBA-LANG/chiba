@@ -117,6 +117,7 @@ const REQUIRED_TEXT = [
   "def typed_source_region_only_spaces",
   "def typed_i32_const_call_arg_exact_len",
   "def typed_i32_const_call_arg_exact",
+  "TypedI32ConstSmall(_) =>",
   "def typed_function_symbol_eq",
   "def typed_function_tail_call_target",
   "def typed_functions_have_symbol",

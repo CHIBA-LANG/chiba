@@ -264,6 +264,11 @@ def typed_i32_const_call_arg_exact(text: String, arg_start: usize, end: usize, a
     match atom {
         TypedI32ConstZero => typed_i32_const_call_arg_exact_len(text, arg_start, end, 1)
         TypedI32ConstFortyTwo => typed_i32_const_call_arg_exact_len(text, arg_start, end, 2)
+        TypedI32ConstSmall(_) => {
+            let close = typed_source_region_find_byte_or_end(text, arg_start, end, 41)
+            if close >= end { false }
+            else { typed_source_region_only_spaces(text, close + 1, end) }
+        }
     }
 
 /// Find one byte in a bounded source region.

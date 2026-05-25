@@ -1,0 +1,17 @@
+/// C11 fixture for source-slice backend artifact generation.
+namespace pre_c11.source_primary_backend
+
+/// Return the first i32 parameter directly.
+def id(x: i32): i32 = x
+
+/// Return a small const that is not 0 or 42.
+def seven(): i32 = 7
+
+/// Tail-call with a small const argument.
+def main(): i32 = id(7)
+
+/// Literal branch with two distinct arms.
+def literal_branch(): i32 = if true { 7 } else { 13 }
+
+/// Parameter branch with tail-call arms.
+def choose(flag: bool): i32 = if flag { id(7) } else { id(13) }

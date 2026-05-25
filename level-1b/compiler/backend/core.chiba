@@ -205,6 +205,15 @@ def core_expr_from_cps_term(term: CpsTermKind): CoreExprKind =
         _ => CoreExprBranchJoinPending
     }
 
+/// Convert an extracted stackless resume body into backend Core expression form.
+def core_expr_from_stackless_resume_body(body: StacklessResumeBodyKind): CoreExprKind =
+    match body {
+        StacklessResumeBodyShiftN => CoreExprI32Zero
+        StacklessResumeBodyShift => CoreExprI32Zero
+        StacklessResumeBodyReset => CoreExprI32Zero
+        StacklessResumeBodyPending => CoreExprBranchJoinPending
+    }
+
 /// Return true when two binder ids identify the same owner.
 def core_binder_id_eq(left: BinderId, right: BinderId): bool = left.id == right.id
 
@@ -344,7 +353,7 @@ def push_continuation_frame_core_ops(out: Vec[CoreOp], frames: Array[Continuatio
                 export_main: false,
                 function_symbol: None,
                 i32_param_count: 0,
-                function_body: None,
+                function_body: Some(core_expr_from_stackless_resume_body(frame.resume.body)),
                 layout: None,
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,

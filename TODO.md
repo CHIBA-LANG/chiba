@@ -56,6 +56,7 @@
 		- [x] minimal param0 tail-call fact：C08/C11 现在能保留 `forward(x: i32)=id(x)` 并 emit `local.get 0 return_call $target`；多参/非 param0 argument lowering 仍未完成。
 		- [x] minimal callee symbol check：极窄尾调用 target 必须能在当前 typed function set 中解析到同名函数；同 namespace 裸调用会解析成 owner-qualified symbol，完整 import/mangle-aware call graph 仍未完成。
 		- [x] minimal i32 const call exactness：`f(42)` 窄 tail-call slice 现在要求 const arg 精确闭合且处于尾位置，避免把 `f(42 + x)` / `f(42, y)` / `f(42) + 1` 误编译成 `f(42)`。
+		- [x] minimal small i32 const call exactness：`f(7)` 这类非 0/42 small const tail-call arg 现在保留为 `TypedI32ConstSmall` 并可穿到 runnable WAT，避免 source-slice backend 把 small const 漏掉或降成 0。
 		- [x] minimal no-arg call exactness：`f()` 窄 tail-call slice 现在要求空参数精确闭合且处于尾位置，避免把 `f() + 1` 误编译成 `f()`。
 		- [x] minimal param return exactness：`id(x)=x` 窄 return-param slice 现在要求参数名处于尾位置，避免把 `x + 1` 误编译成 `x`。
 		- [x] minimal const return exactness：`42` / `0` 常量返回与 branch const arm 现在要求 atom 占满 tail region，避免把 `42 + x` 误编译成 `42`。
@@ -118,6 +119,7 @@
 	- [x] ContN frame-chain obligations：packaged ContN simplification 已生成 stackless resume function / frame chain / repeatable package obligation；真实 frame extraction 仍未完成。
 	- [x] ContN non-zero frame fact：`ContinuationPackaged` lowering fact 现在会携带至少一个 stackless resume frame shell，避免 C11 收到 zero-frame repeatable package；真实 capture/frame body extraction 仍 fail-closed。
 	- [x] ContN frame-chain primary shell：C10 不再因 materialized continuation capture blocker 提前停止，packaged ContN 会生成空 capture frame shell、frame chain、repeatable package 进入 C11；真实 capture set / frame body extraction 仍未完成。
+	- [x] ContN stackless resume body threading slice：C10 现在从 `CpsControlTermFact` 为 frame resume 标记 `StacklessResumeBodyShiftN` 等 body kind，C11 `CoreOpStacklessFunction` 不再 emit 空 `(func)` shell；真实 resume body expression lowering / capture projection 仍未完成。
 - [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。
 	- [x] Core block obligations：Core lowering 现在产出 block terminator / return / tailcall obligations；真实 executable block emission 仍未完成。
 	- [x] Core pattern decision obligations：C11 现在从 `CpsPatternDecisionFact` 生成 backend-neutral `CorePatternDecisionLoweringObligation`，保留 test-chain / if-else / field-extract / exhaustiveness-error 需求；真实 executable decision tree emission 仍未完成。
@@ -140,6 +142,9 @@
 	- [x] Core tail-call symbol validation：C11 validator 已拒绝未定义的 `CoreFunctionTailCall(target)`，避免悬空 `return_call` 进入 WAT emission。
 	- [x] Core duplicate symbol validation：C11 validator 已拒绝重复 function symbol，避免 namespace/callee lowering 生成 ambiguous WAT labels。
 	- [x] ContN package WAT parse smoke：C11 gate 现在 parse/validate stackless resume + frame-chain/package layout WAT，明确 multi-shot continuation 是 materialized 例外；真实 capture/frame body extraction 仍 blocked。
+	- [x] C11 runnable WAT artifact gate：`level1b:c11-backend` 现在写出 `.scratch/level-1b/c11-backend/*.wat` 与 `.wasm`，并用 wasmtime invoke 覆盖 const、small const、param、branch、tailcall、branch-tailcall、ContN/closure shell；真实 source AST primary path 与 ContN frame body extraction 仍 blocked。
+	- [x] C11 source-slice artifact gate：`level-1b/supports/pre-c11-smokes/source_primary_backend.chiba` 现在经窄 source-slice lowering 生成可查看/可运行 WAT，覆盖 `id(x)=x`、small const、`main=id(7)`、literal branch、param branch tailcall；完整 chibacc AST primary path 仍 blocked。
+	- [x] stackless resume WAT body threading：C11 stackless resume op 会消费 `StacklessResumeBodyKind` 生成函数 body，不再输出空函数壳；真实 ContN replay frame body 仍是下一层 blocker。
 
 - [ ] `level-1b/compiler/source/scan.chiba` 只是 truthfulness scaffold，不是语言设计或未来 frontend；第一优先级是让 chibalex token stream + chibacc AST 成为 C07 source facts 的 primary path，然后删除或降级 `scan.chiba`，不能让 byte-level scanner 长期承担 namespace/item/attribute 语义。
 - [ ] attribute grammar 必须先补齐 spec/golden，再实现：

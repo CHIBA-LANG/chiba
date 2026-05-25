@@ -43,10 +43,19 @@ type ClosureLoweringFact {
 }
 
 /// One stackless function used to resume a continuation frame.
+data StacklessResumeBodyKind {
+    StacklessResumeBodyPending,
+    StacklessResumeBodyReset,
+    StacklessResumeBodyShift,
+    StacklessResumeBodyShiftN,
+}
+
+/// One stackless function used to resume a continuation frame.
 type StacklessResumeFunction {
     owner: BinderId,
     resume_input: TypeIr,
     answer: TypeIr,
+    body: StacklessResumeBodyKind,
 }
 
 /// One frame in a repeatable `ContN` frame chain.

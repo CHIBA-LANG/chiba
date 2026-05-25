@@ -76,7 +76,7 @@ def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConver
     Ok(ClosureConvertedModule(
         module,
         closure_env_layouts_for_module(module),
-        continuation_lowering_facts(module.decisions, 0, Vec[ContinuationLoweringFact].new()),
+        continuation_lowering_facts_from_module(module, module.decisions, 0, Vec[ContinuationLoweringFact].new()),
         continuation_capture_plans(module.decisions, 0, Vec[ContinuationCapturePlan].new())))
 
 /// Empty capture list for a directified closure or continuation package.
@@ -268,12 +268,33 @@ def continuation_lowering_consumed_state(decision: ContinuationSimplification): 
         _ => false
     }
 
-/// Build a stackless resume function shell for a repeatable ContN frame.
-def stackless_resume_function_for_owner(owner: BinderId): StacklessResumeFunction =
+/// Return true when two binder ids identify the same owner.
+def closure_binder_id_eq(left: BinderId, right: BinderId): bool = left.id == right.id
+
+/// Convert a CPS control body kind into a stackless resume body kind.
+def stackless_resume_body_from_control(kind: CpsControlTermKind): StacklessResumeBodyKind =
+    match kind {
+        CpsControlResetBody => StacklessResumeBodyReset
+        CpsControlShiftBody(_) => StacklessResumeBodyShift
+        CpsControlShiftNBody(_) => StacklessResumeBodyShiftN
+    }
+
+/// Find the CPS control body extracted for one continuation owner.
+def stackless_resume_body_for_owner(terms: Array[CpsControlTermFact], owner: BinderId, index: usize): StacklessResumeBodyKind =
+    if index == terms.len() { StacklessResumeBodyPending }
+    else {
+        let term = terms.get(index)
+        if closure_binder_id_eq(term.owner, owner) { stackless_resume_body_from_control(term.kind) }
+        else { stackless_resume_body_for_owner(terms, owner, index + 1) }
+    }
+
+/// Build a stackless resume function from the CPS control body for a repeatable ContN frame.
+def stackless_resume_function_for_owner(module: SimplifiedContinuationModule, owner: BinderId): StacklessResumeFunction =
     StacklessResumeFunction {
         owner: owner,
         resume_input: TypeUnknown,
         answer: TypeUnknown,
+        body: stackless_resume_body_for_owner(module.source.source.control_terms, owner, 0),
     }
 
 /// Convert closure-conversion capture kind into closure IR capture class.
@@ -309,30 +330,30 @@ def continuation_env_fields_from_captures(fields: Array[CaptureField], index: us
 def continuation_env_fields_for_owner(owner: BinderId): Array[EnvField] =
     continuation_env_fields_from_captures(continuation_capture_fields_for_owner(owner), 0, Vec[EnvField].new())
 
-/// Build a repeatable ContN frame with capture extraction still external.
-def continuation_frame_for_owner(owner: BinderId): ContinuationFrame =
+/// Build a repeatable ContN frame with the CPS control body attached.
+def continuation_frame_for_owner(module: SimplifiedContinuationModule, owner: BinderId): ContinuationFrame =
     ContinuationFrame {
         owner: owner,
-        resume: stackless_resume_function_for_owner(owner),
+        resume: stackless_resume_function_for_owner(module, owner),
         captures: continuation_env_fields_for_owner(owner),
         parent: None,
     }
 
 /// Build frame chain facts for continuation kinds that require materialized frames.
-def continuation_lowering_frames(decision: ContinuationSimplification): Array[ContinuationFrame] =
+def continuation_lowering_frames(module: SimplifiedContinuationModule, decision: ContinuationSimplification): Array[ContinuationFrame] =
     match decision {
         ContinuationPackaged(owner) =>
-            Vec[ContinuationFrame].new().push(continuation_frame_for_owner(owner)).freeze()
+            Vec[ContinuationFrame].new().push(continuation_frame_for_owner(module, owner)).freeze()
         _ => Vec[ContinuationFrame].new().freeze()
     }
 
 /// Build a lowering fact for direct/deleted continuations that need no frame.
-def continuation_lowering_fact(decision: ContinuationSimplification): ContinuationLoweringFact =
+def continuation_lowering_fact(module: SimplifiedContinuationModule, decision: ContinuationSimplification): ContinuationLoweringFact =
     ContinuationLoweringFact {
         owner: decision.owner(),
         capability: decision.capability(),
         kind: continuation_lowering_kind(decision),
-        frames: continuation_lowering_frames(decision),
+        frames: continuation_lowering_frames(module, decision),
         consumed_state: continuation_lowering_consumed_state(decision),
     }
 
@@ -344,14 +365,14 @@ def continuation_decision_emits_lowering_fact(decision: ContinuationSimplificati
     }
 
 /// Build continuation lowering facts in stable decision order.
-def continuation_lowering_facts(decisions: Array[ContinuationSimplification], index: usize, out: Vec[ContinuationLoweringFact]): Array[ContinuationLoweringFact] =
+def continuation_lowering_facts_from_module(module: SimplifiedContinuationModule, decisions: Array[ContinuationSimplification], index: usize, out: Vec[ContinuationLoweringFact]): Array[ContinuationLoweringFact] =
     if index == decisions.len() { out.freeze() }
     else {
         let decision = decisions.get(index)
         if continuation_decision_emits_lowering_fact(decision) {
-            continuation_lowering_facts(decisions, index + 1, out.push(continuation_lowering_fact(decision)))
+            continuation_lowering_facts_from_module(module, decisions, index + 1, out.push(continuation_lowering_fact(module, decision)))
         } else {
-            continuation_lowering_facts(decisions, index + 1, out)
+            continuation_lowering_facts_from_module(module, decisions, index + 1, out)
         }
     }
 
