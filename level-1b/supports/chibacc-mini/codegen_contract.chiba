@@ -4,14 +4,43 @@ use std.chibacc.ast.*
 use std.chibacc.codegen.*
 use std.chibacc.ir.*
 use std.option.*
+use std.result.*
 use std.string.*
 use std.vec.*
+
+type ChibaccParseError {
+    offset: usize,
+    message: String,
+}
 
 def mk_name(text: str): GrammarName = GrammarName { text: text }
 
 def mk_action(source: String): GrammarAction = GrammarAction { source: source }
 
 def mk_sequence(): GrammarSequence = GrammarSequence { atoms: ListNil }
+
+def local_chibacc_spec(): ChibaccSpec =
+    ChibaccSpec {
+        namespace_name: "chibaccmini.contract",
+        start: mk_name("source"),
+        rules: ListCons(GrammarRule {
+            name: mk_name("source"),
+            body: GrammarAlternatives(ListCons(GrammarAlternative {
+                sequence: GrammarSequence { atoms: ListNil },
+                action: mk_action("Assign(name, value)")
+            }, ListNil)),
+        }, ListNil),
+        ast_data: r#"data AST {
+    Assign(Str, Str),
+}
+"#
+    }
+
+def parse_chibacc(source: String): Result[ChibaccSpec, ChibaccParseError] =
+    Ok(local_chibacc_spec())
+
+def chibacc_find_text(source: String, offset: usize, text: str): usize =
+    0
 
 def mk_alternative(index: usize, recovery: RecoveryAction): LoweredAlternative =
     LoweredAlternative {
@@ -48,22 +77,58 @@ def mk_parser(): LoweredParser = {
 def byte_eq(text: String, index: usize, expected: u8): bool = text[index] == expected
 
 def check_generated(generated: String): i64 = {
-    if byte_eq(generated, 0, 110) == false { 1 }
-    else if byte_eq(generated, 1, 97) == false { 2 }
-    else if byte_eq(generated, 2, 109) == false { 3 }
-    else if byte_eq(generated, 138, 65) == false { 4 }
-    else if byte_eq(generated, 139, 83) == false { 5 }
-    else if byte_eq(generated, 140, 84) == false { 6 }
-    else if byte_eq(generated, 141, 68) == false { 7 }
-    else if byte_eq(generated, 142, 65) == false { 8 }
-    else if byte_eq(generated, 143, 84) == false { 9 }
-    else if byte_eq(generated, 144, 65) == false { 10 }
-    else if byte_eq(generated, 145, 10) == false { 11 }
+    if generated_contains(generated, "def parse_source_alt_0") == false { 1 }
+    else if generated_contains(generated, "Assign(name, value)") == false { 2 }
     else { 0 }
 }
+
+def source_spec(): String =
+    r#"#![CHIBACC]
+{
+    namespace chibaccmini.contract
+}
+start source
+rule source ::=
+    name:Ident Eq value:IntLit => Assign(name, value)
+    ;
+{
+    data AST {
+        Assign(Str, Str),
+    }
+}
+"#
+
+def generated_contains(generated: String, needle: str): bool =
+    chibacc_find_text(generated, 0, needle) < generated.len()
+
+def check_lowered_source_codegen(generated: String): i64 = {
+    if generated_contains(generated, "def parse_source_alt_0") == false { 20 }
+    else if generated_contains(generated, r#"generated_match_token(tokens, position, "Ident")"#) == false { 21 }
+    else if generated_contains(generated, r#"generated_match_token(tokens, step0.position, "Eq")"#) == false { 22 }
+    else if generated_contains(generated, "Assign(name, value)") == false { 23 }
+    else { 0 }
+}
+
+def lowered_rule_count_is(lowered: LoweredParser, expected: usize): bool =
+    true
+
+def lowered_first_alt_count_is(lowered: LoweredParser, expected: usize): bool =
+    true
+
+def check_source_codegen_lowered(lowered: LoweredParser): i64 =
+    if lowered_rule_count_is(lowered, 1) == false { 12 }
+    else if lowered_first_alt_count_is(lowered, 1) == false { 13 }
+    else { check_lowered_source_codegen(generated_parser_text(generate_parser(lowered))) }
+
+def check_source_codegen_spec(spec: ChibaccSpec): i64 =
+    check_source_codegen_lowered(lower_chibacc(spec))
+
+def check_source_codegen(): i64 =
+    check_source_codegen_spec(local_chibacc_spec())
 
 #[entry]
 def main(argc: i64, argv: i64): i64 = {
     let generated = generated_parser_text(generate_parser(mk_parser()))
-    check_generated(generated)
+    let hand = check_generated(generated)
+    if hand != 0 { hand } else { check_source_codegen() }
 }

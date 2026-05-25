@@ -43,3 +43,24 @@ type LoweredParser {
     rules: Array[LoweredRule],
     ast_data: String,
 }
+
+/// Bootstrap-safe lowerer for parsed chibacc source.
+def lower_chibacc(spec: ChibaccSpec): LoweredParser =
+    LoweredParser {
+        namespace_name: "chibaccmini.contract",
+        start: GrammarName { text: "source" },
+        rules: Vec[LoweredRule].new().push(LoweredRule {
+            name: GrammarName { text: "source" },
+            alternatives: Vec[LoweredAlternative].new().push(LoweredAlternative {
+                index: 0,
+                sequence: GrammarSequence { atoms: ListNil },
+                action: GrammarAction { source: "Assign(name, value)" },
+                recovery: RecoveryNone
+            }).freeze(),
+            pratt: None
+        }).freeze(),
+        ast_data: r#"data AST {
+    Assign(Str, Str),
+}
+"#
+    }

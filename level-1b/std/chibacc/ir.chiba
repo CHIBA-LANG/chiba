@@ -81,11 +81,17 @@ def lower_alternatives_cons(head: GrammarAlternative, tail: List[GrammarAlternat
 
 /// Lower alternative list into stable source-order array.
 def lower_alternatives(items: List[GrammarAlternative], index: usize, out: Vec[LoweredAlternative]): Array[LoweredAlternative] =
-    out.freeze()
+    match items {
+        ListNil => out.freeze()
+        ListCons(head, tail) => lower_alternatives_cons(head, tail, index, out)
+    }
 
 /// Lower one parser rule into parser IR.
 def lower_grammar_rule(rule: GrammarRule): LoweredRule =
-    lowered_rule_alternatives(rule.name, ListNil)
+    match rule.body {
+        GrammarAlternatives(alts) => lowered_rule_alternatives(rule.name, alts)
+        GrammarPratt(prefixes, infixes) => lowered_rule_pratt(rule.name, prefixes, infixes)
+    }
 
 /// Lower grammar rules in source order.
 def lower_rules_cons(head: GrammarRule, tail: List[GrammarRule], out: Vec[LoweredRule]): Array[LoweredRule] = {
@@ -95,7 +101,10 @@ def lower_rules_cons(head: GrammarRule, tail: List[GrammarRule], out: Vec[Lowere
 
 /// Lower grammar rules in source order.
 def lower_rules(items: List[GrammarRule], out: Vec[LoweredRule]): Array[LoweredRule] =
-    out.freeze()
+    match items {
+        ListNil => out.freeze()
+        ListCons(head, tail) => lower_rules_cons(head, tail, out)
+    }
 
 /// Lower parsed chibacc source into typed parser IR.
 def lower_chibacc(spec: ChibaccSpec): LoweredParser =
