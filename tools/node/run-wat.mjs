@@ -55,6 +55,19 @@ async function readInput(args) {
 }
 
 async function makeImports(wat, args) {
+  function asArray(value) {
+    if (Array.isArray(value)) return value;
+    if (value && Array.isArray(value.items)) return value.items;
+    return [];
+  }
+
+  function byteArray(value) {
+    if (value instanceof Uint8Array) return value;
+    if (Array.isArray(value)) return Uint8Array.from(value);
+    if (value && value.bytes instanceof Uint8Array) return value.bytes;
+    return new Uint8Array();
+  }
+
   const env = new Proxy(
     {
       js_log(value) {
@@ -82,6 +95,58 @@ async function makeImports(wat, args) {
       level1c_cont_usage() {
         return 0n;
       },
+      "std.vec_new"() {
+        return [];
+      },
+      "std.vec_len"(vec) {
+        return BigInt(asArray(vec).length);
+      },
+      "std.vec_push"(vec, item) {
+        const array = asArray(vec);
+        array.push(item);
+        return array;
+      },
+      "std.vec_freeze"(vec) {
+        return asArray(vec);
+      },
+      "Array.len"(array) {
+        return BigInt(asArray(array).length);
+      },
+      "Array.get"(array, index) {
+        return asArray(array)[Number(index)] ?? null;
+      },
+      "std.string_len"(text) {
+        return BigInt(byteArray(text).length);
+      },
+      "std.str_len"(text) {
+        return BigInt(byteArray(text).length);
+      },
+      "std.string_byte_at"(text, index) {
+        return BigInt(byteArray(text)[Number(index)] ?? 0);
+      },
+      "std.str_byte_at"(text, index) {
+        return BigInt(byteArray(text)[Number(index)] ?? 0);
+      },
+      "std.string_char_at"(text, index) {
+        return BigInt(byteArray(text)[Number(index)] ?? 0);
+      },
+      "std.str_char_at"(text, index) {
+        return BigInt(byteArray(text)[Number(index)] ?? 0);
+      },
+      "std.string_slice"(text, start, end) {
+        return byteArray(text).slice(Number(start), Number(end));
+      },
+      "std.str_slice"(text, start, end) {
+        return byteArray(text).slice(Number(start), Number(end));
+      },
+      "std.string_concat"(leftText, rightText) {
+        const left = byteArray(leftText);
+        const right = byteArray(rightText);
+        const out = new Uint8Array(left.length + right.length);
+        out.set(left, 0);
+        out.set(right, left.length);
+        return out;
+      },
     },
     {
       get(target, prop) {
@@ -108,6 +173,16 @@ async function makeImports(wat, args) {
   }
 
   return { imports, wasi: null };
+}
+
+function countExportParams(wat, exportName) {
+  const escaped = exportName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const exportMatch = wat.match(new RegExp(`\\(export\\s+"${escaped}"\\s+\\(func\\s+\\$([^\\s)]+)\\)\\)`));
+  if (!exportMatch) return 0;
+  const funcName = exportMatch[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const funcMatch = wat.match(new RegExp(`\\(func\\s+\\$${funcName}\\b([^\\n]*)`));
+  if (!funcMatch) return 0;
+  return (funcMatch[1].match(/\(param\b/g) || []).length;
 }
 
 function selectExport(exports, invoke) {
@@ -152,7 +227,8 @@ try {
     throw new Error(`wat module does not export ${exportName}`);
   }
 
-  const result = main();
+  const defaultArgs = Array.from({ length: countExportParams(wat, exportName) }, () => 0n);
+  const result = main(...defaultArgs);
   console.log(String(result || 0));
 } catch (error) {
   const message = error && error.message ? error.message : String(error);

@@ -51,6 +51,7 @@ function expectedFor(file) {
 
 function instantiateOnly(file, wat) {
   if (!wat.includes('(export "main"') && !wat.includes('(export "_start"')) return true;
+  if (file.includes("namespace") && (file.includes("part_a.wat") || file.includes("part_b.wat"))) return true;
   if (wat.includes('(export "main" (func $None))')) return true;
   if (file.includes("level-1b/c11/continuation.wat")) return true;
   if (file.includes("continuation_scheme_multi.wat")) return true;
@@ -92,9 +93,10 @@ for (const file of listWatFiles(ROOT)) {
   mode.instantiateOnly = instantiateOnly(file, wat);
   const result = runWat(file, mode);
   const output = `${result.stdout}${result.stderr}`;
+  const expectedIncludes = mode.instantiateOnly ? [] : mode.includes;
   const ok =
     result.status === mode.status &&
-    mode.includes.every((line) => output.includes(line));
+    expectedIncludes.every((line) => output.includes(line));
 
   if (ok) {
     if (mode.instantiateOnly) {

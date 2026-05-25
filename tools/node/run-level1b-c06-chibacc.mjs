@@ -30,7 +30,7 @@ const REQUIRED_TEXT = [
   "def parse_pratt_at",
   "data ParserCodegenStatus",
   "ParserCodegenComplete",
-  "def GeneratedParser.complete",
+  "def generated_parser_complete",
   "def generate_parser",
   "reset",
   "shiftn retry",
@@ -169,7 +169,7 @@ function main() {
     if (!contSource.includes(needle)) fail(`chibacc continuation smoke missing ${needle}`);
   }
   pass("chibacc continuation smoke source");
-  if (!read("level-1b/supports/chibacc-mini/codegen_contract.chiba").includes("generate_parser(mk_parser()).text()")) {
+  if (!read("level-1b/supports/chibacc-mini/codegen_contract.chiba").includes("generated_parser_text(generate_parser(mk_parser()))")) {
     fail("chibacc codegen contract fixture must keep executable main");
   }
   pass("chibacc codegen contract fixture");

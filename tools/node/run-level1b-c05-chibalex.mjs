@@ -29,7 +29,7 @@ const REQUIRED_TEXT = [
   "next_char_offset",
   "data LexerCodegenStatus",
   "LexerCodegenComplete",
-  "def GeneratedLexer.complete",
+  "def generated_lexer_complete",
   "def generate_lexer",
   "reset",
   "shift retry",

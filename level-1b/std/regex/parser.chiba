@@ -255,10 +255,10 @@ def regex_parse_usize_digits(pattern: str, offset: usize, end: usize, value: usi
     }
 
 /// Find a byte before a boundary.
-def regex_find_byte_until(pattern: str, offset: usize, end: usize, byte: u8): usize =
+def find_regex_byte_until(pattern: str, offset: usize, end: usize, byte: u8): usize =
     if offset >= end { end }
     else if pattern.byte_at(offset) == byte { offset }
-    else { regex_find_byte_until(pattern, offset + 1, end, byte) }
+    else { find_regex_byte_until(pattern, offset + 1, end, byte) }
 
 /// Attach lazy mode when a quantifier is followed by `?`, and reject possessive `+`.
 def regex_quantifier_apply_lazy(repeat: RegexRepeat, cursor: RegexCursor): Result[RegexQuantifierParseOk, RegexParseError] =
@@ -274,10 +274,10 @@ def regex_quantifier_apply_lazy(repeat: RegexRepeat, cursor: RegexCursor): Resul
 
 /// Parse `{m}`, `{m,}`, or `{m,n}`.
 def parse_braced_quantifier(cursor: RegexCursor): Result[RegexQuantifierParseOk, RegexParseError] =
-    let close = regex_find_byte_until(cursor.pattern, cursor.offset + 1, cursor.pattern.len(), 125)
+    let close = find_regex_byte_until(cursor.pattern, cursor.offset + 1, cursor.pattern.len(), 125)
     if close >= cursor.pattern.len() { Err(RegexParseError { offset: cursor.offset, message: "unterminated regex quantifier" }) }
     else {
-        let comma = regex_find_byte_until(cursor.pattern, cursor.offset + 1, close, 44)
+        let comma = find_regex_byte_until(cursor.pattern, cursor.offset + 1, close, 44)
         if comma >= close {
             match regex_parse_usize_digits(cursor.pattern, cursor.offset + 1, close, 0, false) {
                 Some(exact) => regex_quantifier_apply_lazy(regex_repeat(exact, Some(exact)), RegexCursor { pattern: cursor.pattern, offset: close + 1 })

@@ -1,6 +1,6 @@
 #![no_prelude_import]
 #[compile_if(all(target="chiba-dev", not(backend="native")))]
-namespace level1b.attributes.complex
+namespace supports.attributes.complex
 
 #[attribute(all(someident, a=b, c=[1,2,3,4], meta={owner="compiler", stable=true}))]
 def complex_attr_fixture(): i64 = 1

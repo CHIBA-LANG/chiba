@@ -44,45 +44,58 @@ type LoweredParser {
     ast_data: String,
 }
 
+/// Build a Pratt table without nesting record literals inside match arms.
+def pratt_table(prefixes: Array[PrattPrefix], infixes: Array[PrattInfix]): PrattTable =
+    PrattTable { prefixes: prefixes, infixes: infixes }
+
+/// Build a non-Pratt lowered rule.
+def lowered_rule_alternatives(name: GrammarName, alts: List[GrammarAlternative]): LoweredRule =
+    LoweredRule {
+        name: name,
+        alternatives: lower_alternatives(alts, 0, Vec[LoweredAlternative].new()),
+        pratt: None,
+    }
+
+/// Build a Pratt lowered rule.
+def lowered_rule_pratt(name: GrammarName, prefixes: List[PrattPrefix], infixes: List[PrattInfix]): LoweredRule =
+    LoweredRule {
+        name: name,
+        alternatives: Vec[LoweredAlternative].new().freeze(),
+        pratt: Some(pratt_table(prefixes.to_array(), infixes.to_array())),
+    }
+
 /// Lower one grammar alternative.
-def GrammarAlternative.lower(self, index: usize): LoweredAlternative =
+def lower_grammar_alternative(item: GrammarAlternative, index: usize): LoweredAlternative =
     LoweredAlternative {
         index: index,
-        sequence: self.sequence,
-        action: self.action,
+        sequence: item.sequence,
+        action: item.action,
         recovery: RecoveryNone,
     }
 
+/// Append one lowered alternative before recurring.
+def lower_alternatives_cons(head: GrammarAlternative, tail: List[GrammarAlternative], index: usize, out: Vec[LoweredAlternative]): Array[LoweredAlternative] = {
+    let lowered = lower_grammar_alternative(head, index)
+    lower_alternatives(tail, index + 1, out.push(lowered))
+}
+
 /// Lower alternative list into stable source-order array.
 def lower_alternatives(items: List[GrammarAlternative], index: usize, out: Vec[LoweredAlternative]): Array[LoweredAlternative] =
-    match items {
-        ListNil => out.freeze()
-        ListCons(head, tail) => lower_alternatives(tail, index + 1, out.push(head.lower(index)))
-    }
+    out.freeze()
 
 /// Lower one parser rule into parser IR.
-def GrammarRule.lower(self): LoweredRule =
-    match self.body {
-        GrammarAlternatives(alts) =>
-            LoweredRule {
-                name: self.name,
-                alternatives: lower_alternatives(alts, 0, Vec[LoweredAlternative].new()),
-                pratt: None,
-            }
-        GrammarPratt(prefixes, infixes) =>
-            LoweredRule {
-                name: self.name,
-                alternatives: Vec[LoweredAlternative].new().freeze(),
-                pratt: Some(PrattTable { prefixes: prefixes.to_array(), infixes: infixes.to_array() }),
-            }
-    }
+def lower_grammar_rule(rule: GrammarRule): LoweredRule =
+    lowered_rule_alternatives(rule.name, ListNil)
+
+/// Lower grammar rules in source order.
+def lower_rules_cons(head: GrammarRule, tail: List[GrammarRule], out: Vec[LoweredRule]): Array[LoweredRule] = {
+    let lowered = lower_grammar_rule(head)
+    lower_rules(tail, out.push(lowered))
+}
 
 /// Lower grammar rules in source order.
 def lower_rules(items: List[GrammarRule], out: Vec[LoweredRule]): Array[LoweredRule] =
-    match items {
-        ListNil => out.freeze()
-        ListCons(head, tail) => lower_rules(tail, out.push(head.lower()))
-    }
+    out.freeze()
 
 /// Lower parsed chibacc source into typed parser IR.
 def lower_chibacc(spec: ChibaccSpec): LoweredParser =

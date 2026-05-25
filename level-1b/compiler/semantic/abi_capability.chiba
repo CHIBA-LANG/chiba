@@ -16,6 +16,13 @@ data CapabilityUse {
     CapabilityAtomic,
 }
 
+/// Extern ABI fact derived from typed extern item skeletons.
+type ExternAbiFact {
+    owner: BinderId,
+    abi: ExternAbi,
+    has_type_annotation: bool,
+}
+
 /// Return true for ABI scalar types accepted at extern boundaries.
 def abi_scalar_type(ty: SemType): bool =
     match ty {
@@ -39,9 +46,42 @@ def CapabilityUse.requires_unsafe(self): bool =
         _ => false
     }
 
+/// Convert one extern skeleton into an ABI fact.
+def extern_abi_fact_from_item(item: TypedItemSkeleton): Option[ExternAbiFact] =
+    if item.skeleton_kind == TypedItemExternFunction {
+        Some(ExternAbiFact {
+            owner: item.binder,
+            abi: ExternEnv,
+            has_type_annotation: item.surface.has_type_annotation,
+        })
+    } else { None }
+
+/// Build extern ABI facts from typed item skeletons.
+def extern_abi_facts_from_items(items: Array[TypedItemSkeleton], index: usize, out: Vec[ExternAbiFact]): Array[ExternAbiFact] =
+    if index == items.len() { out.freeze() }
+    else {
+        match extern_abi_fact_from_item(items.get(index)) {
+            Some(fact) => extern_abi_facts_from_items(items, index + 1, out.push(fact))
+            None => extern_abi_facts_from_items(items, index + 1, out)
+        }
+    }
+
+/// Return true when every extern ABI fact has a scanned type annotation.
+def extern_abi_facts_have_signatures(facts: Array[ExternAbiFact], index: usize): bool =
+    if index == facts.len() { true }
+    else if facts.get(index).has_type_annotation == false { false }
+    else { extern_abi_facts_have_signatures(facts, index + 1) }
+
 /// Check extern ABI signatures after type inference.
 def check_extern_abi(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
-    Ok(module)
+    let facts = extern_abi_facts_from_items(module.items, 0, Vec[ExternAbiFact].new())
+    if extern_abi_facts_have_signatures(facts, 0) {
+        Ok(module)
+    } else {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: extern ABI signature facts absent"))
+            .freeze()))
+    }
 
 /// Convert a capability check failure into semantic diagnostics.
 def capability_check_diagnostic(check: CapabilityCheck): Option[SemanticDiagnostics] =
@@ -57,6 +97,5 @@ def capability_check_diagnostic(check: CapabilityCheck): Option[SemanticDiagnost
 def check_capabilities(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
     match capability_check_diagnostic(check_sendable_callable_storages(module.callable_storage, 0)) {
         Some(errors) => Err(errors)
-        None =>
-            Ok(module)
+        None => Ok(module)
     }

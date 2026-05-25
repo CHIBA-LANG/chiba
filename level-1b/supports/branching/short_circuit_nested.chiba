@@ -1,4 +1,4 @@
-namespace level1b.branching.short_circuit_nested
+namespace supports.branching.short_circuit_nested
 
 def left(value: i64): bool = value > 0
 

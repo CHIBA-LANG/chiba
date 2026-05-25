@@ -463,6 +463,8 @@ def cir_l8_item_symbols(items: CirItemList): CirCoreSymbolList =
             match item {
                 L7CoreItemDef(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), tail)
                 L7CoreItemExtern(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), tail)
+                L8ValidatedCoreItemDef(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), tail)
+                L8ValidatedCoreItemExtern(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), tail)
                 _ => tail
             }
         }

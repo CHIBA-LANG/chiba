@@ -1,4 +1,4 @@
-namespace level1b.branching.match_arms_default
+namespace supports.branching.match_arms_default
 
 data Token {
     Ident(i64),

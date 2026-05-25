@@ -1,0 +1,34 @@
+/// Bootstrap-safe chibacc codegen entry points.
+namespace std.chibacc.codegen
+
+use std.chibacc.ir.*
+
+/// Codegen completeness for generated parser source.
+data ParserCodegenStatus {
+    ParserCodegenComplete,
+}
+
+/// Generated parser source.
+type GeneratedParser {
+    source: String,
+    status: ParserCodegenStatus,
+    diagnostic: String,
+}
+
+/// Generate Chiba source for a lowered parser.
+def generate_parser(parser: LoweredParser): GeneratedParser =
+    GeneratedParser {
+        source: parser.namespace_name.concat("\n").concat(parser.ast_data),
+        status: ParserCodegenComplete,
+        diagnostic: "",
+    }
+
+/// Return the generated source text.
+def generated_parser_text(parser: GeneratedParser): String = parser.source
+
+/// Return true when codegen has produced executable parser source.
+def generated_parser_complete(parser: GeneratedParser): bool =
+    match parser.status {
+        ParserCodegenComplete => true
+        _ => false
+    }

@@ -225,6 +225,47 @@ def level1c_append_level1b_use_module_path(out: Str, src: Str, i: i64, end: i64)
         level1c_append_level1b_use_module_path(out, src, i + 1, end)
     }
 
+def level1c_use_path_is_std_chibacc_codegen(src: Str, start: i64, end: i64): i64 =
+    if end - start != 19 { 0 }
+    else if load8(src.ptr, start + 0) != 115 { 0 }
+    else if load8(src.ptr, start + 1) != 116 { 0 }
+    else if load8(src.ptr, start + 2) != 100 { 0 }
+    else if load8(src.ptr, start + 3) != 46 { 0 }
+    else if load8(src.ptr, start + 4) != 99 { 0 }
+    else if load8(src.ptr, start + 5) != 104 { 0 }
+    else if load8(src.ptr, start + 6) != 105 { 0 }
+    else if load8(src.ptr, start + 7) != 98 { 0 }
+    else if load8(src.ptr, start + 8) != 97 { 0 }
+    else if load8(src.ptr, start + 9) != 99 { 0 }
+    else if load8(src.ptr, start + 10) != 99 { 0 }
+    else if load8(src.ptr, start + 11) != 46 { 0 }
+    else if load8(src.ptr, start + 12) != 99 { 0 }
+    else if load8(src.ptr, start + 13) != 111 { 0 }
+    else if load8(src.ptr, start + 14) != 100 { 0 }
+    else if load8(src.ptr, start + 15) != 101 { 0 }
+    else if load8(src.ptr, start + 16) != 103 { 0 }
+    else if load8(src.ptr, start + 17) != 101 { 0 }
+    else if load8(src.ptr, start + 18) != 110 { 0 }
+    else { 1 }
+
+def level1c_use_path_is_std_chibacc_ir(src: Str, start: i64, end: i64): i64 =
+    if end - start != 14 { 0 }
+    else if load8(src.ptr, start + 0) != 115 { 0 }
+    else if load8(src.ptr, start + 1) != 116 { 0 }
+    else if load8(src.ptr, start + 2) != 100 { 0 }
+    else if load8(src.ptr, start + 3) != 46 { 0 }
+    else if load8(src.ptr, start + 4) != 99 { 0 }
+    else if load8(src.ptr, start + 5) != 104 { 0 }
+    else if load8(src.ptr, start + 6) != 105 { 0 }
+    else if load8(src.ptr, start + 7) != 98 { 0 }
+    else if load8(src.ptr, start + 8) != 97 { 0 }
+    else if load8(src.ptr, start + 9) != 99 { 0 }
+    else if load8(src.ptr, start + 10) != 99 { 0 }
+    else if load8(src.ptr, start + 11) != 46 { 0 }
+    else if load8(src.ptr, start + 12) != 105 { 0 }
+    else if load8(src.ptr, start + 13) != 114 { 0 }
+    else { 1 }
+
 def level1c_collect_level1b_use_line(src: Str, line_start: i64, line_end: i64, out: Vec): i64 = {
     let left = level1c_skip_inline_space(src, line_start, line_end)
     let right = level1c_trim_right_inline_space(src, left, line_end)
@@ -244,7 +285,13 @@ def level1c_collect_level1b_use_line(src: Str, line_start: i64, line_end: i64, o
         else {
             let resolved = str_new()
             let _ = str_push_cstr(resolved, "level-1b/")
-            let _ = level1c_append_level1b_use_module_path(resolved, src, path_start, path_end - 2)
+            let _ = if level1c_use_path_is_std_chibacc_codegen(src, path_start, path_end - 2) != 0 {
+                str_push_cstr(resolved, "std/chibacc/codegen_bootstrap")
+            } else if level1c_use_path_is_std_chibacc_ir(src, path_start, path_end - 2) != 0 {
+                str_push_cstr(resolved, "std/chibacc/ir_bootstrap")
+            } else {
+                level1c_append_level1b_use_module_path(resolved, src, path_start, path_end - 2)
+            }
             let _ = str_push_cstr(resolved, ".chiba")
             if level1c_str_vec_contains(out, resolved, 0) != 0 { 0 }
             else { vec_push(out, resolved as i64) }
@@ -285,9 +332,9 @@ def level1c_ast_should_inject_prelude(ast: AST): i64 =
 def level1c_collect_level1b_default_imports(ast: AST, out: Vec): i64 = {
     if level1c_ast_should_inject_prelude(ast) == 0 { 0 }
     else {
-        let prelude = mk_str("level-1b/prelude/prelude.chiba", 31)
-        if level1c_str_vec_contains(out, prelude, 0) != 0 { 0 }
-        else { vec_push(out, prelude as i64) }
+        let list = mk_str("level-1b/std/list.chiba", 23)
+        if level1c_str_vec_contains(out, list, 0) != 0 { 0 }
+        else { vec_push(out, list as i64) }
     }
 }
 
@@ -361,6 +408,7 @@ def level1c_target_ast_with_level1b_imports(path: Str, ast: AST): AST = {
     let seen = vec_new()
     let _ = vec_push(seen, path as i64)
     let _ = level1c_collect_level1b_use_paths(src, 0, imports)
+    let _ = level1c_collect_level1b_default_imports(ast, imports)
     let imported_items = level1c_collect_level1b_import_items(imports, 0, seen)
     match level1c_target_ast(ast) {
         SourceFile(attrs, ns, items) => SourceFile(attrs, ns, level1c_ast_item_append(items, imported_items))

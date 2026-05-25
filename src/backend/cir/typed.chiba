@@ -50,9 +50,17 @@ def cir_global_type_env_lookup(env: CirGlobalTypeEnv, name: Str): CirType =
 def cir_global_type_env_add(env: CirGlobalTypeEnv, name: Str, ty: CirType): CirGlobalTypeEnv =
     CirGlobalTypeEnvCons(name, ty, env)
 
+def cir_typed_type_args(args: AST, fallback: CirType): CirTypeList =
+    match args {
+        TypeArg_End => CirTypeEnd
+        TypeArg_Cons(head, tail) =>
+            CirTypeCons(cir_typed_type_from_ast(head, fallback), cir_typed_type_args(tail, fallback))
+        _ => CirTypeEnd
+    }
+
 def cir_typed_type_from_ast(ty: AST, fallback: CirType): CirType =
     match ty {
-        Type_Path(name, _) => {
+        Type_Path(name, tail) => {
             if name.len == 0 { fallback }
             else if streq(name, mk_str("i64", 3)) != 0 { CirTyI64 }
             else if streq(name, mk_str("i32", 3)) != 0 { CirTyI32 }
@@ -65,7 +73,12 @@ def cir_typed_type_from_ast(ty: AST, fallback: CirType): CirType =
             else if streq(name, mk_str("UnsafeRef", 9)) != 0 { CirTyUnsafeRef(cir_typed_type_first_arg(ty, fallback)) }
             else if streq(name, mk_str("Ptr", 3)) != 0 { CirTyPtr(cir_typed_type_first_arg(ty, fallback)) }
             else if streq(name, mk_str("Atomic", 6)) != 0 { CirTyAtomic(cir_typed_type_first_arg(ty, fallback)) }
-            else { CirTyConst(name) }
+            else {
+                match tail {
+                    Type_Tail_Generic(args) => CirTyApp(CirTyConst(name), cir_typed_type_args(args, fallback))
+                    _ => CirTyConst(name)
+                }
+            }
         }
         Type_Row(_) => fallback
         Type_Atom(name) => {
@@ -289,6 +302,7 @@ def cir_typed_owner_name_from_type(ty: CirType): Str =
         CirTyString => mk_str("String", 6)
         CirTyStr => mk_str("str", 3)
         CirTySliceU8 => mk_str("Slice", 5)
+        CirTyApp(callee, _) => cir_typed_owner_name_from_type(callee)
         CirTyConst(name) => name
         CirTyNominal(id, _) => id.local_name
         CirTyData(id, _) => id.local_name
@@ -300,7 +314,15 @@ def cir_typed_method_receiver_type(name: Str): CirType =
     if streq(name, mk_str("GeneratedParser.text", 20)) != 0 { CirTyConst(mk_str("GeneratedParser", 15)) }
     else if streq(name, mk_str("Range.start", 11)) != 0 { CirTyConst(mk_str("Range", 5)) }
     else if streq(name, mk_str("Range.end", 9)) != 0 { CirTyConst(mk_str("Range", 5)) }
+    else if streq(name, mk_str("Array.len", 9)) != 0 { CirTyConst(mk_str("Array", 5)) }
+    else if streq(name, mk_str("Array.get", 9)) != 0 { CirTyConst(mk_str("Array", 5)) }
+    else if streq(name, mk_str("Array.slice", 11)) != 0 { CirTyConst(mk_str("Array", 5)) }
     else if streq(name, mk_str("Array.is_empty", 14)) != 0 { CirTyConst(mk_str("Array", 5)) }
+    else if streq(name, mk_str("Vec.len", 7)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("Vec.push", 8)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("Vec.freeze", 10)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("Vec.extend", 10)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("Vec.extend_loop", 15)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Slice.is_empty", 14)) != 0 { CirTySliceU8 }
     else { CirTyUnknown }
 
@@ -343,7 +365,10 @@ def cir_typed_known_field_type(owner: Str, field: Str): CirType =
         else if streq(field, mk_str("end", 3)) != 0 { CirTyI64 }
         else { CirTyUnknown }
     } else if streq(owner, mk_str("GeneratedParser", 15)) != 0 {
-        if streq(field, mk_str("source", 6)) != 0 { CirTyString } else { CirTyUnknown }
+        if streq(field, mk_str("source", 6)) != 0 { CirTyString }
+        else if streq(field, mk_str("status", 6)) != 0 { CirTyConst(mk_str("ParserCodegenStatus", 19)) }
+        else if streq(field, mk_str("diagnostic", 10)) != 0 { CirTyString }
+        else { CirTyUnknown }
     } else if streq(owner, mk_str("GrammarName", 11)) != 0 {
         if streq(field, mk_str("text", 4)) != 0 { CirTyStr } else { CirTyUnknown }
     } else if streq(owner, mk_str("GrammarToken", 12)) != 0 {
@@ -412,11 +437,48 @@ def cir_typed_value_owner_name(expr: CirExpr): Str =
         _ => cir_typed_owner_name_from_type(cir_typed_expr_type(expr))
     }
 
+def cir_typed_type_first_arg_from_list(args: CirTypeList): CirType =
+    match args {
+        CirTypeCons(head, _) => head
+        _ => CirTyUnknown
+    }
+
+def cir_typed_array_of(value: CirType): CirType =
+    CirTyApp(CirTyConst(mk_str("Array", 5)), CirTypeCons(value, CirTypeEnd))
+
+def cir_typed_method_result_from_receiver(receiver: CirType, field: Str, fallback: CirType): CirType =
+    match receiver {
+        CirTyApp(callee, args) =>
+            match callee {
+                CirTyConst(owner) =>
+                    if streq(owner, mk_str("Vec", 3)) != 0 {
+                        if streq(field, mk_str("new", 3)) != 0 { receiver }
+                        else if streq(field, mk_str("push", 4)) != 0 { receiver }
+                        else if streq(field, mk_str("extend", 6)) != 0 { receiver }
+                        else if streq(field, mk_str("extend_loop", 11)) != 0 { receiver }
+                        else if streq(field, mk_str("freeze", 6)) != 0 { cir_typed_array_of(cir_typed_type_first_arg_from_list(args)) }
+                        else if streq(field, mk_str("len", 3)) != 0 { CirTyUsize }
+                        else { fallback }
+                    } else if streq(owner, mk_str("Array", 5)) != 0 {
+                        if streq(field, mk_str("len", 3)) != 0 { CirTyUsize }
+                        else if streq(field, mk_str("get", 3)) != 0 { cir_typed_type_first_arg_from_list(args) }
+                        else { fallback }
+                    } else { fallback }
+                _ => fallback
+            }
+        _ => fallback
+    }
+
 def cir_typed_known_callee_result(name: Str): CirType =
     if streq(name, mk_str("Vec.new", 7)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Vec.push", 8)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("Vec.extend", 10)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("Vec.extend_loop", 15)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Vec.freeze", 10)) != 0 { CirTyConst(mk_str("Array", 5)) }
     else if streq(name, mk_str("GeneratedParser.text", 20)) != 0 { CirTyString }
+    else if streq(name, mk_str("generated_parser_text", 21)) != 0 { CirTyString }
+    else if streq(name, mk_str("str.concat", 10)) != 0 { CirTyString }
+    else if streq(name, mk_str("String.concat", 13)) != 0 { CirTyString }
     else if streq(name, mk_str("DiagnosticBuilder.push_str", 26)) != 0 { CirTyConst(mk_str("DiagnosticBuilder", 17)) }
     else if streq(name, mk_str("DiagnosticBuilder.finish", 24)) != 0 { CirTyString }
     else if streq(name, mk_str("Array.len", 9)) != 0 { CirTyI64 }
@@ -444,8 +506,10 @@ def cir_typed_callee_result(callee: CirExpr, globals: CirGlobalTypeEnv): CirType
                     }
                 L1OpField(value, field) => {
                     let owner = cir_typed_value_owner_name(value)
-                    if owner.len == 0 { ty }
+                    let receiver_ty = cir_typed_expr_type(value)
+                    let fallback = if owner.len == 0 { ty }
                     else { cir_typed_lookup_global_result(globals, cir_typed_method_name(owner, field)) }
+                    cir_typed_method_result_from_receiver(receiver_ty, field, fallback)
                 }
                 _ => ty
             }
@@ -457,8 +521,9 @@ def cir_typed_callee_result(callee: CirExpr, globals: CirGlobalTypeEnv): CirType
             }
         L1OpField(value, field) => {
             let owner = cir_typed_value_owner_name(value)
-            if owner.len == 0 { CirTyUnknown }
+            let fallback = if owner.len == 0 { CirTyUnknown }
             else { cir_typed_lookup_global_result(globals, cir_typed_method_name(owner, field)) }
+            cir_typed_method_result_from_receiver(cir_typed_expr_type(value), field, fallback)
         }
         _ => CirTyUnknown
     }

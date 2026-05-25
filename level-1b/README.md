@@ -16,9 +16,11 @@ wasmtime chibac.wasm -- input.chiba -I std -I prelude --target wasm32-unknown-wa
 Binaryen v129 is the standard WAT-to-WASM toolchain for level-1b validation:
 `wasm-as` assembles, `wasm-opt` validates/optimizes, `wasm-dis` roundtrips for
 debugging, and tools such as `wasm-merge` / `wasm-reduce` may be used by tests
-and debugging workflows. Node runners and the `binaryen.js` binding are allowed
-for development and CI convenience, but level-1b source and generated WAT/WASM
-must not depend on Node-only host imports.
+and debugging workflows.
+
+Node runners and Binaryen wrappers are developer and CI conveniences only.
+Level-1b source and generated WAT/WASM must not depend on Node-only host
+imports.
 
 ## Source Layout
 

@@ -34,18 +34,16 @@ def append_lexer_prelude(builder: DiagnosticBuilder, lexer: LoweredLexer): Diagn
 
 /// Render a small usize as source text.
 def lexer_codegen_decimal_digit(value: usize): str =
-    match value {
-        0 => "0"
-        1 => "1"
-        2 => "2"
-        3 => "3"
-        4 => "4"
-        5 => "5"
-        6 => "6"
-        7 => "7"
-        8 => "8"
-        _ => "9"
-    }
+    if value == 0 { "0" }
+    else if value == 1 { "1" }
+    else if value == 2 { "2" }
+    else if value == 3 { "3" }
+    else if value == 4 { "4" }
+    else if value == 5 { "5" }
+    else if value == 6 { "6" }
+    else if value == 7 { "7" }
+    else if value == 8 { "8" }
+    else { "9" }
 
 /// Render a usize as source text.
 def lexer_codegen_usize(value: usize): String =
@@ -59,15 +57,15 @@ def lexer_codegen_u32(value: u32): String =
 
 /// Append a quoted source string. Lexer mode/action names are parsed identifiers.
 def append_lexer_quoted(builder: DiagnosticBuilder, text: str): DiagnosticBuilder =
-    builder.push_str("\"").push_str(text).push_str("\"")
+    builder.push_str(r#"""#).push_str(text).push_str(r#"""#)
 
 /// Append a LexMode literal.
 def append_lexer_mode(builder: DiagnosticBuilder, mode: LexMode): DiagnosticBuilder =
-    append_lexer_quoted(builder.push_str("LexMode { name: "), mode.name).push_str(" }")
+    append_lexer_quoted(builder.push_str(r#"LexMode { name: "#), mode.name).push_str(r#" }"#)
 
 /// Append a RegexChar literal.
 def append_regex_char(builder: DiagnosticBuilder, ch: RegexChar): DiagnosticBuilder =
-    builder.push_str("RegexChar { codepoint: ").push_str(lexer_codegen_u32(ch.codepoint)).push_str(" }")
+    builder.push_str(r#"RegexChar { codepoint: "#).push_str(lexer_codegen_u32(ch.codepoint)).push_str(r#" }"#)
 
 /// Append a RegexClassAtom literal.
 def append_regex_class_atom(builder: DiagnosticBuilder, atom: RegexClassAtom): DiagnosticBuilder =
@@ -92,11 +90,11 @@ def append_regex_class_atoms(builder: DiagnosticBuilder, atoms: List[RegexClassA
 def append_regex_class(builder: DiagnosticBuilder, class: RegexClass): DiagnosticBuilder =
     append_regex_class_atoms(
         builder
-            .push_str("RegexClass { negated: ")
+            .push_str(r#"RegexClass { negated: "#)
             .push_str(if class.negated { "true" } else { "false" })
             .push_str(", atoms: "),
         class.atoms)
-        .push_str(" }")
+        .push_str(r#" }"#)
 
 /// Append a quantifier mode literal.
 def append_regex_quant_mode(builder: DiagnosticBuilder, mode: RegexQuantMode): DiagnosticBuilder =
@@ -117,13 +115,13 @@ def append_regex_repeat(builder: DiagnosticBuilder, repeat: RegexRepeat): Diagno
     append_regex_quant_mode(
         append_regex_optional_usize(
             builder
-                .push_str("RegexRepeat { min: ")
+                .push_str(r#"RegexRepeat { min: "#)
                 .push_str(lexer_codegen_usize(repeat.min))
                 .push_str(", max: "),
             repeat.max)
             .push_str(", mode: "),
         repeat.mode)
-        .push_str(" }")
+        .push_str(r#" }"#)
 
 /// Append a RegexAst list literal.
 def append_regex_ast_list(builder: DiagnosticBuilder, items: List[RegexAst]): DiagnosticBuilder =
@@ -175,19 +173,19 @@ def append_lowered_rule_literal(builder: DiagnosticBuilder, rule: LoweredLexRule
         append_regex_ast(
             append_lexer_mode(
                 builder
-                    .push_str("LoweredLexRule { id: LexRuleId { index: ")
+                    .push_str(r#"LoweredLexRule { id: LexRuleId { index: "#)
                     .push_str(lexer_codegen_usize(rule.id.index))
-                    .push_str(" }, mode: "),
+                    .push_str(r#" }, mode: "#),
                 rule.mode)
                 .push_str(", pattern: "),
             rule.pattern)
             .push_str(", program: compile_regex("),
             rule.pattern)
-            .push_str("), action: LexAction { body: \"\" }, transition: "),
+            .push_str(r#"), action: LexAction { body: "" }, transition: "#),
         rule.transition)
         .push_str(", trivia: ")
         .push_str(if rule.trivia { "true" } else { "false" })
-        .push_str(" }")
+        .push_str(r#" }"#)
 
 /// Append generated rule array construction.
 def append_lowered_rule_array(builder: DiagnosticBuilder, rules: Array[LoweredLexRule], index: usize): DiagnosticBuilder =
@@ -203,14 +201,15 @@ def append_lexer_mode_array(builder: DiagnosticBuilder, modes: Array[LexMode], i
 def append_generated_lexer_factory(builder: DiagnosticBuilder, lexer: LoweredLexer): DiagnosticBuilder =
     append_lowered_rule_array(
         append_lexer_mode_array(
-            append_lexer_quoted(builder.push_str("def generated_lexer(): LoweredLexer = LoweredLexer { namespace_name: "), lexer.namespace_name)
+            append_lexer_quoted(builder.push_str(r#"def generated_lexer(): LoweredLexer = LoweredLexer { namespace_name: "#), lexer.namespace_name)
                 .push_str(", modes: Vec[LexMode].new()"),
             lexer.modes,
             0)
             .push_str(", rules: Vec[LoweredLexRule].new()"),
         lexer.rules,
         0)
-        .push_str(", token_data: \"\" }\n")
+        .push_str(r#", token_data: "" }
+"#)
 
 /// Append one lowered lexer rule summary.
 def append_lexer_rule_summary(builder: DiagnosticBuilder, rule: LoweredLexRule): DiagnosticBuilder =
@@ -232,9 +231,9 @@ def append_lexer_emit_branch(builder: DiagnosticBuilder, rule: LoweredLexRule): 
         builder
             .push_str("    else if rule.index == ")
             .push_str(lexer_codegen_usize(rule.id.index))
-            .push_str(" { let s = input.slice(start, end - start); Some(")
+            .push_str(r#" { let s = input.slice(start, end - start); Some("#)
             .push_str(rule.action.body)
-            .push_str(") }\n")
+            .push_str(r#") }\n"#)
     }
 
 /// Append token emission branches.
@@ -244,16 +243,34 @@ def append_lexer_emit_branches(rules: Array[LoweredLexRule], index: usize, build
 
 /// Return true when a byte can appear in a generated token constructor name.
 def lexer_action_ctor_byte(byte: u8): bool =
-    if byte >= 65 && byte <= 90 { true }
-    else if byte >= 97 && byte <= 122 { true }
-    else if byte >= 48 && byte <= 57 { true }
-    else { byte == 95 }
+    if byte >= 65 {
+        if byte <= 90 { true } else {
+            if byte >= 97 {
+                if byte <= 122 { true } else {
+                    if byte >= 48 {
+                        if byte <= 57 { true } else { byte == 95 }
+                    } else { byte == 95 }
+                }
+            } else {
+                if byte >= 48 {
+                    if byte <= 57 { true } else { byte == 95 }
+                } else { byte == 95 }
+            }
+        }
+    } else {
+        if byte >= 48 {
+            if byte <= 57 { true } else { byte == 95 }
+        } else { byte == 95 }
+    }
 
 /// Find the end of the token constructor in an action such as `Ident(s)`.
 def lexer_action_ctor_end(action: String, offset: usize): usize =
     if offset >= action.len() { offset }
-    else if lexer_action_ctor_byte(action.byte_at(offset)) { lexer_action_ctor_end(action, offset + 1) }
-    else { offset }
+    else {
+        let byte = action.byte_at(offset)
+        if lexer_action_ctor_byte(byte) { lexer_action_ctor_end(action, offset + 1) }
+        else { offset }
+    }
 
 /// Return the constructor name emitted by one token action.
 def lexer_action_ctor_name(action: String): str =
@@ -262,7 +279,10 @@ def lexer_action_ctor_name(action: String): str =
 /// Return true when the token action carries the matched slice as payload.
 def lexer_action_has_payload(action: String): bool =
     let end = lexer_action_ctor_end(action, 0)
-    end < action.len() && action.byte_at(end) == 40
+    if end < action.len() {
+        let byte = action.byte_at(end)
+        byte == 40
+    } else { false }
 
 /// Append one token reflection match arm for `generated_name`.
 def append_token_name_arm(builder: DiagnosticBuilder, rule: LoweredLexRule): DiagnosticBuilder =
@@ -273,9 +293,10 @@ def append_token_name_arm(builder: DiagnosticBuilder, rule: LoweredLexRule): Dia
         builder
             .push_str("        ")
             .push_str(ctor)
-            .push_str(if payload { "(_) => \"" } else { " => \"" })
+            .push_str(if payload { r#"(_) => ""# } else { r#" => ""# })
             .push_str(ctor)
-            .push_str("\"\n")
+            .push_str(r#""
+"#)
     }
 
 /// Append token reflection name arms.
@@ -309,13 +330,15 @@ def append_token_reflection_helpers(builder: DiagnosticBuilder, lexer: LoweredLe
             0,
             builder
                 .push_str("def Token.generated_name(self): str =\n")
-                .push_str("    match self {\n"))
-            .push_str("        _ => \"\"\n")
-            .push_str("    }\n")
+                .push_str(r#"    match self {\n"#))
+            .push_str(r#"        _ => ""
+"#)
+            .push_str(r#"    }\n"#)
             .push_str("def Token.generated_payload(self): str =\n")
-            .push_str("    match self {\n"))
-        .push_str("        _ => \"\"\n")
-        .push_str("    }\n")
+            .push_str(r#"    match self {\n"#))
+        .push_str(r#"        _ => ""
+"#)
+        .push_str(r#"    }\n"#)
 
 /// Append generated runtime helpers.
 def append_lexer_runtime(builder: DiagnosticBuilder, lexer: LoweredLexer): DiagnosticBuilder =
@@ -325,34 +348,34 @@ def append_lexer_runtime(builder: DiagnosticBuilder, lexer: LoweredLexer): Diagn
         append_token_reflection_helpers(builder, lexer)
             .push_str("def generated_start_mode(): LexMode = generated_lexer().modes.get(0)\n")
             .push_str("def generated_after_transition(rule: LoweredLexRule, state: LexState): LexState =\n")
-            .push_str("    match rule.transition {\n")
+            .push_str(r#"    match rule.transition {\n"#)
             .push_str("        LexStay => state\n")
             .push_str("        LexGoto(mode) => lex_state(mode, state.offset, state.line, state.column)\n")
             .push_str("        LexPush(mode) => lex_state(mode, state.offset, state.line, state.column)\n")
             .push_str("        LexPop => lex_state(generated_start_mode(), state.offset, state.line, state.column)\n")
-            .push_str("    }\n")
+            .push_str(r#"    }\n"#)
             .push_str("def generated_emit_token(rule: LexRuleId, input: str, start: usize, end: usize): Option[Token] =\n")
-            .push_str("    if false { None }\n"))
-        .push_str("    else { None }\n")
+            .push_str(r#"    if false { None }\n"#))
+        .push_str(r#"    else { None }\n"#)
         .push_str("def lex_all(input: str): Array[TokenSpan] = lex_loop(input, lex_state(generated_start_mode(), 0, 0, 0), Vec[TokenSpan].new())\n")
         .push_str("def lex_all_from(input: str, offset: usize, out: Vec[TokenSpan]): Array[TokenSpan] = lex_loop(input, lex_state(generated_start_mode(), offset, 0, 0), out)\n")
         .push_str("def lex_loop(input: str, state: LexState, out: Vec[TokenSpan]): Array[TokenSpan] =\n")
-        .push_str("    if state.offset >= input.len() { out.freeze() }\n")
-        .push_str("    else {\n")
+        .push_str(r#"    if state.offset >= input.len() { out.freeze() }\n"#)
+        .push_str(r#"    else {\n"#)
         .push_str("        let lexer = generated_lexer()\n")
-        .push_str("        match find_best_rule(lexer, input, state) {\n")
-        .push_str("            Some(found) => {\n")
+        .push_str(r#"        match find_best_rule(lexer, input, state) {\n"#)
+        .push_str(r#"            Some(found) => {\n"#)
         .push_str("                let rule = lexer.rules.get(found.rule.index)\n")
         .push_str("                let advanced = state.advance(input, found.end)\n")
         .push_str("                let next_state = generated_after_transition(rule, advanced)\n")
-        .push_str("                match generated_emit_token(found.rule, input, state.offset, found.end) {\n")
-        .push_str("                    Some(token) => lex_loop(input, next_state, out.push(TokenSpan { token: token, start: state.offset, end: found.end }))\n")
+        .push_str(r#"                match generated_emit_token(found.rule, input, state.offset, found.end) {\n"#)
+        .push_str(r#"                    Some(token) => lex_loop(input, next_state, out.push(TokenSpan { token: token, start: state.offset, end: found.end }))\n"#)
         .push_str("                    None => lex_loop(input, next_state, out)\n")
-        .push_str("                }\n")
-        .push_str("            }\n")
+        .push_str(r#"                }\n"#)
+        .push_str(r#"            }\n"#)
         .push_str("            None => lex_loop(input, state.advance_char(input), out)\n")
-        .push_str("        }\n")
-        .push_str("    }\n")
+        .push_str(r#"        }\n"#)
+        .push_str(r#"    }\n"#)
 
 /// Generate Chiba source for a lowered lexer.
 def generate_lexer(lexer: LoweredLexer): GeneratedLexer = {
@@ -360,7 +383,7 @@ def generate_lexer(lexer: LoweredLexer): GeneratedLexer = {
     let builder1 = append_lexer_prelude(builder0, lexer)
     let builder2 = append_lexer_rule_summaries(lexer.rules, 0, builder1)
     let builder3 = builder2
-        .push_str("type TokenSpan { token: Token, start: usize, end: usize }\n")
+        .push_str(r#"type TokenSpan { token: Token, start: usize, end: usize }\n"#)
         .push_str(lexer.token_data)
         .push_str("\n")
     let builder4 = append_generated_lexer_factory(builder3, lexer)
@@ -374,11 +397,11 @@ def generate_lexer(lexer: LoweredLexer): GeneratedLexer = {
 }
 
 /// Return the generated source text.
-def GeneratedLexer.text(self): String = self.source
+def generated_lexer_text(lexer: GeneratedLexer): String = lexer.source
 
 /// Return true when codegen has produced executable lexer source.
-def GeneratedLexer.complete(self): bool =
-    match self.status {
+def generated_lexer_complete(lexer: GeneratedLexer): bool =
+    match lexer.status {
         LexerCodegenComplete => true
         _ => false
     }

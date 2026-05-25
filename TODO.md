@@ -281,6 +281,7 @@
 ## 工具链原则更新
 
 - `chibac.wasm` 仍必须是用户可直接用 `wasmtime chibac.wasm -- ...` 执行的 WASI/Wasm-GC compiler。
+- 普通 Array / Vec / String / closure env / continuation package 必须保持 Wasm-GC managed object 语义，不退回线性内存或 Node host object。
 - Node runner / JS harness 仍然只是开发和 CI 便利层，不是运行时语义前提。
 - **Binaryen 不是当前要去除的依赖。**
 	- Binaryen CLI / `binaryen.js` / 仓库内携带的 `binaryen-linux-x86-64-version_129/` 都可以作为可接受的组装、验证、优化和分发工具链组成部分。
@@ -592,6 +593,11 @@
 	- **备注**:
 		- 这项发生在 C12 验证完成之后，不与当前“先让 level-1b 成为语义主路径”相混淆；
 		- `level0/` 也按同样原则直接删除，追溯依赖 Git 历史而不是仓库内并存目录。
+
+## 改进点
+
+1. `public use` reexport 暂时不支持, 新增 `public` 关键字可以加在 `def` `use` `type` `data` 之类的前面，但是保持默认 `public` 语义
+2. prelude 应该默认就直接 use 一堆 std 和 intrinsics
 
 ## 当前优先级顺序
 

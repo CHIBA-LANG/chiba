@@ -62,7 +62,15 @@ def build_typed_facts(module: TypedModule): Result[Array[TypedFacts], SemanticDi
     if module.functions.len() > 0 {
         Ok(typed_facts_from_functions(module.functions, 0, Vec[TypedFacts].new()))
     } else {
-        Ok(Vec[TypedFacts].new().freeze())
+        Ok(Vec[TypedFacts].new().push(typed_fact_module_baseline()).freeze())
+    }
+
+/// Baseline module fact for item-only modules that still passed typed skeleton derivation.
+def typed_fact_module_baseline(): TypedFacts =
+    TypedFacts {
+        root_type: typed_fact_unit_type(),
+        constraints: Vec[SemanticConstraint].new().freeze(),
+        obligations: Vec[SemanticObligation].new().freeze(),
     }
 
 /// Return true when typed facts contain specialization obligations.

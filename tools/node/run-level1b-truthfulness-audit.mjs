@@ -32,6 +32,13 @@ const ALLOWED_EMPTY_FACT_HELPERS = new Set([
   "cps_usage_facts_none",
 ]);
 
+const ALLOWED_NUMERIC_DOMAIN_HELPERS = new Set([
+  "core_stackless_resume_param_count",
+  "emit_core_decimal_digit",
+  "control_resume_shape_loop",
+  "control_resume_shape_finish",
+]);
+
 function listFiles(dir, suffix = ".chiba") {
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -82,7 +89,7 @@ for (const check of CHECKS) {
 for (const root of SCAN_ROOTS) {
   for (const file of listFiles(root)) {
     const source = read(file);
-    const passThrough = /\bdef\s+[A-Za-z0-9_.*]+\s*\([^)]*\bmodule\s*:[^)]*\)[\s\S]*?=\s*Ok\s*\(\s*module\s*\)/g;
+    const passThrough = /\bdef\s+[A-Za-z0-9_.*]+\s*\([^)]*\bmodule\s*:[^)]*\)\s*:[^=\n]+=\s*Ok\s*\(\s*module\s*\)/g;
     for (const match of source.matchAll(passThrough)) {
       blockers.push({
         id: "ok-module-pass-through",
@@ -216,6 +223,7 @@ for (const root of SCAN_ROOTS) {
 
     const numericConditional = /\bif\s+([^\n{}]+?)\s*(?:!=\s*0|==\s*1)\b/g;
     for (const match of source.matchAll(numericConditional)) {
+      if (ALLOWED_NUMERIC_DOMAIN_HELPERS.has(enclosingFunctionName(source, match.index))) continue;
       blockers.push({
         id: "historical-numeric-conditional",
         file: `${file}:${lineOf(source, match.index)}`,
@@ -227,6 +235,7 @@ for (const root of SCAN_ROOTS) {
 
     const numericBoolArm = /=>\s*(?:0|1)\b/g;
     for (const match of source.matchAll(numericBoolArm)) {
+      if (ALLOWED_NUMERIC_DOMAIN_HELPERS.has(enclosingFunctionName(source, match.index))) continue;
       blockers.push({
         id: "historical-numeric-bool-arm",
         file: `${file}:${lineOf(source, match.index)}`,

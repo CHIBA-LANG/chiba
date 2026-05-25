@@ -88,6 +88,7 @@ function runGeneratedWat(test) {
       "--no-warnings",
       "tools/node/run-wat.mjs",
       "-",
+      ...(test.invoke ? ["--invoke", test.invoke] : []),
       ...(USE_BINARYEN_OPT ? ["--opt"] : []),
     ],
     { input: generated.stdout },
@@ -514,11 +515,13 @@ const GENERATED_WAT_CASES = [
   {
     name: "generated wat grammar 01",
     file: "chiba-level1-grammar-spec/01-test.chiba",
+    invoke: "keep_comments",
     expect: ["1"],
   },
   {
     name: "generated wat loop",
     file: "supports/bootstrap/wat-loop-smoke.chiba",
+    invoke: "loop_once",
     expect: ["7"],
   },
   {
@@ -529,11 +532,13 @@ const GENERATED_WAT_CASES = [
   {
     name: "generated wat tailcall",
     file: "supports/bootstrap/wat-tailcall-smoke.chiba",
+    invoke: "run_tailcall",
     expect: ["0"],
   },
   {
     name: "generated wat tuple heap",
     file: "supports/bootstrap/wat-tuple-heap-smoke.chiba",
+    invoke: "tuple_heap",
     expect: ["41"],
   },
   {

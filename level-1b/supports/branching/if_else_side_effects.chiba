@@ -1,4 +1,4 @@
-namespace level1b.branching.if_else_side_effects
+namespace supports.branching.if_else_side_effects
 
 def then_effect(x: i64): i64 = x + 1
 

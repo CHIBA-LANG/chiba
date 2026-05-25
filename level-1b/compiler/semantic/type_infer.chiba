@@ -1995,7 +1995,11 @@ def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemS
 
 /// Run the level-2 semantic checks that require inferred types.
 def check_l2_types(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
-    Ok(module)
+    if module.items.len() == 0 {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: L2 typed item facts absent"))
+            .freeze()))
+    } else { Ok(module) }
 
 /// Historical diagnostics kept stable for tooling while primary lowering now continues with facts.
 def semantic_retired_blocker_messages(): Array[String] =

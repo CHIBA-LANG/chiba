@@ -64,6 +64,6 @@ def check_generated(generated: String): i64 = {
 
 #[entry]
 def main(argc: i64, argv: i64): i64 = {
-    let generated = generate_parser(mk_parser()).text()
+    let generated = generated_parser_text(generate_parser(mk_parser()))
     check_generated(generated)
 }

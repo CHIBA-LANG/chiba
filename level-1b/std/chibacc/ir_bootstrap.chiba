@@ -1,0 +1,45 @@
+/// Bootstrap-safe chibacc grammar IR surface.
+namespace std.chibacc.ir
+
+use std.chibacc.ast.*
+
+/// Stable parser state identifier.
+type ParserStateId {
+    index: usize,
+}
+
+/// Recovery action used after a failed alternative.
+data RecoveryAction {
+    RecoveryNone,
+    RecoverySkipUntil(List[str]),
+    RecoveryInsert(str),
+}
+
+/// Lowered alternative with stable order.
+type LoweredAlternative {
+    index: usize,
+    sequence: GrammarSequence,
+    action: GrammarAction,
+    recovery: RecoveryAction,
+}
+
+/// Pratt table entry.
+type PrattTable {
+    prefixes: Array[PrattPrefix],
+    infixes: Array[PrattInfix],
+}
+
+/// Lowered parser rule.
+type LoweredRule {
+    name: GrammarName,
+    alternatives: Array[LoweredAlternative],
+    pratt: Option[PrattTable],
+}
+
+/// Lowered parser module.
+type LoweredParser {
+    namespace_name: str,
+    start: GrammarName,
+    rules: Array[LoweredRule],
+    ast_data: String,
+}
