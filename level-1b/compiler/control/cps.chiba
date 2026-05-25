@@ -85,6 +85,7 @@ type CpsAdtCtorLoweringFact {
     helper_arity: usize,
     returns_canonical_tuple: bool,
     requires_tail_tuple_return: bool,
+    requires_utf8_identifier_lowering: bool,
 }
 
 /// Pick the primary branch-join kind for a coarse branching plan.
@@ -255,6 +256,7 @@ def cps_adt_ctor_lowering_fact_from_ctor(ctor: LoweredAdtCtor): CpsAdtCtorLoweri
         helper_arity: ctor.helper_arity,
         returns_canonical_tuple: ctor.body.returns_canonical_tuple,
         requires_tail_tuple_return: true,
+        requires_utf8_identifier_lowering: ctor.requires_utf8_identifier_lowering,
     }
 
 /// Build CPS ADT ctor lowering facts in source constructor order.

@@ -87,6 +87,7 @@ const REQUIRED_TEXT = [
   "adt_ctors: Array[CpsAdtCtorLoweringFact]",
   "type CpsAdtCtorLoweringFact",
   "requires_tail_tuple_return: bool",
+  "requires_utf8_identifier_lowering: bool",
   "def cps_adt_ctor_lowering_fact_from_ctor",
   "def cps_adt_ctor_lowering_facts",
   "def cps_tail_form_kind_from_function",

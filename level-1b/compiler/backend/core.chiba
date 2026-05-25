@@ -140,6 +140,7 @@ type CoreAdtCtorLoweringObligation {
     tuple_fields: Array[AdtTupleField],
     requires_symbol_tag_field: bool,
     requires_tuple_record_return: bool,
+    requires_utf8_identifier_lowering: bool,
 }
 
 /// Return the closure environment layout used by escaping closures.
@@ -447,6 +448,7 @@ def core_adt_ctor_lowering_obligation_from_fact(fact: CpsAdtCtorLoweringFact): C
         tuple_fields: fact.source.tuple_fields,
         requires_symbol_tag_field: fact.returns_canonical_tuple,
         requires_tuple_record_return: fact.requires_tail_tuple_return,
+        requires_utf8_identifier_lowering: fact.requires_utf8_identifier_lowering,
     }
 
 /// Convert CPS ADT constructor facts into Core obligations.

@@ -55,6 +55,7 @@ type LoweredAdtCtor {
     tuple_fields: Array[AdtTupleField],
     tuple_record_shape: AggregateShape,
     body: AdtCtorHelperBody,
+    requires_utf8_identifier_lowering: bool,
 }
 
 /// Constructor lowering strategy after usage analysis.
@@ -125,6 +126,15 @@ def adt_ctor_byte_is_lower(byte: u8): bool = byte >= 97 && byte <= 122
 
 /// Return true for ASCII digit constructor bytes.
 def adt_ctor_byte_is_digit(byte: u8): bool = byte >= 48 && byte <= 57
+
+/// Return true for non-ASCII UTF-8 bytes that cannot be case-folded by this transition helper.
+def adt_ctor_byte_requires_utf8_identifier_lowering(byte: u8): bool = byte >= 128
+
+/// Return true when constructor tag derivation needs the UTF-8 parser identifier path.
+def adt_ctor_name_requires_utf8_identifier_lowering(name: str, index: usize): bool =
+    if index == name.len() { false }
+    else if adt_ctor_byte_requires_utf8_identifier_lowering(name.byte_at(index)) { true }
+    else { adt_ctor_name_requires_utf8_identifier_lowering(name, index + 1) }
 
 /// Return true when byte continues one lowercase word segment.
 def adt_ctor_byte_is_word_tail(byte: u8): bool =
@@ -247,6 +257,7 @@ def lower_adt_ctor(variant: AdtVariantDecl): LoweredAdtCtor =
             tuple_fields: tuple_fields,
             returns_canonical_tuple: true,
         },
+        requires_utf8_identifier_lowering: adt_ctor_name_requires_utf8_identifier_lowering(variant.ctor_name, 0),
     }
 
 /// Lower constructors in deterministic variant order.

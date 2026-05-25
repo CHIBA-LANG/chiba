@@ -15,6 +15,7 @@ data CoreValidationError {
     CoreMissingBranchBody(str),
     CoreMissingPatternDecision(str),
     CoreMissingAdtCtorLowering(str),
+    CoreMissingUtf8IdentifierLowering(str),
     CoreIllegalRuntimeState(str),
     CoreIllegalContinuationPackage(str),
 }
@@ -353,9 +354,21 @@ def validate_core_adt_ctor_lowering(module: WasmGcCoreModule, out: Vec[CoreValid
     if module.adt_ctor_obligations.len() == 0 { out }
     else { out.push(CoreMissingAdtCtorLowering("ADT constructor tuple helper lowering absent")) }
 
+/// Return true when ADT ctor obligations need UTF-8 identifier lowering.
+def core_adt_ctor_obligations_need_utf8_lowering(obligations: Array[CoreAdtCtorLoweringObligation], index: usize): bool =
+    if index == obligations.len() { false }
+    else if obligations.get(index).requires_utf8_identifier_lowering { true }
+    else { core_adt_ctor_obligations_need_utf8_lowering(obligations, index + 1) }
+
+/// Validate that UTF-8 constructor identifiers cannot pass through ASCII tag canonicalization.
+def validate_core_utf8_identifier_lowering(module: WasmGcCoreModule, out: Vec[CoreValidationError]): Vec[CoreValidationError] =
+    if core_adt_ctor_obligations_need_utf8_lowering(module.adt_ctor_obligations, 0) {
+        out.push(CoreMissingUtf8IdentifierLowering("UTF-8 ADT constructor identifier lowering absent"))
+    } else { out }
+
 /// Validate symbols, layouts, tailcall facts, and continuation packages.
 def validate_wasm_gc_core(module: WasmGcCoreModule): Result[ValidatedCoreModule, Array[CoreValidationError]] =
-    match validate_core_adt_ctor_lowering(module, validate_core_pattern_decisions(module, validate_core_ops(module, 0, Vec[CoreValidationError].new()))).freeze() {
+    match validate_core_utf8_identifier_lowering(module, validate_core_adt_ctor_lowering(module, validate_core_pattern_decisions(module, validate_core_ops(module, 0, Vec[CoreValidationError].new())))).freeze() {
         errors =>
             if errors.len() == 0 { Ok(ValidatedCoreModule { core: module }) }
             else { Err(errors) }
