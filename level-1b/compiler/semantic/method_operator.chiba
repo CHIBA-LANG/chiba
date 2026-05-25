@@ -37,11 +37,21 @@ type OperatorResolutionObligation {
     has_index_slice: bool,
 }
 
+/// Candidate set for one operator use before operand matching.
+type OperatorCandidateSet {
+    owner: BinderId,
+    file: SourceFileId,
+    candidates: Array[OperatorKey],
+    requires_operand_matching: bool,
+    requires_ambiguity_check: bool,
+}
+
 /// Method/operator index for one project.
 type MethodOperatorIndex {
     methods: Array[MethodKey],
     operators: Array[OperatorKey],
     surface_entries: Array[MethodOperatorSurfaceEntry],
+    operator_candidates: Array[OperatorCandidateSet],
 }
 
 /// Empty method/operator index for modules without declarations.
@@ -50,6 +60,7 @@ def method_operator_index_empty(): MethodOperatorIndex =
         methods: Vec[MethodKey].new().freeze(),
         operators: Vec[OperatorKey].new().freeze(),
         surface_entries: Vec[MethodOperatorSurfaceEntry].new().freeze(),
+        operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
     }
 
 /// Convert one typed surface fact into a method/operator index input.
@@ -140,6 +151,7 @@ def method_operator_index_from_surface(project: ProjectSurface, facts: Array[Met
         methods: method_keys_from_surface_entries(project, entries, 0, Vec[MethodKey].new()),
         operators: operator_keys_from_surface_entries(project, entries, 0, Vec[OperatorKey].new()),
         surface_entries: entries,
+        operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
     }
 
 /// Convert one operator-use surface fact into a resolver obligation.
@@ -162,13 +174,48 @@ def operator_resolution_obligations_from_facts(facts: Array[OperatorUseSurfaceFa
 def build_operator_resolution_obligations(module: TypedModule): Array[OperatorResolutionObligation] =
     operator_resolution_obligations_from_facts(module.operator_use_surface, 0, Vec[OperatorResolutionObligation].new())
 
+/// Any parsed operator use requires typed operand matching.
+def operator_obligation_requires_operand_matching(obligation: OperatorResolutionObligation): bool =
+    obligation.has_infix_operator || obligation.has_operator_obligation || obligation.has_index || obligation.has_index_slice
+
+/// Collect declaration candidates for one operator use; operand filtering is later.
+def operator_candidate_set_from_obligation(index: MethodOperatorIndex, obligation: OperatorResolutionObligation): OperatorCandidateSet =
+    OperatorCandidateSet {
+        owner: obligation.owner,
+        file: obligation.file,
+        candidates: index.operators,
+        requires_operand_matching: operator_obligation_requires_operand_matching(obligation),
+        requires_ambiguity_check: true,
+    }
+
+/// Convert operator obligations into candidate sets in source order.
+def operator_candidate_sets(index: MethodOperatorIndex, obligations: Array[OperatorResolutionObligation], cursor: usize, out: Vec[OperatorCandidateSet]): Array[OperatorCandidateSet] =
+    if cursor == obligations.len() { out.freeze() }
+    else { operator_candidate_sets(index, obligations, cursor + 1, out.push(operator_candidate_set_from_obligation(index, obligations.get(cursor)))) }
+
+/// Attach candidate sets to the nominal method/operator index.
+def method_operator_index_with_candidates(project: ProjectSurface, facts: Array[MethodSurfaceFact], obligations: Array[OperatorResolutionObligation]): MethodOperatorIndex =
+    let entries = method_operator_surface_entries_from_facts(facts, 0, Vec[MethodOperatorSurfaceEntry].new())
+    let base = MethodOperatorIndex {
+        methods: method_keys_from_surface_entries(project, entries, 0, Vec[MethodKey].new()),
+        operators: operator_keys_from_surface_entries(project, entries, 0, Vec[OperatorKey].new()),
+        surface_entries: entries,
+        operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
+    }
+    MethodOperatorIndex {
+        methods: base.methods,
+        operators: base.operators,
+        surface_entries: base.surface_entries,
+        operator_candidates: operator_candidate_sets(base, obligations, 0, Vec[OperatorCandidateSet].new()),
+    }
+
 /// Build the nominal method/operator index.
 def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex, SemanticDiagnostics] =
-    if module.method_surface.len() == 0 {
+    if module.method_surface.len() == 0 && module.operator_use_surface.len() == 0 {
         Ok(method_operator_index_empty())
     } else {
-        let _ = method_operator_index_from_surface(module.alpha.project, module.method_surface)
-        let _ = build_operator_resolution_obligations(module)
+        let obligations = build_operator_resolution_obligations(module)
+        let _ = method_operator_index_with_candidates(module.alpha.project, module.method_surface, obligations)
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method/operator index construction absent"))
             .freeze()))
