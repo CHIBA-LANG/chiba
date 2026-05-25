@@ -577,6 +577,7 @@ type GenericTemplateObligation {
 type OperatorUseSurfaceFact {
     owner: BinderId,
     file: SourceFileId,
+    operator_kind: SourceOperatorUseKind,
     has_infix_operator: bool,
     has_operator_obligation: bool,
     has_index: bool,
@@ -1306,6 +1307,7 @@ def operator_use_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[Ope
         Some(OperatorUseSurfaceFact {
             owner: item.binder,
             file: item.file,
+            operator_kind: item.surface.operator_use_kind,
             has_infix_operator: item.surface.has_infix_operator_expr,
             has_operator_obligation: item.surface.has_operator_obligation_surface,
             has_index: item.surface.has_index_expr,

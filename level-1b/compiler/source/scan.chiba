@@ -436,6 +436,18 @@ def source_scan_item_has_index_slice_expr(text: String, offset: usize): bool =
         source_region_has_text(text, source_scan_item_body_region_start(text, offset), source_scan_item_region_end(text, offset), "..")
     } else { false }
 
+/// Return the first operator kind visible in the item body.
+def source_scan_item_operator_use_kind(text: String, offset: usize): SourceOperatorUseKind =
+    let start = source_scan_item_body_region_start(text, offset)
+    let end = source_scan_item_region_end(text, offset)
+    if source_region_has_text(text, start, end, " + ") { SourceOperatorUseAdd }
+    else if source_region_has_text(text, start, end, " - ") { SourceOperatorUseSub }
+    else if source_region_has_text(text, start, end, " * ") { SourceOperatorUseMul }
+    else if source_region_has_text(text, start, end, " / ") { SourceOperatorUseDiv }
+    else if source_scan_item_has_index_slice_expr(text, offset) { SourceOperatorUseIndexSlice }
+    else if source_scan_item_has_index_expr(text, offset) { SourceOperatorUseIndex }
+    else { SourceOperatorUseUnknown }
+
 /// Return true when an item body contains an infix operator surface.
 def source_scan_item_has_infix_operator_expr(text: String, offset: usize): bool =
     let start = source_scan_item_body_region_start(text, offset)
@@ -574,6 +586,7 @@ def source_scan_item_surface(text: String, offset: usize): SourceItemSurfaceFact
         has_index_expr: source_scan_item_has_index_expr(text, offset),
         has_index_slice_expr: source_scan_item_has_index_slice_expr(text, offset),
         has_infix_operator_expr: source_scan_item_has_infix_operator_expr(text, offset),
+        operator_use_kind: source_scan_item_operator_use_kind(text, offset),
         has_operator_obligation_surface: source_scan_item_has_operator_obligation_surface(text, offset),
         has_auto_generic_params: source_scan_item_has_auto_generic_params(text, offset),
         has_explicit_instantiation_call: source_scan_item_has_explicit_instantiation_call(text, offset),

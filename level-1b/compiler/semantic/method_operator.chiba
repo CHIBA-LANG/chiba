@@ -31,6 +31,7 @@ type MethodOperatorSurfaceEntry {
 type OperatorResolutionObligation {
     owner: BinderId,
     file: SourceFileId,
+    operator_kind: SourceOperatorUseKind,
     has_infix_operator: bool,
     has_operator_obligation: bool,
     has_index: bool,
@@ -41,6 +42,7 @@ type OperatorResolutionObligation {
 type OperatorCandidateSet {
     owner: BinderId,
     file: SourceFileId,
+    operator_name: String,
     candidates: Array[OperatorKey],
     requires_operand_matching: bool,
     requires_ambiguity_check: bool,
@@ -159,6 +161,7 @@ def operator_resolution_obligation_from_surface(fact: OperatorUseSurfaceFact): O
     OperatorResolutionObligation {
         owner: fact.owner,
         file: fact.file,
+        operator_kind: fact.operator_kind,
         has_infix_operator: fact.has_infix_operator,
         has_operator_obligation: fact.has_operator_obligation,
         has_index: fact.has_index,
@@ -174,6 +177,36 @@ def operator_resolution_obligations_from_facts(facts: Array[OperatorUseSurfaceFa
 def build_operator_resolution_obligations(module: TypedModule): Array[OperatorResolutionObligation] =
     operator_resolution_obligations_from_facts(module.operator_use_surface, 0, Vec[OperatorResolutionObligation].new())
 
+/// Convert source operator kind into method-style operator member name.
+def operator_member_name_for_use_kind(kind: SourceOperatorUseKind): String =
+    match kind {
+        SourceOperatorUseAdd => "op_add"
+        SourceOperatorUseSub => "op_sub"
+        SourceOperatorUseMul => "op_mul"
+        SourceOperatorUseDiv => "op_div"
+        SourceOperatorUseIndex => "op_index"
+        SourceOperatorUseIndexSlice => "op_index_slice"
+        SourceOperatorUseUnknown => ""
+    }
+
+/// Return true when an operator declaration matches the use kind.
+def operator_key_matches_use_kind(key: OperatorKey, kind: SourceOperatorUseKind): bool =
+    let name = operator_member_name_for_use_kind(kind)
+    if name == "" { true }
+    else { key.operator_name == name }
+
+/// Filter operator declarations by source operator spelling.
+def operator_candidates_matching_use_kind(operators: Array[OperatorKey], kind: SourceOperatorUseKind, cursor: usize, out: Vec[OperatorKey]): Array[OperatorKey] =
+    if cursor == operators.len() { out.freeze() }
+    else {
+        let key = operators.get(cursor)
+        if operator_key_matches_use_kind(key, kind) {
+            operator_candidates_matching_use_kind(operators, kind, cursor + 1, out.push(key))
+        } else {
+            operator_candidates_matching_use_kind(operators, kind, cursor + 1, out)
+        }
+    }
+
 /// Any parsed operator use requires typed operand matching.
 def operator_obligation_requires_operand_matching(obligation: OperatorResolutionObligation): bool =
     obligation.has_infix_operator || obligation.has_operator_obligation || obligation.has_index || obligation.has_index_slice
@@ -183,7 +216,8 @@ def operator_candidate_set_from_obligation(index: MethodOperatorIndex, obligatio
     OperatorCandidateSet {
         owner: obligation.owner,
         file: obligation.file,
-        candidates: index.operators,
+        operator_name: operator_member_name_for_use_kind(obligation.operator_kind),
+        candidates: operator_candidates_matching_use_kind(index.operators, obligation.operator_kind, 0, Vec[OperatorKey].new()),
         requires_operand_matching: operator_obligation_requires_operand_matching(obligation),
         requires_ambiguity_check: true,
     }

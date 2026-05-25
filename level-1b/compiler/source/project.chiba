@@ -123,6 +123,17 @@ data SourceItemKind {
     SourceItemExtern,
 }
 
+/// First operator kind discovered by the transition scanner.
+data SourceOperatorUseKind {
+    SourceOperatorUseUnknown,
+    SourceOperatorUseAdd,
+    SourceOperatorUseSub,
+    SourceOperatorUseMul,
+    SourceOperatorUseDiv,
+    SourceOperatorUseIndex,
+    SourceOperatorUseIndexSlice,
+}
+
 /// Attribute facts attached to a source item before full AST parsing.
 type SourceItemAttributeFacts {
     compile_if: Option[SourceCompileIfFacts],
@@ -174,6 +185,7 @@ type SourceItemSurfaceFacts {
     has_index_expr: bool,
     has_index_slice_expr: bool,
     has_infix_operator_expr: bool,
+    operator_use_kind: SourceOperatorUseKind,
     has_operator_obligation_surface: bool,
     has_auto_generic_params: bool,
     has_explicit_instantiation_call: bool,

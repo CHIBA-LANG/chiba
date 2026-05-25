@@ -43,6 +43,7 @@
 	- [x] operator use surface facts：typed module 已记录 infix/operator/index/slice use surface；真实 candidate collection、operand matching、ambiguity 仍 fail-closed。
 	- [x] operator resolution obligations：`OperatorUseSurfaceFact` 已转成稳定 overload-resolution obligation；candidate collection / operand matching / ambiguity 仍未完成。
 	- [x] operator candidate-set facts：method/operator index 已为每个 operator use 绑定当前 operator declaration candidate set，并显式要求 operand matching / ambiguity check；真实按 receiver/operand 过滤、missing/ambiguous/wrong-operand 报错仍 fail-closed。
+	- [x] operator kind threading：source/typed/operator obligation 已线程 `+ - * / [] [..]` 到 `op_add/op_sub/op_mul/op_div/op_index/op_index_slice` method-style member key；真实 receiver/operand type filtering 仍 fail-closed。
 - [ ] typed AST elaboration：现在很多是 skeleton/facts；真实 expression/type/item traversal 不完整。
 	- [x] typed item skeleton threading：`TypedModule.items` 保留 alpha 后的 item skeleton，后续 method/operator/branch/control pass 不再只能重扫 source。
 	- [x] typed elaboration obligations：`TypedElaboration` 现在携带 item/type/body traversal obligations；真实 typed AST expression lowering 仍未完成。
