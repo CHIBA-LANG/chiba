@@ -85,37 +85,37 @@ def validate_core_cps_tail_form(op: CoreOp): Option[CoreValidationError] =
         _ => None
     }
 
-/// Validate that branch join facts are not emitted as fake function bodies.
-def core_branch_condition_requires_param0(condition: CoreBranchCondition): bool =
+/// Return true when one Core branch condition reads an indexed parameter.
+def core_branch_condition_reads_param(condition: CoreBranchCondition): bool =
     match condition {
-        CoreBranchConditionParam(0) => true
+        CoreBranchConditionParam(_) => true
         _ => false
     }
 
-/// Return true when a Core expression body reads param0.
-def core_function_body_requires_param0(body: CoreExprKind): bool =
+/// Return true when a Core expression body reads any indexed parameter.
+def core_function_body_reads_param(body: CoreExprKind): bool =
     match body {
-        CoreExprParam(index) => index == 0
-        CoreExprTailCallArgs(_, args) => core_function_body_args_require_param0(args, 0)
+        CoreExprParam(_) => true
+        CoreExprTailCallArgs(_, args) => core_function_body_args_read_param(args, 0)
         CoreExprIfElse(condition, then_expr, else_expr) =>
-            if core_branch_condition_requires_param0(condition) { true }
-            else if core_function_body_requires_param0(then_expr) { true }
-            else { core_function_body_requires_param0(else_expr) }
+            if core_branch_condition_reads_param(condition) { true }
+            else if core_function_body_reads_param(then_expr) { true }
+            else { core_function_body_reads_param(else_expr) }
         _ => false
     }
 
-/// Return true when any Core expression argument reads param0.
-def core_function_body_args_require_param0(args: Array[CoreExprKind], index: usize): bool =
+/// Return true when any Core expression argument reads an indexed parameter.
+def core_function_body_args_read_param(args: Array[CoreExprKind], index: usize): bool =
     if index == args.len() { false }
-    else if core_function_body_requires_param0(args.get(index)) { true }
-    else { core_function_body_args_require_param0(args, index + 1) }
+    else if core_function_body_reads_param(args.get(index)) { true }
+    else { core_function_body_args_read_param(args, index + 1) }
 
 /// Validate that branch join facts are not emitted as fake function bodies.
 def validate_core_function_body(op: CoreOp): Option[CoreValidationError] =
     match op.function_body {
         Some(CoreExprBranchJoinPending) => Some(CoreMissingBranchBody("branch join function body lowering absent"))
         Some(body) =>
-            if core_function_body_requires_param0(body) && op.i32_param_count == 0 { Some(CoreMissingBranchBody("param0 function body requires i32 param")) }
+            if core_function_body_reads_param(body) && op.i32_param_count == 0 { Some(CoreMissingBranchBody("function body reads missing i32 param")) }
             else if core_function_body_max_param_index(body, 0) >= op.i32_param_count && op.i32_param_count > 0 { Some(CoreMissingBranchBody("function body reads missing i32 param")) }
             else { None }
         _ => None
