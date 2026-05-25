@@ -111,6 +111,55 @@ def chibalex_apply_reference_suffix(pattern: str, offset: usize, ast: RegexAst):
         else { ast }
     }
 
+/// Return the offset after a named reference suffix.
+def chibalex_reference_suffix_end(pattern: str, offset: usize): usize =
+    let suffix = chibalex_skip_ws(pattern, offset)
+    if suffix >= pattern.len() { offset }
+    else {
+        let byte = pattern.byte_at(suffix)
+        if byte == 42 || byte == 43 || byte == 63 { suffix + 1 }
+        else { offset }
+    }
+
+/// Find the next named regex reference in a pattern fragment.
+def chibalex_find_reference(pattern: str, offset: usize): usize =
+    if offset >= pattern.len() { pattern.len() }
+    else if pattern.byte_at(offset) == 64 { offset }
+    else { chibalex_find_reference(pattern, pattern.next_char_offset(offset)) }
+
+/// Return true when a pattern fragment contains a named regex reference.
+def chibalex_pattern_has_reference(pattern: str, offset: usize): bool =
+    chibalex_find_reference(pattern, offset) < pattern.len()
+
+/// Append one non-empty regex fragment to a sequence accumulator.
+def chibalex_append_pattern_fragment(items: Vec[RegexAst], pattern: str, start: usize, end: usize): Vec[RegexAst] =
+    let fragment = chibalex_trimmed_slice(pattern, start, end)
+    if fragment.len() == 0 { items }
+    else { items.push(chibalex_parse_regex_fragment(fragment)) }
+
+/// Append one named reference and return the cursor after its suffix.
+def chibalex_append_reference_atom(pattern: str, at: usize, defs: List[LexRegexDef], items: Vec[RegexAst]): (Vec[RegexAst], usize) =
+    let name_end = chibalex_scan_ident(pattern, at + 1)
+    let name = pattern.slice(at + 1, name_end - at - 1)
+    let suffix_end = chibalex_reference_suffix_end(pattern, name_end)
+    match chibalex_regex_def_lookup(defs, name) {
+        Some(ast) => (items.push(chibalex_apply_reference_suffix(pattern, name_end, ast)), suffix_end)
+        None => (items.push(RegexEmpty), suffix_end)
+    }
+
+/// Expand `@name` regex definitions inside a larger pattern sequence.
+def chibalex_expand_pattern_refs(pattern: str, offset: usize, defs: List[LexRegexDef], items: Vec[RegexAst]): RegexAst =
+    let at = chibalex_find_reference(pattern, offset)
+    if at >= pattern.len() {
+        let complete = chibalex_append_pattern_fragment(items, pattern, offset, pattern.len()).freeze()
+        RegexSequence(regex_ast_array_to_list(complete, 0, ListNil))
+    } else {
+        let before = chibalex_append_pattern_fragment(items, pattern, offset, at)
+        let (after_ref, next) = chibalex_append_reference_atom(pattern, at, defs, before)
+        chibalex_expand_pattern_refs(pattern, next, defs, after_ref)
+    }
+}
+
 /// Parse the namespace declaration from a fixture header.
 def chibalex_parse_namespace(source: str): str =
     let start = chibalex_find_text(source, 0, "namespace")
@@ -206,7 +255,9 @@ def chibalex_token_block_end(source: str, offset: usize): usize =
 /// Parse a rule pattern, including regex references and string literals.
 def chibalex_parse_rule_pattern_with_defs(source: str, start: usize, end: usize, defs: List[LexRegexDef]): RegexAst =
     let pattern = chibalex_trimmed_slice(source, start, end)
-    if pattern.len() > 0 && pattern.byte_at(0) == 64 {
+    if chibalex_pattern_has_reference(pattern, 0) && !(pattern.len() > 0 && pattern.byte_at(0) == 64) {
+        chibalex_expand_pattern_refs(pattern, 0, defs, Vec[RegexAst].new())
+    } else if pattern.len() > 0 && pattern.byte_at(0) == 64 {
         let name_end = chibalex_scan_ident(pattern, 1)
         let name = pattern.slice(1, name_end - 1)
         match chibalex_regex_def_lookup(defs, name) {

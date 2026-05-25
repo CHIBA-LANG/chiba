@@ -128,8 +128,46 @@ def append_atom_binding(builder: DiagnosticBuilder, atom: GrammarAtom, step_name
         None => builder
     }
 
+/// Append the generated name for a repeat consumer.
+def append_repeat_consumer_name(builder: DiagnosticBuilder, prefix: str, step: usize): DiagnosticBuilder =
+    builder.push_str(prefix).push_str("_repeat_").push_str(parser_codegen_usize(step))
+
+/// Append one zero-or-more consumer function. It succeeds at the first position where the inner atom fails.
+def append_repeat_consumer_function(builder: DiagnosticBuilder, prefix: str, step: usize, inner: GrammarAtom): DiagnosticBuilder =
+    append_atom_parse_call(
+        append_repeat_consumer_name(builder.push_str("def "), prefix, step)
+            .push_str("(tokens: Array[TokenSpan], position: ParsePosition): Result[ParseCandidate[str], ParseFailure] =\n")
+            .push_str("    match "),
+        inner,
+        "position")
+        .push_str(" {\n")
+        .push_str("        Ok(next) => {\n")
+        .push_str("            if next.position.index == position.index { Ok(ParseCandidate[str] { value: \"\", position: position }) }\n")
+        .push_str("            else { ")
+        .push_str(prefix)
+        .push_str("_repeat_")
+        .push_str(parser_codegen_usize(step))
+        .push_str("(tokens, next.position) }\n")
+        .push_str("        }\n")
+        .push_str("        Err(_) => Ok(ParseCandidate[str] { value: \"\", position: position })\n")
+        .push_str("    }\n\n")
+
+/// Append repeat consumers needed by one atom list.
+def append_repeat_consumer_functions(builder: DiagnosticBuilder, prefix: str, atoms: List[GrammarAtom], step: usize): DiagnosticBuilder =
+    match atoms {
+        ListNil => builder
+        ListCons(head, tail) => {
+            let atom = parser_atom_unbind(head)
+            match atom {
+                GrammarRepeatZeroOrMore(inner) =>
+                    append_repeat_consumer_functions(append_repeat_consumer_function(builder, prefix, step, inner), prefix, tail, step + 1)
+                _ => append_repeat_consumer_functions(builder, prefix, tail, step + 1)
+            }
+        }
+    }
+
 /// Append recursive parse steps for one alternative.
-def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], action: GrammarAction, step: usize, position_expr: str): DiagnosticBuilder =
+def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], action: GrammarAction, step: usize, position_expr: str, repeat_prefix: str): DiagnosticBuilder =
     match atoms {
         ListNil =>
             append_action_source(
@@ -157,18 +195,34 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                         tail,
                         action,
                         step + 1,
-                        step_name.concat(".position"))
+                        step_name.concat(".position"),
+                        repeat_prefix)
                         .push_str("            }\n")
                         .push_str("            Err(_) => {\n")
-                    append_alt_steps(with_success, tail, action, step + 1, position_expr)
+                    append_alt_steps(with_success, tail, action, step + 1, position_expr, repeat_prefix)
                         .push_str("            }\n")
                         .push_str("        }\n")
                 }
                 GrammarRepeatZeroOrMore(inner) =>
-                    append_alt_steps(builder, tail, action, step + 1, position_expr)
+                    append_alt_steps(
+                        append_repeat_consumer_name(builder.push_str("        match "), repeat_prefix, step)
+                            .push_str("(tokens, ")
+                            .push_str(position_expr)
+                            .push_str(") {\n")
+                            .push_str("            Ok(")
+                            .push_str(step_name)
+                            .push_str(") => {\n"),
+                        tail,
+                        action,
+                        step + 1,
+                        step_name.concat(".position"),
+                        repeat_prefix)
+                        .push_str("            }\n")
+                        .push_str("            Err(error) => Err(error)\n")
+                        .push_str("        }\n")
                 GrammarToken(name) =>
                     if parser_atom_is_empty_token(name) {
-                        append_alt_steps(builder, tail, action, step + 1, position_expr)
+                        append_alt_steps(builder, tail, action, step + 1, position_expr, repeat_prefix)
                     } else {
                         append_alt_steps(
                             append_atom_binding(
@@ -182,7 +236,8 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                             tail,
                             action,
                             step + 1,
-                            step_name.concat(".position"))
+                            step_name.concat(".position"),
+                            repeat_prefix)
                             .push_str("            }\n")
                             .push_str("            Err(error) => Err(error)\n")
                             .push_str("        }\n")
@@ -200,7 +255,8 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                         tail,
                         action,
                         step + 1,
-                        step_name.concat(".position"))
+                        step_name.concat(".position"),
+                        repeat_prefix)
                         .push_str("            }\n")
                         .push_str("            Err(error) => Err(error)\n")
                         .push_str("        }\n")
@@ -222,7 +278,7 @@ def append_pratt_infix_atom_parse_call(builder: DiagnosticBuilder, atom: Grammar
     }
 
 /// Append recursive parse steps for one Pratt infix arm.
-def append_pratt_infix_steps(builder: DiagnosticBuilder, rule: LoweredRule, atoms: List[GrammarAtom], action: GrammarAction, step: usize, position_expr: str, right_power: usize): DiagnosticBuilder =
+def append_pratt_infix_steps(builder: DiagnosticBuilder, rule: LoweredRule, atoms: List[GrammarAtom], action: GrammarAction, step: usize, position_expr: str, right_power: usize, repeat_prefix: str): DiagnosticBuilder =
     match atoms {
         ListNil =>
             append_action_source(
@@ -238,10 +294,27 @@ def append_pratt_infix_steps(builder: DiagnosticBuilder, rule: LoweredRule, atom
             let step_name = "step".concat(parser_codegen_usize(step))
             match atom {
                 GrammarRepeatZeroOrMore(inner) =>
-                    append_pratt_infix_steps(builder, rule, tail, action, step + 1, position_expr, right_power)
+                    append_pratt_infix_steps(
+                        append_repeat_consumer_name(builder.push_str("        match "), repeat_prefix, step)
+                            .push_str("(tokens, ")
+                            .push_str(position_expr)
+                            .push_str(") {\n")
+                            .push_str("            Ok(")
+                            .push_str(step_name)
+                            .push_str(") => {\n"),
+                        rule,
+                        tail,
+                        action,
+                        step + 1,
+                        step_name.concat(".position"),
+                        right_power,
+                        repeat_prefix)
+                        .push_str("            }\n")
+                        .push_str("            Err(error) => Err(error)\n")
+                        .push_str("        }\n")
                 GrammarToken(name) =>
                     if parser_atom_is_empty_token(name) {
-                        append_pratt_infix_steps(builder, rule, tail, action, step + 1, position_expr, right_power)
+                        append_pratt_infix_steps(builder, rule, tail, action, step + 1, position_expr, right_power, repeat_prefix)
                     } else {
                         append_pratt_infix_steps(
                             append_atom_binding(
@@ -257,7 +330,8 @@ def append_pratt_infix_steps(builder: DiagnosticBuilder, rule: LoweredRule, atom
                             action,
                             step + 1,
                             step_name.concat(".position"),
-                            right_power)
+                            right_power,
+                            repeat_prefix)
                             .push_str("            }\n")
                             .push_str("            Err(error) => Err(error)\n")
                             .push_str("        }\n")
@@ -277,7 +351,8 @@ def append_pratt_infix_steps(builder: DiagnosticBuilder, rule: LoweredRule, atom
                         action,
                         step + 1,
                         step_name.concat(".position"),
-                        right_power)
+                        right_power,
+                        repeat_prefix)
                         .push_str("            }\n")
                         .push_str("            Err(error) => Err(error)\n")
                         .push_str("        }\n")
@@ -288,7 +363,11 @@ def append_pratt_infix_steps(builder: DiagnosticBuilder, rule: LoweredRule, atom
 /// Append one alternative parser.
 def append_alternative_function(builder: DiagnosticBuilder, rule: LoweredRule, alt: LoweredAlternative): DiagnosticBuilder =
     append_alt_steps(
-        builder
+        append_repeat_consumer_functions(
+            builder,
+            "parse_".concat(rule.name.text).concat("_alt_").concat(parser_codegen_usize(alt.index)),
+            alt.sequence.atoms,
+            0)
             .push_str("def parse_")
             .push_str(rule.name.text)
             .push_str("_alt_")
@@ -297,7 +376,8 @@ def append_alternative_function(builder: DiagnosticBuilder, rule: LoweredRule, a
         alt.sequence.atoms,
         alt.action,
         0,
-        "position")
+        "position",
+        "parse_".concat(rule.name.text).concat("_alt_").concat(parser_codegen_usize(alt.index)))
         .push_str("\n")
 
 /// Append all alternative parser functions for one rule.
@@ -330,7 +410,11 @@ def append_rule_alt_dispatch(builder: DiagnosticBuilder, rule: LoweredRule, inde
 /// Append one Pratt prefix parser function.
 def append_pratt_prefix_function(builder: DiagnosticBuilder, rule: LoweredRule, arm: PrattPrefix, index: usize): DiagnosticBuilder =
     append_alt_steps(
-        builder
+        append_repeat_consumer_functions(
+            builder,
+            "parse_".concat(rule.name.text).concat("_prefix_").concat(parser_codegen_usize(index)),
+            arm.sequence.atoms,
+            0)
             .push_str("def parse_")
             .push_str(rule.name.text)
             .push_str("_prefix_")
@@ -339,7 +423,8 @@ def append_pratt_prefix_function(builder: DiagnosticBuilder, rule: LoweredRule, 
         arm.sequence.atoms,
         arm.action,
         0,
-        "position")
+        "position",
+        "parse_".concat(rule.name.text).concat("_prefix_").concat(parser_codegen_usize(index)))
         .push_str("\n")
 
 /// Append all Pratt prefix functions.
@@ -350,7 +435,11 @@ def append_pratt_prefix_functions(builder: DiagnosticBuilder, rule: LoweredRule,
 /// Append one Pratt infix parser function.
 def append_pratt_infix_function(builder: DiagnosticBuilder, rule: LoweredRule, arm: PrattInfix, index: usize): DiagnosticBuilder =
     append_pratt_infix_steps(
-        builder
+        append_repeat_consumer_functions(
+            builder,
+            "parse_".concat(rule.name.text).concat("_infix_").concat(parser_codegen_usize(index)),
+            arm.sequence.atoms,
+            0)
             .push_str("def parse_")
             .push_str(rule.name.text)
             .push_str("_infix_")
@@ -361,7 +450,8 @@ def append_pratt_infix_function(builder: DiagnosticBuilder, rule: LoweredRule, a
         arm.action,
         0,
         "position",
-        arm.right_power)
+        arm.right_power,
+        "parse_".concat(rule.name.text).concat("_infix_").concat(parser_codegen_usize(index)))
         .push_str("\n")
 
 /// Append all Pratt infix functions.
