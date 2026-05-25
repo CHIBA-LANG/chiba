@@ -1782,6 +1782,7 @@ def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemS
         generic_surface: generic_surface,
         operator_use_surface: operator_use_surface,
         closure_surface: closure_surface,
+        method_operator_index: method_operator_index_empty(),
     }
 
 /// Run the level-2 semantic checks that require inferred types.

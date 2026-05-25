@@ -323,3 +323,29 @@ def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex
         if diagnostics.len() == 0 { Ok(index) }
         else { Err(SemanticDiagnostics(diagnostics)) }
     }
+
+/// Attach the resolved method/operator index to the typed module facts.
+def typed_module_with_method_operator_index(module: TypedModule, index: MethodOperatorIndex): TypedModule =
+    TypedModule {
+        alpha: module.alpha,
+        items: module.items,
+        functions: module.functions,
+        adt_ctors: module.adt_ctors,
+        callable_storage: module.callable_storage,
+        namespace_ownership: module.namespace_ownership,
+        namespace_imports: module.namespace_imports,
+        method_surface: module.method_surface,
+        branching_surface: module.branching_surface,
+        control_surface: module.control_surface,
+        global_init_surface: module.global_init_surface,
+        pipe_surface: module.pipe_surface,
+        pattern_surface: module.pattern_surface,
+        pattern_dft_steps: module.pattern_dft_steps,
+        pattern_exhaustiveness: module.pattern_exhaustiveness,
+        pattern_envs: module.pattern_envs,
+        intrinsic_surface: module.intrinsic_surface,
+        generic_surface: module.generic_surface,
+        operator_use_surface: module.operator_use_surface,
+        closure_surface: module.closure_surface,
+        method_operator_index: index,
+    }

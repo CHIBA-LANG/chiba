@@ -56,6 +56,7 @@ type TypedModule {
     generic_surface: Array[GenericSurfaceFact],
     operator_use_surface: Array[OperatorUseSurfaceFact],
     closure_surface: Array[ClosureSurfaceFact],
+    method_operator_index: MethodOperatorIndex,
 }
 
 /// Run alpha, pattern, inference, template, method/operator, ABI, and capability passes.
@@ -71,8 +72,9 @@ def run_typed_semantics(project: ProjectSurface): Result[TypedModule, SemanticDi
                                     match check_template(checked) {
                                         Ok(_) =>
                                             match build_method_operator_index(checked) {
-                                                Ok(_) =>
-                                                    match check_extern_abi(checked) {
+                                                Ok(method_operator_index) =>
+                                                    let checked_with_index = typed_module_with_method_operator_index(checked, method_operator_index)
+                                                    match check_extern_abi(checked_with_index) {
                                                         Ok(abi_checked) => check_capabilities(abi_checked)
                                                         Err(errors) => Err(errors)
                                                     }
