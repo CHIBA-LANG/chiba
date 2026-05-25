@@ -6,6 +6,7 @@ import process from "node:process";
 const SOURCE_ROOT = "level-1b/compiler/source";
 const DRIVER_ROOT = "level-1b/compiler/driver";
 const FIXTURE = "level-1b/supports/pre-c07-smokes/doc_compile_if.chiba";
+const UTF8_FIXTURE = "level-1b/supports/pre-c07-smokes/utf8_identifier_blocked.chiba";
 const REQUIRED_TEXT = [
   "type ProjectSurface",
   "type SourceProjectFacts",
@@ -321,6 +322,17 @@ function main() {
     if (!fixture.includes(needle)) fail(`C07 fixture missing ${needle}`);
   }
   primaryPathBlocked("doc compile_if fixture parse requires level-1b parser execution");
+
+  const utf8Fixture = read(UTF8_FIXTURE);
+  for (const needle of [
+    "namespace pre_c07.utf8_identifier_blocked",
+    "Résultat",
+    "Succès",
+    "café",
+  ]) {
+    if (!utf8Fixture.includes(needle)) fail(`C07 UTF-8 fixture missing ${needle}`);
+  }
+  primaryPathBlocked("UTF-8 identifier fixture requires chibalex/chibacc primary parser execution");
 
   const namespace = spawnSync("timeout", ["30", "vp", "run", "level1b:namespace"], { encoding: "utf8" });
   if (namespace.status === 0) oracleReference("namespace project reference");
