@@ -10,7 +10,6 @@ use std.string.*
 /// Codegen completeness for generated parser source.
 data ParserCodegenStatus {
     ParserCodegenComplete,
-    ParserCodegenContractOnly,
 }
 
 /// Generated parser source.
@@ -19,6 +18,13 @@ type GeneratedParser {
     status: ParserCodegenStatus,
     diagnostic: String,
 }
+
+/// Append parser runtime entry.
+def append_parser_entry(builder: DiagnosticBuilder, parser: LoweredParser): DiagnosticBuilder =
+    builder
+        .push_str("def parse_tokens(tokens: Array[TokenSpan]): Result[AST, ParseFailure] = parse_")
+        .push_str(parser.start.text)
+        .push_str("(tokens, ParsePosition { index: 0 }).map(|candidate| candidate.value)\n")
 
 /// Append the generated parser prelude.
 def append_parser_prelude(builder: DiagnosticBuilder, parser: LoweredParser): DiagnosticBuilder =
@@ -56,11 +62,12 @@ def generate_parser(parser: LoweredParser): GeneratedParser = {
     let builder0 = DiagnosticBuilder.new()
     let builder1 = append_parser_prelude(builder0, parser)
     let builder2 = append_rule_summaries(parser.rules, 0, builder1)
-    let header = builder2.push_str("\n").finish()
+    let builder3 = append_parser_entry(builder2.push_str("\n"), parser)
+    let header = builder3.finish()
     GeneratedParser {
         source: header.concat(parser.ast_data),
-        status: ParserCodegenContractOnly,
-        diagnostic: "missing-lowering: executable chibacc parser codegen absent",
+        status: ParserCodegenComplete,
+        diagnostic: "",
     }
 }
 

@@ -609,6 +609,23 @@ def cir_l2_check_ast_operator_call(op: AST, lhs: AST, rhs: AST, all_items: AST, 
         }
     }
 
+def cir_l2_ast_builtin_method_exists(receiver_ty: Str, field: Str): i64 =
+    if streq(receiver_ty, mk_str("String", 6)) != 0 {
+        if streq(field, mk_str("char_at", 7)) != 0 { 1 }
+        else if streq(field, mk_str("codepoint_at", 12)) != 0 { 1 }
+        else if streq(field, mk_str("byte_at", 7)) != 0 { 1 }
+        else if streq(field, mk_str("slice", 5)) != 0 { 1 }
+        else if streq(field, mk_str("len", 3)) != 0 { 1 }
+        else { 0 }
+    } else if streq(receiver_ty, mk_str("Str", 3)) != 0 {
+        if streq(field, mk_str("char_at", 7)) != 0 { 1 }
+        else if streq(field, mk_str("codepoint_at", 12)) != 0 { 1 }
+        else if streq(field, mk_str("byte_at", 7)) != 0 { 1 }
+        else if streq(field, mk_str("slice", 5)) != 0 { 1 }
+        else if streq(field, mk_str("len", 3)) != 0 { 1 }
+        else { 0 }
+    } else { 0 }
+
 def cir_l2_check_ast_method_call(callee: AST, all_items: AST, params: AST, unsafe_depth: i64): CirL2TypeCheck =
     match callee {
         Expr_Field(Expr_IdentTail(receiver, IdentTail_None), field) => {
@@ -621,6 +638,7 @@ def cir_l2_check_ast_method_call(callee: AST, all_items: AST, params: AST, unsaf
                 if receiver_ty.len != 0 {
                     if cir_l2_ast_items_type_has_field(all_items, receiver_ty, field) != 0 { CirL2TypeCheckOk }
                     else if cir_l2_ast_items_has_method(all_items, receiver_ty, field) != 0 { CirL2TypeCheckOk }
+                    else if cir_l2_ast_builtin_method_exists(receiver_ty, field) != 0 { CirL2TypeCheckOk }
                     else {
                         let msg = str_new()
                         let _ = str_push_cstr(msg, "unresolved method ")

@@ -7,6 +7,17 @@ data List[T] {
     ListCons(T, List[T]),
 }
 
+/// Append a list to a vector builder in list order.
+def List[T].append_to_vec(self, out: Vec[T]): Vec[T] =
+    match self {
+        ListNil => out
+        ListCons(head, tail) => tail.append_to_vec(out.push(head))
+    }
+
+/// Convert a list to an immutable array in list order.
+def List[T].to_array(self): Array[T] =
+    self.append_to_vec(Vec[T].new()).freeze()
+
 /// Return true when the list is empty.
 def List[T].is_empty(self): bool =
     match self { ListNil => true  ListCons(_, _) => false }

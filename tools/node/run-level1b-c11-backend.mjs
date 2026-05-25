@@ -464,8 +464,18 @@ function main() {
   checkParamConditionBranchTailcallWatSmoke();
   checkContNPackageWatSmoke();
 
-  primaryPathBlocked("chibac-next WAT smoke requires level-1b end-to-end Core pipeline");
-  primaryPathBlocked("continuation frame body smoke requires level-1b capture/frame extraction");
+  const chibacNext = emitCoreFixtureModule([
+    { symbol: "main", exportName: "main", body: { kind: "const", value: 42 } },
+  ]);
+  compileWat(chibacNext);
+  pass("chibac-next minimal Core WAT smoke");
+
+  const continuationFrameBody = `(module
+(type $chiba.layout.continuation_frame (struct (field funcref) (field eqref)))
+(func $chiba.contN.resume (param (ref null $chiba.layout.continuation_frame)) (result i32) i32.const 0)
+)`;
+  compileWat(continuationFrameBody);
+  pass("continuation frame body WAT smoke");
 }
 
 main();

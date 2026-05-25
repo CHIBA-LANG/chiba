@@ -597,8 +597,7 @@ rule if_cond_binary_op ::=
     ;
 
 rule if_cond_ident_rest ::= 
-    LParen args:arg_list RParen op:if_cond_binary_op rhs:if_cond_binary_rhs => IfCondIdent_CallBinary(args, op, rhs)
-    | LParen args:arg_list RParen => IfCondIdent_Call(args)
+    LParen args:arg_list RParen tail:if_cond_call_tail => if_cond_call_tail(args, tail)
     | EqEq rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpEqEq, rhs)
     | BangEq rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpBangEq, rhs)
     | Lt rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpLt, rhs)
@@ -606,6 +605,11 @@ rule if_cond_ident_rest ::=
     | LtEq rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpLtEq, rhs)
     | GtEq rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpGtEq, rhs)
     | => IfCondIdent_Name
+    ;
+
+rule if_cond_call_tail ::=
+    op:if_cond_binary_op rhs:if_cond_binary_rhs => IfCondCallTail_Binary(op, rhs)
+    | => IfCondCallTail_None
     ;
 
 rule if_cond_binary_rhs ::=
@@ -1144,6 +1148,8 @@ rule arg_tail ::=
         IfCondIdent_CallBinary(AST, AST, AST),
         IfCondIdent_Binary(AST, AST),
         IfCondIdent_Name,
+        IfCondCallTail_Binary(AST, AST),
+        IfCondCallTail_None,
         Expr_Match(AST, AST),
         Expr_MatchIdent(Str, AST),
         MatchIdent_Call(AST, AST),
@@ -1304,6 +1310,12 @@ rule arg_tail ::=
 
     def expr_from_match_ident_rest(name: Str, rest: AST): AST =
         expr_apply_match_ident_rest(Expr_Name(name), rest)
+
+    def if_cond_call_tail(args: AST, tail: AST): AST =
+        match tail {
+            IfCondCallTail_Binary(op, rhs) => IfCondIdent_CallBinary(args, op, rhs)
+            _ => IfCondIdent_Call(args)
+        }
 
     def data_body_from_first(first: Str, rest: AST): AST =
         match rest {

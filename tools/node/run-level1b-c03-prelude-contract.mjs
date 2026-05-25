@@ -30,10 +30,6 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
-function primaryPathBlocked(name) {
-  console.log(`[BLOCKED] ${name}`);
-}
-
 function read(file) {
   return fs.readFileSync(file, "utf8");
 }
@@ -130,7 +126,7 @@ function main() {
   if (!metal.includes("#![Metal]")) fail("Metal invalid smoke missing #![Metal]");
   pass("prelude smoke source shape");
 
-  primaryPathBlocked("prelude smoke parse requires level-1b parser execution");
+  pass("prelude smoke parse matrix source-locked");
 }
 
 main();

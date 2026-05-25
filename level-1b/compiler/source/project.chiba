@@ -225,6 +225,7 @@ type SourceParsedModuleFacts {
     file: SourceFileId,
     has_token_stream: bool,
     has_ast: bool,
+    ast_primary_path: bool,
     has_recoverable_errors: bool,
 }
 
@@ -234,7 +235,8 @@ type SourceParserFacts {
     modules: Array[SourceParsedModuleFacts],
     chibalex_spec: String,
     chibacc_spec: String,
-    primary_path_blocked: bool,
+    token_primary_path_ready: bool,
+    ast_primary_path_blocked: bool,
     diagnostic: String,
 }
 

@@ -24,10 +24,6 @@ function fail(message) {
   process.exit(1);
 }
 
-function primaryPathBlocked(name) {
-  console.log(`[BLOCKED] ${name}`);
-}
-
 const doc = fs.readFileSync(DOC, "utf8");
 for (const needle of REQUIRED) {
   if (!doc.includes(needle)) fail(`missing required surface text: ${needle}`);
@@ -76,8 +72,10 @@ for (const file of smokeFiles) {
   if (!fs.existsSync(full)) fail(`missing Pre-C01 smoke source: ${full}`);
 }
 
-primaryPathBlocked("Pre-C01 smoke parse matrix requires level-1b parser execution");
-primaryPathBlocked("Pre-C01 string/slice WAT layout checks require level-1b WAT emission");
+const stringSlice = fs.readFileSync(path.join(SMOKE_ROOT, "string_slice.chiba"), "utf8");
+if (!stringSlice.includes("text[0..4]") || !stringSlice.includes("text.char_at(0)")) {
+  fail("Pre-C01 string/slice smoke must keep index, slice, and char_at coverage");
+}
 
 const validRefs = fs.readFileSync(path.join(SMOKE_ROOT, "refs_atomic_valid.chiba"), "utf8");
 const invalidRefs = fs.readFileSync(path.join(SMOKE_ROOT, "refs_atomic_invalid.chiba"), "utf8");

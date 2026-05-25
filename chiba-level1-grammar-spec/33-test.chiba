@@ -1,0 +1,9 @@
+namespace parser.spec.if.call.condition
+
+def predicate(value: i64): bool = true
+
+def bare_call_condition(): i64 =
+    if predicate(1) { 2 } else { 1 }
+
+def binary_call_condition(): i64 =
+    if predicate(1) == true { 2 } else { 1 }

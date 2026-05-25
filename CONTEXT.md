@@ -36,6 +36,30 @@ _Avoid_: copy-through, fallback path, unreviewed port
 A compiler success path that requires a builtin or oracle implementation to supply key language capability instead of the self-hosted compiler path. An oracle may be a ruler for comparison or fixture generation, but it must not be a leg the compiler stands on.
 _Avoid_: oracle-backed success, builtin-backed success, hidden host behavior
 
+**ChibaCC**:
+The Chiba ecosystem parser generator that consumes lexer-produced `TokenItem` streams and produces parser AST results. ChibaCC grammars do not parse characters and do not use string terminals; character handling belongs to ChibaLex.
+_Avoid_: character parser, scanner parser, string-terminal grammar
+
+**LabeledAST**:
+The top-level ChibaCC parse result wrapper that distinguishes complete AST success from recoverable or skipped error regions. It belongs to the generated start driver output, not to every internal grammar rule.
+_Avoid_: rule result wrapper, internal AST type, parser error node
+
+**ChibaCC LL(*) parser**:
+The ChibaCC parsing model for ordinary grammar rules: generated recursive-descent parsing with arbitrary lookahead where needed, plus explicit Pratt islands for expression precedence. Alternative retry and recovery are modeled with multi-shot continuation semantics.
+_Avoid_: PEG parser, LR parser, GLR parser, character parser
+
+**Parser retry continuation**:
+The multi-shot continuation captured while trying ChibaCC alternatives or recovery paths. It is semantically and operationally `shiftn`; generated parsers must not replace it with a separate retry stack fallback.
+_Avoid_: one-shot parser retry, shift retry, exception-only recovery, retry stack fallback
+
+**ChibaCC source generation complete**:
+The state where ChibaCC can generate parser source that represents the requested grammar and uses real parser retry continuations. This is distinct from ChibaCC AST primary path completion, which also requires the generated parser to execute through the compiler backend.
+_Avoid_: AST primary complete, generated parser executed, parser backend complete
+
+**ChibaCC action expression**:
+The arbitrary Chiba expression after `=>` in a grammar alternative or Pratt arm. ChibaCC owns binding labels and splicing this expression into generated parser source; the main Chiba compiler owns parsing, typing, CPS, closure, and backend semantics for the expression.
+_Avoid_: callback syntax, action DSL, restricted action subset, parser-owned typechecking
+
 **Level-1b bootstrap complete**:
 The state where C12 two-round bootstrap comparison succeeds through `level1c -> level1c-next -> level1c-next2` without legacy dependency or oracle dependency. The result must run the required specs and gates outside a Node-only path and record hashes, toolchain versions, and any accepted manifest differences.
 _Avoid_: half-bootstrap, gate-green bootstrap, Node-only success

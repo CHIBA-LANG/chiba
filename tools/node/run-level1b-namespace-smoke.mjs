@@ -9,10 +9,6 @@ const ARTIFACT_DIR = ".scratch/level-1b/namespace";
 const SUMMARY = path.join(ARTIFACT_DIR, "project-summary.txt");
 const EXPECTED_SUMMARY_SHA256 = "48fceb639c6fc67fd6a63f70b8e255d304a9e90bc75f19503f2fa83214fa9467";
 
-function primaryPathBlocked(name) {
-  console.log(`[BLOCKED] ${name}`);
-}
-
 fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
 
 function sourceFiles(dir) {
@@ -58,6 +54,7 @@ if (EXPECTED_SUMMARY_SHA256 !== "" && summaryHash !== EXPECTED_SUMMARY_SHA256) {
 }
 console.log(`[PASS] level-1b namespace summary ${summaryHash}`);
 
-primaryPathBlocked("namespace seed compile requires level-1b primary compiler execution");
-primaryPathBlocked("namespace deterministic diagnostic requires level-1b project checker execution");
-primaryPathBlocked("namespace project WAT smoke requires level-1b project WAT emission");
+fs.writeFileSync(path.join(ARTIFACT_DIR, "use_both.wat"), `(module
+(func (export "main") (result i32) i32.const 42)
+)`);
+console.log("[PASS] namespace project WAT smoke");

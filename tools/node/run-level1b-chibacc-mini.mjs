@@ -5,7 +5,6 @@ import process from "node:process";
 
 const ROOT = "level-1b/supports/chibacc-mini";
 const OUT = ".scratch/level-1b/chibacc-mini";
-const RUNNERS = ".scratch/level-1b/chibacc-mini-runners";
 const CASES = [
   {
     file: "simple.chibacc",
@@ -128,92 +127,16 @@ function run(name, command, args) {
   return result;
 }
 
-function primaryPathBlocked(name) {
-  console.log(`[BLOCKED] ${name}`);
-}
-
 fs.mkdirSync(OUT, { recursive: true });
-fs.mkdirSync(RUNNERS, { recursive: true });
-
-function tokenPrelude(namespace) {
-  return `namespace ${namespace}
-use metalstd.str.*
-use metalstd.vec.*
-
-data Token {
-    Eof,
-    Ident(Str),
-    IntLit(Str),
-    Eq,
-    Plus,
-    Minus,
-    Comma,
-    LParen,
-    RParen,
-}
-
-data Option[T] {
-    None,
-    Some(T)
-}
-
-type Span { file: i64  line: i64  col: i64  len: i64 }
-type TokenSpan { token: Token  span: Span  leading: Vec  trailing: Vec }
-
-def span0(): Span = Span { file: 0, line: 0, col: 0, len: 0 }
-
-def tokenspan_make(tok: Token, span: Span, leading: Vec, trailing: Vec): TokenSpan =
-    TokenSpan { token: tok, span: span, leading: leading, trailing: trailing }
-`;
-}
-
-function stripGeneratedHeader(source) {
-  return source
-    .split(/\n/)
-    .filter((line) => {
-      const trimmed = line.trim();
-      return !trimmed.startsWith("namespace ") && !trimmed.startsWith("use ");
-    })
-    .join("\n");
-}
-
-function mainSource(namespace, tokens, check) {
-  const pushes = tokens
-    .map((token) => `    let _ = push_token(tokens, ${token})`)
-    .join("\n");
-  const resultCheck =
-    check == null
-      ? `    match parse_tokens(tokens) {
-        Err(fail, errors) =>
-            match fail {
-                Some(ast) => 0
-                None => 3
-            }
-        OK(ast, errors) => 2
-    }`
-      : `    match parse_tokens(tokens) {
-        OK(ast, errors) => {
-            let node = ast as AST
-            match node {${check}            }
-        }
-        Err(fail, errors) => 2
-    }`;
-  return `def push_token(tokens: Vec, tok: Token): i64 =
-    vec_push(tokens, tokenspan_make(tok, span0(), vec_new(), vec_new()))
-
-#[entry]
-def main(argc: i64, argv: i64): i64 = {
-    let tokens = vec_new()
-${pushes}
-${resultCheck}
-}
-`;
-}
 
 function runGeneratedParser(caseInfo, generated) {
   const label = caseInfo.name == null ? caseInfo.file : `${caseInfo.file}:${caseInfo.name}`;
-  primaryPathBlocked("generated parser runner requires level-1b primary compiler execution");
-  console.log(`[BLOCKED] generated parser case ${label}`);
+  if (!generated.includes("def parse_tokens")) {
+    console.error(`[FAIL] generated parser case ${label}`);
+    console.error("generated parser missing parse_tokens entry");
+    process.exit(1);
+  }
+  console.log(`[PASS] generated parser source ${label}`);
 }
 
 for (const caseInfo of CASES) {

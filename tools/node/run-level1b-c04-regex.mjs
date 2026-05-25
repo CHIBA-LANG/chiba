@@ -9,7 +9,7 @@ const MIGRATION = "level-1b/std/FRONTEND_MIGRATION.md";
 const GOLDEN = "level-1b/supports/regex/regex-golden.json";
 const WAT = "level-1b/tests/wasmtime/regex-c04-smoke.wat";
 const WASM = ".scratch/level-1b/regex-c04-smoke.wasm";
-const REQUIRED_FILES = ["ast.chiba", "matcher.chiba", "parser.chiba", "program.chiba", "utf8.chiba"];
+const REQUIRED_FILES = ["ast.chiba", "matcher.chiba", "parser.chiba", "program.chiba", "utf8.chiba", "xiddata.chiba"];
 const REQUIRED_TEXT = [
   "data RegexAst",
   "data RegexClassAtom",
@@ -26,12 +26,17 @@ const REQUIRED_TEXT = [
   "type RegexMatch",
   "def RegexProgram.longest_at",
   "def str.next_char_offset",
+  "def codepoint_is_xid_start",
+  "def codepoint_is_xid_continue",
+  "def xid_range_contains",
 ];
 const FORBIDDEN_UTF8_BUILTINS = [
   "std.str_is_char_boundary",
   "std.str_next_char_offset",
   "std.str_prev_char_offset",
   "std.regex_cursor_advance",
+  "std.char_is_xid_start",
+  "std.char_is_xid_continue",
 ];
 
 function fail(message) {
@@ -151,7 +156,7 @@ function main() {
   for (const needle of [
     "| UTF-8 byte boundary helpers | `std/regex/utf8.chiba` | rewritten |",
     "| Regex cursor advance | `std/regex/parser.chiba` | rewritten |",
-    "| Unicode XID property tables | `std/regex/utf8.chiba` plus generated data | contract only |",
+    "| Unicode XID property tables | `std/regex/utf8.chiba` plus generated data | rewritten |",
   ]) {
     if (!migration.includes(needle)) fail(`frontend migration map missing: ${needle}`);
   }

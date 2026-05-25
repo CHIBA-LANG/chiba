@@ -64,7 +64,7 @@ def source_project_has_utf8_warning(project: ProjectSurface): bool =
 
 /// Return true when project facts still come from scanner fallback.
 def source_project_parser_primary_blocked(project: ProjectSurface): bool =
-    project.facts.parser.primary_path_blocked
+    project.facts.parser.ast_primary_path_blocked
 
 /// Return true when project source facts contain namespace forms needing full parser assembly.
 def source_project_has_namespace_warning(project: ProjectSurface): bool =

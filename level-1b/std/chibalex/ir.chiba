@@ -30,8 +30,32 @@ type LoweredLexer {
     token_data: String,
 }
 
+/// Lower one lexer rule into executable regex program form.
+def LexRule.lower(self, index: usize): LoweredLexRule =
+    LoweredLexRule {
+        id: LexRuleId { index: index },
+        mode: self.mode,
+        program: compile_regex(self.pattern),
+        action: self.action,
+        transition: self.transition,
+        trivia: self.trivia,
+    }
+
+/// Lower lexer rules in source order.
+def lower_chibalex_rules(rules: List[LexRule], index: usize, out: Vec[LoweredLexRule]): Array[LoweredLexRule] =
+    match rules {
+        ListNil => out.freeze()
+        ListCons(rule, tail) => lower_chibalex_rules(tail, index + 1, out.push(rule.lower(index)))
+    }
+
 /// Lower a parsed chibalex spec into typed lexer IR.
-def lower_chibalex(spec: ChibalexSpec): LoweredLexer = __compiler_builtin("std.chibalex_lower")
+def lower_chibalex(spec: ChibalexSpec): LoweredLexer =
+    LoweredLexer {
+        namespace_name: spec.namespace_name,
+        modes: spec.modes.to_array(),
+        rules: lower_chibalex_rules(spec.rules, 0, Vec[LoweredLexRule].new()),
+        token_data: spec.token_data,
+    }
 
 /// Return rules in deterministic source order.
 def LoweredLexer.ordered_rules(self): Array[LoweredLexRule] = self.rules

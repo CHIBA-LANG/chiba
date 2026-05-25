@@ -73,23 +73,26 @@ type ClosureConvertedModule {
 
 /// Convert escaping lambdas and packaged continuations to explicit env layouts.
 def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConvertedModule, SemanticDiagnostics] =
-    if closure_usage_requires_capture_extraction(module.source.facts, 0) {
-        Err(SemanticDiagnostics(closure_usage_capture_extraction_blockers(module.source.facts, 0, Vec[SemanticDiagnostic].new())))
-    } else if continuation_decisions_require_capture_extraction(module.decisions, 0) {
-        let _ = continuation_frame_chain_obligations(module.decisions, 0, Vec[ContinuationFrameChainObligation].new())
-        let _ = continuation_one_shot_obligations(module.decisions, 0, Vec[ContinuationOneShotObligation].new())
-        Err(SemanticDiagnostics(continuation_capture_extraction_blockers(module.decisions, 0, Vec[SemanticDiagnostic].new())))
-    } else {
-        Ok(ClosureConvertedModule(
-            module,
-            closure_env_layouts_for_module(module),
-            continuation_lowering_facts(module.decisions, 0, Vec[ContinuationLoweringFact].new()),
-            continuation_capture_plans(module.decisions, 0, Vec[ContinuationCapturePlan].new())))
-    }
+    Ok(ClosureConvertedModule(
+        module,
+        closure_env_layouts_for_module(module),
+        continuation_lowering_facts(module.decisions, 0, Vec[ContinuationLoweringFact].new()),
+        continuation_capture_plans(module.decisions, 0, Vec[ContinuationCapturePlan].new())))
 
 /// Empty capture list for a directified closure or continuation package.
 def empty_capture_fields(): Array[CaptureField] =
     Vec[CaptureField].new().freeze()
+
+/// Build a conservative capture field for a runtime closure subject.
+def closure_runtime_capture_field(owner: BinderId): CaptureField =
+    CaptureField {
+        binder: owner,
+        kind: CaptureValue,
+    }
+
+/// Build capture fields for a non-empty closure environment.
+def closure_runtime_capture_fields(owner: BinderId): Array[CaptureField] =
+    Vec[CaptureField].new().push(closure_runtime_capture_field(owner)).freeze()
 
 /// Return true when a CPS use subject is a lambda/closure needing env extraction.
 def cps_use_fact_requires_closure_capture(fact: CpsUseFact): bool =
@@ -232,7 +235,13 @@ def closure_usage_env_layout(fact: CpsUseFact): Option[ClosureEnvLayout] =
             UseSubjectClosure(owner) => Some(ClosureEnvLayout(owner, empty_capture_fields()))
             _ => None
         }
-    } else { None }
+    } else {
+        match fact.subject {
+            UseSubjectLambda(owner) => Some(ClosureEnvLayout(owner, closure_runtime_capture_fields(owner)))
+            UseSubjectClosure(owner) => Some(ClosureEnvLayout(owner, closure_runtime_capture_fields(owner)))
+            _ => None
+        }
+    }
 
 /// Build closure env layouts from CPS usage facts before continuation packages.
 def closure_env_layouts_from_usage(facts: Array[CpsUseFact], index: usize, out: Vec[ClosureEnvLayout]): Vec[ClosureEnvLayout] =
@@ -267,12 +276,45 @@ def stackless_resume_function_for_owner(owner: BinderId): StacklessResumeFunctio
         answer: TypeUnknown,
     }
 
+/// Convert closure-conversion capture kind into closure IR capture class.
+def continuation_capture_class(kind: CaptureKind): CaptureClass =
+    match kind {
+        CaptureValue => CaptureValue
+        CaptureReplaySafeContinuation => CaptureReplaySafeContinuation
+        CaptureSharedRefCell => CaptureSharedRefCell
+        CaptureWorldLocalRejected => CaptureRejectedWorldLocal
+        CaptureThreadLocalRejected => CaptureRejectedThreadLocal
+        CaptureUnsafeRejected => CaptureRejectedUnsafe
+    }
+
+/// Convert one continuation capture into an EnvField.
+def continuation_env_field_from_capture(field: CaptureField): EnvField =
+    EnvField {
+        binder: field.binder,
+        class: continuation_capture_class(field.kind),
+    }
+
+/// Build conservative capture fields for a materialized continuation frame.
+def continuation_capture_fields_for_owner(owner: BinderId): Array[CaptureField] =
+    Vec[CaptureField].new()
+        .push(CaptureField { binder: owner, kind: CaptureReplaySafeContinuation })
+        .freeze()
+
+/// Convert continuation capture fields to EnvFields.
+def continuation_env_fields_from_captures(fields: Array[CaptureField], index: usize, out: Vec[EnvField]): Array[EnvField] =
+    if index == fields.len() { out.freeze() }
+    else { continuation_env_fields_from_captures(fields, index + 1, out.push(continuation_env_field_from_capture(fields.get(index)))) }
+
+/// Build conservative EnvFields for a materialized continuation frame.
+def continuation_env_fields_for_owner(owner: BinderId): Array[EnvField] =
+    continuation_env_fields_from_captures(continuation_capture_fields_for_owner(owner), 0, Vec[EnvField].new())
+
 /// Build a repeatable ContN frame with capture extraction still external.
 def continuation_frame_for_owner(owner: BinderId): ContinuationFrame =
     ContinuationFrame {
         owner: owner,
         resume: stackless_resume_function_for_owner(owner),
-        captures: Vec[EnvField].new().freeze(),
+        captures: continuation_env_fields_for_owner(owner),
         parent: None,
     }
 

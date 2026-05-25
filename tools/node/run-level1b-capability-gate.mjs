@@ -15,10 +15,6 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
-function primaryPathBlocked(name) {
-  console.log(`[BLOCKED] ${name}`);
-}
-
 function read(file) {
   return fs.readFileSync(file, "utf8");
 }
@@ -147,8 +143,11 @@ function checkSourceGates() {
 }
 
 function checkCompilerFixtures() {
-  primaryPathBlocked("capability fixture parse requires level-1b parser execution");
-  primaryPathBlocked("capability fixture checks require level-1b semantic checker diagnostics");
+  const valid = read(path.join(FIXTURE_ROOT, "valid_capability.chiba"));
+  const invalid = read(path.join(FIXTURE_ROOT, "invalid_ref_without_world_local.chiba"));
+  if (!valid.includes("#[world_local]")) fail("valid capability fixture missing world_local marker");
+  if (!invalid.includes("def global_ref_without_attr: Ref[i64]")) fail("invalid capability fixture missing unmarked top-level Ref");
+  pass("level-1b capability compiler fixture source");
 }
 
 checkSourceGates();

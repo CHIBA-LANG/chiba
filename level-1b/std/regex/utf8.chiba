@@ -1,6 +1,8 @@
 /// UTF-8/WTF-8 helpers used by the regex parser and matcher.
 namespace std.regex.utf8
 
+use std.regex.xiddata.*
+
 /// Return true when a byte is a UTF-8 continuation byte.
 def u8.is_utf8_continuation(self): bool = self >= 128 && self < 192
 
@@ -41,7 +43,9 @@ def str.prev_char_offset(self, offset: usize): usize =
     self.prev_char_offset_loop(self.clamp_offset(offset))
 
 /// Return true when a character can start an identifier.
-def Char.is_xid_start(self): bool = __compiler_builtin("std.char_is_xid_start")
+def Char.is_xid_start(self): bool =
+    codepoint_is_xid_start(self.codepoint)
 
 /// Return true when a character can continue an identifier.
-def Char.is_xid_continue(self): bool = __compiler_builtin("std.char_is_xid_continue")
+def Char.is_xid_continue(self): bool =
+    codepoint_is_xid_continue(self.codepoint)

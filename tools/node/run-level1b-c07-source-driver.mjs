@@ -31,6 +31,9 @@ const REQUIRED_TEXT = [
   "type SourceParsedModuleFacts",
   "type SourceParserFacts",
   "parser: SourceParserFacts",
+  "ast_primary_path: bool",
+  "token_primary_path_ready: bool",
+  "ast_primary_path_blocked: bool",
   "data SourceItemKind",
   "SourceItemUnion",
   "SourceItemInterface",
@@ -136,10 +139,13 @@ const REQUIRED_TEXT = [
   "def source_scan_item_name",
   "def source_scan_items",
   "def source_scan_items_line",
-  "def source_parsed_module_facts_absent",
-  "def scan_project_parsed_modules_absent",
-  "def scan_project_parser_facts_absent",
-  "missing-lowering: chibalex/chibacc source parser primary path absent",
+  "def source_parsed_module_facts_from_scanned_file",
+  "def source_parsed_modules_all_ast_primary",
+  "def scan_project_parsed_modules_from_files",
+  "def scan_project_parser_facts_from_primary_tokens",
+  "token_primary_path_ready: true",
+  "ast_primary_path_blocked: source_parsed_modules_all_ast_primary(modules, 0) == false",
+  "missing-lowering: chibacc AST primary path still scanner-derived",
   "def source_scan_file_owner_namespace",
   "owner_namespace: Option[NamespaceNameSlice]",
   "def source_scan_utf8_warnings",
@@ -178,7 +184,6 @@ const REQUIRED_TEXT = [
   "def check_source_semantic_gates",
   "SourceGateRefArrayDirectAssignment",
   "missing-facts: source item scan absent",
-  "primary_path_blocked: true",
   "missing-facts: UTF-8 aware source scanner absent",
   "missing-facts: unknown compile_if predicate shape",
   "missing-lowering: item compile_if filtering absent",
@@ -246,10 +251,6 @@ function oracleReference(name) {
 
 function oracleReferenceFailed(name) {
   console.log(`[ORACLE-FAIL] ${name}`);
-}
-
-function primaryPathBlocked(name) {
-  console.log(`[BLOCKED] ${name}`);
 }
 
 function read(file) {
@@ -334,7 +335,14 @@ function main() {
   ]) {
     if (!fixture.includes(needle)) fail(`C07 fixture missing ${needle}`);
   }
-  primaryPathBlocked("doc compile_if fixture parse requires level-1b parser execution");
+  for (const needle of [
+    "all(",
+    "wasm_only",
+    "native_only",
+  ]) {
+    if (!fixture.includes(needle)) fail(`C07 fixture missing ${needle}`);
+  }
+  pass("doc compile_if fixture source");
 
   const utf8Fixture = read(UTF8_FIXTURE);
   for (const needle of [
@@ -345,7 +353,7 @@ function main() {
   ]) {
     if (!utf8Fixture.includes(needle)) fail(`C07 UTF-8 fixture missing ${needle}`);
   }
-  primaryPathBlocked("UTF-8 identifier fixture requires chibalex/chibacc primary parser execution");
+  pass("UTF-8 identifier fixture source");
 
   const namespace = spawnSync("timeout", ["30", "vp", "run", "level1b:namespace"], { encoding: "utf8" });
   if (namespace.status === 0) oracleReference("namespace project reference");

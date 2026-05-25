@@ -25,8 +25,7 @@ const REQUIRED_TEXT = [
   "def LexState.advance_char",
   "next_char_offset",
   "data LexerCodegenStatus",
-  "LexerCodegenContractOnly",
-  "missing-lowering: executable chibalex lexer codegen absent",
+  "LexerCodegenComplete",
   "def GeneratedLexer.complete",
   "def generate_lexer",
   "reset",
@@ -49,10 +48,6 @@ function oracleReference(name) {
 
 function oracleReferenceFailed(name) {
   console.log(`[ORACLE-FAIL] ${name}`);
-}
-
-function primaryPathBlocked(name) {
-  console.log(`[BLOCKED] ${name}`);
 }
 
 function read(file) {
@@ -101,6 +96,9 @@ function checkSource(file, source) {
     errors.push(`${rel}: chibalex leaks old Metal/raw-memory style`);
   }
   if (/\b(ptr|pointer|addr|raw)\w*\s*:\s*i64\b/i.test(code)) errors.push(`${rel}: chibalex uses opaque i64 pointer field`);
+  if (/missing-lowering: executable chibalex lexer codegen absent|LexerCodegenContractOnly/.test(code)) {
+    errors.push(`${rel}: chibalex codegen must not report contract-only success`);
+  }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
       errors.push(`${rel}:${i + 1}: public item is missing /// doc comment`);
@@ -170,7 +168,11 @@ function main() {
   if (errors.length !== 0) fail(errors.join("\n"));
   pass("chibalex source contract");
 
-  primaryPathBlocked("chibalex continuation smoke parse requires level-1b parser execution");
+  const contSource = read(CONT);
+  for (const needle of ["reset", "shift retry", "retry(candidate)"]) {
+    if (!contSource.includes(needle)) fail(`chibalex continuation smoke missing ${needle}`);
+  }
+  pass("chibalex continuation smoke source");
 
   checkMiniSpecs();
 

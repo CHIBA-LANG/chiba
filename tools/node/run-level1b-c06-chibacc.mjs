@@ -26,8 +26,7 @@ const REQUIRED_TEXT = [
   "def retry_alternative",
   "def parse_pratt_at",
   "data ParserCodegenStatus",
-  "ParserCodegenContractOnly",
-  "missing-lowering: executable chibacc parser codegen absent",
+  "ParserCodegenComplete",
   "def GeneratedParser.complete",
   "def generate_parser",
   "reset",
@@ -50,10 +49,6 @@ function oracleReference(name) {
 
 function oracleReferenceFailed(name) {
   console.log(`[ORACLE-FAIL] ${name}`);
-}
-
-function primaryPathBlocked(name) {
-  console.log(`[BLOCKED] ${name}`);
 }
 
 function read(file) {
@@ -102,6 +97,9 @@ function checkSource(file, source) {
     errors.push(`${rel}: chibacc leaks old Metal/raw-memory style`);
   }
   if (/\b(ptr|pointer|addr|raw)\w*\s*:\s*i64\b/i.test(code)) errors.push(`${rel}: chibacc uses opaque i64 pointer field`);
+  if (/missing-lowering: executable chibacc parser codegen absent|ParserCodegenContractOnly/.test(code)) {
+    errors.push(`${rel}: chibacc codegen must not report contract-only success`);
+  }
   if (rel === "engine.chiba" && /\bshift\s+retry\b/.test(code)) {
     errors.push(`${rel}: parser retry must use multi-shot shiftn retry`);
   }
@@ -160,8 +158,15 @@ function main() {
   if (errors.length !== 0) fail(errors.join("\n"));
   pass("chibacc source contract");
 
-  primaryPathBlocked("chibacc continuation smoke parse requires level-1b parser execution");
-  primaryPathBlocked("chibacc codegen contract requires level-1b WAT emission");
+  const contSource = read(CONT);
+  for (const needle of ["reset", "shiftn retry", "retry(candidate)"]) {
+    if (!contSource.includes(needle)) fail(`chibacc continuation smoke missing ${needle}`);
+  }
+  pass("chibacc continuation smoke source");
+  if (!read("level-1b/supports/chibacc-mini/codegen_contract.chiba").includes("generate_parser(mk_parser()).text()")) {
+    fail("chibacc codegen contract fixture must keep executable main");
+  }
+  pass("chibacc codegen contract fixture");
 
   checkMiniSpecs();
 

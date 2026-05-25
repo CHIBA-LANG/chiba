@@ -39,6 +39,7 @@ type TypedItemSkeleton {
 data TypedI32ConstAtom {
     TypedI32ConstZero,
     TypedI32ConstFortyTwo,
+    TypedI32ConstSmall(usize),
 }
 
 /// Typed branch condition carried by typed expression lowering.
@@ -53,11 +54,29 @@ data TypedExprKind {
     TypedExprUnit,
     TypedExprI32Zero,
     TypedExprI32FortyTwo,
+    TypedExprI32Const(TypedI32ConstAtom),
     TypedExprParam0,
     TypedExprTailCall(str),
+    TypedExprTailCallArgs(str, Array[TypedExprKind]),
     TypedExprTailCallI32Const(str, TypedI32ConstAtom),
     TypedExprIfElse(TypedBranchCondition, TypedExprKind, TypedExprKind),
     TypedExprBranchJoinPending,
+}
+
+/// Stable traversal event for typed expression lowering.
+data TypedExprVisitKind {
+    TypedVisitUnit,
+    TypedVisitAtom,
+    TypedVisitTailCall,
+    TypedVisitBranch,
+    TypedVisitPending,
+}
+
+/// One typed expression traversal fact in depth-first order.
+type TypedExprVisit {
+    owner: BinderId,
+    kind: TypedExprVisitKind,
+    tail_position: bool,
 }
 
 /// Function body fact that has passed the narrow C08 primary codegen subset.
@@ -71,6 +90,55 @@ type TypedFunctionFact {
     i32_param_count: usize,
     body: TypedExprKind,
 }
+
+/// Pick traversal kind for one typed expression node.
+def typed_expr_visit_kind(expr: TypedExprKind): TypedExprVisitKind =
+    match expr {
+        TypedExprUnit => TypedVisitUnit
+        TypedExprI32Zero => TypedVisitAtom
+        TypedExprI32FortyTwo => TypedVisitAtom
+        TypedExprI32Const(_) => TypedVisitAtom
+        TypedExprParam0 => TypedVisitAtom
+        TypedExprTailCall(_) => TypedVisitTailCall
+        TypedExprTailCallArgs(_, _) => TypedVisitTailCall
+        TypedExprTailCallI32Const(_, _) => TypedVisitTailCall
+        TypedExprIfElse(_, _, _) => TypedVisitBranch
+        TypedExprBranchJoinPending => TypedVisitPending
+    }
+
+/// Traverse a typed expression recursively in primary lowering order.
+def typed_expr_traverse(owner: BinderId, expr: TypedExprKind, tail_position: bool, out: Vec[TypedExprVisit]): Vec[TypedExprVisit] =
+    {
+        let with_self = out.push(TypedExprVisit(owner, typed_expr_visit_kind(expr), tail_position))
+        match expr {
+            TypedExprIfElse(_, then_expr, else_expr) =>
+                typed_expr_traverse(owner, else_expr, tail_position, typed_expr_traverse(owner, then_expr, tail_position, with_self))
+            TypedExprTailCallArgs(_, args) => typed_expr_traverse_args(owner, args, 0, false, with_self)
+            _ => with_self
+        }
+    }
+
+/// Traverse typed call arguments left-to-right.
+def typed_expr_traverse_args(owner: BinderId, args: Array[TypedExprKind], index: usize, tail_position: bool, out: Vec[TypedExprVisit]): Vec[TypedExprVisit] =
+    if index == args.len() { out }
+    else { typed_expr_traverse_args(owner, args, index + 1, tail_position, typed_expr_traverse(owner, args.get(index), tail_position, out)) }
+
+/// Traverse one typed function body.
+def typed_function_expr_visits(function: TypedFunctionFact): Array[TypedExprVisit] =
+    typed_expr_traverse(function.owner, function.body, true, Vec[TypedExprVisit].new()).freeze()
+
+/// Append visits for one function into a builder.
+def typed_function_expr_visits_append(function: TypedFunctionFact, index: usize, visits: Array[TypedExprVisit], out: Vec[TypedExprVisit]): Vec[TypedExprVisit] =
+    if index == visits.len() { out }
+    else { typed_function_expr_visits_append(function, index + 1, visits, out.push(visits.get(index))) }
+
+/// Traverse all typed function bodies.
+def typed_function_expr_visits_all(functions: Array[TypedFunctionFact], index: usize, out: Vec[TypedExprVisit]): Array[TypedExprVisit] =
+    if index == functions.len() { out.freeze() }
+    else {
+        let visits = typed_function_expr_visits(functions.get(index))
+        typed_function_expr_visits_all(functions, index + 1, typed_function_expr_visits_append(functions.get(index), 0, visits, out))
+    }
 
 /// Scan a function-slice no-argument tail-call target from a function body region.
 def typed_no_arg_call_exact(text: String, call_start: usize, end: usize): bool =
@@ -144,6 +212,27 @@ def typed_i32_const_atom_from_region(text: String, start: usize, end: usize): Op
     else if typed_function_body_starts_with_atom(text, start, end, "0") { Some(TypedI32ConstZero) }
     else { None }
 
+/// Return true when a byte is an ASCII decimal digit.
+def typed_is_ascii_digit(byte: u8): bool =
+    byte >= 48 && byte <= 57
+
+/// Parse a small unsigned integer literal from a source region.
+def typed_parse_small_i32_digits(text: String, offset: usize, end: usize, value: usize): Option[TypedI32ConstAtom] =
+    if offset >= end { Some(TypedI32ConstSmall(value)) }
+    else if offset >= text.len() { Some(TypedI32ConstSmall(value)) }
+    else if typed_is_ascii_digit(text.byte_at(offset)) {
+        typed_parse_small_i32_digits(text, offset + 1, end, value * 10 + (text.byte_at(offset) - 48))
+    } else if typed_source_region_only_spaces(text, offset, end) {
+        Some(TypedI32ConstSmall(value))
+    } else { None }
+
+/// Parse an exact small i32 literal from a source region.
+def typed_small_i32_const_exact_from_region(text: String, start: usize, end: usize): Option[TypedI32ConstAtom] =
+    let offset = source_skip_spaces(text, start)
+    if offset >= end { None }
+    else if typed_is_ascii_digit(text.byte_at(offset)) == false { None }
+    else { typed_parse_small_i32_digits(text, offset, end, 0) }
+
 /// Return true when the rest of a bounded region is whitespace only.
 def typed_source_region_only_spaces(text: String, offset: usize, end: usize): bool =
     source_skip_spaces(text, offset) >= end
@@ -159,7 +248,8 @@ def typed_i32_const_atom_exact_from_region(text: String, start: usize, end: usiz
     match typed_i32_const_atom_from_region(text, start, end) {
         Some(TypedI32ConstZero) => typed_i32_const_atom_exact_len(text, start, end, TypedI32ConstZero, 1)
         Some(TypedI32ConstFortyTwo) => typed_i32_const_atom_exact_len(text, start, end, TypedI32ConstFortyTwo, 2)
-        None => None
+        Some(TypedI32ConstSmall(value)) => Some(TypedI32ConstSmall(value))
+        None => typed_small_i32_const_exact_from_region(text, start, end)
     }
 
 /// Return true when a narrow const call argument length is exactly closed in tail position.
@@ -314,6 +404,7 @@ def typed_function_non_branch_expr_from_region(text: String, item: TypedItemSkel
         match typed_i32_const_atom_exact_from_region(text, start, end) {
             Some(TypedI32ConstFortyTwo) => Some(TypedExprI32FortyTwo)
             Some(TypedI32ConstZero) => Some(TypedExprI32Zero)
+            Some(atom) => Some(TypedExprI32Const(atom))
             None =>
                 match typed_function_tail_call_i32_const_body(text, item, start, end) {
                     Some(body) => Some(body)
@@ -364,6 +455,7 @@ def typed_function_tail_call_target(body: TypedExprKind): Option[str] =
     match body {
         TypedExprTailCall(target) => Some(target)
         TypedExprTailCallI32Const(target, _) => Some(target)
+        TypedExprTailCallArgs(target, _) => Some(target)
         _ => None
     }
 
@@ -401,8 +493,19 @@ def typed_function_tail_targets_resolved_for_body(functions: Array[TypedFunction
     match body {
         TypedExprTailCall(target) => typed_functions_have_symbol(functions, target, 0)
         TypedExprTailCallI32Const(target, _) => typed_functions_have_symbol(functions, target, 0)
+        TypedExprTailCallArgs(target, args) =>
+            typed_functions_have_symbol(functions, target, 0) && typed_function_tail_targets_resolved_for_args(functions, args, 0)
+        TypedExprIfElse(_, then_expr, else_expr) =>
+            typed_function_tail_targets_resolved_for_body(functions, then_expr) && typed_function_tail_targets_resolved_for_body(functions, else_expr)
         _ => true
     }
+
+/// Return true when every nested expression argument has resolved tail-call targets.
+def typed_function_tail_targets_resolved_for_args(functions: Array[TypedFunctionFact], args: Array[TypedExprKind], index: usize): bool =
+    if index == args.len() { true }
+    else if typed_function_tail_targets_resolved_for_body(functions, args.get(index)) {
+        typed_function_tail_targets_resolved_for_args(functions, args, index + 1)
+    } else { false }
 
 /// Return true when every function body has resolved function-slice tail-call targets.
 def typed_function_tail_targets_resolved(functions: Array[TypedFunctionFact], index: usize): bool =

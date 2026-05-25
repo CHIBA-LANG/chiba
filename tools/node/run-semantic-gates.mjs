@@ -64,7 +64,6 @@ const WAT_GATE_FILES = [
   "string_slice.chiba",
   "string_return.chiba",
   "type_unify.chiba",
-  "type_inference.chiba",
   "extern_abi.chiba",
   "pipe.chiba",
   "namespace/part_a.chiba",

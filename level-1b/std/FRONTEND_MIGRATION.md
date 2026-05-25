@@ -16,7 +16,7 @@ time instead of producing partial or misleading matches.
 | --- | --- | --- |
 | UTF-8 byte boundary helpers | `std/regex/utf8.chiba` | rewritten |
 | Regex cursor advance | `std/regex/parser.chiba` | rewritten |
-| Unicode XID property tables | `std/regex/utf8.chiba` plus generated data | contract only |
+| Unicode XID property tables | `std/regex/utf8.chiba` plus generated data | rewritten |
 | Regex parser | `std/regex/parser.chiba` | contract only |
 | Regex compiler | `std/regex/program.chiba` | contract only |
 | Regex matcher and longest match | `std/regex/matcher.chiba` | partial rewrite: find/longest_at traversal rewritten; match_at VM still builtin |

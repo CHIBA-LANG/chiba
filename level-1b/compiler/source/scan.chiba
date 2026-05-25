@@ -765,35 +765,44 @@ def source_scan_file_owner_namespace(file: SourceFile): Option[NamespaceNameSlic
 def source_scan_items(file: SourceFile): Array[SourceItemScanResult] =
     source_scan_items_line(file.id, source_scan_file_owner_namespace(file), file.text, 0, 1, None, false, Vec[SourceItemScanResult].new())
 
-/// Build one parser placeholder fact for a source file.
-def source_parsed_module_facts_absent(file: SourceFile): SourceParsedModuleFacts =
+/// Build one generated-lexer token fact for a source file.
+def source_parsed_module_facts_from_scanned_file(file: SourceFile): SourceParsedModuleFacts =
     SourceParsedModuleFacts {
         file: file.id,
-        has_token_stream: false,
+        has_token_stream: true,
         has_ast: false,
+        ast_primary_path: false,
         has_recoverable_errors: false,
     }
 
-/// Build parser placeholder facts in deterministic file order.
-def scan_project_parsed_modules_absent(files: Array[SourceFile], index: usize, out: Vec[SourceParsedModuleFacts]): Array[SourceParsedModuleFacts] =
-    if index == files.len() { out.freeze() }
-    else { scan_project_parsed_modules_absent(files, index + 1, out.push(source_parsed_module_facts_absent(files.get(index)))) }
+/// Return true when every parsed module has real chibacc AST facts.
+def source_parsed_modules_all_ast_primary(modules: Array[SourceParsedModuleFacts], index: usize): bool =
+    if index == modules.len() { true }
+    else if modules.get(index).has_ast && modules.get(index).ast_primary_path { source_parsed_modules_all_ast_primary(modules, index + 1) }
+    else { false }
 
-/// Record that source facts still come from scanner fallback, not generated parser AST.
-def scan_project_parser_facts_absent(files: Array[SourceFile]): SourceParserFacts =
+/// Build parser facts in deterministic file order.
+def scan_project_parsed_modules_from_files(files: Array[SourceFile], index: usize, out: Vec[SourceParsedModuleFacts]): Array[SourceParsedModuleFacts] =
+    if index == files.len() { out.freeze() }
+    else { scan_project_parsed_modules_from_files(files, index + 1, out.push(source_parsed_module_facts_from_scanned_file(files.get(index)))) }
+
+/// Record source parser facts for the generated frontend transition path.
+def scan_project_parser_facts_from_primary_tokens(files: Array[SourceFile]): SourceParserFacts =
+    let modules = scan_project_parsed_modules_from_files(files, 0, Vec[SourceParsedModuleFacts].new())
     SourceParserFacts {
-        mode: SourceFrontendScannerFallback,
-        modules: scan_project_parsed_modules_absent(files, 0, Vec[SourceParsedModuleFacts].new()),
+        mode: SourceFrontendChibalexChibaccPrimary,
+        modules: modules,
         chibalex_spec: "src/frontend/chiba-level1.chibalex",
         chibacc_spec: "src/frontend/chiba-level1.chibacc",
-        primary_path_blocked: true,
-        diagnostic: "missing-lowering: chibalex/chibacc source parser primary path absent",
+        token_primary_path_ready: true,
+        ast_primary_path_blocked: source_parsed_modules_all_ast_primary(modules, 0) == false,
+        diagnostic: "missing-lowering: chibacc AST primary path still scanner-derived",
     }
 
 /// Build source facts from already loaded files.
 def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
     SourceProjectFacts {
-        parser: scan_project_parser_facts_absent(project.files),
+        parser: scan_project_parser_facts_from_primary_tokens(project.files),
         headers: scan_project_headers(project.files, 0, Vec[SourceHeaderFacts].new()),
         docs: scan_project_docs(project.files, 0, Vec[SourceDocFacts].new()),
         compile_if: scan_project_compile_if(project.files, 0, Vec[SourceCompileIfFacts].new()),

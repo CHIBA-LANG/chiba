@@ -53,6 +53,7 @@ type OperatorCandidateSet {
 /// Candidate resolver status before operand and receiver filtering.
 data OperatorCandidateStatus {
     OperatorCandidateMissing,
+    OperatorCandidateResolved,
     OperatorCandidateAmbiguityPending,
     OperatorCandidateOperandMatchingPending,
     OperatorCandidateUnknownOperatorPending,
@@ -254,7 +255,7 @@ def operator_candidate_status(set: OperatorCandidateSet): OperatorCandidateStatu
     if set.operator_name == "" { OperatorCandidateUnknownOperatorPending }
     else if set.candidate_count == 0 { OperatorCandidateMissing }
     else if set.candidate_count > 1 { OperatorCandidateAmbiguityPending }
-    else { OperatorCandidateOperandMatchingPending }
+    else { OperatorCandidateResolved }
 
 /// Build one diagnostic-ready candidate fact.
 def operator_candidate_diagnostic_fact(set: OperatorCandidateSet): OperatorCandidateDiagnosticFact =
@@ -276,6 +277,7 @@ def operator_candidate_diagnostic(fact: OperatorCandidateDiagnosticFact): Option
     match fact.status {
         OperatorCandidateMissing =>
             Some(SemanticDiagnostic("<semantic>", 0, 0, "invalid-surface: operator overload candidate missing"))
+        OperatorCandidateResolved => None
         OperatorCandidateAmbiguityPending =>
             Some(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: operator overload ambiguity check absent"))
         OperatorCandidateOperandMatchingPending =>

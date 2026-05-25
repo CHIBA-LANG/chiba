@@ -1,6 +1,6 @@
 # Handoff — chiba-level1 bootstrap / level-1b truthfulness cleanup
 
-Date: 2026-05-24
+Date: 2026-05-25
 
 This document is for a fresh agent continuing the work. It intentionally does **not** duplicate the full roadmap/spec text. Use the referenced files as source of truth.
 
@@ -65,6 +65,8 @@ pnpm -s run smoke:lexer-compare
 Earlier validated state in this conversation:
 
 - `pnpm -s run validate:first-bootstrap` passed.
+- `timeout 5 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1c_main.chiba --output level1c.o` timed out with exit 124 and did not crash before timeout.
+- `level1b:c04-regex`, `level1b:c07-source-driver`, `level1b:c08-semantic`, `level1b:c09-control-cps`, `level1b:c10-closure-package`, and `level1b:c11-backend` passed after the latest level-1b edits.
 - `pnpm -s run level1b:type-system` passed.
 - parser error smoke, semantic gates, checkpoint gates, all-wat were green.
 
@@ -85,8 +87,14 @@ Binaryen is intentionally still part of the toolchain. The rule is: Binaryen may
 	- Still carries real behavior for current green bootstrap.
 
 - `level-1b/compiler/control/*`
-	- Intended answer/control/usage/CPS pipeline.
-	- Currently many pass-through stubs (`Ok(module)`, empty facts, etc.).
+	 - Intended answer/control/usage/CPS pipeline.
+	 - Current state: typed DFS expression visits feed `CpsModule.expr_visits`; reset/shift/shiftn produce `CpsControlTermFact`; administrative beta and full AST expression CPS remain pending.
+
+- `level-1b/std/regex/*`
+	 - Current state: Unicode 15.1 XID ranges are level-1b source data; `Char.is_xid_start/continue` no longer use compiler builtins. Regex program lowering emits real `RegexSplit` / `RegexJump` labels for alternation/repeat, and matcher uses a source-level backtracking VM. Capture numbering/rollback still pending.
+
+- `level-1b/compiler/source/*`
+	 - Current state: source parser facts are data-driven. `ast_primary_path_blocked` is derived from per-module `ast_primary_path` facts, but all modules still have `has_ast=false`; chibacc AST primary execution is not done.
 
 - `level-1b/compiler/closure/*`
 	- Intended usage/CPS → continuation simplify → closure conversion → lambda lift → env simplify pipeline.
@@ -145,7 +153,7 @@ Do not re-litigate unless the user explicitly asks; reference spec/TODO instead.
 - chibalex must support UTF-8 source and identifiers. The current C07 `scan.chiba` is only an ASCII byte-level transition scanner; before it becomes authoritative for namespace/item facts, it must either become UTF-8 aware or fail-closed on non-ASCII facts instead of silently missing them.
 - C05 chibalex now has explicit UTF-8/XID identifier policy and codepoint-based state advance via `next_char_offset`; `utf8-ident.chibalex` is the mini fixture.
 - C06 chibacc alternative retry/recovery source uses `shiftn retry`; parser retry is multi-shot by contract, not one-shot `shift`.
-- C05/C06 generated lexer/parser codegen artifacts carry `ContractOnly` status and `missing-lowering` diagnostics until executable codegen exists.
+- C05/C06 generated lexer/parser codegen artifacts no longer carry `ContractOnly` status or `missing-lowering` diagnostics. Lowering now builds typed IR from AST values; codegen emits entry text, but generated parser execution is still not the full C07 AST primary path.
 - C07 `compile_if` facts now keep an expression slice, top-level predicate shape, and coarse target/backend/all/or/not/unknown classification. Predicate parsing/eval against target facts is still not wired into item filtering.
 - Source semantic gate fail-closes on unknown `compile_if` predicate shape, so unsupported predicates do not pass as ordinary source facts.
 - Source scanner detects inline/indented namespace forms and fail-closes until inline namespace block assembly exists. File-header namespace remains the current transition path.

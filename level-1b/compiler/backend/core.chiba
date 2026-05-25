@@ -39,6 +39,7 @@ data CoreRuntimeState {
 data CoreI32ConstAtom {
     CoreI32ConstZero,
     CoreI32ConstFortyTwo,
+    CoreI32ConstSmall(usize),
 }
 
 /// Core branch condition carried by expression lowering.
@@ -56,6 +57,7 @@ data CoreExprKind {
     CoreExprParam0,
     CoreExprTailCall(str),
     CoreExprTailCallI32Const(str, CoreI32ConstAtom),
+    CoreExprTailCallParam0(str),
     CoreExprIfElse(CoreBranchCondition, CoreExprKind, CoreExprKind),
     CoreExprBranchJoinPending,
 }
@@ -158,6 +160,7 @@ def core_i32_const_atom_from_typed(atom: TypedI32ConstAtom): CoreI32ConstAtom =
     match atom {
         TypedI32ConstZero => CoreI32ConstZero
         TypedI32ConstFortyTwo => CoreI32ConstFortyTwo
+        TypedI32ConstSmall(value) => CoreI32ConstSmall(value)
     }
 
 /// Convert a typed branch condition to Core.
@@ -183,6 +186,7 @@ def core_expr_from_cps_tail_call_arg(target: str, args: Array[CpsAtom]): CoreExp
     else {
         match args.get(0) {
             CpsAtomI32Const(atom) => CoreExprTailCallI32Const(target, core_i32_const_atom_from_typed(atom))
+            CpsAtomParam0 => CoreExprTailCallParam0(target)
             _ => CoreExprBranchJoinPending
         }
     }

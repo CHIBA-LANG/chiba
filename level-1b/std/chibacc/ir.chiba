@@ -44,5 +44,51 @@ type LoweredParser {
     ast_data: String,
 }
 
+/// Lower one grammar alternative.
+def GrammarAlternative.lower(self, index: usize): LoweredAlternative =
+    LoweredAlternative {
+        index: index,
+        sequence: self.sequence,
+        action: self.action,
+        recovery: RecoveryNone,
+    }
+
+/// Lower alternative list into stable source-order array.
+def lower_alternatives(items: List[GrammarAlternative], index: usize, out: Vec[LoweredAlternative]): Array[LoweredAlternative] =
+    match items {
+        ListNil => out.freeze()
+        ListCons(head, tail) => lower_alternatives(tail, index + 1, out.push(head.lower(index)))
+    }
+
+/// Lower one parser rule into parser IR.
+def GrammarRule.lower(self): LoweredRule =
+    match self.body {
+        GrammarAlternatives(alts) =>
+            LoweredRule {
+                name: self.name,
+                alternatives: lower_alternatives(alts, 0, Vec[LoweredAlternative].new()),
+                pratt: None,
+            }
+        GrammarPratt(prefixes, infixes) =>
+            LoweredRule {
+                name: self.name,
+                alternatives: Vec[LoweredAlternative].new().freeze(),
+                pratt: Some(PrattTable { prefixes: prefixes.to_array(), infixes: infixes.to_array() }),
+            }
+    }
+
+/// Lower grammar rules in source order.
+def lower_rules(items: List[GrammarRule], out: Vec[LoweredRule]): Array[LoweredRule] =
+    match items {
+        ListNil => out.freeze()
+        ListCons(head, tail) => lower_rules(tail, out.push(head.lower()))
+    }
+
 /// Lower parsed chibacc source into typed parser IR.
-def lower_chibacc(spec: ChibaccSpec): LoweredParser = __compiler_builtin("std.chibacc_lower")
+def lower_chibacc(spec: ChibaccSpec): LoweredParser =
+    LoweredParser {
+        namespace_name: spec.namespace_name,
+        start: spec.start,
+        rules: lower_rules(spec.rules, Vec[LoweredRule].new()),
+        ast_data: spec.ast_data,
+    }

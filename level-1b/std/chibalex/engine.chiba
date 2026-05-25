@@ -44,8 +44,38 @@ def choose_with_backtracking(candidate: LexCandidate): LexCandidate = reset {
     }
 }
 
+/// Return true when a lowered rule is active in the current mode.
+def LexMode.eq(self, other: LexMode): bool = self.name == other.name
+
+/// Build a candidate for one rule when it matches at the current offset.
+def lex_candidate_for_rule(rule: LoweredLexRule, input: str, state: LexState): Option[LexCandidate] =
+    if rule.mode.eq(state.mode) == false { None }
+    else {
+        match rule.program.longest_at(input, state.offset) {
+            Some(found) =>
+                if found.end > state.offset { Some(LexCandidate { rule: rule.id, end: found.end }) }
+                else { None }
+            None => None
+        }
+    }
+
+/// Select the best candidate from all rules.
+def find_best_rule_loop(rules: Array[LoweredLexRule], input: str, state: LexState, index: usize, best: Option[LexCandidate]): Option[LexCandidate] =
+    if index == rules.len() { best }
+    else {
+        let candidate = lex_candidate_for_rule(rules.get(index), input, state)
+        let next_best = match candidate {
+            Some(found) =>
+                if found.better_than(best) { Some(found) }
+                else { best }
+            None => best
+        }
+        find_best_rule_loop(rules, input, state, index + 1, next_best)
+    }
+
 /// Find the best rule at the current state.
-def find_best_rule(lexer: LoweredLexer, input: str, state: LexState): Option[LexCandidate] = __compiler_builtin("std.chibalex_find_best_rule")
+def find_best_rule(lexer: LoweredLexer, input: str, state: LexState): Option[LexCandidate] =
+    find_best_rule_loop(lexer.ordered_rules(), input, state, 0, None)
 
 /// Advance one UTF-8 codepoint of line/column state.
 def LexState.advance_char(self, input: str): LexState =

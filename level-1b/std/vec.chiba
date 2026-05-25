@@ -18,5 +18,14 @@ def Vec[T].len(self): usize = __compiler_builtin("std.vec_len")
 /// Append a value and return the updated builder.
 def Vec[T].push(self, value: T): Vec[T] = __compiler_builtin("std.vec_push")
 
+/// Append all array items and return the updated builder.
+def Vec[T].extend_loop(self, values: Array[T], index: usize): Vec[T] =
+    if index == values.len() { self }
+    else { self.push(values.get(index)).extend_loop(values, index + 1) }
+
+/// Append all array items and return the updated builder.
+def Vec[T].extend(self, values: Array[T]): Vec[T] =
+    self.extend_loop(values, 0)
+
 /// Freeze the builder into an immutable managed array.
 def Vec[T].freeze(self): Array[T] = __compiler_builtin("std.vec_freeze")

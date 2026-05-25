@@ -30,8 +30,115 @@ type RegexProgram {
     capture_count: usize,
 }
 
+/// Append one instruction array to a builder.
+def regex_emit_all(items: Array[RegexInstruction], index: usize, out: Vec[RegexInstruction]): Vec[RegexInstruction] =
+    if index == items.len() { out }
+    else { regex_emit_all(items, index + 1, out.push(items.get(index))) }
+
+/// Compile one AST node into an immutable instruction fragment.
+def regex_compile_fragment(ast: RegexAst): Array[RegexInstruction] =
+    regex_compile_into(ast, Vec[RegexInstruction].new()).freeze()
+
+/// Compile a sequence list into instruction builder form.
+def regex_compile_sequence(items: List[RegexAst], out: Vec[RegexInstruction]): Vec[RegexInstruction] =
+    match items {
+        ListNil => out
+        ListCons(head, tail) => regex_compile_sequence(tail, regex_compile_into(head, out))
+    }
+
+/// Compile an alternation list into nested typed Split/Jump branches.
+def regex_compile_alternative(items: List[RegexAst], out: Vec[RegexInstruction]): Vec[RegexInstruction] =
+    match items {
+        ListNil => out
+        ListCons(head, tail) =>
+            match tail {
+                ListNil => regex_compile_into(head, out)
+                _ => {
+                    let first = regex_compile_fragment(head)
+                    let rest = regex_compile_alternative(tail, Vec[RegexInstruction].new()).freeze()
+                    let split_index = out.len()
+                    let first_start = split_index + 1
+                    let rest_start = first_start + first.len() + 1
+                    let end = rest_start + rest.len()
+                    regex_emit_all(rest, 0,
+                        regex_emit_all(first, 0,
+                            out.push(RegexSplit(RegexLabel { index: first_start }, RegexLabel { index: rest_start }, RegexGreedy)))
+                            .push(RegexJump(RegexLabel { index: end })))
+                }
+            }
+    }
+
+/// Compile a fixed number of required repeats.
+def regex_compile_required_repeats(inner: RegexAst, count: usize, out: Vec[RegexInstruction]): Vec[RegexInstruction] =
+    if count == 0 { out }
+    else { regex_compile_required_repeats(inner, count - 1, regex_compile_into(inner, out)) }
+
+/// Compile one optional repeat slot.
+def regex_compile_optional_repeat(inner: RegexAst, mode: RegexQuantMode, out: Vec[RegexInstruction]): Vec[RegexInstruction] =
+    {
+        let body = regex_compile_fragment(inner)
+        let split_index = out.len()
+        let body_start = split_index + 1
+        let end = body_start + body.len()
+        match mode {
+            RegexGreedy => regex_emit_all(body, 0, out.push(RegexSplit(RegexLabel { index: body_start }, RegexLabel { index: end }, mode)))
+            RegexLazy => regex_emit_all(body, 0, out.push(RegexSplit(RegexLabel { index: end }, RegexLabel { index: body_start }, mode)))
+        }
+    }
+
+/// Compile a bounded number of optional repeats.
+def regex_compile_optional_repeats(inner: RegexAst, count: usize, mode: RegexQuantMode, out: Vec[RegexInstruction]): Vec[RegexInstruction] =
+    if count == 0 { out }
+    else { regex_compile_optional_repeats(inner, count - 1, mode, regex_compile_optional_repeat(inner, mode, out)) }
+
+/// Compile unbounded repeat tail after required repetitions.
+def regex_compile_unbounded_repeat_tail(inner: RegexAst, mode: RegexQuantMode, out: Vec[RegexInstruction]): Vec[RegexInstruction] =
+    {
+        let body = regex_compile_fragment(inner)
+        let split_index = out.len()
+        let body_start = split_index + 1
+        let end = body_start + body.len() + 1
+        let with_split = match mode {
+            RegexGreedy => out.push(RegexSplit(RegexLabel { index: body_start }, RegexLabel { index: end }, mode))
+            RegexLazy => out.push(RegexSplit(RegexLabel { index: end }, RegexLabel { index: body_start }, mode))
+        }
+        regex_emit_all(body, 0, with_split).push(RegexJump(RegexLabel { index: split_index }))
+    }
+
+/// Compile a quantified expression into typed branch instructions.
+def regex_compile_repeat(inner: RegexAst, repeat: RegexRepeat, out: Vec[RegexInstruction]): Vec[RegexInstruction] =
+    {
+        let required = regex_compile_required_repeats(inner, repeat.min, out)
+        match repeat.max {
+            Some(max) =>
+                if max <= repeat.min { required }
+                else { regex_compile_optional_repeats(inner, max - repeat.min, repeat.mode, required) }
+            None => regex_compile_unbounded_repeat_tail(inner, repeat.mode, required)
+        }
+    }
+
+/// Compile one regex AST node into typed Thompson-style instruction form.
+def regex_compile_into(ast: RegexAst, out: Vec[RegexInstruction]): Vec[RegexInstruction] =
+    match ast {
+        RegexEmpty => out
+        RegexLiteral(ch) => out.push(RegexMatchLiteral(ch))
+        RegexAny => out.push(RegexMatchAny)
+        RegexClassExpr(class) => out.push(RegexMatchClass(class))
+        RegexSequence(items) => regex_compile_sequence(items, out)
+        RegexAlternative(items) => regex_compile_alternative(items, out)
+        RegexCapture(inner) =>
+            regex_compile_into(inner, out.push(RegexEnterCapture(0))).push(RegexExitCapture(0))
+        RegexNonCapture(inner) => regex_compile_into(inner, out)
+        RegexRepeatExpr(inner, repeat) => regex_compile_repeat(inner, repeat, out)
+        RegexAssert(assertion) => out.push(RegexAssertInstruction(assertion))
+    }
+
 /// Compile a regex AST into the typed program IR.
-def compile_regex(ast: RegexAst): RegexProgram = __compiler_builtin("std.regex_compile")
+def compile_regex(ast: RegexAst): RegexProgram =
+    RegexProgram {
+        instructions: regex_compile_into(ast, Vec[RegexInstruction].new()).push(RegexAccept).freeze(),
+        capture_count: 0,
+    }
 
 /// Return the number of instructions.
 def RegexProgram.len(self): usize = self.instructions.len()

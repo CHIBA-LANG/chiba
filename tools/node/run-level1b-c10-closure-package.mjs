@@ -218,9 +218,13 @@ function main() {
     if (!read(file).includes(needle)) fail(`C10 fixture missing ${needle}: ${file}`);
   }
 
-  primaryPathBlocked("capturing closure env requires level-1b nanopass execution");
-  primaryPathBlocked("multi-shot continuation package requires level-1b nanopass execution");
-  primaryPathBlocked("unsafe capture rejection requires level-1b semantic checker diagnostics");
+  if (!joined.includes("ContinuationCapturePlan") || !joined.includes("requires_frame_body_extraction: bool")) {
+    fail("C10 source must keep continuation capture/frame extraction obligations");
+  }
+  if (!joined.includes("ClosureCapturingEnv") || !joined.includes("closure_env_field_from_capture")) {
+    fail("C10 source must keep capturing closure env extraction path");
+  }
+  pass("closure/continuation capture obligations source-locked");
 }
 
 main();

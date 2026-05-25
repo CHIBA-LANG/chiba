@@ -14,7 +14,23 @@ data ControlBoundary {
 
 /// Answer type fact for one reset boundary.
 type AnswerFact {
+    owner: BinderId,
     boundary: ControlBoundary,
+    answer: SemType,
+}
+
+/// Delimited-control body shape discovered before CPS lowering.
+data ControlBodyKind {
+    ControlBodyReset,
+    ControlBodyShift,
+    ControlBodyShiftN,
+}
+
+/// Per-owner control body fact used by one-pass CPS.
+type ControlBodyFact {
+    owner: BinderId,
+    file: SourceFileId,
+    kind: ControlBodyKind,
     answer: SemType,
 }
 
@@ -43,6 +59,10 @@ def typed_items_have_control_surface(items: Array[TypedItemSkeleton], index: usi
 def answer_facts_none(): Array[AnswerFact] =
     Vec[AnswerFact].new().freeze()
 
+/// Empty control body fact stream.
+def control_body_facts_none(): Array[ControlBodyFact] =
+    Vec[ControlBodyFact].new().freeze()
+
 /// Conservative answer type used until expression answer inference owns bodies.
 def default_answer_type(): SemType =
     TyNominal(NominalId { namespace_name: "std", name: "i64" })
@@ -61,18 +81,43 @@ def answer_facts_from_control_surface(facts: Array[ControlSurfaceFact], index: u
             facts,
             index + 1,
             out.push(AnswerFact {
+                owner: fact.owner,
                 boundary: boundary,
                 answer: default_answer_type(),
             }))
     }
 
+/// Convert one control-surface fact into CPS body facts.
+def control_body_facts_from_surface_fact(fact: ControlSurfaceFact, out: Vec[ControlBodyFact]): Vec[ControlBodyFact] =
+    {
+        let with_reset =
+            if fact.has_reset {
+                out.push(ControlBodyFact(fact.owner, fact.file, ControlBodyReset, default_answer_type()))
+            } else { out }
+        let with_shift =
+            if fact.has_shift {
+                with_reset.push(ControlBodyFact(fact.owner, fact.file, ControlBodyShift, default_answer_type()))
+            } else { with_reset }
+        if fact.has_shiftn {
+            with_shift.push(ControlBodyFact(fact.owner, fact.file, ControlBodyShiftN, default_answer_type()))
+        } else { with_shift }
+    }
+
+/// Build control body facts in stable owner order.
+def control_body_facts_from_control_surface(facts: Array[ControlSurfaceFact], index: usize, out: Vec[ControlBodyFact]): Array[ControlBodyFact] =
+    if index == facts.len() { out.freeze() }
+    else { control_body_facts_from_control_surface(facts, index + 1, control_body_facts_from_surface_fact(facts.get(index), out)) }
+
 /// Check `reset` and `shift` answer consistency.
 def check_answer_control(module: TypedModule): Result[AnswerControlModule, SemanticDiagnostics] =
     let obligations = answer_control_obligations(module.control_surface, 0, Vec[AnswerControlObligation].new())
     if module.control_surface.len() > 0 && obligations.len() > 0 {
-        Ok(AnswerControlModule(module, answer_facts_from_control_surface(module.control_surface, 0, Vec[AnswerFact].new())))
+        Ok(AnswerControlModule(
+            module,
+            answer_facts_from_control_surface(module.control_surface, 0, Vec[AnswerFact].new()),
+            control_body_facts_from_control_surface(module.control_surface, 0, Vec[ControlBodyFact].new())))
     } else {
-        Ok(AnswerControlModule(module, answer_facts_none()))
+        Ok(AnswerControlModule(module, answer_facts_none(), control_body_facts_none()))
     }
 
 /// Convert one control surface fact into answer/control obligations.
@@ -94,4 +139,5 @@ def answer_control_obligations(facts: Array[ControlSurfaceFact], index: usize, o
 type AnswerControlModule {
     typed: TypedModule,
     facts: Array[AnswerFact],
+    control_bodies: Array[ControlBodyFact],
 }

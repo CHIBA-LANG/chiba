@@ -139,10 +139,15 @@ def CoreOpKind.wat_label(self): String =
     }
 
 /// Emit the body instructions for one lowered Core function.
+def emit_core_small_usize(value: usize): String =
+    "0"
+
+/// Emit the body instructions for one lowered Core function.
 def emit_core_i32_const_atom(atom: CoreI32ConstAtom): String =
     match atom {
         CoreI32ConstZero => "i32.const 0"
         CoreI32ConstFortyTwo => "i32.const 42"
+        CoreI32ConstSmall(value) => "i32.const ".concat(emit_core_small_usize(value))
     }
 
 /// Emit the literal condition for the first executable branch slice.
@@ -161,6 +166,7 @@ def emit_core_expr_instruction(body: CoreExprKind): String =
         CoreExprParam0 => "local.get 0"
         CoreExprTailCall(target) => "return_call $chiba.".concat(target)
         CoreExprTailCallI32Const(target, arg) => emit_core_i32_const_atom(arg).concat(" return_call $chiba.").concat(target)
+        CoreExprTailCallParam0(target) => "local.get 0 return_call $chiba.".concat(target)
         CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_expr(condition, then_expr, else_expr)
         CoreExprBranchJoinPending => "unreachable"
         CoreExprUnit => ""
@@ -193,6 +199,8 @@ def emit_core_function_body(body: Option[CoreExprKind]): String =
                 .concat(emit_core_i32_const_atom(arg))
                 .concat(" return_call $chiba.")
                 .concat(target)
+        Some(CoreExprTailCallParam0(target)) =>
+            "(result i32) local.get 0 return_call $chiba.".concat(target)
         Some(CoreExprIfElse(condition, then_expr, else_expr)) => emit_core_if_else_expr(condition, then_expr, else_expr)
         Some(CoreExprBranchJoinPending) => "(result i32) unreachable"
         Some(CoreExprUnit) => ""

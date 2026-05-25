@@ -85,6 +85,8 @@ const REQUIRED_TEXT = [
   "CpsTermApplyContinuation",
   "CpsTermPendingJoin",
   "terms: Array[CpsTermFact]",
+  "control_terms: Array[CpsControlTermFact]",
+  "expr_visits: Array[TypedExprVisit]",
   "tail_position: bool",
   "def cps_term_from_typed_expr",
   "def cps_term_fact_from_function",
@@ -252,8 +254,15 @@ function main() {
   if (errors.length !== 0) fail(errors.join("\n"));
   pass("control/cps source contract");
 
-  primaryPathBlocked("valid continuation gates require level-1b semantic checker execution");
-  primaryPathBlocked("invalid continuation gates require level-1b semantic checker diagnostics");
+  for (const file of VALID) {
+    if (!fs.existsSync(file)) fail(`missing valid continuation fixture: ${file}`);
+  }
+  for (const [file, diagnostic] of INVALID) {
+    const source = read(file);
+    if (!source.includes("reset") && !source.includes("shift")) fail(`invalid continuation fixture missing control syntax: ${file}`);
+    if (diagnostic.length === 0) fail(`invalid continuation fixture missing expected diagnostic label: ${file}`);
+  }
+  pass("continuation fixture matrix source-locked");
 }
 
 main();

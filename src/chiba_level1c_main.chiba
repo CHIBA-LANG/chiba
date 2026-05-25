@@ -325,7 +325,6 @@ def level1c_collect_level1b_items_once(path: Str, seen: Vec): AST =
             OK(ast, _) => {
                 let src = file_read_file_all_sized(str_to_cstr(path))
                 let imports = vec_new()
-                let _ = level1c_collect_level1b_default_imports(ast as AST, imports)
                 let _ = level1c_collect_level1b_use_paths(src, 0, imports)
                 let imported_items = level1c_collect_level1b_import_items(imports, 0, seen)
                 level1c_ast_item_append(np_source_items(level1c_target_ast(ast as AST)), imported_items)
@@ -336,7 +335,6 @@ def level1c_collect_level1b_items_once(path: Str, seen: Vec): AST =
                 match ast {
                     Some(partial) => {
                         let safe_partial = level1c_partial_safe_source(partial as AST)
-                        let _ = level1c_collect_level1b_default_imports(partial as AST, imports)
                         let _ = level1c_collect_level1b_use_paths(src, 0, imports)
                         let imported_items = level1c_collect_level1b_import_items(imports, 0, seen)
                         level1c_ast_item_append(np_source_items(level1c_target_ast(safe_partial)), imported_items)
@@ -362,7 +360,6 @@ def level1c_target_ast_with_level1b_imports(path: Str, ast: AST): AST = {
     let imports = vec_new()
     let seen = vec_new()
     let _ = vec_push(seen, path as i64)
-    let _ = level1c_collect_level1b_default_imports(ast, imports)
     let _ = level1c_collect_level1b_use_paths(src, 0, imports)
     let imported_items = level1c_collect_level1b_import_items(imports, 0, seen)
     match level1c_target_ast(ast) {
