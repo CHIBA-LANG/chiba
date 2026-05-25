@@ -443,6 +443,55 @@ def cir_typed_type_first_arg_from_list(args: CirTypeList): CirType =
         _ => CirTyUnknown
     }
 
+def cir_typed_type_from_type_expr(expr: CirExpr): CirType =
+    match expr {
+        L2OpTyped(inner, ty) =>
+            match inner {
+                L1OpRef(ref) =>
+                    match ref {
+                        L1RefGlobal(name) => cir_typed_type_from_name(name)
+                        L1RefUnresolved(name) => cir_typed_type_from_name(name)
+                        _ => ty
+                    }
+                _ => ty
+            }
+        L1OpRef(ref) =>
+            match ref {
+                L1RefGlobal(name) => cir_typed_type_from_name(name)
+                L1RefUnresolved(name) => cir_typed_type_from_name(name)
+                _ => CirTyUnknown
+            }
+        _ => CirTyUnknown
+    }
+
+def cir_typed_type_from_name(name: Str): CirType =
+    if streq(name, mk_str("i64", 3)) != 0 { CirTyI64 }
+    else if streq(name, mk_str("i32", 3)) != 0 { CirTyI32 }
+    else if streq(name, mk_str("usize", 5)) != 0 { CirTyUsize }
+    else if streq(name, mk_str("u8", 2)) != 0 { CirTyConst(name) }
+    else if streq(name, mk_str("bool", 4)) != 0 { CirTyBool }
+    else if streq(name, mk_str("String", 6)) != 0 { CirTyString }
+    else if streq(name, mk_str("str", 3)) != 0 { CirTyStr }
+    else { CirTyConst(name) }
+
+def cir_typed_type_args_from_exprs(args: CirExprList): CirTypeList =
+    match args {
+        CirExprEnd => CirTypeEnd
+        CirExprCons(head, tail) => CirTypeCons(cir_typed_type_from_type_expr(head), cir_typed_type_args_from_exprs(tail))
+    }
+
+def cir_typed_type_application(value: CirExpr, args: CirExprList): CirType =
+    match value {
+        L2OpTyped(inner, _) => cir_typed_type_application(inner, args)
+        L1OpRef(ref) =>
+            match ref {
+                L1RefGlobal(name) => CirTyApp(CirTyConst(name), cir_typed_type_args_from_exprs(args))
+                L1RefUnresolved(name) => CirTyApp(CirTyConst(name), cir_typed_type_args_from_exprs(args))
+                _ => CirTyUnknown
+            }
+        _ => CirTyUnknown
+    }
+
 def cir_typed_array_of(value: CirType): CirType =
     CirTyApp(CirTyConst(mk_str("Array", 5)), CirTypeCons(value, CirTypeEnd))
 
@@ -646,8 +695,14 @@ def cir_typed_expr_in_g(expr: CirExpr, env: CirTypeEnv, globals: CirGlobalTypeEn
             L2OpTyped(L1OpField(value2, field), inferred)
         }
         L1OpIndex(value, args) => {
+            let value2 = cir_typed_expr_in_g(value, env, globals)
             let args2 = cir_typed_expr_list_in_g(args, env, globals)
-            L2OpTyped(L1OpIndex(cir_typed_expr_in_g(value, env, globals), args2), cir_typed_index_result(args2))
+            L2OpTyped(L1OpIndex(value2, args2), cir_typed_index_result(args2))
+        }
+        L1OpTypeApply(value, args) => {
+            let value2 = cir_typed_expr_in_g(value, env, globals)
+            let args2 = cir_typed_expr_list_in_g(args, env, globals)
+            L2OpTyped(L1OpTypeApply(value2, args2), cir_typed_type_application(value2, args2))
         }
         L1OpAssign(lhs, rhs) => {
             let rhs2 = cir_typed_expr_in_g(rhs, env, globals)

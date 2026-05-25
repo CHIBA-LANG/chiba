@@ -214,6 +214,8 @@ def alpha_expr(expr: CirExpr, ctx: AlphaCtx): CirExpr =
             L1OpField(alpha_expr(value, ctx), field)
         L0OpIndex(value, args) =>
             L1OpIndex(alpha_expr(value, ctx), alpha_expr_list(args, ctx))
+        L0OpTypeApply(value, args) =>
+            L1OpTypeApply(alpha_expr(value, ctx), alpha_expr_list(args, ctx))
         L0OpAssign(lhs, rhs) =>
             L1OpAssign(alpha_expr(lhs, ctx), alpha_expr(rhs, ctx))
         L0OpUnsafe(body) =>

@@ -1,0 +1,9 @@
+namespace supports.chibaccmini.scalar_vec_contract
+
+use std.vec.*
+
+#[entry]
+def main(argc: i64, argv: i64): i64 = {
+    let values = Vec[i64].new().push(7).push(35).freeze()
+    values[1]
+}

@@ -64,6 +64,7 @@ def cir_cont_resume_count_expr(expr: CirExpr, id: i64): i64 =
         }
         L1OpField(value, _) => cir_cont_resume_count_expr(value, id)
         L1OpIndex(value, args) => cir_cont_resume_count_expr(value, id) + cir_cont_resume_count_args(args, id)
+        L1OpTypeApply(value, args) => cir_cont_resume_count_expr(value, id) + cir_cont_resume_count_args(args, id)
         L1OpAssign(lhs, rhs) => cir_cont_resume_count_expr(lhs, id) + cir_cont_resume_count_expr(rhs, id)
         L1OpPrefix(_, value) => cir_cont_resume_count_expr(value, id)
         L1OpBinary(_, lhs, rhs) => cir_cont_resume_count_expr(lhs, id) + cir_cont_resume_count_expr(rhs, id)
@@ -129,6 +130,10 @@ def cir_cont_usage_show_expr(out: Str, expr: CirExpr): i64 =
         }
         L1OpField(value, _) => cir_cont_usage_show_expr(out, value)
         L1OpIndex(value, args) => {
+            let _ = cir_cont_usage_show_expr(out, value)
+            cir_cont_usage_show_args(out, args)
+        }
+        L1OpTypeApply(value, args) => {
             let _ = cir_cont_usage_show_expr(out, value)
             cir_cont_usage_show_args(out, args)
         }

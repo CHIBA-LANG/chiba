@@ -28,6 +28,30 @@ def cir_type_names_contains(names: CirTypeNameList, want: Str): i64 =
             if streq(head, want) != 0 { 1 } else { cir_type_names_contains(tail, want) }
     }
 
+def cir_builtin_type_name(name: Str): i64 =
+    if streq(name, mk_str("Vec", 3)) != 0 { 1 }
+    else if streq(name, mk_str("Array", 5)) != 0 { 1 }
+    else if streq(name, mk_str("Option", 6)) != 0 { 1 }
+    else if streq(name, mk_str("Result", 6)) != 0 { 1 }
+    else if streq(name, mk_str("String", 6)) != 0 { 1 }
+    else if streq(name, mk_str("str", 3)) != 0 { 1 }
+    else if streq(name, mk_str("i64", 3)) != 0 { 1 }
+    else if streq(name, mk_str("i32", 3)) != 0 { 1 }
+    else if streq(name, mk_str("usize", 5)) != 0 { 1 }
+    else if streq(name, mk_str("u8", 2)) != 0 { 1 }
+    else if streq(name, mk_str("bool", 4)) != 0 { 1 }
+    else { 0 }
+
+def cir_type_constructor_name(type_names: CirTypeNameList, name: Str): i64 =
+    if cir_builtin_type_name(name) != 0 { 1 } else { cir_type_names_contains(type_names, name) }
+
+def cir_ast_type_constructor(type_names: CirTypeNameList, ast: AST): i64 =
+    match ast {
+        Expr_Name(name) => cir_type_constructor_name(type_names, name)
+        Expr_IdentTail(name, IdentTail_None) => cir_type_constructor_name(type_names, name)
+        _ => 0
+    }
+
 def cir_collect_type_names_from_item(ast: AST): CirTypeNameList =
     match ast {
         Item_WithAttrs(_, item) => cir_collect_type_names_from_item(item)
@@ -547,13 +571,26 @@ def cir_lower_expr(type_names: CirTypeNameList, ast: AST): CirExpr =
             } else {
                 L0OpCall(L0OpField(L0OpName(name), field), cir_lower_expr_list(type_names, args))
             }
-        Expr_Call(Expr_Index(Expr_IdentTail(name, IdentTail_None), _), args) =>
-            L0OpCall(L0OpName(name), cir_lower_expr_list(type_names, args))
-        Expr_Call(Expr_Index(Expr_Name(name), _), args) =>
-            L0OpCall(L0OpName(name), cir_lower_expr_list(type_names, args))
+        Expr_Call(Expr_Index(Expr_IdentTail(name, IdentTail_None), type_args), args) =>
+            if cir_type_constructor_name(type_names, name) != 0 {
+                L0OpCall(L0OpTypeApply(L0OpName(name), cir_lower_expr_list(type_names, type_args)), cir_lower_expr_list(type_names, args))
+            } else {
+                L0OpCall(L0OpName(name), cir_lower_expr_list(type_names, args))
+            }
+        Expr_Call(Expr_Index(Expr_Name(name), type_args), args) =>
+            if cir_type_constructor_name(type_names, name) != 0 {
+                L0OpCall(L0OpTypeApply(L0OpName(name), cir_lower_expr_list(type_names, type_args)), cir_lower_expr_list(type_names, args))
+            } else {
+                L0OpCall(L0OpName(name), cir_lower_expr_list(type_names, args))
+            }
         Expr_Call(callee, args) => L0OpCall(cir_lower_expr(type_names, callee), cir_lower_expr_list(type_names, args))
         Expr_Field(value, field) => L0OpField(cir_lower_expr(type_names, value), field)
-        Expr_Index(value, args) => L0OpIndex(cir_lower_expr(type_names, value), cir_lower_expr_list(type_names, args))
+        Expr_Index(value, args) =>
+            if cir_ast_type_constructor(type_names, value) != 0 {
+                L0OpTypeApply(cir_lower_expr(type_names, value), cir_lower_expr_list(type_names, args))
+            } else {
+                L0OpIndex(cir_lower_expr(type_names, value), cir_lower_expr_list(type_names, args))
+            }
         Expr_Assign(lhs, rhs) => L0OpAssign(cir_lower_expr(type_names, lhs), cir_lower_expr(type_names, rhs))
         Expr_Unsafe(body) => L0OpUnsafe(cir_lower_expr(type_names, body))
         Expr_Cast(value, ty) => L0OpCast(cir_lower_expr(type_names, value), ty)

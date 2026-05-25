@@ -815,6 +815,16 @@ def cir_show_expr(out: Str, depth: i64, expr: CirExpr): i64 =
             let _ = cir_show_expr(out, depth + 1, value)
             cir_show_expr_list(out, depth + 1, args)
         }
+        L0OpTypeApply(value, args) => {
+            let _ = cir_show_line(out, depth, "L0OpTypeApply")
+            let _ = cir_show_expr(out, depth + 1, value)
+            cir_show_expr_list(out, depth + 1, args)
+        }
+        L1OpTypeApply(value, args) => {
+            let _ = cir_show_line(out, depth, "L1OpTypeApply")
+            let _ = cir_show_expr(out, depth + 1, value)
+            cir_show_expr_list(out, depth + 1, args)
+        }
         L0OpAssign(lhs, rhs) => {
             let _ = cir_show_line(out, depth, "L0OpAssign")
             let _ = cir_show_expr(out, depth + 1, lhs)

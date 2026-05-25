@@ -186,6 +186,19 @@ def wat_valtype_from_cir(ty: CirType): i64 =
         _ => "i64"
     }
 
+def wat_type_is_i64_storage(ty: CirType): i64 =
+    match ty {
+        CirTyI64 => 1
+        CirTyI32 => 1
+        CirTyUsize => 1
+        CirTyBool => 1
+        CirTyConst(name) =>
+            if streq(name, mk_str("u8", 2)) != 0 { 1 }
+            else if wat_is_scalar_type_name(name) != 0 { 1 }
+            else { 0 }
+        _ => 0
+    }
+
 def wat_valtype_from_ast(ty: AST): i64 =
     wat_valtype_from_ast_in(Item_End, ty)
 
@@ -1109,6 +1122,7 @@ def wat_expr_references_unresolved(expr: CirExpr, name: Str): i64 =
         L1OpIndex(value, args) =>
             if wat_expr_references_unresolved(value, name) != 0 { 1 }
             else { wat_expr_list_references_unresolved(args, name) }
+        L1OpTypeApply(_, _) => 0
         L1OpAssign(lhs, rhs) =>
             if wat_expr_references_unresolved(lhs, name) != 0 { 1 }
             else { wat_expr_references_unresolved(rhs, name) }
@@ -1208,6 +1222,7 @@ def wat_collect_expr_locals(out: Str, expr: CirExpr): i64 =
             let _ = wat_collect_expr_locals(out, value)
             wat_collect_expr_list_locals(out, args)
         }
+        L1OpTypeApply(_, _) => 0
         L1OpAssign(lhs, rhs) => {
             let _ = wat_collect_expr_locals(out, lhs)
             wat_collect_expr_locals(out, rhs)
@@ -1343,6 +1358,19 @@ def wat_type_is_ref_layout(ty: CirType): i64 =
         _ => 0
     }
 
+def wat_type_is_scalar_vec_or_array(ty: CirType): i64 =
+    match ty {
+        CirTyApp(callee, args) =>
+            match callee {
+                CirTyConst(owner) =>
+                    if streq(owner, mk_str("Vec", 3)) != 0 || streq(owner, mk_str("Array", 5)) != 0 {
+                        wat_type_is_i64_storage(wat_type_list_first(args))
+                    } else { 0 }
+                _ => 0
+            }
+        _ => 0
+    }
+
 def wat_type_is_ref_vec_or_array(ty: CirType): i64 =
     match ty {
         CirTyApp(callee, args) =>
@@ -1372,9 +1400,27 @@ def wat_expr_type(expr: CirExpr): CirType =
 def wat_expr_is_ref_vec_or_array(expr: CirExpr): i64 =
     wat_type_is_ref_vec_or_array(wat_expr_type(expr))
 
+def wat_expr_is_scalar_vec_or_array(expr: CirExpr): i64 =
+    wat_type_is_scalar_vec_or_array(wat_expr_type(expr))
+
+def wat_array_like_runtime_name(owner: Str, field: Str, value: CirExpr): Str =
+    if wat_expr_is_scalar_vec_or_array(value) != 0 {
+        if streq(owner, mk_str("Vec", 3)) != 0 {
+            if streq(field, mk_str("new", 3)) != 0 { mk_str("Vec.i64.new", 11) }
+            else if streq(field, mk_str("len", 3)) != 0 { mk_str("Vec.i64.len", 11) }
+            else if streq(field, mk_str("push", 4)) != 0 { mk_str("Vec.i64.push", 12) }
+            else if streq(field, mk_str("freeze", 6)) != 0 { mk_str("Vec.i64.freeze", 14) }
+            else { wat_method_name(owner, field) }
+        } else if streq(owner, mk_str("Array", 5)) != 0 {
+            if streq(field, mk_str("len", 3)) != 0 { mk_str("Array.i64.len", 13) }
+            else if streq(field, mk_str("get", 3)) != 0 { mk_str("Array.i64.get", 13) }
+            else { wat_method_name(owner, field) }
+        } else { wat_method_name(owner, field) }
+    } else { wat_method_name(owner, field) }
+
 def wat_expr_is_type_application(expr: CirExpr): i64 =
     match wat_unwrap_pass_expr(expr) {
-        L1OpIndex(_, CirExprCons(arg, CirExprEnd)) => wat_is_type_level_expr(arg)
+        L1OpTypeApply(_, _) => 1
         _ => 0
     }
 
@@ -1428,8 +1474,7 @@ def wat_expr_is_string_array(expr: CirExpr): i64 =
 
 def wat_expr_method_value(expr: CirExpr): CirExpr =
     match wat_unwrap_pass_expr(expr) {
-        L1OpIndex(value, _) =>
-            if wat_expr_is_type_application(expr) != 0 { value } else { expr }
+        L1OpTypeApply(value, _) => value
         _ => expr
     }
 
@@ -1478,7 +1523,7 @@ def wat_expr_method_owner(expr: CirExpr): Str =
                 CirTyUnion(id, _) => id.local_name
                 _ => wat_expr_method_owner(value)
             }
-        L1OpIndex(value, _) =>
+        L1OpTypeApply(value, _) =>
             match wat_unwrap_pass_expr(value) {
                 L1OpRef(ref) =>
                     match ref {
@@ -1702,10 +1747,14 @@ def wat_emit_method_call(out: Str, depth: i64, value: CirExpr, field: Str, args:
             }
         } else if wat_expr_is_type_application(value) != 0 && streq(owner, mk_str("Vec", 3)) != 0 {
             if streq(field, mk_str("new", 3)) != 0 {
-                wat_emit_call_name(out, depth, mk_str("Vec.new", 7))
+                wat_emit_call_name(out, depth, wat_array_like_runtime_name(owner, field, value))
             } else {
                 wat_line(out, depth, "unreachable ;; generic Vec type method unsupported")
             }
+        } else if wat_expr_is_scalar_vec_or_array(value) != 0 && wat_is_array_like_owner(owner) != 0 {
+            let _ = wat_emit_expr(out, depth, value)
+            let _ = wat_emit_expr_list(out, depth, args)
+            wat_emit_call_name(out, depth, wat_array_like_runtime_name(owner, field, value))
         } else if wat_expr_is_ref_vec_or_array(value) != 0 && wat_is_array_like_owner(owner) != 0 {
             let _ = wat_emit_expr(out, depth, value)
             let _ = wat_emit_expr_list(out, depth, args)
@@ -1994,7 +2043,16 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
                 }
             } else {
                 let owner = wat_expr_method_owner(value)
-                if wat_expr_is_ref_vec_or_array(value) != 0 && wat_is_array_like_owner(owner) != 0 {
+                if wat_expr_is_scalar_vec_or_array(value) != 0 && wat_is_array_like_owner(owner) != 0 {
+                    match args {
+                        CirExprCons(index, CirExprEnd) => {
+                            let _ = wat_emit_expr(out, depth, value)
+                            let _ = wat_emit_expr(out, depth, index)
+                            wat_line(out, depth, "call $Array.i64.get")
+                        }
+                        _ => wat_line(out, depth, "unreachable ;; array index arity unsupported")
+                    }
+                } else if wat_expr_is_ref_vec_or_array(value) != 0 && wat_is_array_like_owner(owner) != 0 {
                     match args {
                         CirExprCons(index, CirExprEnd) => {
                             let _ = wat_emit_expr(out, depth, value)
@@ -2008,6 +2066,7 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
                 }
             }
         }
+        L1OpTypeApply(_, _) => 0
         L1OpPrefix(op, value) => {
             if streq(op, mk_str("-", 1)) != 0 {
                 let _ = wat_line(out, depth, "i64.const 0")
@@ -2166,6 +2225,7 @@ def wat_expr_validated(expr: CirExpr): i64 =
         L1OpField(value, _) => wat_expr_validated(value)
         L1OpIndex(value, args) =>
             if wat_expr_validated(value) == 0 { 0 } else { wat_expr_list_validated(args) }
+        L1OpTypeApply(_, _) => 1
         L1OpAssign(lhs, rhs) =>
             if wat_expr_validated(lhs) == 0 { 0 } else { wat_expr_validated(rhs) }
         L1OpPrefix(_, value) => wat_expr_validated(value)
@@ -2245,6 +2305,8 @@ def wat_emit_module(module: CirModule): Str = {
     let _ = str_push_cstr(out, "  (type $slice_u8 (struct (field (ref $array_u8)) (field i32) (field i32)))\n")
     let _ = str_push_cstr(out, "  (type $array_eqref (array (mut eqref)))\n")
     let _ = str_push_cstr(out, "  (type $vec_ref (struct (field (mut i64)) (field (ref $array_eqref))))\n")
+    let _ = str_push_cstr(out, "  (type $array_i64 (array (mut i64)))\n")
+    let _ = str_push_cstr(out, "  (type $vec_i64 (struct (field (mut i64)) (field (ref $array_i64))))\n")
     let _ = wat_emit_declared_type_defs(out, ast_items)
     let _ = str_push_cstr(out, "  )\n")
     let _ = match module {
@@ -2588,6 +2650,67 @@ def wat_emit_module(module: CirModule): Str = {
     let _ = str_push_cstr(out, "    local.get $idx\n")
     let _ = str_push_cstr(out, "    i32.wrap_i64\n")
     let _ = str_push_cstr(out, "    array.get $array_eqref)\n")
+    let _ = str_push_cstr(out, "  (func $Vec.i64.new (result eqref)\n")
+    let _ = str_push_cstr(out, "    i64.const 0\n")
+    let _ = str_push_cstr(out, "    i64.const 0\n")
+    let _ = str_push_cstr(out, "    i32.const 4\n")
+    let _ = str_push_cstr(out, "    array.new $array_i64\n")
+    let _ = str_push_cstr(out, "    struct.new $vec_i64)\n")
+    let _ = str_push_cstr(out, "  (func $Vec.i64.len (param $v eqref) (result i64)\n")
+    let _ = str_push_cstr(out, "    local.get $v\n")
+    let _ = str_push_cstr(out, "    ref.cast (ref $vec_i64)\n")
+    let _ = str_push_cstr(out, "    struct.get $vec_i64 0)\n")
+    let _ = str_push_cstr(out, "  (func $Vec.i64.push (param $v eqref) (param $item i64) (result eqref)\n")
+    let _ = str_push_cstr(out, "    local.get $v\n")
+    let _ = str_push_cstr(out, "    ref.cast (ref $vec_i64)\n")
+    let _ = str_push_cstr(out, "    struct.get $vec_i64 1\n")
+    let _ = str_push_cstr(out, "    local.get $v\n")
+    let _ = str_push_cstr(out, "    ref.cast (ref $vec_i64)\n")
+    let _ = str_push_cstr(out, "    struct.get $vec_i64 0\n")
+    let _ = str_push_cstr(out, "    i32.wrap_i64\n")
+    let _ = str_push_cstr(out, "    local.get $item\n")
+    let _ = str_push_cstr(out, "    array.set $array_i64\n")
+    let _ = str_push_cstr(out, "    local.get $v\n")
+    let _ = str_push_cstr(out, "    ref.cast (ref $vec_i64)\n")
+    let _ = str_push_cstr(out, "    local.get $v\n")
+    let _ = str_push_cstr(out, "    ref.cast (ref $vec_i64)\n")
+    let _ = str_push_cstr(out, "    struct.get $vec_i64 0\n")
+    let _ = str_push_cstr(out, "    i64.const 1\n")
+    let _ = str_push_cstr(out, "    i64.add\n")
+    let _ = str_push_cstr(out, "    struct.set $vec_i64 0\n")
+    let _ = str_push_cstr(out, "    local.get $v)\n")
+    let _ = str_push_cstr(out, "  (func $Vec.i64.freeze (param $v eqref) (result eqref)\n")
+    let _ = str_push_cstr(out, "    (local $out (ref $array_i64))\n")
+    let _ = str_push_cstr(out, "    i64.const 0\n")
+    let _ = str_push_cstr(out, "    local.get $v\n")
+    let _ = str_push_cstr(out, "    ref.cast (ref $vec_i64)\n")
+    let _ = str_push_cstr(out, "    struct.get $vec_i64 0\n")
+    let _ = str_push_cstr(out, "    i32.wrap_i64\n")
+    let _ = str_push_cstr(out, "    array.new $array_i64\n")
+    let _ = str_push_cstr(out, "    local.set $out\n")
+    let _ = str_push_cstr(out, "    local.get $out\n")
+    let _ = str_push_cstr(out, "    i32.const 0\n")
+    let _ = str_push_cstr(out, "    local.get $v\n")
+    let _ = str_push_cstr(out, "    ref.cast (ref $vec_i64)\n")
+    let _ = str_push_cstr(out, "    struct.get $vec_i64 1\n")
+    let _ = str_push_cstr(out, "    i32.const 0\n")
+    let _ = str_push_cstr(out, "    local.get $v\n")
+    let _ = str_push_cstr(out, "    ref.cast (ref $vec_i64)\n")
+    let _ = str_push_cstr(out, "    struct.get $vec_i64 0\n")
+    let _ = str_push_cstr(out, "    i32.wrap_i64\n")
+    let _ = str_push_cstr(out, "    array.copy $array_i64 $array_i64\n")
+    let _ = str_push_cstr(out, "    local.get $out)\n")
+    let _ = str_push_cstr(out, "  (func $Array.i64.len (param $a eqref) (result i64)\n")
+    let _ = str_push_cstr(out, "    local.get $a\n")
+    let _ = str_push_cstr(out, "    ref.cast (ref $array_i64)\n")
+    let _ = str_push_cstr(out, "    array.len\n")
+    let _ = str_push_cstr(out, "    i64.extend_i32_u)\n")
+    let _ = str_push_cstr(out, "  (func $Array.i64.get (param $a eqref) (param $idx i64) (result i64)\n")
+    let _ = str_push_cstr(out, "    local.get $a\n")
+    let _ = str_push_cstr(out, "    ref.cast (ref $array_i64)\n")
+    let _ = str_push_cstr(out, "    local.get $idx\n")
+    let _ = str_push_cstr(out, "    i32.wrap_i64\n")
+    let _ = str_push_cstr(out, "    array.get $array_i64)\n")
     let _ = match module {
         L1Module(_, items) => {
             wat_emit_items(out, ast_items, items, 0)

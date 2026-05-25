@@ -82,6 +82,8 @@ def cir_l6_has_capture_expr(expr: CirExpr, bound: CirL6IdList): i64 =
         L1OpField(value, _) => cir_l6_has_capture_expr(value, bound)
         L1OpIndex(value, args) =>
             if cir_l6_has_capture_expr(value, bound) != 0 { 1 } else { cir_l6_has_capture_args(args, bound) }
+        L1OpTypeApply(value, args) =>
+            if cir_l6_has_capture_expr(value, bound) != 0 { 1 } else { cir_l6_has_capture_args(args, bound) }
         L1OpAssign(lhs, rhs) =>
             if cir_l6_has_capture_expr(lhs, bound) != 0 { 1 } else { cir_l6_has_capture_expr(rhs, bound) }
         L1OpPrefix(_, value) => cir_l6_has_capture_expr(value, bound)
@@ -146,6 +148,7 @@ def cir_l6_closure_payload(expr: CirExpr): CirExpr =
         }
         L1OpField(value, field) => L1OpField(cir_l6_closure_expr(value), field)
         L1OpIndex(value, args) => L1OpIndex(cir_l6_closure_expr(value), cir_l6_closure_expr_list(args))
+        L1OpTypeApply(value, args) => L1OpTypeApply(cir_l6_closure_expr(value), cir_l6_closure_expr_list(args))
         L1OpAssign(lhs, rhs) => L1OpAssign(cir_l6_closure_expr(lhs), cir_l6_closure_expr(rhs))
         L1OpPrefix(op, value) => L1OpPrefix(op, cir_l6_closure_expr(value))
         L1OpBinary(op, lhs, rhs) => L1OpBinary(op, cir_l6_closure_expr(lhs), cir_l6_closure_expr(rhs))

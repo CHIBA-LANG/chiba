@@ -429,6 +429,8 @@ data CirExpr {
 
     L0OpIndex(CirExpr, CirExprList),
     L1OpIndex(CirExpr, CirExprList),
+    L0OpTypeApply(CirExpr, CirExprList),
+    L1OpTypeApply(CirExpr, CirExprList),
 
     L0OpAssign(CirExpr, CirExpr),
     L1OpAssign(CirExpr, CirExpr),

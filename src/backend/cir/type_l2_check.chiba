@@ -126,6 +126,7 @@ def cir_l2_check_expr_in(expr: CirExpr, unsafe_depth: i64): CirL2TypeCheck =
                 L1OpCall(callee, args) => cir_l2_type_check_merge(cir_l2_check_expr_in(callee, unsafe_depth), cir_l2_check_expr_list_in(args, unsafe_depth))
                 L1OpField(value, _) => cir_l2_check_expr_in(value, unsafe_depth)
                 L1OpIndex(value, args) => cir_l2_type_check_merge(cir_l2_check_expr_in(value, unsafe_depth), cir_l2_check_expr_list_in(args, unsafe_depth))
+                L1OpTypeApply(value, args) => cir_l2_type_check_merge(cir_l2_check_expr_in(value, unsafe_depth), cir_l2_check_expr_list_in(args, unsafe_depth))
                 L1OpAssign(lhs, rhs) => cir_l2_type_check_merge(cir_l2_check_expr_in(lhs, unsafe_depth), cir_l2_check_expr_in(rhs, unsafe_depth))
                 L1OpUnsafe(body) => cir_l2_check_expr_in(body, unsafe_depth + 1)
                 L1OpCast(value, ty) => {

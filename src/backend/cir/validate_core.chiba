@@ -169,6 +169,7 @@ def cir_l8_validate_payload_with_env(env: CirCoreEnv, expr: CirExpr): CirExpr =
         L1OpNominalCtor(name, fields) => L1OpNominalCtor(name, cir_l8_validate_record_field_exprs_with_env(env, fields))
         L1OpField(value, field) => L1OpField(cir_l8_validate_expr_with_env(env, value), field)
         L1OpIndex(value, args) => L1OpIndex(cir_l8_validate_expr_with_env(env, value), cir_l8_validate_expr_list_with_env(env, args))
+        L1OpTypeApply(value, args) => L1OpTypeApply(cir_l8_validate_expr_with_env(env, value), cir_l8_validate_expr_list_with_env(env, args))
         L1OpAssign(lhs, rhs) => L1OpAssign(cir_l8_validate_expr_with_env(env, lhs), cir_l8_validate_expr_with_env(env, rhs))
         L1OpPrefix(op, value) => L1OpPrefix(op, cir_l8_validate_expr_with_env(env, value))
         L1OpBinary(op, lhs, rhs) => L1OpBinary(op, cir_l8_validate_expr_with_env(env, lhs), cir_l8_validate_expr_with_env(env, rhs))

@@ -106,6 +106,7 @@ def cir_cont_resume_count_expr(expr: CirExpr, id: i64): i64 =
         }
         L1OpField(value, _) => cir_cont_resume_count_expr(value, id)
         L1OpIndex(value, args) => cir_cont_resume_count_expr(value, id) + cir_cont_resume_count_args(args, id)
+        L1OpTypeApply(value, args) => cir_cont_resume_count_expr(value, id) + cir_cont_resume_count_args(args, id)
         L1OpAssign(lhs, rhs) => cir_cont_resume_count_expr(lhs, id) + cir_cont_resume_count_expr(rhs, id)
         L1OpUnsafe(body) => cir_cont_resume_count_expr(body, id)
         L1OpCast(value, _) => cir_cont_resume_count_expr(value, id)
@@ -174,6 +175,8 @@ def cir_cont_has_non_replay_expr(expr: CirExpr): i64 =
         }
         L1OpField(value, _) => cir_cont_has_non_replay_expr(value)
         L1OpIndex(value, args) =>
+            if cir_cont_has_non_replay_expr(value) != 0 { 1 } else { cir_cont_has_non_replay_args(args) }
+        L1OpTypeApply(value, args) =>
             if cir_cont_has_non_replay_expr(value) != 0 { 1 } else { cir_cont_has_non_replay_args(args) }
         L1OpAssign(_, _) => 1
         L1OpUnsafe(_) => 1
@@ -286,6 +289,7 @@ def cir_cont_check_expr(expr: CirExpr, reset_depth: i64, answer: CirType): CirCo
             cir_cont_merge(cir_cont_check_expr(callee, reset_depth, answer), cir_cont_check_expr_list(args, reset_depth, answer))
         L1OpField(value, _) => cir_cont_check_expr(value, reset_depth, answer)
         L1OpIndex(value, args) => cir_cont_merge(cir_cont_check_expr(value, reset_depth, answer), cir_cont_check_expr_list(args, reset_depth, answer))
+        L1OpTypeApply(value, args) => cir_cont_merge(cir_cont_check_expr(value, reset_depth, answer), cir_cont_check_expr_list(args, reset_depth, answer))
         L1OpAssign(lhs, rhs) => cir_cont_merge(cir_cont_check_expr(lhs, reset_depth, answer), cir_cont_check_expr(rhs, reset_depth, answer))
         L1OpPrefix(_, value) => cir_cont_check_expr(value, reset_depth, answer)
         L1OpBinary(_, lhs, rhs) => cir_cont_merge(cir_cont_check_expr(lhs, reset_depth, answer), cir_cont_check_expr(rhs, reset_depth, answer))

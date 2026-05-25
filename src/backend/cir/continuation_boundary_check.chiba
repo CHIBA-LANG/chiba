@@ -51,6 +51,9 @@ def cir_cont_ref_crosses_boundary(expr: CirExpr, active: CirContIdList): i64 =
         L1OpIndex(value, args) =>
             if cir_cont_ref_crosses_boundary(value, active) != 0 { 1 }
             else { cir_cont_ref_crosses_boundary_args(args, active) }
+        L1OpTypeApply(value, args) =>
+            if cir_cont_ref_crosses_boundary(value, active) != 0 { 1 }
+            else { cir_cont_ref_crosses_boundary_args(args, active) }
         L1OpAssign(lhs, rhs) =>
             if cir_cont_ref_crosses_boundary(lhs, active) != 0 { 1 }
             else { cir_cont_ref_crosses_boundary(rhs, active) }
@@ -153,6 +156,7 @@ def cir_cont_boundary_check_expr(expr: CirExpr, active: CirContIdList): CirContB
             cir_cont_boundary_merge(cir_cont_boundary_check_boundary_call(callee, args, active), cir_cont_boundary_merge(cir_cont_boundary_check_expr(callee, active), cir_cont_boundary_check_args(args, active)))
         L1OpField(value, _) => cir_cont_boundary_check_expr(value, active)
         L1OpIndex(value, args) => cir_cont_boundary_merge(cir_cont_boundary_check_expr(value, active), cir_cont_boundary_check_args(args, active))
+        L1OpTypeApply(value, args) => cir_cont_boundary_merge(cir_cont_boundary_check_expr(value, active), cir_cont_boundary_check_args(args, active))
         L1OpAssign(lhs, rhs) => cir_cont_boundary_merge(cir_cont_boundary_check_expr(lhs, active), cir_cont_boundary_check_expr(rhs, active))
         L1OpPrefix(_, value) => cir_cont_boundary_check_expr(value, active)
         L1OpBinary(_, lhs, rhs) => cir_cont_boundary_merge(cir_cont_boundary_check_expr(lhs, active), cir_cont_boundary_check_expr(rhs, active))
