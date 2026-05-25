@@ -205,6 +205,80 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
         }
     }
 
+/// Append the call that consumes one Pratt infix atom, using right binding power for recursive RHS.
+def append_pratt_infix_atom_parse_call(builder: DiagnosticBuilder, atom: GrammarAtom, position_expr: str, rule: LoweredRule, right_power: usize): DiagnosticBuilder =
+    match atom {
+        GrammarRuleRef(name) =>
+            if name.text == rule.name.text {
+                builder.push_str("parse_").push_str(rule.name.text).push_str("_bp(tokens, ").push_str(position_expr).push_str(", ").push_str(parser_codegen_usize(right_power)).push_str(")")
+            } else { append_atom_parse_call(builder, atom, position_expr) }
+        GrammarBind(_, inner) => append_pratt_infix_atom_parse_call(builder, inner, position_expr, rule, right_power)
+        GrammarOptional(inner) => append_pratt_infix_atom_parse_call(builder, inner, position_expr, rule, right_power)
+        _ => append_atom_parse_call(builder, atom, position_expr)
+    }
+
+/// Append recursive parse steps for one Pratt infix arm.
+def append_pratt_infix_steps(builder: DiagnosticBuilder, rule: LoweredRule, atoms: List[GrammarAtom], action: GrammarAction, step: usize, position_expr: str, right_power: usize): DiagnosticBuilder =
+    match atoms {
+        ListNil =>
+            append_action_source(
+                builder
+                    .push_str("            Ok(ParseCandidate[AST] { value: "),
+                action.source,
+                0)
+                .push_str(", position: ")
+                .push_str(position_expr)
+                .push_str(" })\n")
+        ListCons(head, tail) => {
+            let atom = parser_atom_unbind(head)
+            let step_name = "step".concat(parser_codegen_usize(step))
+            match atom {
+                GrammarToken(name) =>
+                    if parser_atom_is_empty_token(name) {
+                        append_pratt_infix_steps(builder, rule, tail, action, step + 1, position_expr, right_power)
+                    } else {
+                        append_pratt_infix_steps(
+                            append_atom_binding(
+                                append_pratt_infix_atom_parse_call(builder.push_str("        match "), atom, position_expr, rule, right_power)
+                                    .push_str(" {\n")
+                                    .push_str("            Ok(")
+                                    .push_str(step_name)
+                                    .push_str(") => {\n"),
+                                head,
+                                step_name),
+                            rule,
+                            tail,
+                            action,
+                            step + 1,
+                            step_name.concat(".position"),
+                            right_power)
+                            .push_str("            }\n")
+                            .push_str("            Err(error) => Err(error)\n")
+                            .push_str("        }\n")
+                    }
+                _ =>
+                    append_pratt_infix_steps(
+                        append_atom_binding(
+                            append_pratt_infix_atom_parse_call(builder.push_str("        match "), atom, position_expr, rule, right_power)
+                                .push_str(" {\n")
+                                .push_str("            Ok(")
+                                .push_str(step_name)
+                                .push_str(") => {\n"),
+                            head,
+                            step_name),
+                        rule,
+                        tail,
+                        action,
+                        step + 1,
+                        step_name.concat(".position"),
+                        right_power)
+                        .push_str("            }\n")
+                        .push_str("            Err(error) => Err(error)\n")
+                        .push_str("        }\n")
+            }
+        }
+    }
+
 /// Append one alternative parser.
 def append_alternative_function(builder: DiagnosticBuilder, rule: LoweredRule, alt: LoweredAlternative): DiagnosticBuilder =
     append_alt_steps(
@@ -269,17 +343,19 @@ def append_pratt_prefix_functions(builder: DiagnosticBuilder, rule: LoweredRule,
 
 /// Append one Pratt infix parser function.
 def append_pratt_infix_function(builder: DiagnosticBuilder, rule: LoweredRule, arm: PrattInfix, index: usize): DiagnosticBuilder =
-    append_alt_steps(
+    append_pratt_infix_steps(
         builder
             .push_str("def parse_")
             .push_str(rule.name.text)
             .push_str("_infix_")
             .push_str(parser_codegen_usize(index))
             .push_str("(tokens: Array[TokenSpan], position: ParsePosition, lhs: AST): Result[ParseCandidate[AST], ParseFailure] =\n"),
+        rule,
         arm.sequence.atoms,
         arm.action,
         0,
-        "position")
+        "position",
+        arm.right_power)
         .push_str("\n")
 
 /// Append all Pratt infix functions.
