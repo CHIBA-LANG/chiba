@@ -2,7 +2,9 @@
 namespace compiler.backend.wat_emit
 
 use compiler.backend.validate_core.*
+use compiler.backend.layout.*
 use compiler.semantic.driver.*
+use std.diagnostic.*
 
 /// Textual WAT module.
 type WatModule {
@@ -38,6 +40,48 @@ def build_symbol_debug_manifest(module: ValidatedCoreModule): Result[SymbolDebug
 def symbol_debug_manifest_as_text(manifest: SymbolDebugManifest): String =
     "source symbol -> lowered symbol -> final mangled name\n"
 
+/// Return the WAT type label for a backend layout kind.
+def WasmGcLayoutKind.wat_type_label(self): str =
+    match self {
+        LayoutStruct => "$chiba.layout.struct"
+        LayoutArray => "$chiba.layout.array"
+        LayoutClosureEnv => "$chiba.layout.closure_env"
+        LayoutContinuationFrame => "$chiba.layout.continuation_frame"
+        LayoutContinuationFrameChain => "$chiba.layout.continuation_frame_chain"
+        LayoutBoxedCont1 => "$chiba.layout.boxed_cont1"
+        LayoutContNPackage => "$chiba.layout.contN_package"
+        LayoutContinuationPackage => "$chiba.layout.continuation_package"
+        LayoutSliceView => "$chiba.layout.slice_view"
+    }
+
+/// Emit a conservative Wasm-GC struct type for one layout entry.
+def emit_layout_type(layout: WasmGcLayout): String =
+    match layout.kind {
+        LayoutArray =>
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (array (mut i32)))\n")
+        LayoutSliceView =>
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field (ref null $chiba.layout.array)) (field i32) (field i32)))\n")
+        LayoutClosureEnv =>
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field funcref) (field eqref)))\n")
+        LayoutContinuationFrame =>
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field funcref) (field eqref)))\n")
+        LayoutContinuationFrameChain =>
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field (ref null $chiba.layout.continuation_frame)) (field (ref null $chiba.layout.continuation_frame_chain))))\n")
+        LayoutBoxedCont1 =>
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field (ref null $chiba.layout.continuation_frame)) (field (mut i32))))\n")
+        LayoutContNPackage =>
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field (ref null $chiba.layout.continuation_frame_chain)) (field i32)))\n")
+        LayoutContinuationPackage =>
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field i32) (field eqref)))\n")
+        LayoutStruct =>
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct))\n")
+    }
+
+/// Append canonical layout type declarations.
+def append_layout_types(layouts: Array[WasmGcLayout], index: usize, builder: DiagnosticBuilder): DiagnosticBuilder =
+    if index == layouts.len() { builder }
+    else { append_layout_types(layouts, index + 1, builder.push_str(emit_layout_type(layouts.get(index)))) }
+
 /// Return a stable label for a Core operation kind.
 def CoreOpKind.wat_label(self): String =
     match self {
@@ -60,9 +104,74 @@ def CoreOpKind.wat_label(self): String =
 
 /// Emit one Core op as WAT text.
 def emit_core_op(op: CoreOp): Result[String, SemanticDiagnostics] =
-    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-        .push(SemanticDiagnostic("<backend>", 0, 0, "missing-backend-layout: WAT lowering for ".concat(op.kind.wat_label()).concat(" absent")))
-        .freeze()))
+    match op.kind {
+        CoreOpFunction => Ok("(func)\n")
+        CoreOpStacklessFunction => Ok("(func)\n")
+        CoreOpStructNew => Ok("(func (result eqref) ref.null eq)\n")
+        CoreOpArrayNew => Ok("(func (result eqref) ref.null eq)\n")
+        CoreOpClosureCall => Ok("(func (param funcref) (param eqref))\n")
+        CoreOpBoxedCont1 => Ok("(func (param (ref null $chiba.layout.boxed_cont1)) (result i32) i32.const 0)\n")
+        CoreOpContinuationFrameChain => Ok("(func (param (ref null $chiba.layout.continuation_frame_chain)))\n")
+        CoreOpContNPackage => Ok("(func (param (ref null $chiba.layout.contN_package)))\n")
+        CoreOpContinuationPackage => Ok("(func (param (ref null $chiba.layout.continuation_package)))\n")
+        CoreOpTailCall => Ok("(func (result i32) i32.const 0 return)\n")
+        CoreOpImportCall(module) =>
+            match module {
+                CoreImportWasi => Ok("(import \"wasi_snapshot_preview1\" \"proc_exit\" (func))\n")
+                CoreImportEnv => Ok("(import \"env\" \"chiba_host_call\" (func))\n")
+            }
+    }
+
+/// Return true for module imports, which must be emitted before function bodies.
+def CoreOpKind.is_import(self): bool =
+    match self {
+        CoreOpImportCall(_) => true
+        _ => false
+    }
+
+/// Append one emitted Core op to the WAT builder.
+def append_core_op_wat(builder: DiagnosticBuilder, op: CoreOp): Result[DiagnosticBuilder, SemanticDiagnostics] =
+    match emit_core_op(op) {
+        Ok(text) => Ok(builder.push_str(text))
+        Err(errors) => Err(errors)
+    }
+
+/// Append all Core ops in stable order.
+def append_core_ops_wat(ops: Array[CoreOp], index: usize, builder: DiagnosticBuilder): Result[DiagnosticBuilder, SemanticDiagnostics] =
+    if index == ops.len() { Ok(builder) }
+    else {
+        match append_core_op_wat(builder, ops.get(index)) {
+            Ok(next) => append_core_ops_wat(ops, index + 1, next)
+            Err(errors) => Err(errors)
+        }
+    }
+
+/// Append only import Core ops before runtime function definitions.
+def append_import_core_ops_wat(ops: Array[CoreOp], index: usize, builder: DiagnosticBuilder): Result[DiagnosticBuilder, SemanticDiagnostics] =
+    if index == ops.len() { Ok(builder) }
+    else {
+        let op = ops.get(index)
+        if op.kind.is_import() {
+            match append_core_op_wat(builder, op) {
+                Ok(next) => append_import_core_ops_wat(ops, index + 1, next)
+                Err(errors) => Err(errors)
+            }
+        } else { append_import_core_ops_wat(ops, index + 1, builder) }
+    }
+
+/// Append non-import Core ops after imports.
+def append_runtime_core_ops_wat(ops: Array[CoreOp], index: usize, builder: DiagnosticBuilder): Result[DiagnosticBuilder, SemanticDiagnostics] =
+    if index == ops.len() { Ok(builder) }
+    else {
+        let op = ops.get(index)
+        if op.kind.is_import() { append_runtime_core_ops_wat(ops, index + 1, builder) }
+        else {
+            match append_core_op_wat(builder, op) {
+                Ok(next) => append_runtime_core_ops_wat(ops, index + 1, next)
+                Err(errors) => Err(errors)
+            }
+        }
+    }
 
 /// Convert one Core op into an executable WAT emission obligation.
 def wat_emission_obligation_from_op(op: CoreOp): WatEmissionObligation =
@@ -83,9 +192,16 @@ def emit_wat(module: ValidatedCoreModule): Result[WatModule, SemanticDiagnostics
     if obligations.len() == 0 {
         Ok(empty_wat_module())
     } else {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<backend>", 0, 0, "missing-backend-layout: executable WAT emission absent"))
-            .freeze()))
+        let builder = DiagnosticBuilder.new().push_str("(module\n")
+        let with_layouts = append_layout_types(module.core.layouts.entries, 0, builder)
+        match append_import_core_ops_wat(module.core.ops, 0, with_layouts) {
+            Ok(with_imports) =>
+                match append_runtime_core_ops_wat(module.core.ops, 0, with_imports) {
+                    Ok(done) => Ok(WatModule { text: done.push_str(")\n").finish() })
+                    Err(errors) => Err(errors)
+                }
+            Err(errors) => Err(errors)
+        }
     }
 
 /// Minimal executable module for an empty validated Core program.

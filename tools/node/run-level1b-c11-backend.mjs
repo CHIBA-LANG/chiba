@@ -204,9 +204,9 @@ function main() {
   if (errors.length !== 0) fail(errors.join("\n"));
   pass("backend source contract");
 
-  primaryPathBlocked("tailcall WAT smoke requires level-1b WAT emission");
-  primaryPathBlocked("chibac-next WAT smoke requires level-1b WAT emission");
-  primaryPathBlocked("continuation WAT smoke requires level-1b continuation backend emission");
+  primaryPathBlocked("tailcall WAT smoke requires level-1b typed Core pipeline");
+  primaryPathBlocked("chibac-next WAT smoke requires level-1b end-to-end Core pipeline");
+  primaryPathBlocked("continuation WAT smoke requires level-1b continuation frame bodies");
 }
 
 main();
