@@ -453,6 +453,100 @@ def typed_call_arg_expr_from_region(text: String, item: TypedItemSkeleton, start
         }
     }
 
+/// Return true when a bounded source region is exactly the pipe placeholder.
+def typed_pipe_arg_is_placeholder(text: String, start: usize, end: usize): bool =
+    let offset = source_skip_spaces(text, start)
+    if offset >= end { false }
+    else if text.byte_at(offset) != 95 { false }
+    else { typed_source_region_only_spaces(text, offset + 1, end) }
+
+/// Parse one simple pipe RHS argument, replacing every `_` with the same lhs value.
+def typed_pipe_call_arg_expr_from_region(text: String, item: TypedItemSkeleton, lhs: TypedExprKind, start: usize, end: usize): Option[TypedExprKind] =
+    if typed_pipe_arg_is_placeholder(text, start, end) { Some(lhs) }
+    else { typed_call_arg_expr_from_region(text, item, start, end) }
+
+/// Parse comma-separated pipe RHS arguments.
+def typed_pipe_call_arg_exprs(text: String, item: TypedItemSkeleton, lhs: TypedExprKind, offset: usize, close: usize, out: Vec[TypedExprKind]): Option[Array[TypedExprKind]] =
+    let start = source_skip_spaces(text, offset)
+    if start >= close { Some(out.freeze()) }
+    else {
+        let arg_end = typed_call_arg_end(text, start, close)
+        match typed_pipe_call_arg_expr_from_region(text, item, lhs, start, arg_end) {
+            Some(arg) => {
+                let next = source_skip_spaces(text, arg_end)
+                if next >= close { Some(out.push(arg).freeze()) }
+                else if text.byte_at(next) == 44 { typed_pipe_call_arg_exprs(text, item, lhs, next + 1, close, out.push(arg)) }
+                else { None }
+            }
+            None => None
+        }
+    }
+
+/// Return true when a pipe RHS argument list already uses `_`.
+def typed_pipe_args_have_placeholder(text: String, offset: usize, close: usize): bool =
+    let start = source_skip_spaces(text, offset)
+    if start >= close { false }
+    else {
+        let arg_end = typed_call_arg_end(text, start, close)
+        if typed_pipe_arg_is_placeholder(text, start, arg_end) { true }
+        else {
+            let next = source_skip_spaces(text, arg_end)
+            if next < close && text.byte_at(next) == 44 { typed_pipe_args_have_placeholder(text, next + 1, close) }
+            else { false }
+        }
+    }
+
+/// Prepend the pipe lhs value to an argument array for receiver-first pipe calls.
+def typed_pipe_prepend_lhs_arg(lhs: TypedExprKind, args: Array[TypedExprKind], index: usize, out: Vec[TypedExprKind]): Array[TypedExprKind] =
+    if index == args.len() { out.freeze() }
+    else { typed_pipe_prepend_lhs_arg(lhs, args, index + 1, out.push(args.get(index))) }
+
+/// Parse a simple pipe RHS call and expand placeholder/default receiver position.
+def typed_pipe_rhs_expr(text: String, item: TypedItemSkeleton, lhs: TypedExprKind, start: usize, end: usize): Option[TypedExprKind] =
+    let offset = source_skip_spaces(text, start)
+    if offset >= end { None }
+    else if source_is_ident_start(text.byte_at(offset)) == false { None }
+    else {
+        let name_end = source_scan_namespace_name_end(text, offset)
+        let call_start = source_skip_spaces(text, name_end)
+        if call_start >= end {
+            Some(TypedExprTailCallArgs(
+                typed_resolve_tail_call_target(text, item, text.slice(offset, name_end - offset)),
+                Vec[TypedExprKind].new().push(lhs).freeze()))
+        }
+        else if text.byte_at(call_start) == 40 {
+            let close = typed_source_region_find_byte_or_end(text, call_start + 1, end, 41)
+            if close >= end { None }
+            else if typed_source_region_only_spaces(text, close + 1, end) == false { None }
+            else {
+                match typed_pipe_call_arg_exprs(text, item, lhs, call_start + 1, close, Vec[TypedExprKind].new()) {
+                    Some(args) =>
+                        if typed_pipe_args_have_placeholder(text, call_start + 1, close) {
+                            Some(TypedExprTailCallArgs(
+                                typed_resolve_tail_call_target(text, item, text.slice(offset, name_end - offset)),
+                                args))
+                        } else {
+                            Some(TypedExprTailCallArgs(
+                                typed_resolve_tail_call_target(text, item, text.slice(offset, name_end - offset)),
+                                typed_pipe_prepend_lhs_arg(lhs, args, 0, Vec[TypedExprKind].new().push(lhs))))
+                        }
+                    None => None
+                }
+            }
+        } else { None }
+    }
+
+/// Parse a simple single-step pipe expression into an executable tail call.
+def typed_pipe_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    let pipe = typed_source_region_find_text_or_end(text, start, end, "|>")
+    if pipe >= end { None }
+    else {
+        match typed_call_arg_expr_from_region(text, item, start, pipe) {
+            Some(lhs) => typed_pipe_rhs_expr(text, item, lhs, pipe + 2, end)
+            None => None
+        }
+    }
+
 /// Parse simple comma-separated atom arguments.
 def typed_call_arg_exprs(text: String, item: TypedItemSkeleton, offset: usize, close: usize, out: Vec[TypedExprKind]): Option[Array[TypedExprKind]] =
     let start = source_skip_spaces(text, offset)
@@ -539,26 +633,30 @@ def typed_branch_condition_from_item_region(text: String, item: TypedItemSkeleto
 
 /// Pick a non-branch typed expression from a bounded source region.
 def typed_function_non_branch_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
-    match typed_function_param_expr_from_region(text, item, start, end) {
-        Some(param) => Some(param)
+    match typed_pipe_expr_body(text, item, start, end) {
+        Some(pipe) => Some(pipe)
         None =>
-        match typed_i32_const_atom_exact_from_region(text, start, end) {
-            Some(TypedI32ConstFortyTwo) => Some(TypedExprI32FortyTwo)
-            Some(TypedI32ConstZero) => Some(TypedExprI32Zero)
-            Some(atom) => Some(TypedExprI32Const(atom))
+        match typed_function_param_expr_from_region(text, item, start, end) {
+            Some(param) => Some(param)
             None =>
-                match typed_function_tail_call_i32_const_body(text, item, start, end) {
-                    Some(body) => Some(body)
-                    None =>
-                        match typed_function_tail_call_args_body(text, item, start, end) {
-                            Some(body) => Some(body)
-                            None =>
-                                match typed_function_tail_call_target_slice(text, start, end) {
-                                    Some(target) => Some(TypedExprTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target))))
-                                    None => None
-                                }
-                        }
-                }
+            match typed_i32_const_atom_exact_from_region(text, start, end) {
+                Some(TypedI32ConstFortyTwo) => Some(TypedExprI32FortyTwo)
+                Some(TypedI32ConstZero) => Some(TypedExprI32Zero)
+                Some(atom) => Some(TypedExprI32Const(atom))
+                None =>
+                    match typed_function_tail_call_i32_const_body(text, item, start, end) {
+                        Some(body) => Some(body)
+                        None =>
+                            match typed_function_tail_call_args_body(text, item, start, end) {
+                                Some(body) => Some(body)
+                                None =>
+                                    match typed_function_tail_call_target_slice(text, start, end) {
+                                        Some(target) => Some(TypedExprTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target))))
+                                        None => None
+                                    }
+                            }
+                    }
+            }
         }
     }
 
