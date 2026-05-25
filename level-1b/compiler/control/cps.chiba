@@ -17,6 +17,7 @@ type CpsModule {
     source: ReplaySafeModule,
     continuations: Array[ContinuationFact],
     tail_forms: Array[CpsTailFormFact],
+    branch_joins: Array[CpsBranchJoinFact],
 }
 
 /// Tail shape after one-pass CPS and administrative beta reduction.
@@ -54,6 +55,38 @@ type BranchJoinPlan {
     has_short_circuit: bool,
 }
 
+/// CPS join continuation fact derived from branching surface syntax.
+type CpsBranchJoinFact {
+    owner: BinderId,
+    file: SourceFileId,
+    kind: BranchJoinKind,
+    requires_join_continuation: bool,
+    all_arms_resume_to_same_tail: bool,
+}
+
+/// Pick the primary branch-join kind for a coarse branching plan.
+def branch_join_kind_from_plan(plan: BranchJoinPlan): BranchJoinKind =
+    if plan.has_match { BranchJoinMatch }
+    else if plan.has_if_let { BranchJoinIfLet }
+    else if plan.has_short_circuit { BranchJoinShortCircuit }
+    else if plan.has_else_if { BranchJoinElseIf }
+    else { BranchJoinIfElse }
+
+/// Convert one branch join plan into a CPS join fact.
+def cps_branch_join_fact_from_plan(plan: BranchJoinPlan): CpsBranchJoinFact =
+    CpsBranchJoinFact {
+        owner: plan.owner,
+        file: plan.file,
+        kind: branch_join_kind_from_plan(plan),
+        requires_join_continuation: true,
+        all_arms_resume_to_same_tail: true,
+    }
+
+/// Build CPS branch join facts in stable owner order.
+def cps_branch_join_facts_from_plans(plans: Array[BranchJoinPlan], index: usize, out: Vec[CpsBranchJoinFact]): Array[CpsBranchJoinFact] =
+    if index == plans.len() { out.freeze() }
+    else { cps_branch_join_facts_from_plans(plans, index + 1, out.push(cps_branch_join_fact_from_plan(plans.get(index)))) }
+
 /// Convert one typed branching surface fact into a CPS join plan.
 def branch_join_plan_from_surface(fact: BranchingSurfaceFact): BranchJoinPlan =
     BranchJoinPlan {
@@ -79,15 +112,15 @@ def branch_join_plans(module: ReplaySafeModule): Array[BranchJoinPlan] =
 /// Transform a replay-safe module to CPS while beta-reducing administrative continuations.
 def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostics] =
     let branches = branch_join_plans(module)
-    if branches.len() > 0 {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: branching CPS join continuation planning absent"))
-            .freeze()))
-    } else if module.usage.facts.len() == 0 && module.replay.len() == 0 {
+    if module.usage.facts.len() == 0 && module.replay.len() == 0 {
         let continuations = cps_continuation_facts_none()
         let function_tail_forms = cps_tail_form_facts_from_functions(module.usage.answer.typed.functions, 0, Vec[CpsTailFormFact].new())
         let tail_builder = cps_tail_form_facts_copy(function_tail_forms, 0, Vec[CpsTailFormFact].new())
-        Ok(CpsModule(module, continuations, cps_tail_form_facts_from_continuations(continuations, 0, tail_builder)))
+        Ok(CpsModule(
+            module,
+            continuations,
+            cps_tail_form_facts_from_continuations(continuations, 0, tail_builder),
+            cps_branch_join_facts_from_plans(branches, 0, Vec[CpsBranchJoinFact].new())))
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: one-pass CPS with administrative beta-reduction absent"))

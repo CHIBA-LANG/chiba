@@ -7,6 +7,7 @@ use compiler.ir.closure.*
 use compiler.backend.layout.*
 use compiler.semantic.type_infer.*
 use compiler.semantic.driver.*
+use compiler.control.cps.*
 
 /// Direct import target selected before emit.
 data CoreImportModule {
@@ -80,6 +81,7 @@ type WasmGcCoreModule {
     layouts: WasmGcLayoutTable,
     ops: Array[CoreOp],
     block_obligations: Array[CoreBlockLoweringObligation],
+    branch_join_obligations: Array[CoreBranchJoinLoweringObligation],
 }
 
 /// Core-to-block lowering obligation before executable WAT emission.
@@ -90,12 +92,24 @@ type CoreBlockLoweringObligation {
     requires_tail_call: bool,
 }
 
+/// Core obligation for a CPS branch join continuation.
+type CoreBranchJoinLoweringObligation {
+    owner: BinderId,
+    kind: BranchJoinKind,
+    requires_join_block: bool,
+    requires_tail_terminator: bool,
+}
+
 /// Return the closure environment layout used by escaping closures.
 def closure_env_layout(): WasmGcLayout = layout_closure_env()
 
 /// Reach the typed module that fed the closure/control/backend pipeline.
 def optimized_closure_typed_module(module: OptimizedClosureModule): TypedModule =
     module.source.source.source.source.source.source.usage.answer.typed
+
+/// Reach the CPS module that fed closure conversion.
+def optimized_closure_cps_module(module: OptimizedClosureModule): CpsModule =
+    module.source.source.source.source.source
 
 /// Convert a C08 typed function body to backend Core body form.
 def core_function_body_from_typed(body: TypedFunctionBodyKind): CoreFunctionBody =
@@ -303,6 +317,20 @@ def core_block_lowering_obligations(ops: Array[CoreOp], index: usize, out: Vec[C
     if index == ops.len() { out.freeze() }
     else { core_block_lowering_obligations(ops, index + 1, out.push(core_block_lowering_obligation_from_op(ops.get(index)))) }
 
+/// Convert one CPS branch join fact into a backend-neutral Core obligation.
+def core_branch_join_lowering_obligation_from_fact(fact: CpsBranchJoinFact): CoreBranchJoinLoweringObligation =
+    CoreBranchJoinLoweringObligation {
+        owner: fact.owner,
+        kind: fact.kind,
+        requires_join_block: fact.requires_join_continuation,
+        requires_tail_terminator: fact.all_arms_resume_to_same_tail,
+    }
+
+/// Convert CPS branch join facts into Core obligations.
+def core_branch_join_lowering_obligations(facts: Array[CpsBranchJoinFact], index: usize, out: Vec[CoreBranchJoinLoweringObligation]): Array[CoreBranchJoinLoweringObligation] =
+    if index == facts.len() { out.freeze() }
+    else { core_branch_join_lowering_obligations(facts, index + 1, out.push(core_branch_join_lowering_obligation_from_fact(facts.get(index)))) }
+
 /// Append one Core op array to another builder.
 def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[CoreOp] =
     if index == ops.len() { out }
@@ -313,6 +341,7 @@ def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
     let function_ops = lower_typed_function_facts(optimized_closure_typed_module(module).functions, 0, Vec[CoreOp].new())
     let closure_ops = lower_closure_facts(module.closures, 0, Vec[CoreOp].new())
     let continuation_ops = lower_continuation_facts(module.continuations, 0, Vec[CoreOp].new())
+    let branch_join_obligations = core_branch_join_lowering_obligations(optimized_closure_cps_module(module).branch_joins, 0, Vec[CoreBranchJoinLoweringObligation].new())
     let ops = append_core_ops(Vec[CoreOp].new(), function_ops, 0)
         |> append_core_ops(closure_ops, 0)
         |> append_core_ops(continuation_ops, 0)
@@ -321,6 +350,7 @@ def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
         layouts: build_wasm_gc_layouts(module),
         ops: ops,
         block_obligations: core_block_lowering_obligations(ops, 0, Vec[CoreBlockLoweringObligation].new()),
+        branch_join_obligations: branch_join_obligations,
     }
 
 /// Return true when a Core op requires a layout reference.

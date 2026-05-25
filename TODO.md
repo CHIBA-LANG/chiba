@@ -118,7 +118,8 @@
 - [ ] branching 分析必须作为本轮 primary lowering 的硬门槛：
 	- [x] branching gate fixtures：覆盖 if/else、else-if、if-let、match、short-circuit、nested branch；用于防止只看 happy path。
 	- [x] branching surface facts：source/typed facts 已记录 if/else/else-if/if-let/match/short-circuit，供 typed lowering 和 CPS join planning 使用。
-	- [x] branching CPS join blocker：CPS pass 已把 branching surface 转成 `BranchJoinPlan`，遇到分支不再走 no-op CPS；真实 join continuation lowering 仍未完成。
+	- [x] branching CPS join fact：CPS pass 已把 branching surface 转成 `BranchJoinPlan` / `CpsBranchJoinFact`，并要求所有 arm 回到同一 tail；真实表达式级 join continuation body lowering 仍未完成。
+	- [x] branching Core obligation：C11 已把 `CpsBranchJoinFact` 转成 backend-neutral `CoreBranchJoinLoweringObligation`；真实 executable branch block emission 仍未完成。
 	- 不能只看 `if` then/happy path；必须同时覆盖 `else`、`else if`、`if let` 成功/失败分支、`match` 每个 arm、default/fallback、短路逻辑和 nested branch。
 	- typed env、pattern binding scope、exhaustiveness/warning、CPS join continuation、branch result type unify 必须一起验收。
 	- 所有 branching lowering gate 必须包含 “then/else 都有副作用或不同 binder” 的 fixture，避免再出现看了 if 不看 else、match branching 一坨但漏分支的情况。
@@ -414,14 +415,14 @@
 		- spec 要求 continuation boundary / replay / usage 保留 control boundary、answer type、arena/world legality 与 usage；当前 boundary / usage 已改为 fail-closed blocker，replay 仍只有轻量事实壳。
 		- C09 replay safety 不再把 usage facts 全部标成 `safe=true`；缺 usage facts 或 capture classification 时 fail-closed，避免 multi-shot replay legality 假通过。
 		- C09 replay safety 现在显式区分 replay capture kind：pure value、shared `Ref` cell、non-replay state；shared `Ref` 对 `ContN` 是合法的 shared-reference 语义，不 snapshot / rollback。真实 capture classification 仍 fail-closed。
-		- one-pass CPS 当前只是 `CpsModule(module)` wrapper，没有实际 CPS transform 或 administrative beta-reduction。
+		- one-pass CPS 当前已不再是单纯 `CpsModule(module)` wrapper：普通函数 tail-form、极窄 tail-call target、branch join fact、ContN materialized exception 已进入事实流；真实 expression CPS transform 与 administrative beta-reduction 仍未完成。
 		- 旧 `src/backend/cir/*` 与 level-0 可以作为 legacy reference 借鉴算法、fixture、失败模式；但每次借鉴都必须先过 spec alignment，且 level-1b 重新拥有行为，不能形成 legacy dependency。
 		- 旧 `src/backend/cir/cps.chiba` 也只是 L5 wrapper / synthetic continuation package 方向，不是可直接搬运的 spec 级 one-pass CPS + beta 实现。
-		- CPS usage 当前把 usage facts 全部转成 `UseSubjectBinder`，会丢 continuation / lambda / closure subject kind。
-		- C10 CPS usage 当前已 fail-closed 于 closure/lambda/continuation subject extraction absent；之前只从 continuation facts 重建 usage，完全没证明 closure/lambda 捕获与 no-capture directification。
+		- CPS usage 当前已保留 continuation / lambda / closure subject kind，并能对 syntactic no-capture closure 走 direct path；真实 expression-level usage count 与 capture extraction 仍未完成。
+		- C10 CPS usage 当前已 fail-closed 于 capturing closure/lambda extraction absent；no-capture directification 只有 syntactic surface 竖切，还没证明完整 closure/lambda 捕获分析。
 		- spec 要求 `shift` 捕获 `Cont1`、`shiftn` 捕获 `ContN`，逃逸 `Cont1` boxed 且不升级；当前 control/closure 只按 UseZero/UseOne/UseMany 做壳级 decision，未承载 `Cont1` / `ContN` storage 语义。
 		- 已新增 target-independent IR contract：`ContinuationCont1` / `ContinuationContN`、`ContinuationBoxedOneShot`、`ContinuationRepeatableFrameChain`、`ContinuationFact`、sendable callable exclusion hook。
-		- continuation package 当前由 `UseMany` 直接驱动，未区分 `Cont1` escaped boxed 与 `ContN` repeatable package。
+		- continuation package 当前已区分 escaped boxed `Cont1` 与 repeatable `ContN` package；真实 storage/call-site escape analysis 与 capture extraction 仍未完成。
 		- closure conversion 当前对 packaged continuation 生成 empty capture fields，未抽取真实 capture set。
 		- 已新增 closure/backend contract：`StacklessResumeFunction`、`ContinuationFrame`、`ContinuationLowerBoxedCont1`、`ContinuationLowerRepeatableContN`、`CoreOpStacklessFunction`、`CoreOpContinuationFrameChain`、`CoreOpContNPackage`。
 		- C10/C11 source path 已把 `ContinuationSimplification` 转成 `ContinuationLoweringFact` 并贯穿到 backend Core op lowering；boxed `Cont1` 保留 consumed-state，`ContN` lower 为 frame-chain op + repeatable package op，但真实 capture extraction / frame body / WAT emission 仍是 blocker。
