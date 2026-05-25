@@ -95,6 +95,7 @@
 - [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。
 	- [x] Core block obligations：Core lowering 现在产出 block terminator / return / tailcall obligations；真实 executable block emission 仍未完成。
 	- [x] Core pattern decision obligations：C11 现在从 `CpsPatternDecisionFact` 生成 backend-neutral `CorePatternDecisionLoweringObligation`，保留 test-chain / if-else / field-extract / exhaustiveness-error 需求；真实 executable decision tree emission 仍未完成。
+	- [x] Core pattern decision fail-closed：C11 validator 会拒绝尚未 executable lowering 的 pattern decision obligation，避免 match/if-let 义务被静默丢弃后继续 emit WAT。
 	- [x] typed function Core op：C11 现在会从 C08 typed function body facts 生成 `CoreOpFunction`，并保持 owner / export-main / body fact；真实 block body lowering 仍只覆盖常量返回竖切。
 	- [x] ordinary CPS tail invariant：普通 `CoreOpFunction` 现在必须 lower 成 `CoreBlockReturn` / tail terminator，validator 拒绝 non-tail fallthrough；`ContN` frame/package 仍是 materialized multi-shot 例外。
 	- [x] function-body terminator selection：C11 block obligation 现在按 `CoreFunctionBody` 区分 return / tail-call / pending fallthrough，不再用 `CoreOpFunction.tail = CoreTailCall` 假装全函数 tail-safe。

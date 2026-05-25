@@ -13,6 +13,7 @@ data CoreValidationError {
     CoreIllegalTailCall(str),
     CoreNonTailCps(str),
     CoreMissingBranchBody(str),
+    CoreMissingPatternDecision(str),
     CoreIllegalRuntimeState(str),
     CoreIllegalContinuationPackage(str),
 }
@@ -341,9 +342,14 @@ def validate_core_ops_with_contn_frame(module: WasmGcCoreModule, index: usize, f
 def validate_core_ops(module: WasmGcCoreModule, index: usize, out: Vec[CoreValidationError]): Array[CoreValidationError] =
     validate_core_ops_with_contn_frame(module, index, ContNFrameChainState { owner: None, frame_count: 0, pending_stackless_count: 0 }, out)
 
+/// Validate that pattern decisions are not silently dropped before executable lowering.
+def validate_core_pattern_decisions(module: WasmGcCoreModule, out: Vec[CoreValidationError]): Vec[CoreValidationError] =
+    if module.pattern_decision_obligations.len() == 0 { out }
+    else { out.push(CoreMissingPatternDecision("pattern decision tree lowering absent")) }
+
 /// Validate symbols, layouts, tailcall facts, and continuation packages.
 def validate_wasm_gc_core(module: WasmGcCoreModule): Result[ValidatedCoreModule, Array[CoreValidationError]] =
-    match validate_core_ops(module, 0, Vec[CoreValidationError].new()) {
+    match validate_core_pattern_decisions(module, validate_core_ops(module, 0, Vec[CoreValidationError].new())).freeze() {
         errors =>
             if errors.len() == 0 { Ok(ValidatedCoreModule { core: module }) }
             else { Err(errors) }
