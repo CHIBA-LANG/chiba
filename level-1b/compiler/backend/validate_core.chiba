@@ -99,6 +99,36 @@ def validate_core_layout(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
             else { Some(CoreDanglingLayout(layout.key)) }
     }
 
+/// Compare two Core symbols byte-for-byte.
+def core_symbol_eq(left: str, right: str, index: usize): bool =
+    if index == left.len() && index == right.len() { true }
+    else if index == left.len() { false }
+    else if index == right.len() { false }
+    else if left.byte_at(index) == right.byte_at(index) { core_symbol_eq(left, right, index + 1) }
+    else { false }
+
+/// Return true when one Core op defines a function symbol.
+def core_op_defines_symbol(op: CoreOp, target: str): bool =
+    match op.function_symbol {
+        Some(symbol) => core_symbol_eq(symbol.name, target, 0)
+        None => false
+    }
+
+/// Return true when a Core module defines one function symbol.
+def core_module_contains_symbol(module: WasmGcCoreModule, target: str, index: usize): bool =
+    if index == module.ops.len() { false }
+    else if core_op_defines_symbol(module.ops.get(index), target) { true }
+    else { core_module_contains_symbol(module, target, index + 1) }
+
+/// Validate direct symbol references inside Core function bodies.
+def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValidationError] =
+    match op.function_body {
+        Some(CoreFunctionTailCall(target)) =>
+            if core_module_contains_symbol(module, target, 0) { None }
+            else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
+        _ => None
+    }
+
 /// Validate that materialized runtime ops keep source owner provenance.
 def validate_core_owner(op: CoreOp): Option[CoreValidationError] =
     if op.kind.requires_owner() {
@@ -239,6 +269,7 @@ def push_validation_error(out: Vec[CoreValidationError], error: Option[CoreValid
 def validate_core_op(module: WasmGcCoreModule, op: CoreOp, out: Vec[CoreValidationError]): Vec[CoreValidationError] =
     out
         |> push_validation_error(validate_core_layout(module, op))
+        |> push_validation_error(validate_core_symbol(module, op))
         |> push_validation_error(validate_core_owner(op))
         |> push_validation_error(validate_core_tail(op))
         |> push_validation_error(validate_core_cps_tail_form(op))
