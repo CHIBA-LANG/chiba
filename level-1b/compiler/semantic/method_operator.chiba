@@ -44,8 +44,27 @@ type OperatorCandidateSet {
     file: SourceFileId,
     operator_name: String,
     candidates: Array[OperatorKey],
+    candidate_count: usize,
     requires_operand_matching: bool,
     requires_ambiguity_check: bool,
+    missing_candidate_is_error: bool,
+}
+
+/// Candidate resolver status before operand and receiver filtering.
+data OperatorCandidateStatus {
+    OperatorCandidateMissing,
+    OperatorCandidateAmbiguityPending,
+    OperatorCandidateOperandMatchingPending,
+    OperatorCandidateUnknownOperatorPending,
+}
+
+/// Diagnostic-ready fact for operator resolution blockers.
+type OperatorCandidateDiagnosticFact {
+    owner: BinderId,
+    file: SourceFileId,
+    operator_name: String,
+    status: OperatorCandidateStatus,
+    candidate_count: usize,
 }
 
 /// Method/operator index for one project.
@@ -54,6 +73,7 @@ type MethodOperatorIndex {
     operators: Array[OperatorKey],
     surface_entries: Array[MethodOperatorSurfaceEntry],
     operator_candidates: Array[OperatorCandidateSet],
+    operator_candidate_diagnostics: Array[OperatorCandidateDiagnosticFact],
 }
 
 /// Empty method/operator index for modules without declarations.
@@ -63,6 +83,7 @@ def method_operator_index_empty(): MethodOperatorIndex =
         operators: Vec[OperatorKey].new().freeze(),
         surface_entries: Vec[MethodOperatorSurfaceEntry].new().freeze(),
         operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
+        operator_candidate_diagnostics: Vec[OperatorCandidateDiagnosticFact].new().freeze(),
     }
 
 /// Convert one typed surface fact into a method/operator index input.
@@ -154,6 +175,7 @@ def method_operator_index_from_surface(project: ProjectSurface, facts: Array[Met
         operators: operator_keys_from_surface_entries(project, entries, 0, Vec[OperatorKey].new()),
         surface_entries: entries,
         operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
+        operator_candidate_diagnostics: Vec[OperatorCandidateDiagnosticFact].new().freeze(),
     }
 
 /// Convert one operator-use surface fact into a resolver obligation.
@@ -213,19 +235,44 @@ def operator_obligation_requires_operand_matching(obligation: OperatorResolution
 
 /// Collect declaration candidates for one operator use; operand filtering is later.
 def operator_candidate_set_from_obligation(index: MethodOperatorIndex, obligation: OperatorResolutionObligation): OperatorCandidateSet =
+    let candidates = operator_candidates_matching_use_kind(index.operators, obligation.operator_kind, 0, Vec[OperatorKey].new())
     OperatorCandidateSet {
         owner: obligation.owner,
         file: obligation.file,
         operator_name: operator_member_name_for_use_kind(obligation.operator_kind),
-        candidates: operator_candidates_matching_use_kind(index.operators, obligation.operator_kind, 0, Vec[OperatorKey].new()),
+        candidates: candidates,
+        candidate_count: candidates.len(),
         requires_operand_matching: operator_obligation_requires_operand_matching(obligation),
         requires_ambiguity_check: true,
+        missing_candidate_is_error: true,
     }
 
 /// Convert operator obligations into candidate sets in source order.
 def operator_candidate_sets(index: MethodOperatorIndex, obligations: Array[OperatorResolutionObligation], cursor: usize, out: Vec[OperatorCandidateSet]): Array[OperatorCandidateSet] =
     if cursor == obligations.len() { out.freeze() }
     else { operator_candidate_sets(index, obligations, cursor + 1, out.push(operator_candidate_set_from_obligation(index, obligations.get(cursor)))) }
+
+/// Classify a candidate set without pretending operand matching is complete.
+def operator_candidate_status(set: OperatorCandidateSet): OperatorCandidateStatus =
+    if set.operator_name == "" { OperatorCandidateUnknownOperatorPending }
+    else if set.candidate_count == 0 { OperatorCandidateMissing }
+    else if set.candidate_count > 1 { OperatorCandidateAmbiguityPending }
+    else { OperatorCandidateOperandMatchingPending }
+
+/// Build one diagnostic-ready candidate fact.
+def operator_candidate_diagnostic_fact(set: OperatorCandidateSet): OperatorCandidateDiagnosticFact =
+    OperatorCandidateDiagnosticFact {
+        owner: set.owner,
+        file: set.file,
+        operator_name: set.operator_name,
+        status: operator_candidate_status(set),
+        candidate_count: set.candidate_count,
+    }
+
+/// Convert candidate sets into diagnostic facts.
+def operator_candidate_diagnostic_facts(sets: Array[OperatorCandidateSet], cursor: usize, out: Vec[OperatorCandidateDiagnosticFact]): Array[OperatorCandidateDiagnosticFact] =
+    if cursor == sets.len() { out.freeze() }
+    else { operator_candidate_diagnostic_facts(sets, cursor + 1, out.push(operator_candidate_diagnostic_fact(sets.get(cursor)))) }
 
 /// Attach candidate sets to the nominal method/operator index.
 def method_operator_index_with_candidates(project: ProjectSurface, facts: Array[MethodSurfaceFact], obligations: Array[OperatorResolutionObligation]): MethodOperatorIndex =
@@ -235,12 +282,15 @@ def method_operator_index_with_candidates(project: ProjectSurface, facts: Array[
         operators: operator_keys_from_surface_entries(project, entries, 0, Vec[OperatorKey].new()),
         surface_entries: entries,
         operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
+        operator_candidate_diagnostics: Vec[OperatorCandidateDiagnosticFact].new().freeze(),
     }
+    let candidate_sets = operator_candidate_sets(base, obligations, 0, Vec[OperatorCandidateSet].new())
     MethodOperatorIndex {
         methods: base.methods,
         operators: base.operators,
         surface_entries: base.surface_entries,
-        operator_candidates: operator_candidate_sets(base, obligations, 0, Vec[OperatorCandidateSet].new()),
+        operator_candidates: candidate_sets,
+        operator_candidate_diagnostics: operator_candidate_diagnostic_facts(candidate_sets, 0, Vec[OperatorCandidateDiagnosticFact].new()),
     }
 
 /// Build the nominal method/operator index.
