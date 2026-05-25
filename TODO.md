@@ -124,6 +124,7 @@
 	- [x] branching gate fixtures：覆盖 if/else、else-if、if-let、match、short-circuit、nested branch；用于防止只看 happy path。
 	- [x] branching surface facts：source/typed facts 已记录 if/else/else-if/if-let/match/short-circuit，供 typed lowering 和 CPS join planning 使用。
 	- [x] branching CPS join fact：CPS pass 已把 branching surface 转成 `BranchJoinPlan` / `CpsBranchJoinFact`，并要求所有 arm 回到同一 tail；真实表达式级 join continuation body lowering 仍未完成。
+	- [x] branch tail-call CPS fact：两臂都是 tail-call 的 if/else 会保留为 `CpsTailBranchCall`，不再在 C09 退化成普通 return fact。
 	- [x] branching Core obligation：C11 已把 `CpsBranchJoinFact` 转成 backend-neutral `CoreBranchJoinLoweringObligation`；真实 executable branch block emission 仍未完成。
 	- [x] branching miscompile guard：C08 遇到 branching body 会标记 `TypedFunctionBranchJoinPending`，C11 validator 拒绝 fake body emission，避免 `if/else` 被常量竖切误编译。
 	- [x] minimal executable branch slice：`if true/false { 42/0 } else { 42/0 }` 已能保留 typed branch body 并 emit executable WAT；变量条件、effect arms、nested branch、match/if-let 仍走 join obligation / pending blocker。

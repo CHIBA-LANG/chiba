@@ -24,6 +24,7 @@ type CpsModule {
 data CpsTailFormKind {
     CpsTailReturn,
     CpsTailCall(str),
+    CpsTailBranchCall(str, str),
     CpsMaterializedMultiShotFrame,
 }
 
@@ -146,7 +147,7 @@ def cps_tail_form_kind_from_function(function: TypedFunctionBodyFact): CpsTailFo
         TypedFunctionTailCallI32Const(target, _) => CpsTailCall(target)
         TypedFunctionReturnParam0 => CpsTailReturn
         TypedFunctionIfElseI32Const(_, _, _) => CpsTailReturn
-        TypedFunctionIfElseTailCallI32Const(_, _, _, _, _) => CpsTailReturn
+        TypedFunctionIfElseTailCallI32Const(_, then_target, _, else_target, _) => CpsTailBranchCall(then_target, else_target)
         TypedFunctionBranchJoinPending => CpsTailReturn
         _ => CpsTailReturn
     }

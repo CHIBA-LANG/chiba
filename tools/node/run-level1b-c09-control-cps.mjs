@@ -78,6 +78,7 @@ const REQUIRED_TEXT = [
   "data CpsTailFormKind",
   "CpsTailReturn",
   "CpsTailCall",
+  "CpsTailBranchCall",
   "CpsMaterializedMultiShotFrame",
   "all_non_multishot_calls_are_tail: bool",
   "tail_forms: Array[CpsTailFormFact]",
