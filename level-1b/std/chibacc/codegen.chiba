@@ -247,16 +247,142 @@ def append_rule_alt_dispatch(builder: DiagnosticBuilder, rule: LoweredRule, inde
     }
 }
 
+/// Append one Pratt prefix parser function.
+def append_pratt_prefix_function(builder: DiagnosticBuilder, rule: LoweredRule, arm: PrattPrefix, index: usize): DiagnosticBuilder =
+    append_alt_steps(
+        builder
+            .push_str("def parse_")
+            .push_str(rule.name.text)
+            .push_str("_prefix_")
+            .push_str(parser_codegen_usize(index))
+            .push_str("(tokens: Array[TokenSpan], position: ParsePosition): Result[ParseCandidate[AST], ParseFailure] =\n"),
+        arm.sequence.atoms,
+        arm.action,
+        0,
+        "position")
+        .push_str("\n")
+
+/// Append all Pratt prefix functions.
+def append_pratt_prefix_functions(builder: DiagnosticBuilder, rule: LoweredRule, prefixes: Array[PrattPrefix], index: usize): DiagnosticBuilder =
+    if index == prefixes.len() { builder }
+    else { append_pratt_prefix_functions(append_pratt_prefix_function(builder, rule, prefixes.get(index), index), rule, prefixes, index + 1) }
+
+/// Append one Pratt infix parser function.
+def append_pratt_infix_function(builder: DiagnosticBuilder, rule: LoweredRule, arm: PrattInfix, index: usize): DiagnosticBuilder =
+    append_alt_steps(
+        builder
+            .push_str("def parse_")
+            .push_str(rule.name.text)
+            .push_str("_infix_")
+            .push_str(parser_codegen_usize(index))
+            .push_str("(tokens: Array[TokenSpan], position: ParsePosition, lhs: AST): Result[ParseCandidate[AST], ParseFailure] =\n"),
+        arm.sequence.atoms,
+        arm.action,
+        0,
+        "position")
+        .push_str("\n")
+
+/// Append all Pratt infix functions.
+def append_pratt_infix_functions(builder: DiagnosticBuilder, rule: LoweredRule, infixes: Array[PrattInfix], index: usize): DiagnosticBuilder =
+    if index == infixes.len() { builder }
+    else { append_pratt_infix_functions(append_pratt_infix_function(builder, rule, infixes.get(index), index), rule, infixes, index + 1) }
+
+/// Append prefix dispatch for a Pratt rule.
+def append_pratt_prefix_dispatch(builder: DiagnosticBuilder, rule: LoweredRule, prefixes: Array[PrattPrefix], index: usize): DiagnosticBuilder =
+    if index == prefixes.len() {
+        append_parser_quoted(builder.push_str("    Err(parse_failure(ListCons("), rule.name.text).push_str(", ListNil), position))\n")
+    } else {
+        append_pratt_prefix_dispatch(
+            builder
+                .push_str("    match parse_")
+                .push_str(rule.name.text)
+                .push_str("_prefix_")
+                .push_str(parser_codegen_usize(index))
+                .push_str("(tokens, position) {\n")
+                .push_str("        Ok(value) => Ok(value)\n")
+                .push_str("        Err(_) => {\n"),
+            rule,
+            prefixes,
+            index + 1)
+            .push_str("        }\n")
+            .push_str("    }\n")
+    }
+}
+
+/// Append infix dispatch for a Pratt rule.
+def append_pratt_infix_dispatch(builder: DiagnosticBuilder, rule: LoweredRule, infixes: Array[PrattInfix], index: usize): DiagnosticBuilder =
+    if index == infixes.len() {
+        builder.push_str("    Ok(lhs)\n")
+    } else {
+        let arm = infixes.get(index)
+        let with_try = builder
+            .push_str("    if min_bp <= ")
+            .push_str(parser_codegen_usize(arm.left_power))
+            .push_str(" {\n")
+            .push_str("        match parse_")
+            .push_str(rule.name.text)
+            .push_str("_infix_")
+            .push_str(parser_codegen_usize(index))
+            .push_str("(tokens, lhs.position, lhs.value) {\n")
+            .push_str("            Ok(next) => parse_")
+            .push_str(rule.name.text)
+            .push_str("_infix_loop(tokens, next, min_bp)\n")
+            .push_str("            Err(_) => {\n")
+        let with_retry = append_pratt_infix_dispatch(with_try, rule, infixes, index + 1)
+            .push_str("            }\n")
+            .push_str("        }\n")
+            .push_str("    } else {\n")
+        append_pratt_infix_dispatch(with_retry, rule, infixes, index + 1)
+            .push_str("    }\n")
+    }
+}
+
+/// Append Pratt rule functions.
+def append_pratt_rule_functions(builder: DiagnosticBuilder, rule: LoweredRule, table: PrattTable): DiagnosticBuilder = {
+    let with_arms = append_pratt_infix_functions(
+        append_pratt_prefix_functions(builder, rule, table.prefixes, 0),
+        rule,
+        table.infixes,
+        0)
+    let with_prefix = append_pratt_prefix_dispatch(
+        with_arms
+            .push_str("def parse_")
+            .push_str(rule.name.text)
+            .push_str("_prefix(tokens: Array[TokenSpan], position: ParsePosition): Result[ParseCandidate[AST], ParseFailure] =\n"),
+        rule,
+        table.prefixes,
+        0)
+    let with_loop = append_pratt_infix_dispatch(
+        with_prefix
+            .push_str("def parse_")
+            .push_str(rule.name.text)
+            .push_str("_infix_loop(tokens: Array[TokenSpan], lhs: ParseCandidate[AST], min_bp: usize): Result[ParseCandidate[AST], ParseFailure] =\n"),
+        rule,
+        table.infixes,
+        0)
+    with_loop
+        .push_str("def parse_")
+        .push_str(rule.name.text)
+        .push_str("_bp(tokens: Array[TokenSpan], position: ParsePosition, min_bp: usize): Result[ParseCandidate[AST], ParseFailure] =\n")
+        .push_str("    match parse_")
+        .push_str(rule.name.text)
+        .push_str("_prefix(tokens, position) {\n")
+        .push_str("        Ok(lhs) => parse_")
+        .push_str(rule.name.text)
+        .push_str("_infix_loop(tokens, lhs, min_bp)\n")
+        .push_str("        Err(error) => Err(error)\n")
+        .push_str("    }\n")
+        .push_str("def parse_")
+        .push_str(rule.name.text)
+        .push_str("(tokens: Array[TokenSpan], position: ParsePosition): Result[ParseCandidate[AST], ParseFailure] = parse_")
+        .push_str(rule.name.text)
+        .push_str("_bp(tokens, position, 0)\n")
+}
+
 /// Append one executable rule entry.
 def append_rule_function(builder: DiagnosticBuilder, rule: LoweredRule): DiagnosticBuilder =
     match rule.pratt {
-        Some(_) =>
-            builder
-                .push_str("def parse_")
-                .push_str(rule.name.text)
-                .push_str("(tokens: Array[TokenSpan], position: ParsePosition): Result[ParseCandidate[AST], ParseFailure] = Err(parse_failure(ListCons(\"")
-                .push_str(rule.name.text)
-                .push_str("\", ListNil), position))\n")
+        Some(table) => append_pratt_rule_functions(builder, rule, table)
         None =>
             append_rule_alt_dispatch(
                 append_alternative_functions(builder, rule, 0)
