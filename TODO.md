@@ -37,7 +37,7 @@
 	- [x] typed elaboration obligations：`TypedElaboration` 现在携带 item/type/body traversal obligations；真实 typed AST expression lowering 仍未完成。
 	- [x] minimal codegen typed function fact：C08 现在为无复杂 surface 的简单 `def` 生成 `TypedFunctionBodyFact`，能保留 `main` 与 `i32.const 42` 竖切；完整 type expression / expression AST traversal 仍未完成。
 	- [x] minimal tail-call body fact：C08 现在能把极窄 `callee()` body 标成 `TypedFunctionTailCall(target)`，用于验证 CPS tail-call lowering；完整 typed call graph / namespace-aware callee resolution 仍未完成。
-	- [x] minimal callee symbol check：极窄尾调用 target 必须能在当前 typed function set 中解析到同名函数；完整 namespace/import/mangle-aware call graph 仍未完成。
+	- [x] minimal callee symbol check：极窄尾调用 target 必须能在当前 typed function set 中解析到同名函数；同 namespace 裸调用会解析成 owner-qualified symbol，完整 import/mangle-aware call graph 仍未完成。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 	- [x] generic surface facts：typed module 已记录 explicit params、auto-generic、explicit instantiation、generic Self method surface；真实 template body checking 与 instantiation discharge 仍 fail-closed。
 	- [x] generic template obligations：typed pass 已把 generic surface 转成 `GenericTemplateObligation`，区分显式参数、auto-generic、实例化 discharge、generic Self receiver binding。

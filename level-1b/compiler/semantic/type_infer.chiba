@@ -61,6 +61,7 @@ type TypedFunctionBodyFact {
     owner: BinderId,
     file: SourceFileId,
     symbol: str,
+    local_symbol: str,
     is_main: bool,
     returns_i32: bool,
     body: TypedFunctionBodyKind,
@@ -81,6 +82,38 @@ def typed_function_tail_call_target_slice(text: String, offset: usize, end: usiz
 /// Convert a source name slice into the current minimal symbol spelling.
 def typed_function_tail_call_target_text(text: String, slice: SourceNameSlice): str =
     text.slice(slice.offset, slice.len)
+
+/// Return true when a source symbol is already namespace-qualified.
+def typed_symbol_is_qualified(symbol: str, index: usize): bool =
+    if index == symbol.len() { false }
+    else if symbol.byte_at(index) == 46 { true }
+    else { typed_symbol_is_qualified(symbol, index + 1) }
+
+/// Convert a namespace slice into the current minimal symbol spelling.
+def typed_namespace_symbol_text(text: String, namespace: NamespaceNameSlice): str =
+    text.slice(namespace.offset, namespace.len)
+
+/// Qualify a local symbol with an owner namespace.
+def typed_qualified_symbol_text(text: String, namespace: NamespaceNameSlice, local: str): str =
+    typed_namespace_symbol_text(text, namespace).concat(".").concat(local)
+
+/// Build the canonical minimal function symbol for a skeleton.
+def typed_function_symbol_from_name(text: String, item: TypedItemSkeleton, name: SourceNameSlice): str =
+    let local = typed_function_tail_call_target_text(text, name)
+    match item.owner_namespace {
+        Some(namespace) => typed_qualified_symbol_text(text, namespace, local)
+        None => local
+    }
+
+/// Resolve a raw tail-call target in the lexical owner namespace.
+def typed_resolve_tail_call_target(text: String, item: TypedItemSkeleton, target: str): str =
+    if typed_symbol_is_qualified(target, 0) { target }
+    else {
+        match item.owner_namespace {
+            Some(namespace) => typed_qualified_symbol_text(text, namespace, target)
+            None => target
+        }
+    }
 
 /// Return true when a minimal body starts with one exact atom.
 def typed_function_body_starts_with_atom(text: String, start: usize, end: usize, atom: str): bool =
@@ -407,7 +440,7 @@ def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton)
     else if typed_function_body_starts_with_atom(text, start, end, "0") { TypedFunctionReturnI32Zero }
     else {
         match typed_function_tail_call_target_slice(text, start, end) {
-            Some(target) => TypedFunctionTailCall(typed_function_tail_call_target_text(text, target))
+            Some(target) => TypedFunctionTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)))
             None => TypedFunctionReturnUnit
         }
     }
@@ -423,7 +456,8 @@ def typed_function_body_fact_from_skeleton(project: ProjectSurface, item: TypedI
                     Some(TypedFunctionBodyFact {
                         owner: item.binder,
                         file: item.file,
-                        symbol: typed_function_tail_call_target_text(text, name),
+                        symbol: typed_function_symbol_from_name(text, item, name),
+                        local_symbol: typed_function_tail_call_target_text(text, name),
                         is_main: source_name_slice_eq_text(text, name, "main"),
                         returns_i32: returns_i32,
                         body: typed_function_body_kind_from_surface(text, item),
