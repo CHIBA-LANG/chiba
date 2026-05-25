@@ -101,6 +101,7 @@ type WasmGcCoreModule {
     ops: Array[CoreOp],
     block_obligations: Array[CoreBlockLoweringObligation],
     branch_join_obligations: Array[CoreBranchJoinLoweringObligation],
+    pattern_decision_obligations: Array[CorePatternDecisionLoweringObligation],
 }
 
 /// Core-to-block lowering obligation before executable WAT emission.
@@ -117,6 +118,17 @@ type CoreBranchJoinLoweringObligation {
     kind: BranchJoinKind,
     requires_join_block: bool,
     requires_tail_terminator: bool,
+}
+
+/// Core obligation for lowering pattern decisions to branch tests and field extracts.
+type CorePatternDecisionLoweringObligation {
+    owner: BinderId,
+    file: SourceFileId,
+    requires_test_chain: bool,
+    requires_if_else_lowering: bool,
+    requires_field_extracts: bool,
+    failure_env_has_no_bindings: bool,
+    missing_static_case_is_error: bool,
 }
 
 /// Return the closure environment layout used by escaping closures.
@@ -399,6 +411,23 @@ def core_branch_join_lowering_obligations(facts: Array[CpsBranchJoinFact], index
     if index == facts.len() { out.freeze() }
     else { core_branch_join_lowering_obligations(facts, index + 1, out.push(core_branch_join_lowering_obligation_from_fact(facts.get(index)))) }
 
+/// Convert one CPS pattern decision into a backend-neutral Core obligation.
+def core_pattern_decision_lowering_obligation_from_fact(fact: CpsPatternDecisionFact): CorePatternDecisionLoweringObligation =
+    CorePatternDecisionLoweringObligation {
+        owner: fact.owner,
+        file: fact.file,
+        requires_test_chain: fact.requires_test_chain,
+        requires_if_else_lowering: fact.requires_test_chain,
+        requires_field_extracts: fact.lowers_to_if_else_and_field_extract,
+        failure_env_has_no_bindings: fact.failure_env_has_no_bindings,
+        missing_static_case_is_error: fact.missing_static_case_is_error,
+    }
+
+/// Convert CPS pattern decision facts into Core lowering obligations.
+def core_pattern_decision_lowering_obligations(facts: Array[CpsPatternDecisionFact], index: usize, out: Vec[CorePatternDecisionLoweringObligation]): Array[CorePatternDecisionLoweringObligation] =
+    if index == facts.len() { out.freeze() }
+    else { core_pattern_decision_lowering_obligations(facts, index + 1, out.push(core_pattern_decision_lowering_obligation_from_fact(facts.get(index)))) }
+
 /// Append one Core op array to another builder.
 def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[CoreOp] =
     if index == ops.len() { out }
@@ -410,6 +439,7 @@ def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
     let closure_ops = lower_closure_facts(module.closures, 0, Vec[CoreOp].new())
     let continuation_ops = lower_continuation_facts(module.continuations, 0, Vec[CoreOp].new())
     let branch_join_obligations = core_branch_join_lowering_obligations(optimized_closure_cps_module(module).branch_joins, 0, Vec[CoreBranchJoinLoweringObligation].new())
+    let pattern_decision_obligations = core_pattern_decision_lowering_obligations(optimized_closure_cps_module(module).pattern_decisions, 0, Vec[CorePatternDecisionLoweringObligation].new())
     let ops = append_core_ops(Vec[CoreOp].new(), function_ops, 0)
         |> append_core_ops(closure_ops, 0)
         |> append_core_ops(continuation_ops, 0)
@@ -419,6 +449,7 @@ def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
         ops: ops,
         block_obligations: core_block_lowering_obligations(ops, 0, Vec[CoreBlockLoweringObligation].new()),
         branch_join_obligations: branch_join_obligations,
+        pattern_decision_obligations: pattern_decision_obligations,
     }
 
 /// Return true when a Core op requires a layout reference.
