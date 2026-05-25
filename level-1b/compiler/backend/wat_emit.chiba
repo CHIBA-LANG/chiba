@@ -192,8 +192,6 @@ def emit_core_tail_call_args_expr(target: str, args: Array[CoreExprKind]): Strin
 /// Emit one Core expression without the function result prefix.
 def emit_core_expr_instruction(body: CoreExprKind): String =
     match body {
-        CoreExprI32FortyTwo => "i32.const 42"
-        CoreExprI32Zero => "i32.const 0"
         CoreExprI32Const(atom) => emit_core_i32_const_atom(atom)
         CoreExprParam(index) => emit_core_param(index)
         CoreExprTailCall(target) => "return_call $chiba.".concat(target)
@@ -221,8 +219,6 @@ def emit_core_function_params(i32_param_count: usize): String =
 /// Emit the body instructions for one lowered Core function.
 def emit_core_function_body(body: Option[CoreExprKind]): String =
     match body {
-        Some(CoreExprI32FortyTwo) => "(result i32) i32.const 42"
-        Some(CoreExprI32Zero) => "(result i32) i32.const 0"
         Some(CoreExprI32Const(atom)) => "(result i32) ".concat(emit_core_i32_const_atom(atom))
         Some(CoreExprParam(index)) => "(result i32) ".concat(emit_core_param(index))
         Some(CoreExprTailCall(target)) => "(result i32) return_call $chiba.".concat(target)

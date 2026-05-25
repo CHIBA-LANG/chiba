@@ -50,7 +50,7 @@ const REQUIRED_TEXT = [
   "data CoreExprKind",
   "data CoreI32ConstAtom",
   "data CoreBranchCondition",
-  "CoreExprI32FortyTwo",
+  "CoreExprI32Const",
   "CoreExprParam(usize)",
   "CoreExprTailCall",
   "CoreExprTailCallArgs",

@@ -347,8 +347,6 @@ def cps_tail_form_facts_copy(facts: Array[CpsTailFormFact], index: usize, out: V
 def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
     match body {
         TypedExprUnit => CpsTermReturn(CpsAtomUnit)
-        TypedExprI32Zero => CpsTermReturn(CpsAtomI32Const(TypedI32ConstZero))
-        TypedExprI32FortyTwo => CpsTermReturn(CpsAtomI32Const(TypedI32ConstFortyTwo))
         TypedExprI32Const(atom) => CpsTermReturn(CpsAtomI32Const(atom))
         TypedExprParam(index) => CpsTermReturn(CpsAtomParam(index))
         TypedExprTailCall(target) => CpsTermTailCall(target, Vec[CpsAtom].new().freeze())
@@ -365,8 +363,6 @@ def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
 /// Convert one typed call argument only when it is already an atom.
 def cps_atom_from_typed_arg(arg: TypedExprKind): Option[CpsAtom] =
     match arg {
-        TypedExprI32Zero => Some(CpsAtomI32Const(TypedI32ConstZero))
-        TypedExprI32FortyTwo => Some(CpsAtomI32Const(TypedI32ConstFortyTwo))
         TypedExprI32Const(atom) => Some(CpsAtomI32Const(atom))
         TypedExprParam(param_index) => Some(CpsAtomParam(param_index))
         _ => None

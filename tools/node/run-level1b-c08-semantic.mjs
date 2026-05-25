@@ -79,7 +79,7 @@ const REQUIRED_TEXT = [
   "data TypedExprKind",
   "data TypedI32ConstAtom",
   "data TypedBranchCondition",
-  "TypedExprI32FortyTwo",
+  "TypedExprI32Const",
   "TypedExprParam(usize)",
   "TypedExprTailCall",
   "TypedExprTailCallArgs",

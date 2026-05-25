@@ -52,8 +52,6 @@ data CoreBranchCondition {
 /// Core expression form after CPS/closure lowering.
 data CoreExprKind {
     CoreExprUnit,
-    CoreExprI32Zero,
-    CoreExprI32FortyTwo,
     CoreExprI32Const(CoreI32ConstAtom),
     CoreExprParam(usize),
     CoreExprTailCall(str),
@@ -175,16 +173,14 @@ def core_branch_condition_from_typed(condition: TypedBranchCondition): CoreBranc
 def core_expr_from_cps_atom(atom: CpsAtom): CoreExprKind =
     match atom {
         CpsAtomUnit => CoreExprUnit
-        CpsAtomI32Const(TypedI32ConstZero) => CoreExprI32Zero
-        CpsAtomI32Const(TypedI32ConstFortyTwo) => CoreExprI32FortyTwo
         CpsAtomI32Const(atom) => CoreExprI32Const(core_i32_const_atom_from_typed(atom))
         CpsAtomParam(index) => CoreExprParam(index)
     }
 
 /// Convert a small resume result into an executable Core atom.
 def core_expr_from_usize(value: usize): CoreExprKind =
-    if value == 0 { CoreExprI32Zero }
-    else if value == 42 { CoreExprI32FortyTwo }
+    if value == 0 { CoreExprI32Const(CoreI32ConstZero) }
+    else if value == 42 { CoreExprI32Const(CoreI32ConstFortyTwo) }
     else { CoreExprI32Const(CoreI32ConstSmall(value)) }
 
 /// Convert CPS tail-call arguments to Core atoms.
@@ -221,9 +217,9 @@ def core_expr_from_cps_term(term: CpsTermKind): CoreExprKind =
 /// Convert an extracted stackless resume body into backend Core expression form.
 def core_expr_from_stackless_resume_body(body: StacklessResumeBodyKind): CoreExprKind =
     match body {
-        StacklessResumeBodyShiftN => CoreExprI32Zero
-        StacklessResumeBodyShift => CoreExprI32Zero
-        StacklessResumeBodyReset => CoreExprI32Zero
+        StacklessResumeBodyShiftN => CoreExprI32Const(CoreI32ConstZero)
+        StacklessResumeBodyShift => CoreExprI32Const(CoreI32ConstZero)
+        StacklessResumeBodyReset => CoreExprI32Const(CoreI32ConstZero)
         StacklessResumeBodyConst(value) => core_expr_from_usize(value)
         StacklessResumeBodyParam0 => CoreExprParam(0)
         StacklessResumeBodyMultiResume(_, last) => core_expr_from_usize(last)

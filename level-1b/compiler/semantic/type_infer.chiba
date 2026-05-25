@@ -52,8 +52,6 @@ data TypedBranchCondition {
 /// Typed expression shape used by semantic lowering before CPS.
 data TypedExprKind {
     TypedExprUnit,
-    TypedExprI32Zero,
-    TypedExprI32FortyTwo,
     TypedExprI32Const(TypedI32ConstAtom),
     TypedExprParam(usize),
     TypedExprTailCall(str),
@@ -94,8 +92,6 @@ type TypedFunctionFact {
 def typed_expr_visit_kind(expr: TypedExprKind): TypedExprVisitKind =
     match expr {
         TypedExprUnit => TypedVisitUnit
-        TypedExprI32Zero => TypedVisitAtom
-        TypedExprI32FortyTwo => TypedVisitAtom
         TypedExprI32Const(_) => TypedVisitAtom
         TypedExprParam(_) => TypedVisitAtom
         TypedExprTailCall(_) => TypedVisitTailCall
@@ -442,8 +438,6 @@ def typed_call_arg_expr_from_region(text: String, item: TypedItemSkeleton, start
         Some(param) => Some(param)
         None =>
         match typed_i32_const_atom_exact_from_region(text, start, end) {
-            Some(TypedI32ConstFortyTwo) => Some(TypedExprI32FortyTwo)
-            Some(TypedI32ConstZero) => Some(TypedExprI32Zero)
             Some(atom) => Some(TypedExprI32Const(atom))
             None => None
         }
@@ -500,8 +494,6 @@ def typed_pipe_prepend_lhs_arg(lhs: TypedExprKind, args: Array[TypedExprKind], i
 /// Return true when a typed expression can still be used as a direct CPS atom.
 def typed_expr_is_atom_arg(expr: TypedExprKind): bool =
     match expr {
-        TypedExprI32Zero => true
-        TypedExprI32FortyTwo => true
         TypedExprI32Const(_) => true
         TypedExprParam(_) => true
         _ => false
@@ -662,8 +654,6 @@ def typed_function_non_branch_expr_from_region(text: String, item: TypedItemSkel
             Some(param) => Some(param)
             None =>
             match typed_i32_const_atom_exact_from_region(text, start, end) {
-                Some(TypedI32ConstFortyTwo) => Some(TypedExprI32FortyTwo)
-                Some(TypedI32ConstZero) => Some(TypedExprI32Zero)
                 Some(atom) => Some(TypedExprI32Const(atom))
                 None =>
                     match typed_function_tail_call_i32_const_body(text, item, start, end) {
@@ -684,11 +674,7 @@ def typed_function_non_branch_expr_from_region(text: String, item: TypedItemSkel
 
 /// Convert an i32 atom into the typed expression form used by backend slices.
 def typed_expr_from_i32_atom(atom: TypedI32ConstAtom): TypedExprKind =
-    match atom {
-        TypedI32ConstZero => TypedExprI32Zero
-        TypedI32ConstFortyTwo => TypedExprI32FortyTwo
-        TypedI32ConstSmall(_) => TypedExprI32Const(atom)
-    }
+    TypedExprI32Const(atom)
 
 /// Find a continuation resume argument start for a known bootstrap continuation name.
 def typed_control_resume_arg_start(text: String, offset: usize, end: usize, name: str): Option[usize] =
