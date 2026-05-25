@@ -230,8 +230,16 @@ def core_expr_from_stackless_resume_body(body: StacklessResumeBodyKind): CoreExp
         StacklessResumeBodyShift => CoreExprI32Zero
         StacklessResumeBodyReset => CoreExprI32Zero
         StacklessResumeBodyConst(value) => core_expr_from_usize(value)
+        StacklessResumeBodyParam0 => CoreExprParam0
         StacklessResumeBodyMultiResume(_, last) => core_expr_from_usize(last)
         StacklessResumeBodyPending => CoreExprBranchJoinPending
+    }
+
+/// Return the i32 parameter count required by one stackless resume body.
+def core_stackless_resume_param_count(body: StacklessResumeBodyKind): usize =
+    match body {
+        StacklessResumeBodyParam0 => 1
+        _ => 0
     }
 
 /// Return true when two binder ids identify the same owner.
@@ -372,7 +380,7 @@ def push_continuation_frame_core_ops(out: Vec[CoreOp], frames: Array[Continuatio
                 kind: CoreOpStacklessFunction,
                 export_main: false,
                 function_symbol: None,
-                i32_param_count: 0,
+                i32_param_count: core_stackless_resume_param_count(frame.resume.body),
                 function_body: Some(core_expr_from_stackless_resume_body(frame.resume.body)),
                 layout: None,
                 tail: CorePlainCall,

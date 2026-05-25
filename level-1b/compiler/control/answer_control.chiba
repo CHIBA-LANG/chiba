@@ -32,6 +32,7 @@ data ControlBodyKind {
 data ControlBodyResumeShape {
     ControlBodyResumeUnknown,
     ControlBodyResumeConst(usize),
+    ControlBodyResumeParam0,
     ControlBodyMultiResumeConst(usize, usize),
 }
 
@@ -136,6 +137,31 @@ def control_resume_const_at(text: String, offset: usize, end: usize): Option[usi
             }
     }
 
+/// Return true when a resume argument is exactly the first function parameter.
+def control_resume_arg_is_param0(text: String, arg: usize, end: usize, item: TypedItemSkeleton): bool =
+    match typed_function_first_param_name(text, item) {
+        Some(param) => {
+            if source_starts_with_at(text, arg, typed_function_tail_call_target_text(text, param), 0) == false { false }
+            else if source_word_boundary_after(text, arg, param.len) == false { false }
+            else {
+                let close = source_skip_spaces(text, arg + param.len)
+                close < end && text.byte_at(close) == 41
+            }
+        }
+        None => false
+    }
+
+/// Parse a resume call that passes through the first function parameter.
+def control_resume_param0_at(text: String, offset: usize, end: usize, item: TypedItemSkeleton): bool =
+    match control_resume_arg_start(text, offset, end, "k") {
+        Some(arg) => control_resume_arg_is_param0(text, arg, end, item)
+        None =>
+            match control_resume_arg_start(text, offset, end, "retry") {
+                Some(arg) => control_resume_arg_is_param0(text, arg, end, item)
+                None => false
+            }
+    }
+
 /// Build the observed resume shape from a function body region.
 def control_resume_shape_loop(text: String, offset: usize, end: usize, count: usize, first: usize, last: usize): ControlBodyResumeShape =
     if offset >= end {
@@ -150,6 +176,23 @@ def control_resume_shape_loop(text: String, offset: usize, end: usize, count: us
         }
     }
 
+/// Build the observed resume shape, preserving direct first-param resumes.
+def control_resume_shape_loop_for_item(text: String, item: TypedItemSkeleton, offset: usize, end: usize, count: usize, first: usize, last: usize, saw_param0: bool): ControlBodyResumeShape =
+    if offset >= end {
+        if saw_param0 { ControlBodyResumeParam0 }
+        else if count == 0 { ControlBodyResumeUnknown }
+        else if count == 1 { ControlBodyResumeConst(last) }
+        else { ControlBodyMultiResumeConst(first, last) }
+    } else if control_resume_param0_at(text, offset, end, item) {
+        control_resume_shape_loop_for_item(text, item, offset + 1, end, count, first, last, true)
+    } else {
+        match control_resume_const_at(text, offset, end) {
+            Some(value) =>
+                control_resume_shape_loop_for_item(text, item, offset + 1, end, count + 1, if count == 0 { value } else { first }, value, saw_param0)
+            None => control_resume_shape_loop_for_item(text, item, offset + 1, end, count, first, last, saw_param0)
+        }
+    }
+
 /// Extract a conservative executable resume shape for one control owner.
 def control_resume_shape_for_owner(module: TypedModule, fact: ControlSurfaceFact): ControlBodyResumeShape =
     match control_item_for_owner(module.items, fact.owner, 0) {
@@ -157,7 +200,7 @@ def control_resume_shape_for_owner(module: TypedModule, fact: ControlSurfaceFact
             let text = control_source_file_text(module.alpha.project.files, fact.file, 0)
             let start = source_scan_item_body_region_start(text, item.surface.header.offset)
             let end = source_scan_item_region_end(text, item.surface.header.offset)
-            control_resume_shape_loop(text, start, end, 0, 0, 0)
+            control_resume_shape_loop_for_item(text, item, start, end, 0, 0, 0, false)
         }
         None => ControlBodyResumeUnknown
     }

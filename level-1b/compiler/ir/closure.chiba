@@ -49,6 +49,7 @@ data StacklessResumeBodyKind {
     StacklessResumeBodyShift,
     StacklessResumeBodyShiftN,
     StacklessResumeBodyConst(usize),
+    StacklessResumeBodyParam0,
     StacklessResumeBodyMultiResume(usize, usize),
 }
 

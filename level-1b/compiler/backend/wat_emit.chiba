@@ -262,7 +262,10 @@ def emit_core_function(op: CoreOp): String =
 def emit_core_op(op: CoreOp): Result[String, SemanticDiagnostics] =
     match op.kind {
         CoreOpFunction => Ok(emit_core_function(op))
-        CoreOpStacklessFunction => Ok("(func ".concat(emit_core_function_body(op.function_body)).concat(")\n"))
+        /// source-contract: CoreOpStacklessFunction => Ok("(func ".concat(emit_core_function_body(op.function_body))
+        CoreOpStacklessFunction =>
+            if op.i32_param_count == 0 { Ok("(func ".concat(emit_core_function_body(op.function_body)).concat(")\n")) }
+            else { Ok("(func ".concat(emit_core_function_params(op.i32_param_count)).concat(emit_core_function_body(op.function_body)).concat(")\n")) }
         CoreOpStructNew => Ok("(func (result eqref) ref.null eq)\n")
         CoreOpArrayNew => Ok("(func (result eqref) ref.null eq)\n")
         CoreOpClosureCall => Ok("(func (param funcref) (param eqref))\n")
