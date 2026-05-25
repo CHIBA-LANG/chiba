@@ -10,6 +10,7 @@ data CoreValidationError {
     CoreDanglingSymbol(str),
     CoreMissingOwner(str),
     CoreIllegalTailCall(str),
+    CoreNonTailCps(str),
     CoreIllegalRuntimeState(str),
     CoreIllegalContinuationPackage(str),
 }
@@ -64,6 +65,19 @@ def validate_core_tail(op: CoreOp): Option[CoreValidationError] =
         CoreTailCall =>
             if op.kind.allows_tail_position() { None }
             else { Some(CoreIllegalTailCall("tailcall attached to non-call Core op")) }
+    }
+
+/// Validate the CPS invariant: ordinary functions cannot lower to fallthrough blocks.
+def validate_core_cps_tail_form(op: CoreOp): Option[CoreValidationError] =
+    match op.kind {
+        CoreOpFunction =>
+            match core_block_terminator_for_op(op) {
+                CoreBlockContinue => Some(CoreNonTailCps("ordinary CPS function lowered to non-tail fallthrough"))
+                _ => None
+            }
+        CoreOpContNPackage => None
+        CoreOpContinuationFrameChain => None
+        _ => None
     }
 
 /// Validate a layout reference required by a Core operation.
@@ -219,6 +233,7 @@ def validate_core_op(module: WasmGcCoreModule, op: CoreOp, out: Vec[CoreValidati
         |> push_validation_error(validate_core_layout(module, op))
         |> push_validation_error(validate_core_owner(op))
         |> push_validation_error(validate_core_tail(op))
+        |> push_validation_error(validate_core_cps_tail_form(op))
         |> push_validation_error(validate_core_runtime_state(op))
         |> push_validation_error(validate_core_continuation_package(op))
         |> push_validation_error(validate_core_contn_frame_count(op))

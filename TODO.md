@@ -65,6 +65,7 @@
 	- [x] ContN replay obligations：UseMany continuation usage 已转成 `ContNReplaySafetyObligation`，明确 Ref[T] capture 是 shared-reference semantics；真实 capture classification/non-replay reject 仍未完成。
 - [ ] one-pass CPS + beta：没做。现在还是 fail-closed，不是 level0 那条真实 CPS。
 	- [x] no-continuation CPS baseline：无 control obligations 的 module 现在生成空 `CpsModule`；真实 expression CPS + beta 仍未完成。
+	- [x] CPS tail-form invariant facts：无 multi-shot continuation 的普通函数现在生成 `CpsTailFormFact`，明确 `all_non_multishot_calls_are_tail`；真实 call graph CPS / administrative beta 仍未完成。
 - [ ] CIR nanopass IR：清晰分层还不够；需要语言级 CPS/CIR facts，且保证不耦合 Wasm。
 	- [x] CIR/backend boundary gate：compiler/ir/control/closure 不允许出现 Wasm/WAT/Binaryen/funcref/eqref/backend opcode；backend 细节只允许在 backend 层。
 - [ ] closure conversion：no-capture direct、capturing env、env field extraction、call rewrite 没完整。
@@ -78,6 +79,7 @@
 - [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。
 	- [x] Core block obligations：Core lowering 现在产出 block terminator / return / tailcall obligations；真实 executable block emission 仍未完成。
 	- [x] typed function Core op：C11 现在会从 C08 typed function body facts 生成 `CoreOpFunction`，并保持 owner / export-main / body fact；真实 block body lowering 仍只覆盖常量返回竖切。
+	- [x] ordinary CPS tail invariant：普通 `CoreOpFunction` 现在必须 lower 成 `CoreBlockReturn` / tail terminator，validator 拒绝 non-tail fallthrough；`ContN` frame/package 仍是 materialized multi-shot 例外。
 - [ ] Wasm-GC backend layout：layout 有一部分；真实 lowering 到 Wasm-GC object/funcref/eqref 不完整。
 - [ ] WAT emit：没有 executable WAT；现在 fail-closed。
 	- [x] empty Core WAT baseline：空 validated Core module 现在 emits 最小 `(module)`；真实 Core op WAT lowering 仍 fail-closed。

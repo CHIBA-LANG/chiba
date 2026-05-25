@@ -106,7 +106,7 @@ def lower_typed_function_fact(fact: TypedFunctionBodyFact): CoreOp =
         export_main: fact.is_main,
         function_body: Some(core_function_body_from_typed(fact.body)),
         layout: None,
-        tail: CorePlainCall,
+        tail: CoreTailCall,
         runtime_state: CoreNoRuntimeState,
         frame_count: 0,
     }
@@ -260,7 +260,11 @@ def lower_continuation_facts(facts: Array[ContinuationLoweringFact], index: usiz
 /// Pick the block terminator required by one Core op.
 def core_block_terminator_for_op(op: CoreOp): CoreBlockTerminator =
     match op.tail {
-        CoreTailCall => CoreBlockTailCall
+        CoreTailCall =>
+            match op.kind {
+                CoreOpFunction => CoreBlockReturn
+                _ => CoreBlockTailCall
+            }
         CorePlainCall =>
             match op.kind {
                 CoreOpTailCall => CoreBlockTailCall
@@ -274,7 +278,7 @@ def core_block_lowering_obligation_from_op(op: CoreOp): CoreBlockLoweringObligat
     CoreBlockLoweringObligation {
         owner: op.owner,
         terminator: terminator,
-        requires_function_return: false,
+        requires_function_return: terminator == CoreBlockReturn,
         requires_tail_call: terminator == CoreBlockTailCall,
     }
 

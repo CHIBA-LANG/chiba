@@ -60,6 +60,7 @@ const REQUIRED_TEXT = [
   "CoreMissingOwner",
   "CoreIllegalRuntimeState",
   "CoreIllegalTailCall",
+  "CoreNonTailCps",
   "CoreIllegalContinuationPackage",
   "def validate_wasm_gc_core",
   "def validate_core_continuation_order",
@@ -67,12 +68,14 @@ const REQUIRED_TEXT = [
   "def validate_core_owner",
   "def CoreOpKind.requires_owner",
   "def validate_core_runtime_state",
+  "def validate_core_cps_tail_form",
   "def validate_core_contn_frame_count",
   "def validate_core_contn_stackless_count",
   "boxed Cont1 must carry consumed-state machine",
   "ContN frame chain has no stackless resume frames",
   "ContN frame chain missing stackless resume functions",
   "runtime Core op missing owner provenance",
+  "ordinary CPS function lowered to non-tail fallthrough",
   "def validate_core_ops_with_contn_frame",
   "ContN package owner does not match preceding frame chain",
   "ContN package frame count does not match preceding frame chain",
@@ -193,6 +196,9 @@ function checkSource(file, source) {
   }
   if (path.basename(file) === "driver.chiba" && !/\bcore_validation_diagnostic\b[\s\S]{0,520}CoreIllegalRuntimeState/.test(code)) {
     errors.push(`${file}: backend driver must surface CoreIllegalRuntimeState diagnostics`);
+  }
+  if (path.basename(file) === "validate_core.chiba" && !/\bvalidate_core_cps_tail_form\b[\s\S]{0,420}CoreOpFunction[\s\S]{0,420}CoreNonTailCps/.test(code)) {
+    errors.push(`${file}: validator must reject non-tail ordinary CPS function lowering`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {
