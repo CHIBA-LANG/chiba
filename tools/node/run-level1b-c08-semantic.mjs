@@ -121,6 +121,8 @@ const REQUIRED_TEXT = [
   "def operator_use_surface_facts_from_skeletons",
   "type ClosureSurfaceFact",
   "closure_surface: Array[ClosureSurfaceFact]",
+  "syntactic_no_capture: bool",
+  "def closure_surface_all_syntactic_no_capture",
   "def typed_item_has_closure_surface",
   "def closure_surface_fact_from_skeleton",
   "def closure_surface_facts_from_skeletons",

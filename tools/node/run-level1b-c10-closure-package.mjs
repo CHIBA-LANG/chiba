@@ -22,6 +22,7 @@ const REQUIRED_TEXT = [
   "def cps_usage_facts_from_runtime_surface",
   "UseSubjectLambda",
   "UseSubjectClosure",
+  "syntactic_no_capture: bool",
   "def simplify_continuations",
   "def convert_closures",
   "def lift_lambdas",
@@ -47,6 +48,9 @@ const REQUIRED_TEXT = [
   "def closure_usage_capture_extraction_blocker",
   "def closure_usage_capture_extraction_blockers",
   "def closure_usage_requires_capture_extraction",
+  "def closure_usage_env_layout",
+  "def closure_env_layouts_from_usage",
+  "def closure_env_layouts_for_module",
   "missing-facts: lambda capture extraction absent",
   "missing-facts: closure env field extraction absent",
   "def closure_capture_class",
@@ -183,7 +187,7 @@ function main() {
   if (errors.length !== 0) fail(errors.join("\n"));
   pass("closure source contract");
 
-  primaryPathBlocked("no-capture closure directification requires level-1b nanopass execution");
+  primaryPathBlocked("no-capture closure directification smoke requires level-1b end-to-end fixture execution");
   primaryPathBlocked("capturing closure env requires level-1b nanopass execution");
   primaryPathBlocked("multi-shot continuation package requires level-1b nanopass execution");
   primaryPathBlocked("unsafe capture rejection requires level-1b semantic checker diagnostics");

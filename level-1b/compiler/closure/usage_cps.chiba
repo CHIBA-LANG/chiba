@@ -19,6 +19,7 @@ data RuntimeUseSubject {
 type CpsUseFact {
     subject: RuntimeUseSubject,
     count: UsageCount,
+    syntactic_no_capture: bool,
 }
 
 /// CPS module annotated with final use counts for closure conversion.
@@ -47,15 +48,16 @@ def cps_usage_facts(facts: Array[ContinuationFact], index: usize, out: Vec[CpsUs
         let fact = facts.get(index)
         cps_usage_facts(facts, index + 1, out.push(CpsUseFact(
             UseSubjectContinuation(fact.binder, fact.capability),
-            continuation_storage_use_count(fact.storage))))
+            continuation_storage_use_count(fact.storage),
+            false)))
     }
 
 /// Append lambda/closure surface usage facts without erasing subject kind.
 def push_closure_surface_usage_fact(out: Vec[CpsUseFact], fact: ClosureSurfaceFact): Vec[CpsUseFact] =
     let with_lambda =
-        if fact.has_lambda { out.push(CpsUseFact(UseSubjectLambda(fact.owner), UseMany)) }
+        if fact.has_lambda { out.push(CpsUseFact(UseSubjectLambda(fact.owner), UseMany, fact.syntactic_no_capture)) }
         else { out }
-    if fact.has_trailing_closure { with_lambda.push(CpsUseFact(UseSubjectClosure(fact.owner), UseMany)) }
+    if fact.has_trailing_closure { with_lambda.push(CpsUseFact(UseSubjectClosure(fact.owner), UseMany, fact.syntactic_no_capture)) }
     else { with_lambda }
 
 /// Convert typed closure surface facts into CPS runtime usage inputs.

@@ -71,7 +71,7 @@ def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConver
     } else {
         Ok(ClosureConvertedModule(
             module,
-            closure_env_layouts(module.decisions, 0, Vec[ClosureEnvLayout].new()),
+            closure_env_layouts_for_module(module),
             continuation_lowering_facts(module.decisions, 0, Vec[ContinuationLoweringFact].new())))
     }
 
@@ -81,20 +81,26 @@ def empty_capture_fields(): Array[CaptureField] =
 
 /// Return true when a CPS use subject is a lambda/closure needing env extraction.
 def cps_use_fact_requires_closure_capture(fact: CpsUseFact): bool =
-    match fact.subject {
-        UseSubjectLambda(_) => true
-        UseSubjectClosure(_) => true
-        _ => false
+    if fact.syntactic_no_capture { false }
+    else {
+        match fact.subject {
+            UseSubjectLambda(_) => true
+            UseSubjectClosure(_) => true
+            _ => false
+        }
     }
 
 /// Return the precise capture extraction blocker for a lambda/closure subject.
 def closure_usage_capture_extraction_blocker(fact: CpsUseFact): Option[SemanticDiagnostic] =
-    match fact.subject {
-        UseSubjectLambda(_) =>
-            Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: lambda capture extraction absent"))
-        UseSubjectClosure(_) =>
-            Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: closure env field extraction absent"))
-        _ => None
+    if fact.syntactic_no_capture { None }
+    else {
+        match fact.subject {
+            UseSubjectLambda(_) =>
+                Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: lambda capture extraction absent"))
+            UseSubjectClosure(_) =>
+                Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: closure env field extraction absent"))
+            _ => None
+        }
     }
 
 /// Collect blockers for lambda/closure subjects before env layout.
@@ -170,6 +176,26 @@ def continuation_one_shot_obligations(decisions: Array[ContinuationSimplificatio
 def push_closure_env_layout(out: Vec[ClosureEnvLayout], decision: ContinuationSimplification): Vec[ClosureEnvLayout] =
     match decision {
         _ => out
+    }
+
+/// Build an empty env layout for syntactically no-capture lambda/closure subjects.
+def closure_usage_env_layout(fact: CpsUseFact): Option[ClosureEnvLayout] =
+    if fact.syntactic_no_capture {
+        match fact.subject {
+            UseSubjectLambda(owner) => Some(ClosureEnvLayout(owner, empty_capture_fields()))
+            UseSubjectClosure(owner) => Some(ClosureEnvLayout(owner, empty_capture_fields()))
+            _ => None
+        }
+    } else { None }
+
+/// Build closure env layouts from CPS usage facts before continuation packages.
+def closure_env_layouts_from_usage(facts: Array[CpsUseFact], index: usize, out: Vec[ClosureEnvLayout]): Vec[ClosureEnvLayout] =
+    if index == facts.len() { out }
+    else {
+        match closure_usage_env_layout(facts.get(index)) {
+            Some(layout) => closure_env_layouts_from_usage(facts, index + 1, out.push(layout))
+            None => closure_env_layouts_from_usage(facts, index + 1, out)
+        }
     }
 
 /// Map a simplification decision to target-independent continuation lowering.
@@ -254,6 +280,10 @@ def continuation_decisions_require_capture_extraction(decisions: Array[Continuat
 def closure_env_layouts(decisions: Array[ContinuationSimplification], index: usize, out: Vec[ClosureEnvLayout]): Array[ClosureEnvLayout] =
     if index == decisions.len() { out.freeze() }
     else { closure_env_layouts(decisions, index + 1, push_closure_env_layout(out, decisions.get(index))) }
+
+/// Build all closure env layouts, starting with no-capture closure/lambda subjects.
+def closure_env_layouts_for_module(module: SimplifiedContinuationModule): Array[ClosureEnvLayout] =
+    closure_env_layouts(module.decisions, 0, closure_env_layouts_from_usage(module.source.facts, 0, Vec[ClosureEnvLayout].new()))
 
 /// Return true when a capture is legal to place in a runtime package.
 def CaptureKind.package_legal(self): bool =
