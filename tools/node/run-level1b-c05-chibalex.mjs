@@ -45,12 +45,12 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
-function oracleReference(name) {
-  console.log(`[ORACLE] ${name}`);
+function referenceGate(name) {
+  console.log(`[REF] ${name}`);
 }
 
-function oracleReferenceFailed(name) {
-  console.log(`[ORACLE-FAIL] ${name}`);
+function referenceGateFailed(name) {
+  console.log(`[REF-FAIL] ${name}`);
 }
 
 function read(file) {
@@ -183,8 +183,8 @@ function main() {
   checkMiniSpecs();
 
   const mini = run("timeout", ["30", "vp", "run", "level1b:chibalex-mini"]);
-  if (mini.status === 0) oracleReference("chibalex mini reference");
-  else oracleReferenceFailed("chibalex mini reference");
+  if (mini.status === 0) referenceGate("chibalex mini reference");
+  else referenceGateFailed("chibalex mini reference");
 }
 
 main();

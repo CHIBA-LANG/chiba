@@ -418,12 +418,12 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
-function oracleReference(name) {
-  console.log(`[ORACLE] ${name}`);
+function referenceGate(name) {
+  console.log(`[REF] ${name}`);
 }
 
-function oracleReferenceFailed(name) {
-  console.log(`[ORACLE-FAIL] ${name}`);
+function referenceGateFailed(name) {
+  console.log(`[REF-FAIL] ${name}`);
 }
 
 function read(file) {
@@ -501,8 +501,8 @@ function runGate(label, script, timeoutSeconds) {
     encoding: "utf8",
     maxBuffer: 128 * 1024 * 1024,
   });
-  if (result.status === 0) oracleReference(label);
-  else oracleReferenceFailed(label);
+  if (result.status === 0) referenceGate(label);
+  else referenceGateFailed(label);
 }
 
 function main() {

@@ -46,12 +46,12 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
-function oracleReference(name) {
-  console.log(`[ORACLE] ${name}`);
+function referenceGate(name) {
+  console.log(`[REF] ${name}`);
 }
 
-function oracleReferenceFailed(name) {
-  console.log(`[ORACLE-FAIL] ${name}`);
+function referenceGateFailed(name) {
+  console.log(`[REF-FAIL] ${name}`);
 }
 
 function read(file) {
@@ -177,8 +177,8 @@ function main() {
   checkMiniSpecs();
 
   const mini = run("vp", ["run", "level1b:chibacc-mini"]);
-  if (mini.status === 0) oracleReference("chibacc mini reference");
-  else oracleReferenceFailed("chibacc mini reference");
+  if (mini.status === 0) referenceGate("chibacc mini reference");
+  else referenceGateFailed("chibacc mini reference");
 }
 
 main();

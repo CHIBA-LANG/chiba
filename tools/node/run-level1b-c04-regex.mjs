@@ -49,12 +49,12 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
-function oracleReference(name) {
-  console.log(`[ORACLE] ${name}`);
+function referenceGate(name) {
+  console.log(`[REF] ${name}`);
 }
 
-function oracleReferenceFailed(name, detail) {
-  console.log(`[ORACLE-FAIL] ${name}: ${detail}`);
+function referenceGateFailed(name, detail) {
+  console.log(`[REF-FAIL] ${name}: ${detail}`);
 }
 
 function read(file) {
@@ -131,20 +131,21 @@ function checkGolden() {
     }
   }
   if (required.size !== 0) errors.push(`missing cases: ${[...required].join(", ")}`);
-  if (errors.length === 0) oracleReference("regex golden reference");
-  else oracleReferenceFailed("regex golden reference", errors.join("; "));
+  if (errors.length === 0) referenceGate("regex golden reference");
+  else referenceGateFailed("regex golden reference", errors.join("; "));
 }
 
 function runWasmtimeSmoke() {
   const found = spawnSync("which", ["wasmtime"], { encoding: "utf8" });
-  if (found.status !== 0) {
-    console.log("[SKIP] regex wasmtime smoke: wasmtime not found in PATH");
+  const wasmtime = found.status === 0 ? found.stdout.trim() : `${process.env.HOME}/.wasmtime/bin/wasmtime`;
+  if (!fs.existsSync(wasmtime)) {
+    console.log("[SKIP] regex wasmtime smoke: wasmtime not found");
     return;
   }
   fs.mkdirSync(path.dirname(WASM), { recursive: true });
   const wasm = compileWat(read(WAT));
   fs.writeFileSync(WASM, wasm);
-  const run = spawnSync("wasmtime", [WASM], { encoding: "utf8" });
+  const run = spawnSync(wasmtime, [WASM], { encoding: "utf8" });
   if (run.status !== 0) fail(run.stdout || run.stderr);
   if (!run.stdout.includes("level1b regex c04 ok")) fail(`unexpected wasmtime output: ${run.stdout}`);
   pass("regex wasmtime smoke");

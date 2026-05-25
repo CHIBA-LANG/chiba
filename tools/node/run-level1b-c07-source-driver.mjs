@@ -245,12 +245,12 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
-function oracleReference(name) {
-  console.log(`[ORACLE] ${name}`);
+function referenceGate(name) {
+  console.log(`[REF] ${name}`);
 }
 
-function oracleReferenceFailed(name) {
-  console.log(`[ORACLE-FAIL] ${name}`);
+function referenceGateFailed(name) {
+  console.log(`[REF-FAIL] ${name}`);
 }
 
 function read(file) {
@@ -356,8 +356,8 @@ function main() {
   pass("UTF-8 identifier fixture source");
 
   const namespace = spawnSync("timeout", ["30", "vp", "run", "level1b:namespace"], { encoding: "utf8" });
-  if (namespace.status === 0) oracleReference("namespace project reference");
-  else oracleReferenceFailed("namespace project reference");
+  if (namespace.status === 0) referenceGate("namespace project reference");
+  else referenceGateFailed("namespace project reference");
 }
 
 main();

@@ -295,6 +295,17 @@ for (const root of HARNESS_ROOTS) {
       });
     }
 
+    const staleOracleReference = /\boracleReference\s*\(\s*["']([^"']+)["']/g;
+    for (const match of source.matchAll(staleOracleReference)) {
+      blockers.push({
+        id: "stale-oracle-reference-label",
+        file: `${file}:${lineOf(source, match.index)}`,
+        blocker: "oracle-dependency",
+        semantic: `level-1b harness labels a reference path as oracle '${match[1]}'`,
+        message: `oracle-dependency: level-1b harness labels a reference path as oracle '${match[1]}'`,
+      });
+    }
+
     const legacyExecution = /["'](\.\/target\/debug\/level1c\.o|\.\/chibac_amd64-unknown-linux_chiba_dev\.o)["']/g;
     for (const match of source.matchAll(legacyExecution)) {
       blockers.push({
