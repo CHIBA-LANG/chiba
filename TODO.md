@@ -331,6 +331,15 @@
 		- 这是语言级 contract；
 		- bridge intrinsic 需要保留 typed 身份，并与 tuple 表示可 unify；
 		- 要保证双向稳定 roundtrip。
+	- **已落地切片**:
+		- C08 ADT ctor contract 已记录 canonical tag：`BigCamel` -> `:big_camel`；
+		- ctor helper body fact 已记录 `Ctor(args)` 返回 canonical tuple，`_1` 为 tag，payload 从 `_2` 起；
+		- tuple field fact 已接入 row/record shape，供后续 C09/C11 消费。
+	- **仍是 blocker**:
+		- source/data parser 尚未真正产出完整 `AdtVariantDecl`；
+		- ctor callable symbol / overload resolution / namespace 消歧尚未接到 typed 函数表；
+		- C09/C11 尚未把 ctor helper body 降成可执行 runtime 值；
+		- `tuple_to_adt` / `adt_to_tuple` intrinsic 仍缺真实 typed identity roundtrip validation。
 
 - [ ] compiler-internal intrinsic surface
 	- **目标**:
