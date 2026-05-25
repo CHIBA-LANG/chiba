@@ -275,11 +275,14 @@ def operator_candidate_diagnostic_facts(sets: Array[OperatorCandidateSet], curso
 /// Convert an operator candidate status to a semantic diagnostic.
 def operator_candidate_diagnostic(fact: OperatorCandidateDiagnosticFact): Option[SemanticDiagnostic] =
     match fact.status {
-        OperatorCandidateMissing => None
+        OperatorCandidateMissing =>
+            Some(SemanticDiagnostic("<operator>", 0, 0, "invalid-surface: operator overload candidate missing"))
         OperatorCandidateResolved => None
-        OperatorCandidateAmbiguityPending => None
+        OperatorCandidateAmbiguityPending =>
+            Some(SemanticDiagnostic("<operator>", 0, 0, "invalid-surface: operator overload candidate ambiguous"))
         OperatorCandidateOperandMatchingPending => None
-        OperatorCandidateUnknownOperatorPending => None
+        OperatorCandidateUnknownOperatorPending =>
+            Some(SemanticDiagnostic("<operator>", 0, 0, "missing-lowering: operator obligation resolution absent"))
     }
 
 /// Collect diagnostics for unresolved operator candidate sets.
