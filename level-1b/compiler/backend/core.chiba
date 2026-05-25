@@ -35,29 +35,29 @@ data CoreRuntimeState {
     CoreConsumedStateMachine,
 }
 
-/// Minimal function body form accepted by the first executable WAT slice.
+/// Core expression form after CPS/closure lowering.
 data CoreI32ConstAtom {
     CoreI32ConstZero,
     CoreI32ConstFortyTwo,
 }
 
-/// Minimal branch condition accepted by Core WAT emission.
+/// Core branch condition carried by expression lowering.
 data CoreBranchCondition {
     CoreBranchConditionTrue,
     CoreBranchConditionFalse,
     CoreBranchConditionParam0,
 }
 
-/// Minimal function body form accepted by the first executable WAT slice.
-data CoreFunctionBody {
-    CoreFunctionReturnUnit,
-    CoreFunctionReturnI32Zero,
-    CoreFunctionReturnI32FortyTwo,
-    CoreFunctionReturnParam0,
-    CoreFunctionTailCall(str),
-    CoreFunctionTailCallI32Const(str, CoreI32ConstAtom),
-    CoreFunctionIfElseI32Const(CoreBranchCondition, CoreI32ConstAtom, CoreI32ConstAtom),
-    CoreFunctionBranchJoinPending,
+/// Core expression form after CPS/closure lowering.
+data CoreExprKind {
+    CoreExprUnit,
+    CoreExprI32Zero,
+    CoreExprI32FortyTwo,
+    CoreExprParam0,
+    CoreExprTailCall(str),
+    CoreExprTailCallI32Const(str, CoreI32ConstAtom),
+    CoreExprIfElseI32Const(CoreBranchCondition, CoreI32ConstAtom, CoreI32ConstAtom),
+    CoreExprBranchJoinPending,
 }
 
 /// Core operation class understood by the dumb backend emitter.
@@ -87,7 +87,7 @@ type CoreOp {
     export_main: bool,
     function_symbol: Option[CoreFunctionSymbol],
     i32_param_count: usize,
-    function_body: Option[CoreFunctionBody],
+    function_body: Option[CoreExprKind],
     layout: Option[WasmGcLayout],
     tail: CoreTailPosition,
     runtime_state: CoreRuntimeState,
@@ -168,42 +168,73 @@ def core_branch_condition_from_typed(condition: TypedBranchCondition): CoreBranc
         TypedBranchConditionParam0 => CoreBranchConditionParam0
     }
 
-/// Convert a C08 typed function body to backend Core body form.
-def core_function_body_from_typed(body: TypedFunctionBodyKind): CoreFunctionBody =
-    match body {
-        TypedFunctionReturnUnit => CoreFunctionReturnUnit
-        TypedFunctionReturnI32Zero => CoreFunctionReturnI32Zero
-        TypedFunctionReturnI32FortyTwo => CoreFunctionReturnI32FortyTwo
-        TypedFunctionReturnParam0 => CoreFunctionReturnParam0
-        TypedFunctionTailCall(target) => CoreFunctionTailCall(target)
-        TypedFunctionTailCallI32Const(target, arg) => CoreFunctionTailCallI32Const(target, core_i32_const_atom_from_typed(arg))
-        TypedFunctionIfElseI32Const(condition, then_atom, else_atom) =>
-            CoreFunctionIfElseI32Const(
+/// Convert one CPS atom to Core expression form.
+def core_expr_from_cps_atom(atom: CpsAtom): CoreExprKind =
+    match atom {
+        CpsAtomUnit => CoreExprUnit
+        CpsAtomI32Const(TypedI32ConstZero) => CoreExprI32Zero
+        CpsAtomI32Const(TypedI32ConstFortyTwo) => CoreExprI32FortyTwo
+        CpsAtomParam0 => CoreExprParam0
+    }
+
+/// Convert a one-argument CPS tail call to Core expression form.
+def core_expr_from_cps_tail_call_arg(target: str, args: Array[CpsAtom]): CoreExprKind =
+    if args.len() == 0 { CoreExprTailCall(target) }
+    else {
+        match args.get(0) {
+            CpsAtomI32Const(atom) => CoreExprTailCallI32Const(target, core_i32_const_atom_from_typed(atom))
+            _ => CoreExprBranchJoinPending
+        }
+    }
+
+/// Convert a CPS tail term to backend Core expression form.
+def core_expr_from_cps_term(term: CpsTermKind): CoreExprKind =
+    match term {
+        CpsTermReturn(atom) => core_expr_from_cps_atom(atom)
+        CpsTermTailCall(target, args) => core_expr_from_cps_tail_call_arg(target, args)
+        CpsTermBranch(condition, CpsTermReturn(CpsAtomI32Const(then_atom)), CpsTermReturn(CpsAtomI32Const(else_atom))) =>
+            CoreExprIfElseI32Const(
                 core_branch_condition_from_typed(condition),
                 core_i32_const_atom_from_typed(then_atom),
                 core_i32_const_atom_from_typed(else_atom))
-        TypedFunctionBranchJoinPending => CoreFunctionBranchJoinPending
+        CpsTermPendingJoin => CoreExprBranchJoinPending
+        _ => CoreExprBranchJoinPending
     }
 
-/// Lower one typed function fact into a Core function op.
-def lower_typed_function_fact(fact: TypedFunctionBodyFact): CoreOp =
+/// Return true when two binder ids identify the same owner.
+def core_binder_id_eq(left: BinderId, right: BinderId): bool = left.id == right.id
+
+/// Find the typed function metadata for one CPS term owner.
+def core_typed_function_for_owner(functions: Array[TypedFunctionFact], owner: BinderId, index: usize): Option[TypedFunctionFact] =
+    if index == functions.len() { None }
+    else if core_binder_id_eq(functions.get(index).owner, owner) { Some(functions.get(index)) }
+    else { core_typed_function_for_owner(functions, owner, index + 1) }
+
+/// Lower one CPS term fact into a Core function op.
+def lower_cps_term_fact(term: CpsTermFact, function: TypedFunctionFact): CoreOp =
     CoreOp {
-        owner: Some(fact.owner),
+        owner: Some(term.owner),
         kind: CoreOpFunction,
-        export_main: fact.is_main,
-        function_symbol: Some(CoreFunctionSymbol { name: fact.symbol }),
-        i32_param_count: fact.i32_param_count,
-        function_body: Some(core_function_body_from_typed(fact.body)),
+        export_main: function.is_main,
+        function_symbol: Some(CoreFunctionSymbol { name: function.symbol }),
+        i32_param_count: function.i32_param_count,
+        function_body: Some(core_expr_from_cps_term(term.term)),
         layout: None,
         tail: CorePlainCall,
         runtime_state: CoreNoRuntimeState,
         frame_count: 0,
     }
 
-/// Lower typed function facts into Core ops before closure/continuation materialization.
-def lower_typed_function_facts(facts: Array[TypedFunctionBodyFact], index: usize, out: Vec[CoreOp]): Array[CoreOp] =
-    if index == facts.len() { out.freeze() }
-    else { lower_typed_function_facts(facts, index + 1, out.push(lower_typed_function_fact(facts.get(index)))) }
+/// Lower CPS term facts into Core ops before closure/continuation materialization.
+def lower_cps_term_facts(terms: Array[CpsTermFact], functions: Array[TypedFunctionFact], index: usize, out: Vec[CoreOp]): Array[CoreOp] =
+    if index == terms.len() { out.freeze() }
+    else {
+        let term = terms.get(index)
+        match core_typed_function_for_owner(functions, term.owner, 0) {
+            Some(function) => lower_cps_term_facts(terms, functions, index + 1, out.push(lower_cps_term_fact(term, function)))
+            None => lower_cps_term_facts(terms, functions, index + 1, out)
+        }
+    }
 
 /// Lower one closure lowering fact into an optional Core operation.
 def lower_closure_fact(fact: ClosureLoweringFact): Option[CoreOp] =
@@ -361,11 +392,11 @@ def lower_continuation_facts(facts: Array[ContinuationLoweringFact], index: usiz
     else { lower_continuation_facts(facts, index + 1, push_continuation_core_ops(out, facts.get(index))) }
 
 /// Pick the block terminator required by one lowered Core function body.
-def core_function_body_terminator(body: Option[CoreFunctionBody]): CoreBlockTerminator =
+def core_function_body_terminator(body: Option[CoreExprKind]): CoreBlockTerminator =
     match body {
-        Some(CoreFunctionTailCall(_)) => CoreBlockTailCall
-        Some(CoreFunctionTailCallI32Const(_, _)) => CoreBlockTailCall
-        Some(CoreFunctionBranchJoinPending) => CoreBlockContinue
+        Some(CoreExprTailCall(_)) => CoreBlockTailCall
+        Some(CoreExprTailCallI32Const(_, _)) => CoreBlockTailCall
+        Some(CoreExprBranchJoinPending) => CoreBlockContinue
         None => CoreBlockContinue
         _ => CoreBlockReturn
     }
@@ -454,12 +485,13 @@ def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[Cor
 
 /// Lower optimized closure Core to Wasm-GC Core.
 def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
-    let function_ops = lower_typed_function_facts(optimized_closure_typed_module(module).functions, 0, Vec[CoreOp].new())
+    let cps_module = optimized_closure_cps_module(module)
+    let function_ops = lower_cps_term_facts(cps_module.terms, optimized_closure_typed_module(module).functions, 0, Vec[CoreOp].new())
     let closure_ops = lower_closure_facts(module.closures, 0, Vec[CoreOp].new())
     let continuation_ops = lower_continuation_facts(module.continuations, 0, Vec[CoreOp].new())
-    let branch_join_obligations = core_branch_join_lowering_obligations(optimized_closure_cps_module(module).branch_joins, 0, Vec[CoreBranchJoinLoweringObligation].new())
-    let pattern_decision_obligations = core_pattern_decision_lowering_obligations(optimized_closure_cps_module(module).pattern_decisions, 0, Vec[CorePatternDecisionLoweringObligation].new())
-    let adt_ctor_obligations = core_adt_ctor_lowering_obligations(optimized_closure_cps_module(module).adt_ctors, 0, Vec[CoreAdtCtorLoweringObligation].new())
+    let branch_join_obligations = core_branch_join_lowering_obligations(cps_module.branch_joins, 0, Vec[CoreBranchJoinLoweringObligation].new())
+    let pattern_decision_obligations = core_pattern_decision_lowering_obligations(cps_module.pattern_decisions, 0, Vec[CorePatternDecisionLoweringObligation].new())
+    let adt_ctor_obligations = core_adt_ctor_lowering_obligations(cps_module.adt_ctors, 0, Vec[CoreAdtCtorLoweringObligation].new())
     let ops = append_core_ops(Vec[CoreOp].new(), function_ops, 0)
         |> append_core_ops(closure_ops, 0)
         |> append_core_ops(continuation_ops, 0)

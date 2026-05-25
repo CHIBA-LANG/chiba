@@ -92,18 +92,18 @@ def core_branch_condition_requires_param0(condition: CoreBranchCondition): bool 
         _ => false
     }
 
-/// Return true when a minimal function body reads param0.
-def core_function_body_requires_param0(body: CoreFunctionBody): bool =
+/// Return true when a Core expression body reads param0.
+def core_function_body_requires_param0(body: CoreExprKind): bool =
     match body {
-        CoreFunctionReturnParam0 => true
-        CoreFunctionIfElseI32Const(condition, _, _) => core_branch_condition_requires_param0(condition)
+        CoreExprParam0 => true
+        CoreExprIfElseI32Const(condition, _, _) => core_branch_condition_requires_param0(condition)
         _ => false
     }
 
 /// Validate that branch join facts are not emitted as fake function bodies.
 def validate_core_function_body(op: CoreOp): Option[CoreValidationError] =
     match op.function_body {
-        Some(CoreFunctionBranchJoinPending) => Some(CoreMissingBranchBody("branch join function body lowering absent"))
+        Some(CoreExprBranchJoinPending) => Some(CoreMissingBranchBody("branch join function body lowering absent"))
         Some(body) =>
             if core_function_body_requires_param0(body) && op.i32_param_count == 0 { Some(CoreMissingBranchBody("param0 function body requires i32 param")) }
             else { None }
@@ -160,10 +160,10 @@ def validate_core_duplicate_symbol(module: WasmGcCoreModule, op: CoreOp, next_in
 /// Validate direct symbol references inside Core function bodies.
 def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValidationError] =
     match op.function_body {
-        Some(CoreFunctionTailCall(target)) =>
+        Some(CoreExprTailCall(target)) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
-        Some(CoreFunctionTailCallI32Const(target, _)) =>
+        Some(CoreExprTailCallI32Const(target, _)) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
         _ => None

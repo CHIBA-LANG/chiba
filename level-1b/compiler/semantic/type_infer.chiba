@@ -35,33 +35,33 @@ type TypedItemSkeleton {
     column: usize,
 }
 
-/// Minimal typed body shape accepted by the first codegen vertical slice.
+/// Typed expression shape used by semantic lowering before CPS.
 data TypedI32ConstAtom {
     TypedI32ConstZero,
     TypedI32ConstFortyTwo,
 }
 
-/// Minimal branch condition accepted by the first branch codegen slice.
+/// Typed branch condition carried by typed expression lowering.
 data TypedBranchCondition {
     TypedBranchConditionTrue,
     TypedBranchConditionFalse,
     TypedBranchConditionParam0,
 }
 
-/// Minimal typed body shape accepted by the first codegen vertical slice.
-data TypedFunctionBodyKind {
-    TypedFunctionReturnUnit,
-    TypedFunctionReturnI32Zero,
-    TypedFunctionReturnI32FortyTwo,
-    TypedFunctionReturnParam0,
-    TypedFunctionTailCall(str),
-    TypedFunctionTailCallI32Const(str, TypedI32ConstAtom),
-    TypedFunctionIfElseI32Const(TypedBranchCondition, TypedI32ConstAtom, TypedI32ConstAtom),
-    TypedFunctionBranchJoinPending,
+/// Typed expression shape used by semantic lowering before CPS.
+data TypedExprKind {
+    TypedExprUnit,
+    TypedExprI32Zero,
+    TypedExprI32FortyTwo,
+    TypedExprParam0,
+    TypedExprTailCall(str),
+    TypedExprTailCallI32Const(str, TypedI32ConstAtom),
+    TypedExprIfElseI32Const(TypedBranchCondition, TypedI32ConstAtom, TypedI32ConstAtom),
+    TypedExprBranchJoinPending,
 }
 
 /// Function body fact that has passed the narrow C08 primary codegen subset.
-type TypedFunctionBodyFact {
+type TypedFunctionFact {
     owner: BinderId,
     file: SourceFileId,
     symbol: str,
@@ -69,10 +69,10 @@ type TypedFunctionBodyFact {
     is_main: bool,
     returns_i32: bool,
     i32_param_count: usize,
-    body: TypedFunctionBodyKind,
+    body: TypedExprKind,
 }
 
-/// Scan a minimal no-argument tail-call target from a function body region.
+/// Scan a function-slice no-argument tail-call target from a function body region.
 def typed_no_arg_call_exact(text: String, call_start: usize, end: usize): bool =
     if call_start >= end { false }
     else if text.byte_at(call_start) != 40 { false }
@@ -83,7 +83,7 @@ def typed_no_arg_call_exact(text: String, call_start: usize, end: usize): bool =
         else { typed_source_region_only_spaces(text, close + 1, end) }
     }
 
-/// Scan a minimal no-argument tail-call target from a function body region.
+/// Scan a function-slice no-argument tail-call target from a function body region.
 def typed_function_tail_call_target_slice(text: String, offset: usize, end: usize): Option[SourceNameSlice] =
     if offset >= end { None }
     else if offset >= text.len() { None }
@@ -95,7 +95,7 @@ def typed_function_tail_call_target_slice(text: String, offset: usize, end: usiz
         } else { typed_function_tail_call_target_slice(text, offset + 1, end) }
     } else { typed_function_tail_call_target_slice(text, offset + 1, end) }
 
-/// Convert a source name slice into the current minimal symbol spelling.
+/// Convert a source name slice into the current function-slice symbol spelling.
 def typed_function_tail_call_target_text(text: String, slice: SourceNameSlice): str =
     text.slice(slice.offset, slice.len)
 
@@ -105,7 +105,7 @@ def typed_symbol_is_qualified(symbol: str, index: usize): bool =
     else if symbol.byte_at(index) == 46 { true }
     else { typed_symbol_is_qualified(symbol, index + 1) }
 
-/// Convert a namespace slice into the current minimal symbol spelling.
+/// Convert a namespace slice into the current function-slice symbol spelling.
 def typed_namespace_symbol_text(text: String, namespace: NamespaceNameSlice): str =
     text.slice(namespace.offset, namespace.len)
 
@@ -113,7 +113,7 @@ def typed_namespace_symbol_text(text: String, namespace: NamespaceNameSlice): st
 def typed_qualified_symbol_text(text: String, namespace: NamespaceNameSlice, local: str): str =
     typed_namespace_symbol_text(text, namespace).concat(".").concat(local)
 
-/// Build the canonical minimal function symbol for a skeleton.
+/// Build the canonical function-slice function symbol for a skeleton.
 def typed_function_symbol_from_name(text: String, item: TypedItemSkeleton, name: SourceNameSlice): str =
     let local = typed_function_tail_call_target_text(text, name)
     match item.owner_namespace {
@@ -131,14 +131,14 @@ def typed_resolve_tail_call_target(text: String, item: TypedItemSkeleton, target
         }
     }
 
-/// Return true when a minimal body starts with one exact atom.
+/// Return true when a function-slice body starts with one exact atom.
 def typed_function_body_starts_with_atom(text: String, start: usize, end: usize, atom: str): bool =
     let offset = source_skip_spaces(text, start)
     if offset + atom.len() > end { false }
     else if source_starts_with_at(text, offset, atom, 0) == false { false }
     else { source_word_boundary_after(text, offset, atom.len()) }
 
-/// Pick the minimal i32 const atom at the start of a source region.
+/// Pick the function-slice i32 const atom at the start of a source region.
 def typed_i32_const_atom_from_region(text: String, start: usize, end: usize): Option[TypedI32ConstAtom] =
     if typed_function_body_starts_with_atom(text, start, end, "42") { Some(TypedI32ConstFortyTwo) }
     else if typed_function_body_starts_with_atom(text, start, end, "0") { Some(TypedI32ConstZero) }
@@ -154,7 +154,7 @@ def typed_i32_const_atom_exact_len(text: String, start: usize, end: usize, atom:
     if typed_source_region_only_spaces(text, offset + len, end) { Some(atom) }
     else { None }
 
-/// Pick the minimal i32 const atom only when it occupies the full source region.
+/// Pick the function-slice i32 const atom only when it occupies the full source region.
 def typed_i32_const_atom_exact_from_region(text: String, start: usize, end: usize): Option[TypedI32ConstAtom] =
     match typed_i32_const_atom_from_region(text, start, end) {
         Some(TypedI32ConstZero) => typed_i32_const_atom_exact_len(text, start, end, TypedI32ConstZero, 1)
@@ -232,7 +232,7 @@ def typed_function_body_returns_param0(text: String, item: TypedItemSkeleton, st
         None => false
     }
 
-/// Scan a minimal one-i32-const-argument tail-call target from a function body.
+/// Scan a function-slice one-i32-const-argument tail-call target from a function body.
 def typed_function_tail_call_i32_const_slice(text: String, offset: usize, end: usize): Option[SourceNameSlice] =
     if offset >= end { None }
     else if offset >= text.len() { None }
@@ -251,7 +251,7 @@ def typed_function_tail_call_i32_const_slice(text: String, offset: usize, end: u
         } else { typed_function_tail_call_i32_const_slice(text, offset + 1, end) }
     } else { typed_function_tail_call_i32_const_slice(text, offset + 1, end) }
 
-/// Pick the i32 const argument of a minimal tail call.
+/// Pick the i32 const argument of a function-slice tail call.
 def typed_function_tail_call_i32_const_arg(text: String, target: SourceNameSlice, end: usize): Option[TypedI32ConstAtom] =
     let call_start = source_skip_spaces(text, source_name_slice_end(target))
     if call_start >= end { None }
@@ -265,12 +265,12 @@ def typed_function_tail_call_i32_const_arg(text: String, target: SourceNameSlice
         }
     }
 
-/// Parse a minimal one-i32-const-argument tail call from a bounded arm.
-def typed_function_tail_call_i32_const_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedFunctionBodyKind] =
+/// Parse a function-slice one-i32-const-argument tail call from a bounded arm.
+def typed_function_tail_call_i32_const_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
     match typed_function_tail_call_i32_const_slice(text, start, end) {
         Some(target) =>
             match typed_function_tail_call_i32_const_arg(text, target, end) {
-                Some(arg) => Some(TypedFunctionTailCallI32Const(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)), arg))
+                Some(arg) => Some(TypedExprTailCallI32Const(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)), arg))
                 None => None
             }
         None => None
@@ -308,7 +308,7 @@ def typed_branch_condition_from_item_region(text: String, item: TypedItemSkeleto
     }
 
 /// Parse a narrow `if true/false { const } else { const }` body.
-def typed_function_if_else_const_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedFunctionBodyKind] =
+def typed_function_if_else_const_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
     match typed_branch_condition_from_item_region(text, item, start, end) {
         Some(condition) => {
             let then_open = typed_source_region_find_byte_or_end(text, start, end, 123)
@@ -322,7 +322,7 @@ def typed_function_if_else_const_body(text: String, item: TypedItemSkeleton, sta
                 match typed_i32_const_atom_exact_from_region(text, then_open + 1, then_close) {
                     Some(then_atom) =>
                         match typed_i32_const_atom_exact_from_region(text, else_open + 1, else_close) {
-                            Some(else_atom) => Some(TypedFunctionIfElseI32Const(condition, then_atom, else_atom))
+                            Some(else_atom) => Some(TypedExprIfElseI32Const(condition, then_atom, else_atom))
                             None => None
                         }
                     None => None
@@ -332,7 +332,7 @@ def typed_function_if_else_const_body(text: String, item: TypedItemSkeleton, sta
         None => None
     }
 
-/// Compare two minimal source symbols byte-for-byte.
+/// Compare two function-slice source symbols byte-for-byte.
 def typed_function_symbol_eq(left: str, right: str, index: usize): bool =
     if index == left.len() && index == right.len() { true }
     else if index == left.len() { false }
@@ -340,34 +340,34 @@ def typed_function_symbol_eq(left: str, right: str, index: usize): bool =
     else if left.byte_at(index) == right.byte_at(index) { typed_function_symbol_eq(left, right, index + 1) }
     else { false }
 
-/// Return the callee target carried by a minimal typed body.
-def typed_function_tail_call_target(body: TypedFunctionBodyKind): Option[str] =
+/// Return the callee target carried by a function-slice typed body.
+def typed_function_tail_call_target(body: TypedExprKind): Option[str] =
     match body {
-        TypedFunctionTailCall(target) => Some(target)
-        TypedFunctionTailCallI32Const(target, _) => Some(target)
+        TypedExprTailCall(target) => Some(target)
+        TypedExprTailCallI32Const(target, _) => Some(target)
         _ => None
     }
 
 /// Return true when the current typed function set defines one symbol.
-def typed_functions_have_symbol(functions: Array[TypedFunctionBodyFact], target: str, index: usize): bool =
+def typed_functions_have_symbol(functions: Array[TypedFunctionFact], target: str, index: usize): bool =
     if index == functions.len() { false }
     else if typed_function_symbol_eq(functions.get(index).symbol, target, 0) { true }
     else { typed_functions_have_symbol(functions, target, index + 1) }
 
 /// Return true when the same typed function symbol appears later.
-def typed_functions_have_later_symbol(functions: Array[TypedFunctionBodyFact], target: str, index: usize): bool =
+def typed_functions_have_later_symbol(functions: Array[TypedFunctionFact], target: str, index: usize): bool =
     if index == functions.len() { false }
     else if typed_function_symbol_eq(functions.get(index).symbol, target, 0) { true }
     else { typed_functions_have_later_symbol(functions, target, index + 1) }
 
 /// Return true when typed function symbols are unique.
-def typed_function_symbols_unique(functions: Array[TypedFunctionBodyFact], index: usize): bool =
+def typed_function_symbols_unique(functions: Array[TypedFunctionFact], index: usize): bool =
     if index == functions.len() { true }
     else if typed_functions_have_later_symbol(functions, functions.get(index).symbol, index + 1) { false }
     else { typed_function_symbols_unique(functions, index + 1) }
 
 /// Return true when exported main follows the current no-param ABI slice.
-def typed_function_main_abi_valid(functions: Array[TypedFunctionBodyFact], index: usize): bool =
+def typed_function_main_abi_valid(functions: Array[TypedFunctionFact], index: usize): bool =
     if index == functions.len() { true }
     else {
         let function = functions.get(index)
@@ -377,16 +377,16 @@ def typed_function_main_abi_valid(functions: Array[TypedFunctionBodyFact], index
         } else { typed_function_main_abi_valid(functions, index + 1) }
     }
 
-/// Return true when every minimal tail-call target resolves within this typed module.
-def typed_function_tail_targets_resolved_for_body(functions: Array[TypedFunctionBodyFact], body: TypedFunctionBodyKind): bool =
+/// Return true when every function-slice tail-call target resolves within this typed module.
+def typed_function_tail_targets_resolved_for_body(functions: Array[TypedFunctionFact], body: TypedExprKind): bool =
     match body {
-        TypedFunctionTailCall(target) => typed_functions_have_symbol(functions, target, 0)
-        TypedFunctionTailCallI32Const(target, _) => typed_functions_have_symbol(functions, target, 0)
+        TypedExprTailCall(target) => typed_functions_have_symbol(functions, target, 0)
+        TypedExprTailCallI32Const(target, _) => typed_functions_have_symbol(functions, target, 0)
         _ => true
     }
 
-/// Return true when every function body has resolved minimal tail-call targets.
-def typed_function_tail_targets_resolved(functions: Array[TypedFunctionBodyFact], index: usize): bool =
+/// Return true when every function body has resolved function-slice tail-call targets.
+def typed_function_tail_targets_resolved(functions: Array[TypedFunctionFact], index: usize): bool =
     if index == functions.len() { true }
     else if typed_function_tail_targets_resolved_for_body(functions, functions.get(index).body) {
         typed_function_tail_targets_resolved(functions, index + 1)
@@ -618,49 +618,49 @@ def source_name_slice_eq_text(text: String, name: SourceNameSlice, expected: str
 def typed_item_surface_returns_i32(text: String, item: TypedItemSkeleton): bool =
     source_region_has_text(text, item.surface.header.offset, item.surface.header.offset + item.surface.header.len, "i32")
 
-/// Pick the minimal typed body form from the source body region.
-def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton): TypedFunctionBodyKind =
+/// Pick the function-slice typed body form from the source body region.
+def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton): TypedExprKind =
     let start = source_scan_item_body_region_start(text, item.surface.header.offset)
     let end = source_scan_item_region_end(text, item.surface.header.offset)
     if typed_item_has_branching_surface(item) {
         match typed_function_if_else_const_body(text, item, start, end) {
             Some(body) => body
-            None => TypedFunctionBranchJoinPending
+            None => TypedExprBranchJoinPending
         }
     }
-    else if typed_function_body_returns_param0(text, item, start, end) { TypedFunctionReturnParam0 }
+    else if typed_function_body_returns_param0(text, item, start, end) { TypedExprParam0 }
     else {
         match typed_i32_const_atom_exact_from_region(text, start, end) {
-            Some(TypedI32ConstFortyTwo) => TypedFunctionReturnI32FortyTwo
-            Some(TypedI32ConstZero) => TypedFunctionReturnI32Zero
+            Some(TypedI32ConstFortyTwo) => TypedExprI32FortyTwo
+            Some(TypedI32ConstZero) => TypedExprI32Zero
             None => typed_function_non_const_body_kind_from_surface(text, item, start, end)
         }
     }
 
-/// Pick the non-const minimal typed body form from the source body region.
-def typed_function_non_const_body_kind_from_surface(text: String, item: TypedItemSkeleton, start: usize, end: usize): TypedFunctionBodyKind =
+/// Pick the non-const function-slice typed body form from the source body region.
+def typed_function_non_const_body_kind_from_surface(text: String, item: TypedItemSkeleton, start: usize, end: usize): TypedExprKind =
     match typed_function_tail_call_i32_const_slice(text, start, end) {
         Some(target) =>
             match typed_function_tail_call_i32_const_arg(text, target, end) {
-                Some(arg) => TypedFunctionTailCallI32Const(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)), arg)
-                None => TypedFunctionReturnUnit
+                Some(arg) => TypedExprTailCallI32Const(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)), arg)
+                None => TypedExprUnit
             }
         None =>
             match typed_function_tail_call_target_slice(text, start, end) {
-                Some(target) => TypedFunctionTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)))
-                None => TypedFunctionReturnUnit
+                Some(target) => TypedExprTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)))
+                None => TypedExprUnit
             }
     }
 
 /// Convert one simple function skeleton into a typed function body fact.
-def typed_function_body_fact_from_skeleton(project: ProjectSurface, item: TypedItemSkeleton): Option[TypedFunctionBodyFact] =
+def typed_function_fact_from_skeleton(project: ProjectSurface, item: TypedItemSkeleton): Option[TypedFunctionFact] =
     match item.skeleton_kind {
         TypedItemFunction => {
             let text = typed_source_file_text(project.files, item.file, 0)
             let returns_i32 = typed_item_surface_returns_i32(text, item)
             match item.name {
                 Some(name) =>
-                    Some(TypedFunctionBodyFact {
+                    Some(TypedFunctionFact {
                         owner: item.binder,
                         file: item.file,
                         symbol: typed_function_symbol_from_name(text, item, name),
@@ -677,12 +677,12 @@ def typed_function_body_fact_from_skeleton(project: ProjectSurface, item: TypedI
     }
 
 /// Build typed function body facts for the narrow codegen subset.
-def typed_function_body_facts_from_skeletons(project: ProjectSurface, skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[TypedFunctionBodyFact]): Array[TypedFunctionBodyFact] =
+def typed_function_facts_from_skeletons(project: ProjectSurface, skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[TypedFunctionFact]): Array[TypedFunctionFact] =
     if index == skeletons.len() { out.freeze() }
     else {
-        match typed_function_body_fact_from_skeleton(project, skeletons.get(index)) {
-            Some(fact) => typed_function_body_facts_from_skeletons(project, skeletons, index + 1, out.push(fact))
-            None => typed_function_body_facts_from_skeletons(project, skeletons, index + 1, out)
+        match typed_function_fact_from_skeleton(project, skeletons.get(index)) {
+            Some(fact) => typed_function_facts_from_skeletons(project, skeletons, index + 1, out.push(fact))
+            None => typed_function_facts_from_skeletons(project, skeletons, index + 1, out)
         }
     }
 
@@ -1475,7 +1475,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let generic_template_obligations = generic_template_obligations_from_surface(generic_surface, 0, Vec[GenericTemplateObligation].new())
     let operator_use_surface = operator_use_surface_facts_from_skeletons(skeletons, 0, Vec[OperatorUseSurfaceFact].new())
     let closure_surface = closure_surface_facts_from_skeletons(skeletons, 0, Vec[ClosureSurfaceFact].new())
-    let functions = typed_function_body_facts_from_skeletons(module.project, skeletons, 0, Vec[TypedFunctionBodyFact].new())
+    let functions = typed_function_facts_from_skeletons(module.project, skeletons, 0, Vec[TypedFunctionFact].new())
     let adt_ctors = typed_adt_ctors_from_skeletons(module.project, skeletons, 0, Vec[LoweredAdtCtor].new())
     if skeletons.len() == 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
@@ -1660,7 +1660,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
-def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], functions: Array[TypedFunctionBodyFact], adt_ctors: Array[LoweredAdtCtor], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], namespace_imports: Array[NamespaceImportFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], patterns: PatternFacts, intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact], closure_surface: Array[ClosureSurfaceFact]): TypedModule =
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], functions: Array[TypedFunctionFact], adt_ctors: Array[LoweredAdtCtor], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], namespace_imports: Array[NamespaceImportFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], patterns: PatternFacts, intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact], closure_surface: Array[ClosureSurfaceFact]): TypedModule =
     TypedModule {
         alpha: module,
         items: skeletons,

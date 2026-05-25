@@ -17,10 +17,34 @@ data CpsContinuation {
 type CpsModule {
     source: ReplaySafeModule,
     continuations: Array[ContinuationFact],
+    terms: Array[CpsTermFact],
     tail_forms: Array[CpsTailFormFact],
     branch_joins: Array[CpsBranchJoinFact],
     pattern_decisions: Array[CpsPatternDecisionFact],
     adt_ctors: Array[CpsAdtCtorLoweringFact],
+}
+
+/// CPS atom that never allocates a continuation.
+data CpsAtom {
+    CpsAtomUnit,
+    CpsAtomI32Const(TypedI32ConstAtom),
+    CpsAtomParam0,
+}
+
+/// CPS term kind after one-pass CPS and administrative beta.
+data CpsTermKind {
+    CpsTermReturn(CpsAtom),
+    CpsTermTailCall(str, Array[CpsAtom]),
+    CpsTermBranch(TypedBranchCondition, CpsTermKind, CpsTermKind),
+    CpsTermApplyContinuation(CpsContinuation, CpsAtom),
+    CpsTermPendingJoin,
+}
+
+/// Per-function CPS term used by Core lowering.
+type CpsTermFact {
+    owner: BinderId,
+    term: CpsTermKind,
+    tail_position: bool,
 }
 
 /// Tail shape after one-pass CPS and administrative beta reduction.
@@ -143,6 +167,7 @@ def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostic
         Ok(CpsModule(
             module,
             continuations,
+            cps_term_facts_from_functions(module.usage.answer.typed.functions, 0, Vec[CpsTermFact].new()),
             cps_tail_form_facts_from_continuations(continuations, 0, tail_builder),
             cps_branch_join_facts_from_plans(branches, 0, Vec[CpsBranchJoinFact].new()),
             cps_pattern_decision_facts(module.usage.answer.typed),
@@ -158,7 +183,7 @@ def cps_continuation_facts_none(): Array[ContinuationFact] =
     Vec[ContinuationFact].new().freeze()
 
 /// Build a tail-return fact for one ordinary typed function.
-def cps_tail_form_fact_from_function(function: TypedFunctionBodyFact): CpsTailFormFact =
+def cps_tail_form_fact_from_function(function: TypedFunctionFact): CpsTailFormFact =
     CpsTailFormFact {
         owner: function.owner,
         kind: cps_tail_form_kind_from_function(function),
@@ -166,18 +191,18 @@ def cps_tail_form_fact_from_function(function: TypedFunctionBodyFact): CpsTailFo
     }
 
 /// Pick the CPS tail kind for a typed function body.
-def cps_tail_form_kind_from_function(function: TypedFunctionBodyFact): CpsTailFormKind =
+def cps_tail_form_kind_from_function(function: TypedFunctionFact): CpsTailFormKind =
     match function.body {
-        TypedFunctionTailCall(target) => CpsTailCall(target)
-        TypedFunctionTailCallI32Const(target, _) => CpsTailCall(target)
-        TypedFunctionReturnParam0 => CpsTailReturn
-        TypedFunctionIfElseI32Const(_, _, _) => CpsTailReturn
-        TypedFunctionBranchJoinPending => CpsTailReturn
+        TypedExprTailCall(target) => CpsTailCall(target)
+        TypedExprTailCallI32Const(target, _) => CpsTailCall(target)
+        TypedExprParam0 => CpsTailReturn
+        TypedExprIfElseI32Const(_, _, _) => CpsTailReturn
+        TypedExprBranchJoinPending => CpsTailReturn
         _ => CpsTailReturn
     }
 
 /// Build CPS tail-form facts for ordinary functions in stable owner order.
-def cps_tail_form_facts_from_functions(functions: Array[TypedFunctionBodyFact], index: usize, out: Vec[CpsTailFormFact]): Array[CpsTailFormFact] =
+def cps_tail_form_facts_from_functions(functions: Array[TypedFunctionFact], index: usize, out: Vec[CpsTailFormFact]): Array[CpsTailFormFact] =
     if index == functions.len() { out.freeze() }
     else { cps_tail_form_facts_from_functions(functions, index + 1, out.push(cps_tail_form_fact_from_function(functions.get(index)))) }
 
@@ -207,6 +232,36 @@ def cps_tail_form_facts_from_continuations(facts: Array[ContinuationFact], index
 def cps_tail_form_facts_copy(facts: Array[CpsTailFormFact], index: usize, out: Vec[CpsTailFormFact]): Vec[CpsTailFormFact] =
     if index == facts.len() { out }
     else { cps_tail_form_facts_copy(facts, index + 1, out.push(facts.get(index))) }
+
+/// Convert a typed expression body into one CPS tail term.
+def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
+    match body {
+        TypedExprUnit => CpsTermReturn(CpsAtomUnit)
+        TypedExprI32Zero => CpsTermReturn(CpsAtomI32Const(TypedI32ConstZero))
+        TypedExprI32FortyTwo => CpsTermReturn(CpsAtomI32Const(TypedI32ConstFortyTwo))
+        TypedExprParam0 => CpsTermReturn(CpsAtomParam0)
+        TypedExprTailCall(target) => CpsTermTailCall(target, Vec[CpsAtom].new().freeze())
+        TypedExprTailCallI32Const(target, arg) => CpsTermTailCall(target, Vec[CpsAtom].new().push(CpsAtomI32Const(arg)).freeze())
+        TypedExprIfElseI32Const(condition, then_atom, else_atom) =>
+            CpsTermBranch(
+                condition,
+                CpsTermReturn(CpsAtomI32Const(then_atom)),
+                CpsTermReturn(CpsAtomI32Const(else_atom)))
+        TypedExprBranchJoinPending => CpsTermPendingJoin
+    }
+
+/// Convert one typed function into the CPS term fact consumed by Core.
+def cps_term_fact_from_function(function: TypedFunctionFact): CpsTermFact =
+    CpsTermFact {
+        owner: function.owner,
+        term: cps_term_from_typed_expr(function.body),
+        tail_position: true,
+    }
+
+/// Build CPS term facts for typed functions in stable owner order.
+def cps_term_facts_from_functions(functions: Array[TypedFunctionFact], index: usize, out: Vec[CpsTermFact]): Array[CpsTermFact] =
+    if index == functions.len() { out.freeze() }
+    else { cps_term_facts_from_functions(functions, index + 1, out.push(cps_term_fact_from_function(functions.get(index)))) }
 
 /// Return true when a continuation must materialize as a package.
 def CpsContinuation.materialized(self): bool =

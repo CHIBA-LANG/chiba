@@ -267,7 +267,7 @@ def stackless_resume_function_for_owner(owner: BinderId): StacklessResumeFunctio
         answer: TypeUnknown,
     }
 
-/// Build a minimal repeatable ContN frame with capture extraction still external.
+/// Build a repeatable ContN frame with capture extraction still external.
 def continuation_frame_for_owner(owner: BinderId): ContinuationFrame =
     ContinuationFrame {
         owner: owner,

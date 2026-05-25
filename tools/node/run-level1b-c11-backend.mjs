@@ -43,19 +43,19 @@ const REQUIRED_TEXT = [
   "requires_utf8_identifier_lowering: bool",
   "data CoreRuntimeState",
   "CoreConsumedStateMachine",
-  "data CoreFunctionBody",
+  "data CoreExprKind",
   "data CoreI32ConstAtom",
   "data CoreBranchCondition",
-  "CoreFunctionReturnI32FortyTwo",
-  "CoreFunctionReturnParam0",
-  "CoreFunctionTailCall",
-  "CoreFunctionTailCallI32Const",
-  "CoreFunctionIfElseI32Const",
-  "CoreFunctionBranchJoinPending",
+  "CoreExprI32FortyTwo",
+  "CoreExprParam0",
+  "CoreExprTailCall",
+  "CoreExprTailCallI32Const",
+  "CoreExprIfElseI32Const",
+  "CoreExprBranchJoinPending",
   "def core_i32_const_atom_from_typed",
   "def core_branch_condition_from_typed",
   "export_main: bool",
-  "function_body: Option[CoreFunctionBody]",
+  "function_body: Option[CoreExprKind]",
   "type CoreFunctionSymbol",
   "function_symbol: Option[CoreFunctionSymbol]",
   "i32_param_count: usize",
@@ -73,8 +73,9 @@ const REQUIRED_TEXT = [
   "def lower_closure_facts",
   "lower_closure_facts(module.closures",
   "def optimized_closure_typed_module",
-  "def lower_typed_function_fact",
-  "def lower_typed_function_facts",
+  "def core_expr_from_cps_term",
+  "def lower_cps_term_fact",
+  "def lower_cps_term_facts",
   "ClosureNoCaptureDirect => None",
   "ClosureCapturingEnv",
   "def lower_continuation_fact",
@@ -162,8 +163,8 @@ const REQUIRED_TEXT = [
   "def emit_core_function",
   "def emit_core_if_else_i32_const",
   "def emit_core_function_body",
-  "CoreFunctionTailCall(target)",
-  "CoreFunctionTailCallI32Const(target, arg)",
+  "CoreExprTailCall(target)",
+  "CoreExprTailCallI32Const(target, arg)",
   "(export \\\"main\\\")",
   "i32.const 42",
   "return_call $chiba.",
@@ -294,7 +295,7 @@ function checkMinimalFunctionWatSmoke() {
 (func (export "main") (result i32) i32.const 42)
 )`;
   compileWat(wat);
-  pass("minimal function WAT parse");
+  pass("function WAT parse");
 }
 
 function checkTailcallWatSmoke() {

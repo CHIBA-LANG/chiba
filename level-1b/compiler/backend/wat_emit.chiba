@@ -153,7 +153,7 @@ def emit_core_branch_condition(condition: CoreBranchCondition): String =
         CoreBranchConditionParam0 => "local.get 0"
     }
 
-/// Emit a minimal executable if/else expression.
+/// Emit an executable if/else expression.
 def emit_core_if_else_i32_const(condition: CoreBranchCondition, then_atom: CoreI32ConstAtom, else_atom: CoreI32ConstAtom): String =
     "(result i32) (if (result i32) ("
         .concat(emit_core_branch_condition(condition))
@@ -169,20 +169,20 @@ def emit_core_function_params(i32_param_count: usize): String =
     else { "(param i32) ".concat(emit_core_function_params(i32_param_count - 1)) }
 
 /// Emit the body instructions for one lowered Core function.
-def emit_core_function_body(body: Option[CoreFunctionBody]): String =
+def emit_core_function_body(body: Option[CoreExprKind]): String =
     match body {
-        Some(CoreFunctionReturnI32FortyTwo) => "(result i32) i32.const 42"
-        Some(CoreFunctionReturnI32Zero) => "(result i32) i32.const 0"
-        Some(CoreFunctionReturnParam0) => "(result i32) local.get 0"
-        Some(CoreFunctionTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
-        Some(CoreFunctionTailCallI32Const(target, arg)) =>
+        Some(CoreExprI32FortyTwo) => "(result i32) i32.const 42"
+        Some(CoreExprI32Zero) => "(result i32) i32.const 0"
+        Some(CoreExprParam0) => "(result i32) local.get 0"
+        Some(CoreExprTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
+        Some(CoreExprTailCallI32Const(target, arg)) =>
             "(result i32) "
                 .concat(emit_core_i32_const_atom(arg))
                 .concat(" return_call $chiba.")
                 .concat(target)
-        Some(CoreFunctionIfElseI32Const(condition, then_atom, else_atom)) => emit_core_if_else_i32_const(condition, then_atom, else_atom)
-        Some(CoreFunctionBranchJoinPending) => "(result i32) unreachable"
-        Some(CoreFunctionReturnUnit) => ""
+        Some(CoreExprIfElseI32Const(condition, then_atom, else_atom)) => emit_core_if_else_i32_const(condition, then_atom, else_atom)
+        Some(CoreExprBranchJoinPending) => "(result i32) unreachable"
+        Some(CoreExprUnit) => ""
         None => ""
     }
 
