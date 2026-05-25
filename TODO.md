@@ -51,6 +51,7 @@
 	- [x] minimal codegen typed function fact：C08 现在为无复杂 surface 的简单 `def` 生成 `TypedFunctionBodyFact`，能保留 `main` 与 `i32.const 42` 竖切；完整 type expression / expression AST traversal 仍未完成。
 		- [x] minimal tail-call body fact：C08 现在能把极窄 `callee()` body 标成 `TypedFunctionTailCall(target)`，用于验证 CPS tail-call lowering；完整 typed call graph / namespace-aware callee resolution 仍未完成。
 		- [x] minimal i32 param/tail-call fact：C08 现在能保留 `id(x: i32)=x` 与 `main=id(42)` 这类一参 i32 tail-call 竖切；完整 param AST / call argument lowering 仍未完成。
+		- [x] minimal param0 tail-call fact：C08/C11 现在能保留 `forward(x: i32)=id(x)` 并 emit `local.get 0 return_call $target`；多参/非 param0 argument lowering 仍未完成。
 		- [x] minimal callee symbol check：极窄尾调用 target 必须能在当前 typed function set 中解析到同名函数；同 namespace 裸调用会解析成 owner-qualified symbol，完整 import/mangle-aware call graph 仍未完成。
 		- [x] minimal i32 const call exactness：`f(42)` 窄 tail-call slice 现在要求 const arg 精确闭合且处于尾位置，避免把 `f(42 + x)` / `f(42, y)` / `f(42) + 1` 误编译成 `f(42)`。
 		- [x] minimal no-arg call exactness：`f()` 窄 tail-call slice 现在要求空参数精确闭合且处于尾位置，避免把 `f() + 1` 误编译成 `f()`。

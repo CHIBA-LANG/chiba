@@ -96,6 +96,7 @@ def core_branch_condition_requires_param0(condition: CoreBranchCondition): bool 
 def core_function_body_requires_param0(body: CoreFunctionBody): bool =
     match body {
         CoreFunctionReturnParam0 => true
+        CoreFunctionTailCallParam0(_) => true
         CoreFunctionIfElseI32Const(condition, _, _) => core_branch_condition_requires_param0(condition)
         CoreFunctionIfElseTailCall(condition, _, _) => core_branch_condition_requires_param0(condition)
         CoreFunctionIfElseTailCallI32Const(condition, _, _, _, _) => core_branch_condition_requires_param0(condition)
@@ -166,6 +167,9 @@ def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
         Some(CoreFunctionTailCallI32Const(target, _)) =>
+            if core_module_contains_symbol(module, target, 0) { None }
+            else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
+        Some(CoreFunctionTailCallParam0(target)) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
         Some(CoreFunctionIfElseTailCall(_, then_target, else_target)) =>

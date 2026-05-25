@@ -204,6 +204,8 @@ def emit_core_function_body(body: Option[CoreFunctionBody]): String =
                 .concat(emit_core_i32_const_atom(arg))
                 .concat(" return_call $chiba.")
                 .concat(target)
+        Some(CoreFunctionTailCallParam0(target)) =>
+            "(result i32) local.get 0 return_call $chiba.".concat(target)
         Some(CoreFunctionIfElseI32Const(condition, then_atom, else_atom)) => emit_core_if_else_i32_const(condition, then_atom, else_atom)
         Some(CoreFunctionIfElseTailCall(condition, then_target, else_target)) =>
             emit_core_if_else_tail_call(condition, then_target, else_target)

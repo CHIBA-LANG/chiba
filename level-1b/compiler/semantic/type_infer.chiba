@@ -56,6 +56,7 @@ data TypedFunctionBodyKind {
     TypedFunctionReturnParam0,
     TypedFunctionTailCall(str),
     TypedFunctionTailCallI32Const(str, TypedI32ConstAtom),
+    TypedFunctionTailCallParam0(str),
     TypedFunctionIfElseI32Const(TypedBranchCondition, TypedI32ConstAtom, TypedI32ConstAtom),
     TypedFunctionIfElseTailCall(TypedBranchCondition, str, str),
     TypedFunctionIfElseTailCallI32Const(TypedBranchCondition, str, TypedI32ConstAtom, str, TypedI32ConstAtom),
@@ -267,6 +268,37 @@ def typed_function_tail_call_i32_const_arg(text: String, target: SourceNameSlice
         }
     }
 
+/// Return true when a narrow call argument is exactly the first parameter.
+def typed_param0_call_arg_exact(text: String, item: TypedItemSkeleton, arg_start: usize, end: usize): bool =
+    match typed_function_first_param_name(text, item) {
+        Some(param) => {
+            if source_starts_with_at(text, arg_start, typed_function_tail_call_target_text(text, param), 0) == false { false }
+            else if source_word_boundary_after(text, arg_start, param.len) == false { false }
+            else {
+                let close = source_skip_spaces(text, arg_start + param.len)
+                if close >= end { false }
+                else if text.byte_at(close) != 41 { false }
+                else { typed_source_region_only_spaces(text, close + 1, end) }
+            }
+        }
+        None => false
+    }
+
+/// Scan a minimal one-param0-argument tail-call target from a function body.
+def typed_function_tail_call_param0_slice(text: String, item: TypedItemSkeleton, offset: usize, end: usize): Option[SourceNameSlice] =
+    if offset >= end { None }
+    else if offset >= text.len() { None }
+    else if source_is_ident_start(text.byte_at(offset)) {
+        let name_end = source_scan_namespace_name_end(text, offset)
+        let call_start = source_skip_spaces(text, name_end)
+        if call_start < end && text.byte_at(call_start) == 40 {
+            let arg_start = source_skip_spaces(text, call_start + 1)
+            if typed_param0_call_arg_exact(text, item, arg_start, end) {
+                Some(SourceNameSlice { offset: offset, len: name_end - offset })
+            } else { typed_function_tail_call_param0_slice(text, item, offset + 1, end) }
+        } else { typed_function_tail_call_param0_slice(text, item, offset + 1, end) }
+    } else { typed_function_tail_call_param0_slice(text, item, offset + 1, end) }
+
 /// Parse a minimal one-i32-const-argument tail call from a bounded arm.
 def typed_function_tail_call_i32_const_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedFunctionBodyKind] =
     match typed_function_tail_call_i32_const_slice(text, start, end) {
@@ -275,6 +307,13 @@ def typed_function_tail_call_i32_const_body(text: String, item: TypedItemSkeleto
                 Some(arg) => Some(TypedFunctionTailCallI32Const(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)), arg))
                 None => None
             }
+        None => None
+    }
+
+/// Parse a minimal one-param0-argument tail call from a bounded arm.
+def typed_function_tail_call_param0_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedFunctionBodyKind] =
+    match typed_function_tail_call_param0_slice(text, item, start, end) {
+        Some(target) => Some(TypedFunctionTailCallParam0(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target))))
         None => None
     }
 
@@ -439,6 +478,7 @@ def typed_function_tail_targets_resolved_for_body(functions: Array[TypedFunction
     match body {
         TypedFunctionTailCall(target) => typed_functions_have_symbol(functions, target, 0)
         TypedFunctionTailCallI32Const(target, _) => typed_functions_have_symbol(functions, target, 0)
+        TypedFunctionTailCallParam0(target) => typed_functions_have_symbol(functions, target, 0)
         TypedFunctionIfElseTailCall(_, then_target, else_target) =>
             if typed_functions_have_symbol(functions, then_target, 0) {
                 typed_functions_have_symbol(functions, else_target, 0)
@@ -719,9 +759,13 @@ def typed_function_non_const_body_kind_from_surface(text: String, item: TypedIte
                 None => TypedFunctionReturnUnit
             }
         None =>
-            match typed_function_tail_call_target_slice(text, start, end) {
-                Some(target) => TypedFunctionTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)))
-                None => TypedFunctionReturnUnit
+            match typed_function_tail_call_param0_body(text, item, start, end) {
+                Some(body) => body
+                None =>
+                    match typed_function_tail_call_target_slice(text, start, end) {
+                        Some(target) => TypedFunctionTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)))
+                        None => TypedFunctionReturnUnit
+                    }
             }
     }
 

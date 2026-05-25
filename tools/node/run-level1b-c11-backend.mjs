@@ -50,6 +50,7 @@ const REQUIRED_TEXT = [
   "CoreFunctionReturnParam0",
   "CoreFunctionTailCall",
   "CoreFunctionTailCallI32Const",
+  "CoreFunctionTailCallParam0",
   "CoreFunctionIfElseI32Const",
   "CoreFunctionIfElseTailCall",
   "CoreFunctionIfElseTailCallI32Const",
@@ -168,6 +169,7 @@ const REQUIRED_TEXT = [
   "def emit_core_function_body",
   "CoreFunctionTailCall(target)",
   "CoreFunctionTailCallI32Const(target, arg)",
+  "CoreFunctionTailCallParam0(target)",
   "CoreFunctionIfElseTailCall(condition, then_target, else_target)",
   "CoreFunctionIfElseTailCallI32Const(condition, then_target, then_arg, else_target, else_arg)",
   "(export \\\"main\\\")",
@@ -321,6 +323,15 @@ function checkParamTailcallWatSmoke() {
   pass("param tailcall WAT parse");
 }
 
+function checkParam0TailcallWatSmoke() {
+  const wat = `(module
+(func $chiba.id (param i32) (result i32) local.get 0)
+(func $chiba.forward (param i32) (result i32) local.get 0 return_call $chiba.id)
+)`;
+  compileWat(wat);
+  pass("param0 tailcall WAT parse");
+}
+
 function functionWat(symbol, body, exportName = "") {
   const exportText = exportName.length === 0 ? "" : ` (export "${exportName}")`;
   return `(func $chiba.${symbol}${exportText} (result i32) ${body})`;
@@ -432,6 +443,7 @@ function main() {
   checkMinimalFunctionWatSmoke();
   checkTailcallWatSmoke();
   checkParamTailcallWatSmoke();
+  checkParam0TailcallWatSmoke();
   checkSyntheticTailcallTargetWatFixture();
   checkBranchWatSmoke();
   checkParamConditionBranchWatSmoke();
