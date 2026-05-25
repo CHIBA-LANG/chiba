@@ -38,8 +38,9 @@
 	- [x] typed elaboration obligations：`TypedElaboration` 现在携带 item/type/body traversal obligations；真实 typed AST expression lowering 仍未完成。
 	- [x] minimal codegen typed function fact：C08 现在为无复杂 surface 的简单 `def` 生成 `TypedFunctionBodyFact`，能保留 `main` 与 `i32.const 42` 竖切；完整 type expression / expression AST traversal 仍未完成。
 	- [x] minimal tail-call body fact：C08 现在能把极窄 `callee()` body 标成 `TypedFunctionTailCall(target)`，用于验证 CPS tail-call lowering；完整 typed call graph / namespace-aware callee resolution 仍未完成。
-	- [x] minimal i32 param/tail-call fact：C08 现在能保留 `id(x: i32)=x` 与 `main=id(42)` 这类一参 i32 tail-call 竖切；完整 param AST / call argument lowering 仍未完成。
-	- [x] minimal callee symbol check：极窄尾调用 target 必须能在当前 typed function set 中解析到同名函数；同 namespace 裸调用会解析成 owner-qualified symbol，完整 import/mangle-aware call graph 仍未完成。
+		- [x] minimal i32 param/tail-call fact：C08 现在能保留 `id(x: i32)=x` 与 `main=id(42)` 这类一参 i32 tail-call 竖切；完整 param AST / call argument lowering 仍未完成。
+		- [x] minimal callee symbol check：极窄尾调用 target 必须能在当前 typed function set 中解析到同名函数；同 namespace 裸调用会解析成 owner-qualified symbol，完整 import/mangle-aware call graph 仍未完成。
+		- [x] minimal i32 const call exactness：`f(42)` 窄 tail-call slice 现在要求 const arg 精确闭合且处于尾位置，避免把 `f(42 + x)` / `f(42, y)` / `f(42) + 1` 误编译成 `f(42)`。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 	- [x] generic surface facts：typed module 已记录 explicit params、auto-generic、explicit instantiation、generic Self method surface；真实 template body checking 与 instantiation discharge 仍 fail-closed。
 	- [x] generic template obligations：typed pass 已把 generic surface 转成 `GenericTemplateObligation`，区分显式参数、auto-generic、实例化 discharge、generic Self receiver binding。
