@@ -84,7 +84,10 @@ def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostic
             .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: branching CPS join continuation planning absent"))
             .freeze()))
     } else if module.usage.facts.len() == 0 && module.replay.len() == 0 {
-        Ok(CpsModule(module, cps_continuation_facts_none(), cps_tail_form_facts_from_functions(module.usage.answer.typed.functions, 0, Vec[CpsTailFormFact].new())))
+        let continuations = cps_continuation_facts_none()
+        let function_tail_forms = cps_tail_form_facts_from_functions(module.usage.answer.typed.functions, 0, Vec[CpsTailFormFact].new())
+        let tail_builder = cps_tail_form_facts_copy(function_tail_forms, 0, Vec[CpsTailFormFact].new())
+        Ok(CpsModule(module, continuations, cps_tail_form_facts_from_continuations(continuations, 0, tail_builder)))
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: one-pass CPS with administrative beta-reduction absent"))
@@ -114,6 +117,33 @@ def cps_tail_form_kind_from_function(function: TypedFunctionBodyFact): CpsTailFo
 def cps_tail_form_facts_from_functions(functions: Array[TypedFunctionBodyFact], index: usize, out: Vec[CpsTailFormFact]): Array[CpsTailFormFact] =
     if index == functions.len() { out.freeze() }
     else { cps_tail_form_facts_from_functions(functions, index + 1, out.push(cps_tail_form_fact_from_function(functions.get(index)))) }
+
+/// Convert one continuation fact into a tail-form exception when it materializes ContN frames.
+def cps_tail_form_fact_from_continuation(fact: ContinuationFact): Option[CpsTailFormFact] =
+    match fact.capability {
+        ContinuationContN =>
+            Some(CpsTailFormFact {
+                owner: fact.binder,
+                kind: CpsMaterializedMultiShotFrame,
+                all_non_multishot_calls_are_tail: true,
+            })
+        _ => None
+    }
+
+/// Append multi-shot continuation materialization exceptions to tail-form facts.
+def cps_tail_form_facts_from_continuations(facts: Array[ContinuationFact], index: usize, out: Vec[CpsTailFormFact]): Array[CpsTailFormFact] =
+    if index == facts.len() { out.freeze() }
+    else {
+        match cps_tail_form_fact_from_continuation(facts.get(index)) {
+            Some(fact) => cps_tail_form_facts_from_continuations(facts, index + 1, out.push(fact))
+            None => cps_tail_form_facts_from_continuations(facts, index + 1, out)
+        }
+    }
+
+/// Copy existing tail-form facts into a builder before appending continuation exceptions.
+def cps_tail_form_facts_copy(facts: Array[CpsTailFormFact], index: usize, out: Vec[CpsTailFormFact]): Vec[CpsTailFormFact] =
+    if index == facts.len() { out }
+    else { cps_tail_form_facts_copy(facts, index + 1, out.push(facts.get(index))) }
 
 /// Return true when a continuation must materialize as a package.
 def CpsContinuation.materialized(self): bool =
