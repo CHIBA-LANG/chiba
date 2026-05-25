@@ -62,6 +62,23 @@ def parser_codegen_usize(value: usize): String =
 def append_parser_quoted(builder: DiagnosticBuilder, text: str): DiagnosticBuilder =
     builder.push_str("\"").push_str(text).push_str("\"")
 
+/// Return true when source starts with a fixed string at offset.
+def parser_codegen_starts_with_at(source: String, offset: usize, needle: str, index: usize): bool =
+    if index == needle.len() { true }
+    else if offset + index >= source.len() { false }
+    else if source.byte_at(offset + index) == needle.byte_at(index) { parser_codegen_starts_with_at(source, offset, needle, index + 1) }
+    else { false }
+
+/// Append semantic action source, rewriting Pratt `$lhs` into an ordinary local.
+def append_action_source(builder: DiagnosticBuilder, source: String, offset: usize): DiagnosticBuilder =
+    if offset >= source.len() { builder }
+    else if parser_codegen_starts_with_at(source, offset, "$lhs", 0) {
+        append_action_source(builder.push_str("lhs"), source, offset + "$lhs".len())
+    } else {
+        let next = offset + 1
+        append_action_source(builder.push_str(source.slice(offset, next - offset)), source, next)
+    }
+
 /// Append one lowered rule summary.
 def append_rule_summary(builder: DiagnosticBuilder, rule: LoweredRule): DiagnosticBuilder = {
     let base = builder
@@ -114,9 +131,11 @@ def append_atom_binding(builder: DiagnosticBuilder, atom: GrammarAtom, step_name
 def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], action: GrammarAction, step: usize, position_expr: str): DiagnosticBuilder =
     match atoms {
         ListNil =>
-            builder
-                .push_str("            Ok(ParseCandidate[AST] { value: ")
-                .push_str(action.source)
+            append_action_source(
+                builder
+                    .push_str("            Ok(ParseCandidate[AST] { value: "),
+                action.source,
+                0)
                 .push_str(", position: ")
                 .push_str(position_expr)
                 .push_str(" })\n")
