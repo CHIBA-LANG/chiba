@@ -102,10 +102,24 @@ def CoreOpKind.wat_label(self): String =
             }
     }
 
+/// Emit the body instructions for one lowered Core function.
+def emit_core_function_body(body: Option[CoreFunctionBody]): String =
+    match body {
+        Some(CoreFunctionReturnI32FortyTwo) => "(result i32) i32.const 42"
+        Some(CoreFunctionReturnI32Zero) => "(result i32) i32.const 0"
+        Some(CoreFunctionReturnUnit) => ""
+        None => ""
+    }
+
+/// Emit a function, exporting the first typed `main` slice as WebAssembly main.
+def emit_core_function(op: CoreOp): String =
+    let head = if op.export_main { "(func (export \"main\") " } else { "(func " }
+    head.concat(emit_core_function_body(op.function_body)).concat(")\n")
+
 /// Emit one Core op as WAT text.
 def emit_core_op(op: CoreOp): Result[String, SemanticDiagnostics] =
     match op.kind {
-        CoreOpFunction => Ok("(func)\n")
+        CoreOpFunction => Ok(emit_core_function(op))
         CoreOpStacklessFunction => Ok("(func)\n")
         CoreOpStructNew => Ok("(func (result eqref) ref.null eq)\n")
         CoreOpArrayNew => Ok("(func (result eqref) ref.null eq)\n")

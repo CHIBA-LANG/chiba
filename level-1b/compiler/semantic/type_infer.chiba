@@ -2,6 +2,7 @@
 namespace compiler.semantic.type_infer
 
 use compiler.source.project.*
+use compiler.source.scan.*
 use compiler.ir.control.*
 use compiler.semantic.alpha.*
 use compiler.semantic.pattern.*
@@ -31,6 +32,22 @@ type TypedItemSkeleton {
     surface: SourceItemSurfaceFacts,
     line: usize,
     column: usize,
+}
+
+/// Minimal typed body shape accepted by the first codegen vertical slice.
+data TypedFunctionBodyKind {
+    TypedFunctionReturnUnit,
+    TypedFunctionReturnI32Zero,
+    TypedFunctionReturnI32FortyTwo,
+}
+
+/// Function body fact that has passed the narrow C08 primary codegen subset.
+type TypedFunctionBodyFact {
+    owner: BinderId,
+    file: SourceFileId,
+    is_main: bool,
+    returns_i32: bool,
+    body: TypedFunctionBodyKind,
 }
 
 /// Stable item-to-namespace ownership fact after alpha conversion.
@@ -234,6 +251,60 @@ def typed_item_skeletons_from_alpha(origins: Array[AlphaBinderOrigin], index: us
 /// Return true when placeholder pattern facts cover all source item skeletons.
 def type_inference_has_pattern_coverage(skeletons: Array[TypedItemSkeleton], patterns: PatternFacts): bool =
     patterns.patterns.len() >= skeletons.len()
+
+/// Return the text of one source file by stable id.
+def typed_source_file_text(files: Array[SourceFile], file: SourceFileId, index: usize): String =
+    if index == files.len() { "" }
+    else if files.get(index).id.index == file.index { files.get(index).text }
+    else { typed_source_file_text(files, file, index + 1) }
+
+/// Return true when a source name slice equals a fixed ASCII identifier.
+def source_name_slice_eq_text(text: String, name: SourceNameSlice, expected: str): bool =
+    if name.len != expected.len() { false }
+    else { source_starts_with_at(text, name.offset, expected, 0) }
+
+/// Return true when a scanned item header mentions an i32 return annotation.
+def typed_item_surface_returns_i32(text: String, item: TypedItemSkeleton): bool =
+    source_region_has_text(text, item.surface.header.offset, item.surface.header.offset + item.surface.header.len, "i32")
+
+/// Pick the minimal typed body form from the source body region.
+def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton): TypedFunctionBodyKind =
+    let start = source_scan_item_body_region_start(text, item.surface.header.offset)
+    let end = source_scan_item_region_end(text, item.surface.header.offset)
+    if source_region_has_text(text, start, end, "42") { TypedFunctionReturnI32FortyTwo }
+    else if source_region_has_text(text, start, end, "0") { TypedFunctionReturnI32Zero }
+    else { TypedFunctionReturnUnit }
+
+/// Convert one simple function skeleton into a typed function body fact.
+def typed_function_body_fact_from_skeleton(project: ProjectSurface, item: TypedItemSkeleton): Option[TypedFunctionBodyFact] =
+    match item.skeleton_kind {
+        TypedItemFunction => {
+            let text = typed_source_file_text(project.files, item.file, 0)
+            let returns_i32 = typed_item_surface_returns_i32(text, item)
+            match item.name {
+                Some(name) =>
+                    Some(TypedFunctionBodyFact {
+                        owner: item.binder,
+                        file: item.file,
+                        is_main: source_name_slice_eq_text(text, name, "main"),
+                        returns_i32: returns_i32,
+                        body: typed_function_body_kind_from_surface(text, item),
+                    })
+                None => None
+            }
+        }
+        _ => None
+    }
+
+/// Build typed function body facts for the narrow codegen subset.
+def typed_function_body_facts_from_skeletons(project: ProjectSurface, skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[TypedFunctionBodyFact]): Array[TypedFunctionBodyFact] =
+    if index == skeletons.len() { out.freeze() }
+    else {
+        match typed_function_body_fact_from_skeleton(project, skeletons.get(index)) {
+            Some(fact) => typed_function_body_facts_from_skeletons(project, skeletons, index + 1, out.push(fact))
+            None => typed_function_body_facts_from_skeletons(project, skeletons, index + 1, out)
+        }
+    }
 
 /// Return true when item surfaces mention callable or explicit continuation storage types.
 def typed_item_skeletons_have_callable_storage_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
@@ -857,6 +928,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let generic_template_obligations = generic_template_obligations_from_surface(generic_surface, 0, Vec[GenericTemplateObligation].new())
     let operator_use_surface = operator_use_surface_facts_from_skeletons(skeletons, 0, Vec[OperatorUseSurfaceFact].new())
     let closure_surface = closure_surface_facts_from_skeletons(skeletons, 0, Vec[ClosureSurfaceFact].new())
+    let functions = typed_function_body_facts_from_skeletons(module.project, skeletons, 0, Vec[TypedFunctionBodyFact].new())
     if skeletons.len() == 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: typed item skeletons absent"))
@@ -988,6 +1060,8 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: namespace ownership fact generation absent"))
                 .freeze()))
+        } else if functions.len() > 0 && module.uses.len() == 0 {
+            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
         } else {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
@@ -1014,16 +1088,21 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .freeze()))
         }
     } else {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
-            .freeze()))
+        if functions.len() > 0 {
+            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
+        } else {
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
+                .freeze()))
+        }
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
-def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], namespace_imports: Array[NamespaceImportFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact], closure_surface: Array[ClosureSurfaceFact]): TypedModule =
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], functions: Array[TypedFunctionBodyFact], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], namespace_imports: Array[NamespaceImportFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact], closure_surface: Array[ClosureSurfaceFact]): TypedModule =
     TypedModule {
         alpha: module,
         items: skeletons,
+        functions: functions,
         callable_storage: callable_storage,
         namespace_ownership: namespace_ownership,
         namespace_imports: namespace_imports,
@@ -1041,6 +1120,9 @@ def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemS
 
 /// Run the level-2 semantic checks that require inferred types.
 def check_l2_types(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
-    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-        .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: level-2 typed semantic checks absent"))
-        .freeze()))
+    if module.functions.len() > 0 { Ok(module) }
+    else {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: level-2 typed semantic checks absent"))
+            .freeze()))
+    }

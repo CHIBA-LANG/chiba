@@ -23,7 +23,12 @@ const REQUIRED_TEXT = [
   "def core_block_lowering_obligations",
   "data CoreRuntimeState",
   "CoreConsumedStateMachine",
+  "data CoreFunctionBody",
+  "CoreFunctionReturnI32FortyTwo",
+  "export_main: bool",
+  "function_body: Option[CoreFunctionBody]",
   "frame_count: usize",
+  "CoreOpFunction",
   "CoreOpStacklessFunction",
   "CoreOpBoxedCont1",
   "CoreOpContinuationFrameChain",
@@ -33,6 +38,9 @@ const REQUIRED_TEXT = [
   "def lower_closure_fact",
   "def lower_closure_facts",
   "lower_closure_facts(module.closures",
+  "def optimized_closure_typed_module",
+  "def lower_typed_function_fact",
+  "def lower_typed_function_facts",
   "ClosureNoCaptureDirect => None",
   "ClosureCapturingEnv",
   "def lower_continuation_fact",
@@ -82,6 +90,9 @@ const REQUIRED_TEXT = [
   "def symbol_debug_manifest_as_text",
   "def emit_wat",
   "def empty_wat_module",
+  "def emit_core_function",
+  "(export \\\"main\\\")",
+  "i32.const 42",
   "def run_wasm_gc_wat",
 ];
 
@@ -155,10 +166,10 @@ function checkSource(file, source) {
   if (/\bContinuationLowerRepeatableContN\s*=>\s*Some\s*\(\s*CoreOp\s*\{[\s\S]{0,240}CoreOpBoxedCont1/.test(code)) {
     errors.push(`${file}: backend must not lower ContN as boxed Cont1`);
   }
-  if (path.basename(file) === "core.chiba" && !/\bContinuationLowerRepeatableContN\s*=>[\s\S]{0,420}CoreOpContinuationFrameChain[\s\S]{0,420}CoreOpContNPackage/.test(code)) {
+  if (path.basename(file) === "core.chiba" && !/\bContinuationLowerRepeatableContN\s*=>[\s\S]{0,720}CoreOpContinuationFrameChain[\s\S]{0,720}CoreOpContNPackage/.test(code)) {
     errors.push(`${file}: ContN lowering must emit frame chain before repeatable package`);
   }
-  if (path.basename(file) === "core.chiba" && !/\bContinuationLowerRepeatableContN\s*=>[\s\S]{0,520}push_continuation_frame_core_ops[\s\S]{0,520}CoreOpContinuationFrameChain/.test(code)) {
+  if (path.basename(file) === "core.chiba" && !/\bContinuationLowerRepeatableContN\s*=>[\s\S]{0,820}push_continuation_frame_core_ops[\s\S]{0,820}CoreOpContinuationFrameChain/.test(code)) {
     errors.push(`${file}: ContN lowering must emit stackless resume frame ops before frame-chain package`);
   }
   if (path.basename(file) === "core.chiba" && /\bContinuationLowerErasedCallableVariant\s*=>\s*Some\s*\(\s*closure_env_layout\s*\(\s*\)\s*\)/.test(code)) {

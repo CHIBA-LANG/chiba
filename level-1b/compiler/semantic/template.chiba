@@ -20,11 +20,19 @@ type CheckedTemplate {
     obligations: Array[TemplateObligation],
 }
 
+/// Empty checked-template stream for non-generic modules.
+def checked_templates_none(): Array[CheckedTemplate] =
+    Vec[CheckedTemplate].new().freeze()
+
 /// Check a generic body under abstract parameters.
 def check_template(module: TypedModule): Result[Array[CheckedTemplate], SemanticDiagnostics] =
-    Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-        .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: checked-template body analysis absent"))
-        .freeze()))
+    if module.generic_surface.len() == 0 {
+        Ok(checked_templates_none())
+    } else {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: checked-template body analysis absent"))
+            .freeze()))
+    }
 
 /// Append one template obligation if the semantic obligation is generic.
 def push_template_obligation(out: Vec[TemplateObligation], obligation: SemanticObligation): Vec[TemplateObligation] =

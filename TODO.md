@@ -33,6 +33,7 @@
 - [ ] typed AST elaboration：现在很多是 skeleton/facts；真实 expression/type/item traversal 不完整。
 	- [x] typed item skeleton threading：`TypedModule.items` 保留 alpha 后的 item skeleton，后续 method/operator/branch/control pass 不再只能重扫 source。
 	- [x] typed elaboration obligations：`TypedElaboration` 现在携带 item/type/body traversal obligations；真实 typed AST expression lowering 仍未完成。
+	- [x] minimal codegen typed function fact：C08 现在为无复杂 surface 的简单 `def` 生成 `TypedFunctionBodyFact`，能保留 `main` 与 `i32.const 42` 竖切；完整 type expression / expression AST traversal 仍未完成。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 	- [x] generic surface facts：typed module 已记录 explicit params、auto-generic、explicit instantiation、generic Self method surface；真实 template body checking 与 instantiation discharge 仍 fail-closed。
 	- [x] generic template obligations：typed pass 已把 generic surface 转成 `GenericTemplateObligation`，区分显式参数、auto-generic、实例化 discharge、generic Self receiver binding。
@@ -75,11 +76,13 @@
 	- [x] ContN frame-chain obligations：packaged ContN simplification 已生成 stackless resume function / frame chain / repeatable package obligation；真实 frame extraction 仍未完成。
 - [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。
 	- [x] Core block obligations：Core lowering 现在产出 block terminator / return / tailcall obligations；真实 executable block emission 仍未完成。
+	- [x] typed function Core op：C11 现在会从 C08 typed function body facts 生成 `CoreOpFunction`，并保持 owner / export-main / body fact；真实 block body lowering 仍只覆盖常量返回竖切。
 - [ ] Wasm-GC backend layout：layout 有一部分；真实 lowering 到 Wasm-GC object/funcref/eqref 不完整。
 - [ ] WAT emit：没有 executable WAT；现在 fail-closed。
 	- [x] empty Core WAT baseline：空 validated Core module 现在 emits 最小 `(module)`；真实 Core op WAT lowering 仍 fail-closed。
 	- [x] WAT emission obligations：非空 Core ops 现在生成 executable instruction/layout serialization obligations，不再只靠笼统非空判断。
 	- [x] non-empty Core WAT skeleton：已验证 Core op 现在会序列化 canonical Wasm-GC layout type 与 per-op runtime stub，不再整体 fail-closed 于 `executable WAT emission absent`；真实 typed Core body / continuation frame body / chibac-next smoke 仍 blocked。
+	- [x] exported main constant slice：`CoreOpFunction` 可 emit `(export "main")` 且返回 `i32.const 42`；真实 source parser execution / wasmtime end-to-end smoke 仍 blocked。
 
 - [ ] `level-1b/compiler/source/scan.chiba` 只是 truthfulness scaffold，不是语言设计或未来 frontend；第一优先级是让 chibalex/chibacc parser 成为 C07 source facts 的 primary path，然后删除或降级 `scan.chiba`，不能让 byte-level scanner 长期承担 namespace/item/attribute 语义。
 - [ ] attribute grammar 必须先补齐 spec/golden，再实现：

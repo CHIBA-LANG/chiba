@@ -38,6 +38,7 @@ type SemanticDiagnostics {
 type TypedModule {
     alpha: AlphaModule,
     items: Array[TypedItemSkeleton],
+    functions: Array[TypedFunctionBodyFact],
     callable_storage: Array[CallableStorageFact],
     namespace_ownership: Array[NamespaceOwnershipFact],
     namespace_imports: Array[NamespaceImportFact],

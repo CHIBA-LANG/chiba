@@ -5,6 +5,8 @@ use compiler.closure.env_simplify.*
 use compiler.ir.common.*
 use compiler.ir.closure.*
 use compiler.backend.layout.*
+use compiler.semantic.type_infer.*
+use compiler.semantic.driver.*
 
 /// Direct import target selected before emit.
 data CoreImportModule {
@@ -31,6 +33,13 @@ data CoreRuntimeState {
     CoreConsumedStateMachine,
 }
 
+/// Minimal function body form accepted by the first executable WAT slice.
+data CoreFunctionBody {
+    CoreFunctionReturnUnit,
+    CoreFunctionReturnI32Zero,
+    CoreFunctionReturnI32FortyTwo,
+}
+
 /// Core operation class understood by the dumb backend emitter.
 data CoreOpKind {
     CoreOpFunction,
@@ -50,6 +59,8 @@ data CoreOpKind {
 type CoreOp {
     owner: Option[BinderId],
     kind: CoreOpKind,
+    export_main: bool,
+    function_body: Option[CoreFunctionBody],
     layout: Option[WasmGcLayout],
     tail: CoreTailPosition,
     runtime_state: CoreRuntimeState,
@@ -75,6 +86,36 @@ type CoreBlockLoweringObligation {
 /// Return the closure environment layout used by escaping closures.
 def closure_env_layout(): WasmGcLayout = layout_closure_env()
 
+/// Reach the typed module that fed the closure/control/backend pipeline.
+def optimized_closure_typed_module(module: OptimizedClosureModule): TypedModule =
+    module.source.source.source.source.source.source.usage.answer.typed
+
+/// Convert a C08 typed function body to backend Core body form.
+def core_function_body_from_typed(body: TypedFunctionBodyKind): CoreFunctionBody =
+    match body {
+        TypedFunctionReturnUnit => CoreFunctionReturnUnit
+        TypedFunctionReturnI32Zero => CoreFunctionReturnI32Zero
+        TypedFunctionReturnI32FortyTwo => CoreFunctionReturnI32FortyTwo
+    }
+
+/// Lower one typed function fact into a Core function op.
+def lower_typed_function_fact(fact: TypedFunctionBodyFact): CoreOp =
+    CoreOp {
+        owner: Some(fact.owner),
+        kind: CoreOpFunction,
+        export_main: fact.is_main,
+        function_body: Some(core_function_body_from_typed(fact.body)),
+        layout: None,
+        tail: CorePlainCall,
+        runtime_state: CoreNoRuntimeState,
+        frame_count: 0,
+    }
+
+/// Lower typed function facts into Core ops before closure/continuation materialization.
+def lower_typed_function_facts(facts: Array[TypedFunctionBodyFact], index: usize, out: Vec[CoreOp]): Array[CoreOp] =
+    if index == facts.len() { out.freeze() }
+    else { lower_typed_function_facts(facts, index + 1, out.push(lower_typed_function_fact(facts.get(index)))) }
+
 /// Lower one closure lowering fact into an optional Core operation.
 def lower_closure_fact(fact: ClosureLoweringFact): Option[CoreOp] =
     match fact.kind {
@@ -85,6 +126,8 @@ def lower_closure_fact(fact: ClosureLoweringFact): Option[CoreOp] =
             Some(CoreOp {
                 owner: Some(fact.owner),
                 kind: CoreOpClosureCall,
+                export_main: false,
+                function_body: None,
                 layout: Some(closure_env_layout()),
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
@@ -126,6 +169,8 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
             Some(CoreOp {
                 owner: Some(fact.owner),
                 kind: CoreOpBoxedCont1,
+                export_main: false,
+                function_body: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
                 runtime_state: CoreConsumedStateMachine,
@@ -135,6 +180,8 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
             Some(CoreOp {
                 owner: Some(fact.owner),
                 kind: CoreOpContNPackage,
+                export_main: false,
+                function_body: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
@@ -144,6 +191,8 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
             Some(CoreOp {
                 owner: Some(fact.owner),
                 kind: CoreOpContinuationPackage,
+                export_main: false,
+                function_body: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
@@ -160,6 +209,8 @@ def push_continuation_frame_core_ops(out: Vec[CoreOp], frames: Array[Continuatio
             out.push(CoreOp {
                 owner: Some(frame.owner),
                 kind: CoreOpStacklessFunction,
+                export_main: false,
+                function_body: None,
                 layout: None,
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
@@ -177,6 +228,8 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                 .push(CoreOp {
                     owner: Some(fact.owner),
                     kind: CoreOpContinuationFrameChain,
+                    export_main: false,
+                    function_body: None,
                     layout: continuation_frame_chain_layout(fact.kind),
                     tail: CorePlainCall,
                     runtime_state: CoreNoRuntimeState,
@@ -185,6 +238,8 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                 .push(CoreOp {
                     owner: Some(fact.owner),
                     kind: CoreOpContNPackage,
+                    export_main: false,
+                    function_body: None,
                     layout: continuation_core_layout(fact.kind),
                     tail: CorePlainCall,
                     runtime_state: CoreNoRuntimeState,
@@ -235,9 +290,11 @@ def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[Cor
 
 /// Lower optimized closure Core to Wasm-GC Core.
 def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
+    let function_ops = lower_typed_function_facts(optimized_closure_typed_module(module).functions, 0, Vec[CoreOp].new())
     let closure_ops = lower_closure_facts(module.closures, 0, Vec[CoreOp].new())
     let continuation_ops = lower_continuation_facts(module.continuations, 0, Vec[CoreOp].new())
-    let ops = append_core_ops(Vec[CoreOp].new(), closure_ops, 0)
+    let ops = append_core_ops(Vec[CoreOp].new(), function_ops, 0)
+        |> append_core_ops(closure_ops, 0)
         |> append_core_ops(continuation_ops, 0)
     WasmGcCoreModule {
         source: module,
