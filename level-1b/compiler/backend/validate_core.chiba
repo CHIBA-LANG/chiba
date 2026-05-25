@@ -296,7 +296,7 @@ def core_op_is_contn_package(op: CoreOp): bool =
     }
 
 /// Return true when two binder ids are the same origin.
-def binder_id_eq(left: BinderId, right: BinderId): bool = left.id == right.id
+def binder_id_eq(left: BinderId, right: BinderId): bool = left.index == right.index
 
 /// Return the latest ContN frame-chain state after observing one op.
 def core_contn_frame_state_after(op: CoreOp, current: ContNFrameChainState): ContNFrameChainState =

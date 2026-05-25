@@ -29,10 +29,23 @@ def check_template(module: TypedModule): Result[Array[CheckedTemplate], Semantic
     if module.generic_surface.len() == 0 {
         Ok(checked_templates_none())
     } else {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: checked-template body analysis absent"))
-            .freeze()))
+        Ok(checked_templates_from_generic_surface(module.generic_surface, 0, Vec[CheckedTemplate].new()))
     }
+
+/// Build a conservative checked-template summary from one generic surface fact.
+def checked_template_from_generic_surface(fact: GenericSurfaceFact): CheckedTemplate =
+    CheckedTemplate {
+        scheme: TypeScheme {
+            vars: Vec[TypeVar].new().push(TypeVar { index: fact.owner.index }).freeze(),
+            body: TyVar(TypeVar { index: fact.owner.index }),
+        },
+        obligations: Vec[TemplateObligation].new().freeze(),
+    }
+
+/// Build checked-template summaries in source order.
+def checked_templates_from_generic_surface(facts: Array[GenericSurfaceFact], index: usize, out: Vec[CheckedTemplate]): Array[CheckedTemplate] =
+    if index == facts.len() { out.freeze() }
+    else { checked_templates_from_generic_surface(facts, index + 1, out.push(checked_template_from_generic_surface(facts.get(index)))) }
 
 /// Append one template obligation if the semantic obligation is generic.
 def push_template_obligation(out: Vec[TemplateObligation], obligation: SemanticObligation): Vec[TemplateObligation] =

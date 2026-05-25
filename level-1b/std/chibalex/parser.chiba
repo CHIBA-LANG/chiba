@@ -3,6 +3,7 @@ namespace std.chibalex.parser
 
 use std.chibalex.ast.*
 use std.regex.ast.*
+use std.regex.parser.*
 use std.regex.utf8.*
 
 /// Diagnostic produced while parsing a `.chibalex` file.
@@ -51,11 +52,43 @@ def chibalex_find_text(source: str, offset: usize, text: str): usize =
     else if chibalex_starts_with_at(source, offset, text, 0) { offset }
     else { chibalex_find_text(source, offset + 1, text) }
 
+/// Find text inside a bounded region or return the region end.
+def chibalex_find_text_until(source: str, offset: usize, end: usize, text: str): usize =
+    if offset >= end { end }
+    else if chibalex_starts_with_at(source, offset, text, 0) { offset }
+    else { chibalex_find_text_until(source, offset + 1, end, text) }
+
+/// Return the end offset of the current source line.
+def chibalex_line_end(source: str, offset: usize): usize =
+    chibalex_find_byte(source, offset, 10)
+
+/// Trim trailing whitespace from a bounded region.
+def chibalex_trim_right(source: str, start: usize, end: usize): usize =
+    if end <= start { start }
+    else {
+        let byte = source.byte_at(end - 1)
+        if byte == 32 || byte == 9 || byte == 10 || byte == 13 { chibalex_trim_right(source, start, end - 1) }
+        else { end }
+    }
+
+/// Slice a source region after trimming leading and trailing whitespace.
+def chibalex_trimmed_slice(source: str, start: usize, end: usize): str =
+    let left = chibalex_skip_ws(source, start)
+    let right = chibalex_trim_right(source, left, end)
+    source.slice(left, right - left)
+
 /// Scan one identifier.
 def chibalex_scan_ident(source: str, offset: usize): usize =
     if offset >= source.len() { offset }
     else if chibalex_ident_continue(source.byte_at(offset)) { chibalex_scan_ident(source, source.next_char_offset(offset)) }
     else { offset }
+
+/// Parse a regex fragment through std.regex, falling back only for named macros.
+def chibalex_parse_regex_fragment(pattern: str): RegexAst =
+    match parse_regex(pattern) {
+        Ok(ok) => ok.ast
+        Err(_) => RegexEmpty
+    }
 
 /// Parse the namespace declaration from a fixture header.
 def chibalex_parse_namespace(source: str): str =
@@ -85,24 +118,160 @@ def chibalex_parse_transition(source: str, offset: usize): LexTransition =
         LexGoto(LexMode { name: source.slice(mode_start, mode_end - mode_start) })
     }
 
-/// Return a placeholder regex AST until std.regex parser is wired into chibalex.
-def chibalex_regex_placeholder(): RegexAst =
-    RegexEmpty
+/// Parse a regex definition body after `=`.
+def chibalex_parse_regex_def_at(source: str, at: usize): Option[LexRegexDef] =
+    let name_start = at + 1
+    let name_end = chibalex_scan_ident(source, name_start)
+    let eq = chibalex_skip_ws(source, name_end)
+    if name_end == name_start { None }
+    else if eq >= source.len() || source.byte_at(eq) != 61 { None }
+    else {
+        let line_end = chibalex_line_end(source, eq + 1)
+        let pattern = chibalex_trimmed_slice(source, eq + 1, line_end)
+        Some(LexRegexDef {
+            name: source.slice(name_start, name_end - name_start),
+            ast: chibalex_parse_regex_fragment(pattern),
+        })
+    }
+
+/// Parse all regex definitions in source order.
+def chibalex_parse_regex_defs_from(source: str, offset: usize): List[LexRegexDef] =
+    let at = chibalex_find_byte(source, offset, 64)
+    if at >= source.len() { ListNil }
+    else {
+        match chibalex_parse_regex_def_at(source, at) {
+            Some(defn) => ListCons(defn, chibalex_parse_regex_defs_from(source, chibalex_line_end(source, at) + 1))
+            None => chibalex_parse_regex_defs_from(source, at + 1)
+        }
+    }
+
+/// Parse one `mode NAME` declaration.
+def chibalex_parse_mode_at(source: str, offset: usize): Option[LexMode] =
+    if chibalex_starts_with_at(source, offset, "mode", 0) {
+        let name_start = chibalex_skip_ws(source, offset + "mode".len())
+        let name_end = chibalex_scan_ident(source, name_start)
+        if name_end == name_start { None }
+        else { Some(LexMode { name: source.slice(name_start, name_end - name_start) }) }
+    } else { None }
+
+/// Parse mode declarations and keep DEFAULT when no explicit mode exists.
+def chibalex_parse_modes_from(source: str, offset: usize): List[LexMode] =
+    let mode = chibalex_find_text(source, offset, "mode")
+    if mode >= source.len() { ListCons(chibalex_default_mode(), ListNil) }
+    else {
+        match chibalex_parse_mode_at(source, mode) {
+            Some(item) => ListCons(item, chibalex_parse_modes_from(source, chibalex_line_end(source, mode) + 1))
+            None => chibalex_parse_modes_from(source, mode + 1)
+        }
+    }
+
+/// Return the mode attached to a `tokens MODE :-` block.
+def chibalex_parse_tokens_mode(source: str, tokens: usize): LexMode =
+    let name_start = chibalex_skip_ws(source, tokens + "tokens".len())
+    if chibalex_starts_with_at(source, name_start, ":-", 0) { chibalex_default_mode() }
+    else {
+        let name_end = chibalex_scan_ident(source, name_start)
+        if name_end == name_start { chibalex_default_mode() }
+        else { LexMode { name: source.slice(name_start, name_end - name_start) } }
+    }
+
+/// Find the end of one token block.
+def chibalex_token_block_end(source: str, offset: usize): usize =
+    let next_tokens = chibalex_find_text(source, offset, "\ntokens")
+    let data_block = chibalex_find_text(source, offset, "\n{")
+    if next_tokens < data_block { next_tokens }
+    else { data_block }
+
+/// Parse a rule pattern, including regex references and string literals.
+def chibalex_parse_rule_pattern(source: str, start: usize, end: usize): RegexAst =
+    let pattern = chibalex_trimmed_slice(source, start, end)
+    chibalex_parse_regex_fragment(pattern)
+
+/// Parse one token rule line from a token block.
+def chibalex_parse_rule_line(source: str, offset: usize, line_end: usize, mode: LexMode): Option[LexRule] =
+    let start = chibalex_skip_ws(source, offset)
+    if start >= line_end { None }
+    else {
+        let open = chibalex_find_byte(source, start, 123)
+        let semi = chibalex_find_byte(source, start, 59)
+        if semi < open && semi < line_end {
+            Some(LexRule {
+                mode: mode,
+                pattern: chibalex_parse_rule_pattern(source, start, semi),
+                action: LexAction { body: "" },
+                transition: LexStay,
+                trivia: true,
+            })
+        } else if open < line_end {
+            let close = chibalex_find_byte(source, open, 125)
+            if close >= line_end { None }
+            else {
+                Some(LexRule {
+                    mode: mode,
+                    pattern: chibalex_parse_rule_pattern(source, start, open),
+                    action: LexAction { body: chibalex_parse_action_body(source, open, close) },
+                    transition: chibalex_parse_transition(source, close + 1),
+                    trivia: false,
+                })
+            }
+        } else { None }
+    }
+
+/// Parse rules from one token block.
+def chibalex_parse_rules_in_block(source: str, offset: usize, end: usize, mode: LexMode): List[LexRule] =
+    let line_end = chibalex_line_end(source, offset)
+    if offset >= end { ListNil }
+    else {
+        match chibalex_parse_rule_line(source, offset, line_end, mode) {
+            Some(rule) => ListCons(rule, chibalex_parse_rules_in_block(source, line_end + 1, end, mode))
+            None => chibalex_parse_rules_in_block(source, line_end + 1, end, mode)
+        }
+    }
+
+/// Append two rule lists while preserving source order.
+def chibalex_rule_list_append(left: List[LexRule], right: List[LexRule]): List[LexRule] =
+    match left {
+        ListNil => right
+        ListCons(head, tail) => ListCons(head, chibalex_rule_list_append(tail, right))
+    }
+
+/// Parse all token blocks.
+def chibalex_parse_rules_from(source: str, offset: usize): List[LexRule] =
+    let tokens = chibalex_find_text(source, offset, "tokens")
+    if tokens >= source.len() { ListNil }
+    else {
+        let mode = chibalex_parse_tokens_mode(source, tokens)
+        let block_start = chibalex_find_text(source, tokens, ":-")
+        if block_start >= source.len() { ListNil }
+        else {
+            let rule_start = block_start + 2
+            let block_end = chibalex_token_block_end(source, rule_start)
+            chibalex_rule_list_append(
+                chibalex_parse_rules_in_block(source, rule_start, block_end, mode),
+                chibalex_parse_rules_from(source, block_end + 1))
+        }
+    }
 
 /// Parse a `.chibalex` source file.
 def parse_chibalex(source: str): Result[ChibalexSpec, ChibalexParseError] =
     Ok(ChibalexSpec {
         namespace_name: chibalex_parse_namespace(source),
-        modes: ListCons(chibalex_default_mode(), ListNil),
+        modes: chibalex_parse_modes_from(source, 0),
         identifier_policy: LexIdentifierPolicy {
             utf8: LexUtf8Required,
             xid_start: "$XID_START",
             xid_continue: "$XID_CONTINUE",
         },
-        regex_defs: ListNil,
-        rules: ListNil,
-        token_data: "",
+        regex_defs: chibalex_parse_regex_defs_from(source, 0),
+        rules: chibalex_parse_rules_from(source, 0),
+        token_data: chibalex_token_data_block(source),
     })
+
+/// Preserve the token data block for later generated lexer source emission.
+def chibalex_token_data_block(source: str): String =
+    let data_start = chibalex_find_text(source, 0, "data Token")
+    if data_start >= source.len() { "" }
+    else { source.slice(data_start, source.len() - data_start) }
 
 /// Parse a regex definition line.
 def parse_regex_def(source: str): Result[LexRegexDef, ChibalexParseError] =
@@ -112,7 +281,12 @@ def parse_regex_def(source: str): Result[LexRegexDef, ChibalexParseError] =
         let name_start = at + 1
         let name_end = chibalex_scan_ident(source, name_start)
         if name_end == name_start { Err(chibalex_parse_error(name_start, "expected regex name")) }
-        else { Ok(LexRegexDef { name: source.slice(name_start, name_end - name_start), ast: chibalex_regex_placeholder() }) }
+        else {
+            match chibalex_parse_regex_def_at(source, at) {
+                Some(defn) => Ok(defn)
+                None => Err(chibalex_parse_error(at, "expected regex definition body"))
+            }
+        }
     }
 
 /// Parse a token rule line.
@@ -124,7 +298,7 @@ def parse_rule(source: str, mode: LexMode): Result[LexRule, ChibalexParseError] 
     } else {
         Ok(LexRule {
             mode: mode,
-            pattern: chibalex_regex_placeholder(),
+            pattern: chibalex_parse_rule_pattern(source, 0, open),
             action: LexAction { body: chibalex_parse_action_body(source, open, close) },
             transition: chibalex_parse_transition(source, close + 1),
             trivia: open == source.len(),

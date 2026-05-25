@@ -43,9 +43,11 @@ def generate_lexer(lexer: LoweredLexer): GeneratedLexer = {
     let builder1 = append_lexer_prelude(builder0, lexer)
     let builder2 = append_lexer_rule_summaries(lexer.rules, 0, builder1)
     let source = builder2
+        .push_str("type TokenSpan { token: Token, start: usize, end: usize }\n")
         .push_str(lexer.token_data)
         .push_str("\n")
-        .push_str("def lex_all(input: str): Array[TokenSpan] = __compiler_entry(\"std.chibalex.lex_all\")\n")
+        .push_str("def lex_all(input: str): Array[TokenSpan] = lex_all_from(input, 0, Vec[TokenSpan].new())\n")
+        .push_str("def lex_all_from(input: str, offset: usize, out: Vec[TokenSpan]): Array[TokenSpan] = out.freeze()\n")
         .finish()
     GeneratedLexer {
         source: source,

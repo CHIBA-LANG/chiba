@@ -48,6 +48,8 @@ data StacklessResumeBodyKind {
     StacklessResumeBodyReset,
     StacklessResumeBodyShift,
     StacklessResumeBodyShiftN,
+    StacklessResumeBodyConst(usize),
+    StacklessResumeBodyMultiResume(usize, usize),
 }
 
 /// One stackless function used to resume a continuation frame.

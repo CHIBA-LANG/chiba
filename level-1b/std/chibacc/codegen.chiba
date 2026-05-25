@@ -49,6 +49,15 @@ def append_rule_summary(builder: DiagnosticBuilder, rule: LoweredRule): Diagnost
     }
 }
 
+/// Append one executable rule entry shell; alternatives are emitted by later action lowering.
+def append_rule_function(builder: DiagnosticBuilder, rule: LoweredRule): DiagnosticBuilder =
+    builder
+        .push_str("def parse_")
+        .push_str(rule.name.text)
+        .push_str("(tokens: Array[TokenSpan], position: ParsePosition): Result[ParseCandidate[AST], ParseFailure] = Err(parse_failure(ListCons(\"")
+        .push_str(rule.name.text)
+        .push_str("\", ListNil), position))\n")
+
 /// Append all lowered rule summaries in stable order.
 def append_rule_summaries(rules: Array[LoweredRule], index: usize, builder: DiagnosticBuilder): DiagnosticBuilder =
     if index == rules.len() { builder }
@@ -57,13 +66,19 @@ def append_rule_summaries(rules: Array[LoweredRule], index: usize, builder: Diag
         append_rule_summaries(rules, index + 1, append_rule_summary(builder, rule))
     }
 
+/// Append parser rule functions in stable order.
+def append_rule_functions(rules: Array[LoweredRule], index: usize, builder: DiagnosticBuilder): DiagnosticBuilder =
+    if index == rules.len() { builder }
+    else { append_rule_functions(rules, index + 1, append_rule_function(builder, rules.get(index))) }
+
 /// Generate Chiba source for a lowered parser.
 def generate_parser(parser: LoweredParser): GeneratedParser = {
     let builder0 = DiagnosticBuilder.new()
     let builder1 = append_parser_prelude(builder0, parser)
     let builder2 = append_rule_summaries(parser.rules, 0, builder1)
-    let builder3 = append_parser_entry(builder2.push_str("\n"), parser)
-    let header = builder3.finish()
+    let builder3 = append_rule_functions(parser.rules, 0, builder2.push_str("\n"))
+    let builder4 = append_parser_entry(builder3.push_str("\n"), parser)
+    let header = builder4.finish()
     GeneratedParser {
         source: header.concat(parser.ast_data),
         status: ParserCodegenComplete,

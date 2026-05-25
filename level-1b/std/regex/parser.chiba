@@ -89,13 +89,202 @@ def regex_unsupported_feature_message(feature: RegexUnsupportedFeature): String 
     }
 
 /// Parse a complete regex pattern.
-def parse_regex(pattern: str): RegexParseResult = __compiler_builtin("std.regex_parse")
+def parse_regex(pattern: str): RegexParseResult =
+    match parse_alternative(RegexCursor.new(pattern)) {
+        Ok(ok) =>
+            if ok.cursor.at_end() { Ok(ok) }
+            else { Err(RegexParseError { offset: ok.cursor.offset, message: "unexpected regex suffix" }) }
+        Err(error) => Err(error)
+    }
 
 /// Parse one alternation expression.
-def parse_alternative(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] = __compiler_builtin("std.regex_parse_alternative")
+def parse_alternative(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] =
+    match parse_sequence(cursor, Vec[RegexAst].new()) {
+        Ok(first) => parse_alternative_tail(first.cursor, Vec[RegexAst].new().push(first.ast))
+        Err(error) => Err(error)
+    }
 
 /// Parse one quantified atom.
-def parse_quantified(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] = __compiler_builtin("std.regex_parse_quantified")
+def parse_quantified(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] =
+    match parse_atom(cursor) {
+        Ok(atom) => Ok(parse_quantifier_suffix(atom))
+        Err(error) => Err(error)
+    }
 
 /// Parse a character class.
-def parse_class(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] = __compiler_builtin("std.regex_parse_class")
+def parse_class(cursor: RegexCursor): Result[RegexParseOk, RegexParseError] =
+    let open = cursor.offset
+    if open >= cursor.pattern.len() || cursor.pattern.byte_at(open) != 91 {
+        Err(RegexParseError { offset: open, message: "expected character class" })
+    } else {
+        let after_open = cursor.advance()
+        let negated =
+            if after_open.offset < cursor.pattern.len() && cursor.pattern.byte_at(after_open.offset) == 94 { true }
+            else { false }
+        let body = if negated { after_open.advance() } else { after_open }
+        parse_class_atoms(body, negated, ListNil)
+    }
+
+/// Append one AST to the end of a list.
+def regex_ast_list_append(items: List[RegexAst], value: RegexAst): List[RegexAst] =
+    match items {
+        ListNil => ListCons(value, ListNil)
+        ListCons(head, tail) => ListCons(head, regex_ast_list_append(tail, value))
+    }
+
+/// Append one class atom to the end of a list.
+def regex_class_atom_list_append(items: List[RegexClassAtom], value: RegexClassAtom): List[RegexClassAtom] =
+    match items {
+        ListNil => ListCons(value, ListNil)
+        ListCons(head, tail) => ListCons(head, regex_class_atom_list_append(tail, value))
+    }
+
+/// Return true when a byte terminates a sequence.
+def regex_sequence_terminator(byte: u8): bool =
+    if byte == 41 { true }
+    else { byte == 124 }
+
+/// Parse concatenation until alternation, group close, or end.
+def parse_sequence(cursor: RegexCursor, out: Vec[RegexAst]): RegexParseResult =
+    if cursor.at_end() {
+        let items = out.freeze()
+        Ok(RegexParseOk { ast: RegexSequence(regex_ast_array_to_list(items, 0, ListNil)), cursor: cursor })
+    } else if regex_sequence_terminator(cursor.pattern.byte_at(cursor.offset)) {
+        let items = out.freeze()
+        Ok(RegexParseOk { ast: RegexSequence(regex_ast_array_to_list(items, 0, ListNil)), cursor: cursor })
+    } else {
+        match parse_quantified(cursor) {
+            Ok(item) => parse_sequence(item.cursor, out.push(item.ast))
+            Err(error) => Err(error)
+        }
+    }
+
+/// Parse additional `| sequence` arms.
+def parse_alternative_tail(cursor: RegexCursor, arms: Vec[RegexAst]): RegexParseResult =
+    if cursor.at_end() {
+        let items = arms.freeze()
+        if items.len() == 1 { Ok(RegexParseOk { ast: items.get(0), cursor: cursor }) }
+        else { Ok(RegexParseOk { ast: RegexAlternative(regex_ast_array_to_list(items, 0, ListNil)), cursor: cursor }) }
+    } else if cursor.pattern.byte_at(cursor.offset) == 124 {
+        match parse_sequence(cursor.advance(), Vec[RegexAst].new()) {
+            Ok(next) => parse_alternative_tail(next.cursor, arms.push(next.ast))
+            Err(error) => Err(error)
+        }
+    } else {
+        let items = arms.freeze()
+        if items.len() == 1 { Ok(RegexParseOk { ast: items.get(0), cursor: cursor }) }
+        else { Ok(RegexParseOk { ast: RegexAlternative(regex_ast_array_to_list(items, 0, ListNil)), cursor: cursor }) }
+    }
+
+/// Convert an array of ASTs to a list preserving order.
+def regex_ast_array_to_list(items: Array[RegexAst], index: usize, out: List[RegexAst]): List[RegexAst] =
+    if index == items.len() { out }
+    else { regex_ast_array_to_list(items, index + 1, regex_ast_list_append(out, items.get(index))) }
+
+/// Build a regex character from the current cursor.
+def regex_char_at(cursor: RegexCursor): RegexChar =
+    RegexChar { codepoint: cursor.pattern.char_at(cursor.offset).codepoint }
+
+/// Parse an escaped atom.
+def parse_escape(cursor: RegexCursor): RegexParseResult =
+    let next = cursor.advance()
+    if next.at_end() { Err(RegexParseError { offset: cursor.offset, message: "unterminated escape" }) }
+    else {
+        let byte = next.pattern.byte_at(next.offset)
+        if byte == 100 { Ok(RegexParseOk { ast: RegexClassExpr(RegexClass { negated: false, atoms: ListCons(RegexClassDigit, ListNil) }), cursor: next.advance() }) }
+        else if byte == 115 { Ok(RegexParseOk { ast: RegexClassExpr(RegexClass { negated: false, atoms: ListCons(RegexClassWhitespace, ListNil) }), cursor: next.advance() }) }
+        else if byte == 119 { Ok(RegexParseOk { ast: RegexClassExpr(RegexClass { negated: false, atoms: ListCons(RegexClassWord, ListNil) }), cursor: next.advance() }) }
+        else { Ok(RegexParseOk { ast: RegexLiteral(regex_char_at(next)), cursor: next.advance() }) }
+    }
+
+/// Parse a `$NAME` chibalex character class macro.
+def parse_macro(cursor: RegexCursor): RegexParseResult =
+    let name_start = cursor.offset + 1
+    let name_end = regex_macro_name_end(cursor.pattern, name_start)
+    let name = cursor.pattern.slice(name_start, name_end - name_start)
+    let ast =
+        if name == "WS" { RegexClassExpr(RegexClass { negated: false, atoms: ListCons(RegexClassWhitespace, ListNil) }) }
+        else if name == "ASCII_DIGIT" { RegexClassExpr(RegexClass { negated: false, atoms: ListCons(RegexClassDigit, ListNil) }) }
+        else if name == "XID_START" { RegexClassExpr(RegexClass { negated: false, atoms: ListCons(RegexClassXidStart, ListNil) }) }
+        else if name == "XID_CONTINUE" { RegexClassExpr(RegexClass { negated: false, atoms: ListCons(RegexClassXidContinue, ListNil) }) }
+        else { RegexEmpty }
+    Ok(RegexParseOk { ast: ast, cursor: RegexCursor { pattern: cursor.pattern, offset: name_end } })
+
+/// Return true when a byte can continue a regex macro name.
+def regex_macro_name_byte(byte: u8): bool =
+    if byte >= 65 && byte <= 90 { true }
+    else if byte >= 48 && byte <= 57 { true }
+    else { byte == 95 }
+
+/// Scan a regex macro name after `$`.
+def regex_macro_name_end(pattern: str, offset: usize): usize =
+    if offset >= pattern.len() { offset }
+    else if regex_macro_name_byte(pattern.byte_at(offset)) { regex_macro_name_end(pattern, offset + 1) }
+    else { offset }
+
+/// Parse a quoted literal string as a sequence of literal chars.
+def parse_quoted_literal(cursor: RegexCursor): RegexParseResult =
+    parse_quoted_literal_loop(cursor.advance(), Vec[RegexAst].new())
+
+/// Parse literal chars until the closing quote.
+def parse_quoted_literal_loop(cursor: RegexCursor, out: Vec[RegexAst]): RegexParseResult =
+    if cursor.at_end() { Err(RegexParseError { offset: cursor.offset, message: "unterminated string literal regex" }) }
+    else if cursor.pattern.byte_at(cursor.offset) == 34 {
+        let items = out.freeze()
+        Ok(RegexParseOk { ast: RegexSequence(regex_ast_array_to_list(items, 0, ListNil)), cursor: cursor.advance() })
+    } else {
+        parse_quoted_literal_loop(cursor.advance(), out.push(RegexLiteral(regex_char_at(cursor))))
+    }
+
+/// Parse one atom.
+def parse_atom(cursor: RegexCursor): RegexParseResult =
+    if cursor.at_end() { Ok(RegexParseOk { ast: RegexEmpty, cursor: cursor }) }
+    else {
+        let byte = cursor.pattern.byte_at(cursor.offset)
+        if byte == 46 { Ok(RegexParseOk { ast: RegexAny, cursor: cursor.advance() }) }
+        else if byte == 92 { parse_escape(cursor) }
+        else if byte == 36 { parse_macro(cursor) }
+        else if byte == 34 { parse_quoted_literal(cursor) }
+        else if byte == 91 { parse_class(cursor) }
+        else if byte == 40 {
+            match parse_alternative(cursor.advance()) {
+                Ok(inner) =>
+                    if inner.cursor.at_end() { Err(RegexParseError { offset: inner.cursor.offset, message: "unterminated group" }) }
+                    else if inner.cursor.pattern.byte_at(inner.cursor.offset) == 41 { Ok(RegexParseOk { ast: RegexNonCapture(inner.ast), cursor: inner.cursor.advance() }) }
+                    else { Err(RegexParseError { offset: inner.cursor.offset, message: "expected group close" }) }
+                Err(error) => Err(error)
+            }
+        } else { Ok(RegexParseOk { ast: RegexLiteral(regex_char_at(cursor)), cursor: cursor.advance() }) }
+    }
+
+/// Apply an optional quantifier suffix.
+def parse_quantifier_suffix(ok: RegexParseOk): RegexParseOk =
+    if ok.cursor.at_end() { ok }
+    else {
+        let byte = ok.cursor.pattern.byte_at(ok.cursor.offset)
+        if byte == 42 {
+            RegexParseOk { ast: RegexRepeatExpr(ok.ast, regex_repeat(0, None)), cursor: ok.cursor.advance() }
+        } else if byte == 43 {
+            RegexParseOk { ast: RegexRepeatExpr(ok.ast, regex_repeat(1, None)), cursor: ok.cursor.advance() }
+        } else if byte == 63 {
+            RegexParseOk { ast: RegexRepeatExpr(ok.ast, regex_repeat(0, Some(1))), cursor: ok.cursor.advance() }
+        } else { ok }
+    }
+
+/// Parse a character-class atom list.
+def parse_class_atoms(cursor: RegexCursor, negated: bool, atoms: List[RegexClassAtom]): RegexParseResult =
+    if cursor.at_end() { Err(RegexParseError { offset: cursor.offset, message: "unterminated character class" }) }
+    else if cursor.pattern.byte_at(cursor.offset) == 93 {
+        Ok(RegexParseOk {
+            ast: RegexClassExpr(RegexClass { negated: negated, atoms: atoms }),
+            cursor: cursor.advance(),
+        })
+    } else {
+        let ch = regex_char_at(cursor)
+        let next = cursor.advance()
+        if next.offset < cursor.pattern.len() && next.pattern.byte_at(next.offset) == 45 {
+            let range_end = next.advance()
+            if range_end.at_end() { Err(RegexParseError { offset: next.offset, message: "unterminated range" }) }
+            else { parse_class_atoms(range_end.advance(), negated, regex_class_atom_list_append(atoms, RegexClassRange(ch, regex_char_at(range_end)))) }
+        } else { parse_class_atoms(next, negated, regex_class_atom_list_append(atoms, RegexClassChar(ch))) }
+    }

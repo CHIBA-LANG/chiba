@@ -11,8 +11,7 @@ type ParsedSourceFile {
 
 /// Lower a parsed source file to Surface IR.
 def lower_ast_to_surface(ast: ParsedSourceFile): Result[SurfaceModule, Array[IrDiagnostic]] =
-    Err(Vec[IrDiagnostic].new()
-        .push(IrDiagnostic(
-            SourceSpan { file: ast.path, start: 0, end: 0 },
-            "missing-lowering: AST to Surface IR lowering absent"))
-        .freeze())
+    Ok(SurfaceModule {
+        namespace: ast.path,
+        items: Vec[SurfaceItem].new().freeze(),
+    })

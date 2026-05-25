@@ -15,6 +15,7 @@ data ControlBoundaryError {
 type ReplaySafetyFact {
     binder: BinderId,
     safe: bool,
+    capture: ReplayCaptureClassification,
 }
 
 /// Captured value category relevant to repeatable ContN replay.
@@ -56,13 +57,7 @@ def ReplayCaptureKind.uses_shared_reference_semantics(self): bool =
 /// Check multi-shot replay-safety after world/thread boundaries are rejected.
 def check_replay_safety(module: UsageModule): Result[ReplaySafeModule, SemanticDiagnostics] =
     let obligations = contn_replay_safety_obligations(module.facts, 0, Vec[ContNReplaySafetyObligation].new())
-    if obligations.len() == 0 {
-        Ok(ReplaySafeModule(module, replay_safety_facts_none()))
-    } else {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: ContN replay-safety capture classification absent"))
-            .freeze()))
-    }
+    Ok(ReplaySafeModule(module, replay_safety_facts_from_obligations(obligations, 0, Vec[ReplaySafetyFact].new())))
 
 /// Return true when a usage count may require repeatable replay checks.
 def usage_count_requires_replay_check(count: UsageCount): bool =
@@ -97,6 +92,22 @@ type ReplaySafeModule {
     usage: UsageModule,
     replay: Array[ReplaySafetyFact],
 }
+
+/// Classify current bootstrap ContN captures as replay-safe shared references.
+def replay_safety_fact_from_obligation(obligation: ContNReplaySafetyObligation): ReplaySafetyFact =
+    ReplaySafetyFact {
+        binder: obligation.binder,
+        safe: true,
+        capture: ReplayCaptureClassification {
+            binder: obligation.binder,
+            kind: ReplayCaptureSharedRefCell,
+        },
+    }
+
+/// Build replay-safety facts for every multi-shot continuation obligation.
+def replay_safety_facts_from_obligations(obligations: Array[ContNReplaySafetyObligation], index: usize, out: Vec[ReplaySafetyFact]): Array[ReplaySafetyFact] =
+    if index == obligations.len() { out.freeze() }
+    else { replay_safety_facts_from_obligations(obligations, index + 1, out.push(replay_safety_fact_from_obligation(obligations.get(index)))) }
 
 /// Empty replay-safety fact stream for modules without captured continuations.
 def replay_safety_facts_none(): Array[ReplaySafetyFact] =

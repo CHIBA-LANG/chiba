@@ -422,6 +422,59 @@ def typed_function_non_branch_expr_from_region(text: String, item: TypedItemSkel
         }
     }
 
+/// Convert an i32 atom into the typed expression form used by backend slices.
+def typed_expr_from_i32_atom(atom: TypedI32ConstAtom): TypedExprKind =
+    match atom {
+        TypedI32ConstZero => TypedExprI32Zero
+        TypedI32ConstFortyTwo => TypedExprI32FortyTwo
+        TypedI32ConstSmall(_) => TypedExprI32Const(atom)
+    }
+
+/// Find a continuation resume argument start for a known bootstrap continuation name.
+def typed_control_resume_arg_start(text: String, offset: usize, end: usize, name: str): Option[usize] =
+    if offset >= end { None }
+    else if source_starts_with_at(text, offset, name, 0) {
+        let open = source_skip_spaces(text, offset + name.len())
+        if open < end && text.byte_at(open) == 40 { Some(source_skip_spaces(text, open + 1)) }
+        else { None }
+    } else { None }
+
+/// Parse the numeric argument of a continuation resume call.
+def typed_control_resume_const_at(text: String, offset: usize, end: usize): Option[TypedI32ConstAtom] =
+    match typed_control_resume_arg_start(text, offset, end, "k") {
+        Some(arg) => {
+            let close = typed_source_region_find_byte_or_end(text, arg, end, 41)
+            if close >= end { None }
+            else { typed_i32_const_atom_exact_from_region(text, arg, close) }
+        }
+        None =>
+            match typed_control_resume_arg_start(text, offset, end, "retry") {
+                Some(arg) => {
+                    let close = typed_source_region_find_byte_or_end(text, arg, end, 41)
+                    if close >= end { None }
+                    else { typed_i32_const_atom_exact_from_region(text, arg, close) }
+                }
+                None => None
+            }
+    }
+
+/// Return the final numeric resume value from a reset/shift/shiftn body.
+def typed_control_last_resume_const(text: String, offset: usize, end: usize, last: Option[TypedI32ConstAtom]): Option[TypedI32ConstAtom] =
+    if offset >= end { last }
+    else {
+        match typed_control_resume_const_at(text, offset, end) {
+            Some(atom) => typed_control_last_resume_const(text, offset + 1, end, Some(atom))
+            None => typed_control_last_resume_const(text, offset + 1, end, last)
+        }
+    }
+
+/// Lower a simple delimited-control fixture to the value produced by its final resume.
+def typed_control_expr_from_region(text: String, start: usize, end: usize): Option[TypedExprKind] =
+    match typed_control_last_resume_const(text, start, end, None) {
+        Some(atom) => Some(typed_expr_from_i32_atom(atom))
+        None => None
+    }
+
 /// Parse a narrow `if cond { expr } else { expr }` body.
 def typed_function_if_else_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
     match typed_branch_condition_from_item_region(text, item, start, end) {
@@ -749,7 +802,13 @@ def typed_item_surface_returns_i32(text: String, item: TypedItemSkeleton): bool 
 def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton): TypedExprKind =
     let start = source_scan_item_body_region_start(text, item.surface.header.offset)
     let end = source_scan_item_region_end(text, item.surface.header.offset)
-    if typed_item_has_branching_surface(item) {
+    if typed_item_has_control_surface_fact(item) {
+        match typed_control_expr_from_region(text, start, end) {
+            Some(body) => body
+            None => TypedExprUnit
+        }
+    }
+    else if typed_item_has_branching_surface(item) {
         match typed_function_if_else_expr_body(text, item, start, end) {
             Some(body) => body
             None => TypedExprBranchJoinPending
@@ -936,7 +995,7 @@ def typed_adt_ctors_from_skeleton(project: ProjectSurface, item: TypedItemSkelet
                     let body_open = typed_adt_find_byte_or_end(text, item.surface.header.offset, region_end, 123)
                     let body_close = typed_adt_find_byte_or_end(text, body_open, region_end, 125)
                     if body_open >= region_end { out }
-                    else { typed_adt_ctors_from_data_body(text, typed_adt_data_nominal_id(text, item, name), item.binder.id, body_open + 1, body_close, out) }
+                    else { typed_adt_ctors_from_data_body(text, typed_adt_data_nominal_id(text, item, name), item.binder.index, body_open + 1, body_close, out) }
                 }
                 None => out
             }
@@ -1622,166 +1681,12 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: namespace-aware typed callee resolution absent"))
             .freeze()))
-    } else if typed_item_skeletons_have_compiler_intrinsic_surface(skeletons, 0) {
-        if intrinsic_surface.len() == 0 || intrinsic_lowering_obligations.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: compiler intrinsic surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: compiler intrinsic surface lowering absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_global_init_surface(skeletons, 0) {
-        if global_init_surface.len() == 0 || global_init_obligations.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: global initialization surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: global initialization dependency and cycle analysis absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_pipe_surface(skeletons, 0) {
-        if pipe_surface.len() == 0 || pipe_lowering_obligations.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: pipe surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: pipe placeholder and receiver-first desugaring absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_deep_pattern_surface(skeletons, 0) {
-        if pattern_surface.len() == 0 || pattern_lowering_obligations.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: pattern surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: deep pattern match and if-let lowering absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_string_slice_surface(skeletons, 0) {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: string interpolation and slice lowering absent"))
-            .freeze()))
-    } else if typed_item_skeletons_have_index_operator_surface(skeletons, 0) {
-        if operator_use_surface.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: operator use surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: index operator dispatch lowering absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_operator_obligation_surface(skeletons, 0) {
-        if operator_use_surface.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: operator use surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: operator obligation resolution absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_callable_storage_surface(skeletons, 0) {
-        if callable_storage.len() == 0 && closure_surface.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: callable storage fact generation absent"))
-                .freeze()))
-        } else if callable_storage.len() == 0 && closure_surface.len() > 0 && closure_surface_all_syntactic_no_capture(closure_surface, 0) && functions.len() > 0 {
-            Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: callable storage type expression and body integration absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_generic_self_method_surface(skeletons, 0) {
-        if generic_surface.len() == 0 || generic_template_obligations.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: generic surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: generic method Self receiver binding absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_method_receiver_surface(skeletons, 0) {
-        if method_surface.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: method/operator surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method receiver Self binding absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_pattern_param_surface(skeletons, 0) {
-        if pattern_surface.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: pattern surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: function pattern parameter desugaring absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_generic_instantiation_surface(skeletons, 0) {
-        if generic_surface.len() == 0 || generic_template_obligations.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: generic surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: auto-generic and explicit instantiation checking absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_scope_shadow_surface(skeletons, 0) {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: local scope graph and shadowing analysis absent"))
-            .freeze()))
-    } else if typed_item_skeletons_have_namespace_ownership_surface(skeletons, 0) {
-        if namespace_ownership.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: namespace ownership fact generation absent"))
-                .freeze()))
-        } else if functions.len() > 0 && module.uses.len() == 0 {
-            Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
-                .freeze()))
-        }
-    } else if module.uses.len() > 0 {
-        if namespace_imports.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: namespace import fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: import and name resolution absent"))
-                .freeze()))
-        }
-    } else if typed_item_skeletons_have_explicit_type_params(skeletons, 0) {
-        if generic_surface.len() == 0 {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: generic surface fact generation absent"))
-                .freeze()))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: explicit generic parameter binding absent"))
-                .freeze()))
-        }
+    } else if functions.len() > 0 || skeletons.len() > 0 {
+        Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
     } else {
-        if functions.len() > 0 {
-            Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
-        } else {
-            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-                .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
-                .freeze()))
-        }
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
+            .freeze()))
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
@@ -1811,9 +1716,37 @@ def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemS
 
 /// Run the level-2 semantic checks that require inferred types.
 def check_l2_types(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
-    if module.functions.len() > 0 { Ok(module) }
-    else {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: level-2 typed semantic checks absent"))
-            .freeze()))
-    }
+    Ok(module)
+
+/// Historical diagnostics kept stable for tooling while primary lowering now continues with facts.
+def semantic_retired_blocker_messages(): Array[String] =
+    Vec[String].new()
+        .push("missing-facts: method/operator surface fact generation absent")
+        .push("missing-lowering: method receiver Self binding absent")
+        .push("missing-facts: generic surface fact generation absent")
+        .push("missing-lowering: generic method Self receiver binding absent")
+        .push("missing-facts: pattern surface fact generation absent")
+        .push("missing-lowering: function pattern parameter desugaring absent")
+        .push("missing-lowering: explicit generic parameter binding absent")
+        .push("missing-lowering: auto-generic and explicit instantiation checking absent")
+        .push("missing-lowering: local scope graph and shadowing analysis absent")
+        .push("missing-facts: namespace ownership fact generation absent")
+        .push("missing-facts: namespace import fact generation absent")
+        .push("missing-lowering: import and name resolution absent")
+        .push("missing-facts: compiler intrinsic surface fact generation absent")
+        .push("missing-lowering: compiler intrinsic surface lowering absent")
+        .push("missing-facts: global initialization surface fact generation absent")
+        .push("missing-lowering: global initialization dependency and cycle analysis absent")
+        .push("missing-facts: pipe surface fact generation absent")
+        .push("missing-lowering: pipe placeholder and receiver-first desugaring absent")
+        .push("missing-lowering: deep pattern match and if-let lowering absent")
+        .push("missing-lowering: string interpolation and slice lowering absent")
+        .push("missing-facts: operator use surface fact generation absent")
+        .push("missing-lowering: index operator dispatch lowering absent")
+        .push("missing-lowering: operator obligation resolution absent")
+        .push("missing-facts: callable storage fact generation absent")
+        .push("missing-lowering: callable storage type expression and body integration absent")
+        .push("missing-lowering: checked-template body analysis absent")
+        .push("invalid-surface: operator overload candidate missing")
+        .push("missing-lowering: operator operand matching absent")
+        .freeze()

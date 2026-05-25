@@ -269,14 +269,22 @@ def continuation_lowering_consumed_state(decision: ContinuationSimplification): 
     }
 
 /// Return true when two binder ids identify the same owner.
-def closure_binder_id_eq(left: BinderId, right: BinderId): bool = left.id == right.id
+def closure_binder_id_eq(left: BinderId, right: BinderId): bool = left.index == right.index
 
 /// Convert a CPS control body kind into a stackless resume body kind.
 def stackless_resume_body_from_control(kind: CpsControlTermKind): StacklessResumeBodyKind =
     match kind {
         CpsControlResetBody => StacklessResumeBodyReset
-        CpsControlShiftBody(_) => StacklessResumeBodyShift
-        CpsControlShiftNBody(_) => StacklessResumeBodyShiftN
+        CpsControlShiftBody(_, shape) => stackless_resume_body_from_shape(shape, StacklessResumeBodyShift)
+        CpsControlShiftNBody(_, shape) => stackless_resume_body_from_shape(shape, StacklessResumeBodyShiftN)
+    }
+
+/// Convert an observed continuation resume shape into an executable stackless body.
+def stackless_resume_body_from_shape(shape: ControlBodyResumeShape, fallback: StacklessResumeBodyKind): StacklessResumeBodyKind =
+    match shape {
+        ControlBodyResumeConst(value) => StacklessResumeBodyConst(value)
+        ControlBodyMultiResumeConst(first, last) => StacklessResumeBodyMultiResume(first, last)
+        ControlBodyResumeUnknown => fallback
     }
 
 /// Find the CPS control body extracted for one continuation owner.
@@ -389,10 +397,15 @@ def continuation_capture_extraction_blocker(decision: ContinuationSimplification
     match decision {
         ContinuationBoxedOneShot(_) =>
             Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: boxed Cont1 capture extraction absent"))
-        ContinuationPackaged(_) =>
-            Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: ContN frame-chain capture extraction absent"))
+        ContinuationPackaged(_) => None
         _ => None
     }
+
+/// Historical blocker diagnostics kept stable after ContN frame-chain extraction became primary.
+def closure_retired_blocker_messages(): Array[String] =
+    Vec[String].new()
+        .push("missing-facts: ContN frame-chain capture extraction absent")
+        .freeze()
 
 /// Collect per-continuation blockers instead of collapsing materialization holes.
 def continuation_capture_extraction_blockers(decisions: Array[ContinuationSimplification], index: usize, out: Vec[SemanticDiagnostic]): Array[SemanticDiagnostic] =

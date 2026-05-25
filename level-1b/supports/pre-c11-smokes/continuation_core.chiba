@@ -3,7 +3,7 @@ namespace pre_c11.continuation_core
 
 /// Multi-shot continuation should lower through a continuation package path.
 def continuation_core(): i64 = reset {
-    shift k {
+    shiftn k {
         let first = k(1)
         k(2)
     }

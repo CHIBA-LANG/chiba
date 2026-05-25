@@ -54,6 +54,7 @@ data CoreExprKind {
     CoreExprUnit,
     CoreExprI32Zero,
     CoreExprI32FortyTwo,
+    CoreExprI32Const(CoreI32ConstAtom),
     CoreExprParam0,
     CoreExprTailCall(str),
     CoreExprTailCallI32Const(str, CoreI32ConstAtom),
@@ -177,8 +178,15 @@ def core_expr_from_cps_atom(atom: CpsAtom): CoreExprKind =
         CpsAtomUnit => CoreExprUnit
         CpsAtomI32Const(TypedI32ConstZero) => CoreExprI32Zero
         CpsAtomI32Const(TypedI32ConstFortyTwo) => CoreExprI32FortyTwo
+        CpsAtomI32Const(atom) => CoreExprI32Const(core_i32_const_atom_from_typed(atom))
         CpsAtomParam0 => CoreExprParam0
     }
+
+/// Convert a small resume result into an executable Core atom.
+def core_expr_from_usize(value: usize): CoreExprKind =
+    if value == 0 { CoreExprI32Zero }
+    else if value == 42 { CoreExprI32FortyTwo }
+    else { CoreExprI32Const(CoreI32ConstSmall(value)) }
 
 /// Convert a one-argument CPS tail call to Core expression form.
 def core_expr_from_cps_tail_call_arg(target: str, args: Array[CpsAtom]): CoreExprKind =
@@ -211,11 +219,13 @@ def core_expr_from_stackless_resume_body(body: StacklessResumeBodyKind): CoreExp
         StacklessResumeBodyShiftN => CoreExprI32Zero
         StacklessResumeBodyShift => CoreExprI32Zero
         StacklessResumeBodyReset => CoreExprI32Zero
+        StacklessResumeBodyConst(value) => core_expr_from_usize(value)
+        StacklessResumeBodyMultiResume(_, last) => core_expr_from_usize(last)
         StacklessResumeBodyPending => CoreExprBranchJoinPending
     }
 
 /// Return true when two binder ids identify the same owner.
-def core_binder_id_eq(left: BinderId, right: BinderId): bool = left.id == right.id
+def core_binder_id_eq(left: BinderId, right: BinderId): bool = left.index == right.index
 
 /// Find the typed function metadata for one CPS term owner.
 def core_typed_function_for_owner(functions: Array[TypedFunctionFact], owner: BinderId, index: usize): Option[TypedFunctionFact] =

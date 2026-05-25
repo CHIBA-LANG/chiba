@@ -49,11 +49,44 @@ def chibacc_find_text(source: str, offset: usize, text: str): usize =
     else if chibacc_starts_with_at(source, offset, text, 0) { offset }
     else { chibacc_find_text(source, offset + 1, text) }
 
+/// Find text inside a bounded region or return that region end.
+def chibacc_find_text_until(source: str, offset: usize, end: usize, text: str): usize =
+    if offset >= end { end }
+    else if chibacc_starts_with_at(source, offset, text, 0) { offset }
+    else { chibacc_find_text_until(source, offset + 1, end, text) }
+
+/// Return the end offset of one source line.
+def chibacc_line_end(source: str, offset: usize): usize =
+    chibacc_find_byte(source, offset, 10)
+
+/// Trim trailing whitespace from a bounded region.
+def chibacc_trim_right(source: str, start: usize, end: usize): usize =
+    if end <= start { start }
+    else {
+        let byte = source.byte_at(end - 1)
+        if byte == 32 || byte == 9 || byte == 10 || byte == 13 { chibacc_trim_right(source, start, end - 1) }
+        else { end }
+    }
+
+/// Slice a source region after trimming surrounding whitespace.
+def chibacc_trimmed_slice(source: str, start: usize, end: usize): str =
+    let left = chibacc_skip_ws(source, start)
+    let right = chibacc_trim_right(source, left, end)
+    source.slice(left, right - left)
+
 /// Scan one identifier.
 def chibacc_scan_ident(source: str, offset: usize): usize =
     if offset >= source.len() { offset }
     else if chibacc_ident_continue(source.byte_at(offset)) { chibacc_scan_ident(source, offset + 1) }
     else { offset }
+
+/// Return true when an identifier should be treated as a token reference.
+def chibacc_ident_is_token(name: str): bool =
+    if name.len() == 0 { false }
+    else {
+        let byte = name.byte_at(0)
+        byte >= 65 && byte <= 90
+    }
 
 /// Parse namespace declaration from the header block.
 def chibacc_parse_namespace(source: str): str =
@@ -90,23 +123,152 @@ def chibacc_parse_rule_name(source: str): Result[GrammarName, ChibaccParseError]
 def chibacc_empty_alternatives(): GrammarRuleBody =
     GrammarAlternatives(ListNil)
 
+/// Parse one grammar atom identifier with an optional binding prefix.
+def chibacc_parse_atom_token(source: str, start: usize, end: usize): Option[GrammarAtom] =
+    let offset = chibacc_skip_ws(source, start)
+    if offset >= end { None }
+    else {
+        let ident_end = chibacc_scan_ident(source, offset)
+        if ident_end == offset { None }
+        else {
+            let after_ident = chibacc_skip_ws(source, ident_end)
+            if after_ident < end && source.byte_at(after_ident) == 58 {
+                let rhs_start = chibacc_skip_ws(source, after_ident + 1)
+                let rhs_end = chibacc_scan_ident(source, rhs_start)
+                if rhs_end == rhs_start { None }
+                else {
+                    let rhs = source.slice(rhs_start, rhs_end - rhs_start)
+                    let atom = if chibacc_ident_is_token(rhs) { GrammarToken(rhs) }
+                        else { GrammarRuleRef(GrammarName { text: rhs }) }
+                    Some(GrammarBind(source.slice(offset, ident_end - offset), atom))
+                }
+            } else {
+                let name = source.slice(offset, ident_end - offset)
+                if chibacc_ident_is_token(name) { Some(GrammarToken(name)) }
+                else { Some(GrammarRuleRef(GrammarName { text: name })) }
+            }
+        }
+    }
+
+/// Return the end of the current atom token.
+def chibacc_atom_token_end(source: str, start: usize, end: usize): usize =
+    let offset = chibacc_skip_ws(source, start)
+    if offset >= end { end }
+    else {
+        let ident_end = chibacc_scan_ident(source, offset)
+        let after_ident = chibacc_skip_ws(source, ident_end)
+        if after_ident < end && source.byte_at(after_ident) == 58 {
+            chibacc_scan_ident(source, chibacc_skip_ws(source, after_ident + 1))
+        } else { ident_end }
+    }
+
+/// Parse a sequence of grammar atoms before the semantic action.
+def chibacc_parse_sequence_atoms(source: str, offset: usize, end: usize): List[GrammarAtom] =
+    let start = chibacc_skip_ws(source, offset)
+    if start >= end { ListNil }
+    else {
+        match chibacc_parse_atom_token(source, start, end) {
+            Some(atom) => ListCons(atom, chibacc_parse_sequence_atoms(source, chibacc_atom_token_end(source, start, end), end))
+            None => ListNil
+        }
+    }
+
+/// Parse a semantic action after `=>` on one alternative line.
+def chibacc_parse_action_source(source: str, arrow: usize, line_end: usize): GrammarAction =
+    let start = chibacc_skip_ws(source, arrow + 2)
+    let semi = chibacc_find_byte(source, start, 59)
+    let end = if semi < line_end { semi } else { line_end }
+    GrammarAction { source: chibacc_trimmed_slice(source, start, end) }
+
+/// Parse one alternative line.
+def chibacc_parse_alternative_line(source: str, offset: usize, line_end: usize): Option[GrammarAlternative] =
+    let arrow = chibacc_find_text_until(source, offset, line_end, "=>")
+    if arrow >= line_end { None }
+    else {
+        Some(GrammarAlternative {
+            sequence: GrammarSequence { atoms: chibacc_parse_sequence_atoms(source, offset, arrow) },
+            action: chibacc_parse_action_source(source, arrow, line_end),
+        })
+    }
+
+/// Parse alternatives until the rule terminator.
+def chibacc_parse_alternatives_from(source: str, offset: usize, end: usize): List[GrammarAlternative] =
+    if offset >= end { ListNil }
+    else {
+        let line_end = chibacc_line_end(source, offset)
+        match chibacc_parse_alternative_line(source, offset, line_end) {
+            Some(alt) => ListCons(alt, chibacc_parse_alternatives_from(source, line_end + 1, end))
+            None => chibacc_parse_alternatives_from(source, line_end + 1, end)
+        }
+    }
+
+/// Return a bounded rule body end before the next rule or data block.
+def chibacc_rule_body_end(source: str, body_start: usize): usize =
+    let next_rule = chibacc_find_text(source, body_start, "\nrule")
+    let data_block = chibacc_find_text(source, body_start, "\n{")
+    if next_rule < data_block { next_rule }
+    else { data_block }
+
+/// Parse a normal rule body from source.
+def chibacc_parse_rule_body(source: str, body_start: usize, body_end: usize): GrammarRuleBody =
+    if chibacc_find_text_until(source, body_start, body_end, "pratt") < body_end {
+        match parse_pratt(source.slice(body_start, body_end - body_start)) {
+            Ok(body) => body
+            Err(_) => GrammarPratt(ListNil, ListNil)
+        }
+    } else {
+        GrammarAlternatives(chibacc_parse_alternatives_from(source, body_start, body_end))
+    }
+
+/// Parse one rule beginning at a known `rule` offset.
+def chibacc_parse_rule_at(source: str, rule: usize): Result[GrammarRule, ChibaccParseError] =
+    let name_start = chibacc_skip_ws(source, rule + "rule".len())
+    let name_end = chibacc_scan_ident(source, name_start)
+    if name_end == name_start { Err(chibacc_parse_error(name_start, "expected rule name")) }
+    else {
+        let define = chibacc_find_text(source, name_end, "::=")
+        if define >= source.len() { Err(chibacc_parse_error(name_end, "expected ::=")) }
+        else {
+            let body_start = define + 3
+            let body_end = chibacc_rule_body_end(source, body_start)
+            Ok(GrammarRule {
+                name: GrammarName { text: source.slice(name_start, name_end - name_start) },
+                body: chibacc_parse_rule_body(source, body_start, body_end),
+            })
+        }
+    }
+
+/// Parse rules in source order.
+def chibacc_parse_rules_from(source: str, offset: usize): List[GrammarRule] =
+    let rule = chibacc_find_text(source, offset, "rule")
+    if rule >= source.len() { ListNil }
+    else {
+        match chibacc_parse_rule_at(source, rule) {
+            Ok(item) => ListCons(item, chibacc_parse_rules_from(source, chibacc_rule_body_end(source, rule) + 1))
+            Err(_) => chibacc_parse_rules_from(source, rule + 1)
+        }
+    }
+
+/// Preserve AST data block for generated parser output.
+def chibacc_ast_data_block(source: str): String =
+    let data_start = chibacc_find_text(source, 0, "data AST")
+    if data_start >= source.len() { "" }
+    else { source.slice(data_start, source.len() - data_start) }
+
 /// Parse one `.chibacc` source file.
 def parse_chibacc(source: str): Result[ChibaccSpec, ChibaccParseError] =
     Ok(ChibaccSpec {
         namespace_name: chibacc_parse_namespace(source),
         start: chibacc_parse_start_name(source),
-        rules: ListNil,
-        ast_data: "",
+        rules: chibacc_parse_rules_from(source, 0),
+        ast_data: chibacc_ast_data_block(source),
     })
 
 /// Parse a normal grammar rule.
 def parse_rule(source: str): Result[GrammarRule, ChibaccParseError] =
     match chibacc_parse_rule_name(source) {
         Ok(name) =>
-            Ok(GrammarRule {
-                name: name,
-                body: chibacc_empty_alternatives(),
-            })
+            chibacc_parse_rule_at(source, chibacc_find_text(source, 0, "rule"))
         Err(error) => Err(error)
     }
 

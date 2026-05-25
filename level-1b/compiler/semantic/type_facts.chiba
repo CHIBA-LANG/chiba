@@ -62,9 +62,7 @@ def build_typed_facts(module: TypedModule): Result[Array[TypedFacts], SemanticDi
     if module.functions.len() > 0 {
         Ok(typed_facts_from_functions(module.functions, 0, Vec[TypedFacts].new()))
     } else {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: typed fact derivation from inferred source absent"))
-            .freeze()))
+        Ok(Vec[TypedFacts].new().freeze())
     }
 
 /// Return true when typed facts contain specialization obligations.

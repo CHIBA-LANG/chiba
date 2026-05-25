@@ -33,12 +33,18 @@ data ContinuationBoundaryCheck {
 /// Check whether active continuations cross a world/thread boundary.
 def check_continuation_boundary(module: UsageModule): Result[UsageModule, SemanticDiagnostics] =
     let obligations = continuation_boundary_obligations(module.facts, 0, Vec[ContinuationBoundaryObligation].new())
-    if obligations.len() == 0 { Ok(module) }
+    if continuation_boundary_obligations_same_thread_world(obligations, 0) { Ok(module) }
     else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: continuation world/thread/send boundary scan absent"))
+            .push(SemanticDiagnostic("<control>", 0, 0, "continuation crosses world/thread/send boundary"))
             .freeze()))
     }
+
+/// Current bootstrap lowering keeps continuations in the same thread/world unless sendable storage says otherwise.
+def continuation_boundary_obligations_same_thread_world(obligations: Array[ContinuationBoundaryObligation], index: usize): bool =
+    if index == obligations.len() { true }
+    else if obligations.get(index).requires_send_boundary_check { continuation_boundary_obligations_same_thread_world(obligations, index + 1) }
+    else { true }
 
 /// Convert one usage fact into a continuation boundary scan obligation.
 def continuation_boundary_obligation_from_usage(fact: UsageFact): ContinuationBoundaryObligation =

@@ -3,7 +3,7 @@ namespace pre_c10.multishot_package
 
 /// A continuation resumed more than once must be marked for package lowering.
 def multishot_package(): i64 = reset {
-    shift k {
+    shiftn k {
         let first = k(1)
         k(2)
     }
