@@ -11,7 +11,8 @@
 
 ## P0
 - [ ] P0 快速补实现策略：先补 primary lowering 行为，再后补完整 gate；每个补实现 slice 必须在本文件留下 gate TODO，不能用 contract smoke 冒充真实验收。
-	- [ ] gate TODO：为 C08-C11 typed callee symbol / CPS tail-call target / Core return_call target 增加 generated-path fixture，验证 `callee()` 不再 emit 固定 `$chiba.tail_target`。
+	- [x] gate TODO：为 C08-C11 typed callee symbol / CPS tail-call target / Core return_call target 增加 generated-path fixture，验证 `callee()` 不再 emit 固定 `$chiba.tail_target`。
+	- [ ] gate TODO：等 level-1b parser/driver primary path 可执行后，把 synthetic C11 tailcall fixture 升级成 source `callee()` -> typed/CPS/Core/WAT end-to-end fixture。
 - [ ] chibalex/chibacc frontend：还没替换 scan.chiba；真实 source AST 还没进 primary path。
 	- [x] source parser facts blocker：`SourceProjectFacts.parser` 已显式记录 chibalex/chibacc primary path 缺失，不再让 scanner fallback 冒充 parsed AST。
 - [ ] attribute grammar：#[attr(...)] nested/named/list args 没 spec/golden/AST/parser。

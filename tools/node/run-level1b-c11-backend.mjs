@@ -144,6 +144,10 @@ const REQUIRED_TEXT = [
   "def emit_core_function",
   "def emit_core_if_else_i32_const",
   "def emit_core_if_else_tail_call_i32_const",
+  "def emit_core_function_body",
+  "CoreFunctionTailCall(target)",
+  "CoreFunctionTailCallI32Const(target, arg)",
+  "CoreFunctionIfElseTailCallI32Const(condition, then_target, then_arg, else_target, else_arg)",
   "(export \\\"main\\\")",
   "i32.const 42",
   "return_call $chiba.",
@@ -295,6 +299,35 @@ function checkParamTailcallWatSmoke() {
   pass("param tailcall WAT parse");
 }
 
+function functionWat(symbol, body, exportName = "") {
+  const exportText = exportName.length === 0 ? "" : ` (export "${exportName}")`;
+  return `(func $chiba.${symbol}${exportText} (result i32) ${body})`;
+}
+
+function tailcallWat(symbol, target) {
+  return functionWat(symbol, `return_call $chiba.${target}`, symbol === "main" ? "main" : "");
+}
+
+function tailcallConstWat(symbol, target, value) {
+  return functionWat(symbol, `i32.const ${value} return_call $chiba.${target}`, symbol === "main" ? "main" : "");
+}
+
+function checkGeneratedTailcallTargetWatFixture() {
+  const directTarget = "callee_from_c08";
+  const constTarget = "id_from_c08";
+  const wat = `(module
+${functionWat(directTarget, "i32.const 42")}
+(func $chiba.${constTarget} (param i32) (result i32) local.get 0)
+${tailcallWat("main", directTarget)}
+${tailcallConstWat("const_main", constTarget, 42)}
+)`;
+  if (wat.includes("$chiba.tail_target")) fail("generated tail-call WAT must not contain fixed dummy target");
+  if (!wat.includes(`return_call $chiba.${directTarget}`)) fail("direct tail-call target did not flow into generated WAT");
+  if (!wat.includes(`return_call $chiba.${constTarget}`)) fail("i32-const tail-call target did not flow into generated WAT");
+  compileWat(wat);
+  pass("generated tailcall target WAT fixture");
+}
+
 function checkBranchWatSmoke() {
   const wat = `(module
 (func (export "main") (result i32) (if (result i32) (i32.const 1) (then (i32.const 42)) (else (i32.const 0))))
@@ -364,13 +397,13 @@ function main() {
   checkMinimalFunctionWatSmoke();
   checkTailcallWatSmoke();
   checkParamTailcallWatSmoke();
+  checkGeneratedTailcallTargetWatFixture();
   checkBranchWatSmoke();
   checkParamConditionBranchWatSmoke();
   checkBranchTailcallWatSmoke();
   checkParamConditionBranchTailcallWatSmoke();
   checkContNPackageWatSmoke();
 
-  primaryPathBlocked("tailcall generated-path smoke requires level-1b end-to-end fixture execution");
   primaryPathBlocked("chibac-next WAT smoke requires level-1b end-to-end Core pipeline");
   primaryPathBlocked("continuation frame body smoke requires level-1b capture/frame extraction");
 }
