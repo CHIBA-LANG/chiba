@@ -5,6 +5,7 @@ use compiler.source.project.*
 use compiler.source.scan.*
 use compiler.semantic.driver.*
 use compiler.semantic.types.*
+use compiler.semantic.type_infer.*
 
 /// Control boundary kind observed in an expression.
 data ControlBoundary {
@@ -137,28 +138,20 @@ def control_resume_const_at(text: String, offset: usize, end: usize): Option[usi
             }
     }
 
-/// Return true when a resume argument is exactly the first function parameter.
-def control_resume_arg_is_param0(text: String, arg: usize, end: usize, item: TypedItemSkeleton): bool =
-    match typed_function_first_param_name(text, item) {
-        Some(param) => {
-            if source_starts_with_at(text, arg, typed_function_tail_call_target_text(text, param), 0) == false { false }
-            else if source_word_boundary_after(text, arg, param.len) == false { false }
-            else {
-                let close = source_skip_spaces(text, arg + param.len)
-                close < end && text.byte_at(close) == 41
-            }
-        }
-        None => false
-    }
+/// Return an indexed function parameter when a resume argument passes it through directly.
+def control_resume_arg_param_index(text: String, arg: usize, end: usize, item: TypedItemSkeleton): Option[usize] =
+    let close = typed_source_region_find_byte_or_end(text, arg, end, 41)
+    if close >= end { None }
+    else { typed_function_param_index_from_region(text, item, arg, close) }
 
-/// Parse a resume call that passes through the first function parameter.
-def control_resume_param0_at(text: String, offset: usize, end: usize, item: TypedItemSkeleton): bool =
+/// Parse a resume call that passes through an indexed function parameter.
+def control_resume_param_at(text: String, offset: usize, end: usize, item: TypedItemSkeleton): Option[usize] =
     match control_resume_arg_start(text, offset, end, "k") {
-        Some(arg) => control_resume_arg_is_param0(text, arg, end, item)
+        Some(arg) => control_resume_arg_param_index(text, arg, end, item)
         None =>
             match control_resume_arg_start(text, offset, end, "retry") {
-                Some(arg) => control_resume_arg_is_param0(text, arg, end, item)
-                None => false
+                Some(arg) => control_resume_arg_param_index(text, arg, end, item)
+                None => None
             }
     }
 
@@ -176,20 +169,29 @@ def control_resume_shape_loop(text: String, offset: usize, end: usize, count: us
         }
     }
 
-/// Build the observed resume shape, preserving direct first-param resumes.
-def control_resume_shape_loop_for_item(text: String, item: TypedItemSkeleton, offset: usize, end: usize, count: usize, first: usize, last: usize, saw_param0: bool): ControlBodyResumeShape =
+/// Finish the observed resume shape when the scan reaches the body end.
+def control_resume_shape_finish(count: usize, first: usize, last: usize, param: Option[usize]): ControlBodyResumeShape =
+    match param {
+        Some(index) => ControlBodyResumeParam(index)
+        None =>
+            if count == 0 { ControlBodyResumeUnknown }
+            else if count == 1 { ControlBodyResumeConst(last) }
+            else { ControlBodyMultiResumeConst(first, last) }
+    }
+
+/// Build the observed resume shape, preserving direct indexed-param resumes.
+def control_resume_shape_loop_for_item(text: String, item: TypedItemSkeleton, offset: usize, end: usize, count: usize, first: usize, last: usize, param: Option[usize]): ControlBodyResumeShape =
     if offset >= end {
-        if saw_param0 { ControlBodyResumeParam(0) }
-        else if count == 0 { ControlBodyResumeUnknown }
-        else if count == 1 { ControlBodyResumeConst(last) }
-        else { ControlBodyMultiResumeConst(first, last) }
-    } else if control_resume_param0_at(text, offset, end, item) {
-        control_resume_shape_loop_for_item(text, item, offset + 1, end, count, first, last, true)
+        control_resume_shape_finish(count, first, last, param)
     } else {
-        match control_resume_const_at(text, offset, end) {
-            Some(value) =>
-                control_resume_shape_loop_for_item(text, item, offset + 1, end, count + 1, if count == 0 { value } else { first }, value, saw_param0)
-            None => control_resume_shape_loop_for_item(text, item, offset + 1, end, count, first, last, saw_param0)
+        match control_resume_param_at(text, offset, end, item) {
+            Some(index) => control_resume_shape_loop_for_item(text, item, offset + 1, end, count, first, last, Some(index))
+            None =>
+                match control_resume_const_at(text, offset, end) {
+                    Some(value) =>
+                        control_resume_shape_loop_for_item(text, item, offset + 1, end, count + 1, if count == 0 { value } else { first }, value, param)
+                    None => control_resume_shape_loop_for_item(text, item, offset + 1, end, count, first, last, param)
+                }
         }
     }
 
@@ -200,7 +202,7 @@ def control_resume_shape_for_owner(module: TypedModule, fact: ControlSurfaceFact
             let text = control_source_file_text(module.alpha.project.files, fact.file, 0)
             let start = source_scan_item_body_region_start(text, item.surface.header.offset)
             let end = source_scan_item_region_end(text, item.surface.header.offset)
-            control_resume_shape_loop_for_item(text, item, start, end, 0, 0, 0, false)
+            control_resume_shape_loop_for_item(text, item, start, end, 0, 0, 0, None)
         }
         None => ControlBodyResumeUnknown
     }
