@@ -213,13 +213,38 @@ def continuation_lowering_consumed_state(decision: ContinuationSimplification): 
         _ => false
     }
 
+/// Build a stackless resume function shell for a repeatable ContN frame.
+def stackless_resume_function_for_owner(owner: BinderId): StacklessResumeFunction =
+    StacklessResumeFunction {
+        owner: owner,
+        resume_input: TypeUnknown,
+        answer: TypeUnknown,
+    }
+
+/// Build a minimal repeatable ContN frame with capture extraction still external.
+def continuation_frame_for_owner(owner: BinderId): ContinuationFrame =
+    ContinuationFrame {
+        owner: owner,
+        resume: stackless_resume_function_for_owner(owner),
+        captures: Vec[EnvField].new().freeze(),
+        parent: None,
+    }
+
+/// Build frame chain facts for continuation kinds that require materialized frames.
+def continuation_lowering_frames(decision: ContinuationSimplification): Array[ContinuationFrame] =
+    match decision {
+        ContinuationPackaged(owner) =>
+            Vec[ContinuationFrame].new().push(continuation_frame_for_owner(owner)).freeze()
+        _ => Vec[ContinuationFrame].new().freeze()
+    }
+
 /// Build a lowering fact for direct/deleted continuations that need no frame.
 def continuation_lowering_fact(decision: ContinuationSimplification): ContinuationLoweringFact =
     ContinuationLoweringFact {
         owner: decision.owner(),
         capability: decision.capability(),
         kind: continuation_lowering_kind(decision),
-        frames: Vec[ContinuationFrame].new().freeze(),
+        frames: continuation_lowering_frames(decision),
         consumed_state: continuation_lowering_consumed_state(decision),
     }
 

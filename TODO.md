@@ -78,6 +78,7 @@
 	- [x] Cont1 one-shot obligations：Cont1 simplification 已生成 direct resume vs boxed state-machine obligation，并显式要求 consumed state。
 - [ ] ContN lowering：stackless resume frame、frame chain、repeatable package 没完整 primary。
 	- [x] ContN frame-chain obligations：packaged ContN simplification 已生成 stackless resume function / frame chain / repeatable package obligation；真实 frame extraction 仍未完成。
+	- [x] ContN non-zero frame fact：`ContinuationPackaged` lowering fact 现在会携带至少一个 stackless resume frame shell，避免 C11 收到 zero-frame repeatable package；真实 capture/frame body extraction 仍 fail-closed。
 - [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。
 	- [x] Core block obligations：Core lowering 现在产出 block terminator / return / tailcall obligations；真实 executable block emission 仍未完成。
 	- [x] typed function Core op：C11 现在会从 C08 typed function body facts 生成 `CoreOpFunction`，并保持 owner / export-main / body fact；真实 block body lowering 仍只覆盖常量返回竖切。
