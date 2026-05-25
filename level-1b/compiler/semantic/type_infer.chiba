@@ -536,13 +536,24 @@ def typed_pipe_rhs_expr(text: String, item: TypedItemSkeleton, lhs: TypedExprKin
         } else { None }
     }
 
-/// Parse a simple single-step pipe expression into an executable tail call.
+/// Continue a pipe chain as a left fold over simple RHS call segments.
+def typed_pipe_expr_continue(text: String, item: TypedItemSkeleton, lhs: TypedExprKind, start: usize, end: usize): Option[TypedExprKind] =
+    let pipe = typed_source_region_find_text_or_end(text, start, end, "|>")
+    let segment_end = if pipe < end { pipe } else { end }
+    match typed_pipe_rhs_expr(text, item, lhs, start, segment_end) {
+        Some(next_lhs) =>
+            if pipe < end { typed_pipe_expr_continue(text, item, next_lhs, pipe + 2, end) }
+            else { Some(next_lhs) }
+        None => None
+    }
+
+/// Parse a simple pipe expression into executable left-folded tail-call form.
 def typed_pipe_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
     let pipe = typed_source_region_find_text_or_end(text, start, end, "|>")
     if pipe >= end { None }
     else {
         match typed_call_arg_expr_from_region(text, item, start, pipe) {
-            Some(lhs) => typed_pipe_rhs_expr(text, item, lhs, pipe + 2, end)
+            Some(lhs) => typed_pipe_expr_continue(text, item, lhs, pipe + 2, end)
             None => None
         }
     }
