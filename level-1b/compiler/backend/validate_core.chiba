@@ -8,6 +8,7 @@ use compiler.ir.common.*
 data CoreValidationError {
     CoreDanglingLayout(str),
     CoreDanglingSymbol(str),
+    CoreDuplicateSymbol(str),
     CoreMissingOwner(str),
     CoreIllegalTailCall(str),
     CoreNonTailCps(str),
@@ -119,6 +120,21 @@ def core_module_contains_symbol(module: WasmGcCoreModule, target: str, index: us
     if index == module.ops.len() { false }
     else if core_op_defines_symbol(module.ops.get(index), target) { true }
     else { core_module_contains_symbol(module, target, index + 1) }
+
+/// Return true when the same symbol appears later in the Core op stream.
+def core_module_has_later_symbol(module: WasmGcCoreModule, target: str, index: usize): bool =
+    if index == module.ops.len() { false }
+    else if core_op_defines_symbol(module.ops.get(index), target) { true }
+    else { core_module_has_later_symbol(module, target, index + 1) }
+
+/// Validate that emitted function symbols are unique.
+def validate_core_duplicate_symbol(module: WasmGcCoreModule, op: CoreOp, next_index: usize): Option[CoreValidationError] =
+    match op.function_symbol {
+        Some(symbol) =>
+            if core_module_has_later_symbol(module, symbol.name, next_index) { Some(CoreDuplicateSymbol("duplicate Core function symbol")) }
+            else { None }
+        None => None
+    }
 
 /// Validate direct symbol references inside Core function bodies.
 def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValidationError] =
@@ -266,10 +282,11 @@ def push_validation_error(out: Vec[CoreValidationError], error: Option[CoreValid
     }
 
 /// Validate one Core op.
-def validate_core_op(module: WasmGcCoreModule, op: CoreOp, out: Vec[CoreValidationError]): Vec[CoreValidationError] =
+def validate_core_op(module: WasmGcCoreModule, op: CoreOp, next_index: usize, out: Vec[CoreValidationError]): Vec[CoreValidationError] =
     out
         |> push_validation_error(validate_core_layout(module, op))
         |> push_validation_error(validate_core_symbol(module, op))
+        |> push_validation_error(validate_core_duplicate_symbol(module, op, next_index))
         |> push_validation_error(validate_core_owner(op))
         |> push_validation_error(validate_core_tail(op))
         |> push_validation_error(validate_core_cps_tail_form(op))
@@ -288,7 +305,7 @@ def validate_core_ops_with_contn_frame(module: WasmGcCoreModule, index: usize, f
             module,
             index + 1,
             next_frame_state,
-            validate_core_op(module, op, out)
+            validate_core_op(module, op, index + 1, out)
                 |> push_validation_error(validate_core_contn_stackless_count(op, frame_state))
                 |> push_validation_error(validate_core_continuation_order(op, frame_state)))
     }
