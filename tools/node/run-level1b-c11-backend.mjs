@@ -236,6 +236,18 @@ function checkTailcallWatSmoke() {
   pass("tailcall WAT parse");
 }
 
+function checkContNPackageWatSmoke() {
+  const wat = `(module
+(type $chiba.layout.continuation_frame (struct (field funcref) (field eqref)))
+(type $chiba.layout.continuation_frame_chain (struct (field (ref null $chiba.layout.continuation_frame)) (field (ref null $chiba.layout.continuation_frame_chain))))
+(type $chiba.layout.contN_package (struct (field (ref null $chiba.layout.continuation_frame_chain)) (field i32)))
+(func $resume)
+(func $pack (param (ref null $chiba.layout.contN_package)))
+)`;
+  compileWat(wat);
+  pass("ContN package WAT parse");
+}
+
 function main() {
   const files = listChiba(ROOT);
   const seen = new Set(files.map((file) => path.basename(file)));
@@ -251,10 +263,11 @@ function main() {
   pass("backend source contract");
   checkMinimalFunctionWatSmoke();
   checkTailcallWatSmoke();
+  checkContNPackageWatSmoke();
 
   primaryPathBlocked("tailcall lowering smoke requires level-1b typed call graph");
   primaryPathBlocked("chibac-next WAT smoke requires level-1b end-to-end Core pipeline");
-  primaryPathBlocked("continuation WAT smoke requires level-1b continuation frame bodies");
+  primaryPathBlocked("continuation frame body smoke requires level-1b capture/frame extraction");
 }
 
 main();
