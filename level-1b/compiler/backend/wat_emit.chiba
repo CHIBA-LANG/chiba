@@ -107,19 +107,23 @@ def emit_core_function_body(body: Option[CoreFunctionBody]): String =
     match body {
         Some(CoreFunctionReturnI32FortyTwo) => "(result i32) i32.const 42"
         Some(CoreFunctionReturnI32Zero) => "(result i32) i32.const 0"
-        Some(CoreFunctionTailCall) => "(result i32) return_call $chiba.tail_target"
+        Some(CoreFunctionTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
         Some(CoreFunctionReturnUnit) => ""
+        None => ""
+    }
+
+/// Emit an optional stable function label.
+def emit_core_function_symbol(symbol: Option[CoreFunctionSymbol]): String =
+    match symbol {
+        Some(name) => "$chiba.".concat(name.name).concat(" ")
         None => ""
     }
 
 /// Emit a function, exporting the first typed `main` slice as WebAssembly main.
 def emit_core_function(op: CoreOp): String =
-    let head = if op.export_main { "(func (export \"main\") " } else { "(func " }
+    let head = if op.export_main { "(func ".concat(emit_core_function_symbol(op.function_symbol)).concat("(export \"main\") ") }
+        else { "(func ".concat(emit_core_function_symbol(op.function_symbol)) }
     head.concat(emit_core_function_body(op.function_body)).concat(")\n")
-
-/// Emit a shared target used by the first tail-call codegen slice.
-def emit_tail_target_function(): String =
-    "(func $chiba.tail_target (result i32) i32.const 42)\n"
 
 /// Emit one Core op as WAT text.
 def emit_core_op(op: CoreOp): Result[String, SemanticDiagnostics] =
@@ -215,7 +219,7 @@ def emit_wat(module: ValidatedCoreModule): Result[WatModule, SemanticDiagnostics
         let with_layouts = append_layout_types(module.core.layouts.entries, 0, builder)
         match append_import_core_ops_wat(module.core.ops, 0, with_layouts) {
             Ok(with_imports) =>
-                match append_runtime_core_ops_wat(module.core.ops, 0, with_imports.push_str(emit_tail_target_function())) {
+                match append_runtime_core_ops_wat(module.core.ops, 0, with_imports) {
                     Ok(done) => Ok(WatModule { text: done.push_str(")\n").finish() })
                     Err(errors) => Err(errors)
                 }

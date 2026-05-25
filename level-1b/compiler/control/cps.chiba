@@ -22,7 +22,7 @@ type CpsModule {
 /// Tail shape after one-pass CPS and administrative beta reduction.
 data CpsTailFormKind {
     CpsTailReturn,
-    CpsTailCall,
+    CpsTailCall(str),
     CpsMaterializedMultiShotFrame,
 }
 
@@ -109,7 +109,7 @@ def cps_tail_form_fact_from_function(function: TypedFunctionBodyFact): CpsTailFo
 /// Pick the CPS tail kind for a typed function body.
 def cps_tail_form_kind_from_function(function: TypedFunctionBodyFact): CpsTailFormKind =
     match function.body {
-        TypedFunctionTailCall => CpsTailCall
+        TypedFunctionTailCall(target) => CpsTailCall(target)
         _ => CpsTailReturn
     }
 

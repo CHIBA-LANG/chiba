@@ -29,6 +29,9 @@ const REQUIRED_TEXT = [
   "CoreFunctionTailCall",
   "export_main: bool",
   "function_body: Option[CoreFunctionBody]",
+  "type CoreFunctionSymbol",
+  "function_symbol: Option[CoreFunctionSymbol]",
+  "def emit_core_function_symbol",
   "frame_count: usize",
   "CoreOpFunction",
   "CoreOpStacklessFunction",
@@ -96,10 +99,9 @@ const REQUIRED_TEXT = [
   "def emit_wat",
   "def empty_wat_module",
   "def emit_core_function",
-  "def emit_tail_target_function",
   "(export \\\"main\\\")",
   "i32.const 42",
-  "return_call $chiba.tail_target",
+  "return_call $chiba.",
   "def run_wasm_gc_wat",
 ];
 
@@ -185,6 +187,9 @@ function checkSource(file, source) {
   if (path.basename(file) === "core.chiba" && /\bCoreOp\s*\{(?![\s\S]{0,160}owner:)/.test(code)) {
     errors.push(`${file}: CoreOp constructors must preserve owner provenance`);
   }
+  if (path.basename(file) === "wat_emit.chiba" && /\$chiba\.tail_target/.test(code)) {
+    errors.push(`${file}: tail-call emission must use the resolved callee symbol, not a fixed dummy target`);
+  }
   if (path.basename(file) === "layout.chiba" && !/kind:\s*LayoutContinuationPackage[\s\S]{0,240}"tag"[\s\S]{0,240}"payload"/.test(code)) {
     errors.push(`${file}: erased callable continuation layout must carry tag and payload fields`);
   }
@@ -229,8 +234,8 @@ function checkMinimalFunctionWatSmoke() {
 
 function checkTailcallWatSmoke() {
   const wat = `(module
-(func $chiba.tail_target (result i32) i32.const 42)
-(func (export "main") (result i32) return_call $chiba.tail_target)
+(func $chiba.callee (result i32) i32.const 42)
+(func $chiba.main (export "main") (result i32) return_call $chiba.callee)
 )`;
   compileWat(wat);
   pass("tailcall WAT parse");
@@ -265,7 +270,7 @@ function main() {
   checkTailcallWatSmoke();
   checkContNPackageWatSmoke();
 
-  primaryPathBlocked("tailcall lowering smoke requires level-1b typed call graph");
+  primaryPathBlocked("tailcall generated-path smoke requires level-1b end-to-end fixture execution");
   primaryPathBlocked("chibac-next WAT smoke requires level-1b end-to-end Core pipeline");
   primaryPathBlocked("continuation frame body smoke requires level-1b capture/frame extraction");
 }

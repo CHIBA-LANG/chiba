@@ -38,7 +38,7 @@ data CoreFunctionBody {
     CoreFunctionReturnUnit,
     CoreFunctionReturnI32Zero,
     CoreFunctionReturnI32FortyTwo,
-    CoreFunctionTailCall,
+    CoreFunctionTailCall(str),
 }
 
 /// Core operation class understood by the dumb backend emitter.
@@ -56,11 +56,17 @@ data CoreOpKind {
     CoreOpImportCall(CoreImportModule),
 }
 
+/// Minimal symbol attached to an emitted Core function.
+type CoreFunctionSymbol {
+    name: str,
+}
+
 /// One lowered Core operation.
 type CoreOp {
     owner: Option[BinderId],
     kind: CoreOpKind,
     export_main: bool,
+    function_symbol: Option[CoreFunctionSymbol],
     function_body: Option[CoreFunctionBody],
     layout: Option[WasmGcLayout],
     tail: CoreTailPosition,
@@ -97,7 +103,7 @@ def core_function_body_from_typed(body: TypedFunctionBodyKind): CoreFunctionBody
         TypedFunctionReturnUnit => CoreFunctionReturnUnit
         TypedFunctionReturnI32Zero => CoreFunctionReturnI32Zero
         TypedFunctionReturnI32FortyTwo => CoreFunctionReturnI32FortyTwo
-        TypedFunctionTailCall => CoreFunctionTailCall
+        TypedFunctionTailCall(target) => CoreFunctionTailCall(target)
     }
 
 /// Lower one typed function fact into a Core function op.
@@ -106,6 +112,7 @@ def lower_typed_function_fact(fact: TypedFunctionBodyFact): CoreOp =
         owner: Some(fact.owner),
         kind: CoreOpFunction,
         export_main: fact.is_main,
+        function_symbol: Some(CoreFunctionSymbol { name: fact.symbol }),
         function_body: Some(core_function_body_from_typed(fact.body)),
         layout: None,
         tail: CoreTailCall,
@@ -129,6 +136,7 @@ def lower_closure_fact(fact: ClosureLoweringFact): Option[CoreOp] =
                 owner: Some(fact.owner),
                 kind: CoreOpClosureCall,
                 export_main: false,
+                function_symbol: None,
                 function_body: None,
                 layout: Some(closure_env_layout()),
                 tail: CorePlainCall,
@@ -172,6 +180,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 owner: Some(fact.owner),
                 kind: CoreOpBoxedCont1,
                 export_main: false,
+                function_symbol: None,
                 function_body: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
@@ -183,6 +192,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 owner: Some(fact.owner),
                 kind: CoreOpContNPackage,
                 export_main: false,
+                function_symbol: None,
                 function_body: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
@@ -194,6 +204,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 owner: Some(fact.owner),
                 kind: CoreOpContinuationPackage,
                 export_main: false,
+                function_symbol: None,
                 function_body: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
@@ -212,6 +223,7 @@ def push_continuation_frame_core_ops(out: Vec[CoreOp], frames: Array[Continuatio
                 owner: Some(frame.owner),
                 kind: CoreOpStacklessFunction,
                 export_main: false,
+                function_symbol: None,
                 function_body: None,
                 layout: None,
                 tail: CorePlainCall,
@@ -231,6 +243,7 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     owner: Some(fact.owner),
                     kind: CoreOpContinuationFrameChain,
                     export_main: false,
+                    function_symbol: None,
                     function_body: None,
                     layout: continuation_frame_chain_layout(fact.kind),
                     tail: CorePlainCall,
@@ -241,6 +254,7 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     owner: Some(fact.owner),
                     kind: CoreOpContNPackage,
                     export_main: false,
+                    function_symbol: None,
                     function_body: None,
                     layout: continuation_core_layout(fact.kind),
                     tail: CorePlainCall,

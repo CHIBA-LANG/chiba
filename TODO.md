@@ -10,6 +10,8 @@
 已完成的 C00-C10、库边界冻结、语义/CPS/closure 主干落地、以及对应 gate 建设，统一视为历史完成项，不再继续堆在这里干扰判断。详细过程保留在 git 历史、`TODO.checkpoint.md` 和各 gate / runner 中。
 
 ## P0
+- [ ] P0 快速补实现策略：先补 primary lowering 行为，再后补完整 gate；每个补实现 slice 必须在本文件留下 gate TODO，不能用 contract smoke 冒充真实验收。
+	- [ ] gate TODO：为 C08-C11 typed callee symbol / CPS tail-call target / Core return_call target 增加 generated-path fixture，验证 `callee()` 不再 emit 固定 `$chiba.tail_target`。
 - [ ] chibalex/chibacc frontend：还没替换 scan.chiba；真实 source AST 还没进 primary path。
 	- [x] source parser facts blocker：`SourceProjectFacts.parser` 已显式记录 chibalex/chibacc primary path 缺失，不再让 scanner fallback 冒充 parsed AST。
 - [ ] attribute grammar：#[attr(...)] nested/named/list args 没 spec/golden/AST/parser。
@@ -34,7 +36,8 @@
 	- [x] typed item skeleton threading：`TypedModule.items` 保留 alpha 后的 item skeleton，后续 method/operator/branch/control pass 不再只能重扫 source。
 	- [x] typed elaboration obligations：`TypedElaboration` 现在携带 item/type/body traversal obligations；真实 typed AST expression lowering 仍未完成。
 	- [x] minimal codegen typed function fact：C08 现在为无复杂 surface 的简单 `def` 生成 `TypedFunctionBodyFact`，能保留 `main` 与 `i32.const 42` 竖切；完整 type expression / expression AST traversal 仍未完成。
-	- [x] minimal tail-call body fact：C08 现在能把极窄 `callee()` body 标成 `TypedFunctionTailCall`，用于验证 CPS tail-call lowering；真实 callee resolution / typed call graph 仍未完成。
+	- [x] minimal tail-call body fact：C08 现在能把极窄 `callee()` body 标成 `TypedFunctionTailCall(target)`，用于验证 CPS tail-call lowering；完整 typed call graph / namespace-aware callee resolution 仍未完成。
+	- [x] minimal callee symbol check：极窄尾调用 target 必须能在当前 typed function set 中解析到同名函数；完整 namespace/import/mangle-aware call graph 仍未完成。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 	- [x] generic surface facts：typed module 已记录 explicit params、auto-generic、explicit instantiation、generic Self method surface；真实 template body checking 与 instantiation discharge 仍 fail-closed。
 	- [x] generic template obligations：typed pass 已把 generic surface 转成 `GenericTemplateObligation`，区分显式参数、auto-generic、实例化 discharge、generic Self receiver binding。
@@ -67,7 +70,7 @@
 - [ ] one-pass CPS + beta：没做。现在还是 fail-closed，不是 level0 那条真实 CPS。
 	- [x] no-continuation CPS baseline：无 control obligations 的 module 现在生成空 `CpsModule`；真实 expression CPS + beta 仍未完成。
 	- [x] CPS tail-form invariant facts：无 multi-shot continuation 的普通函数现在生成 `CpsTailFormFact`，明确 `all_non_multishot_calls_are_tail`；真实 call graph CPS / administrative beta 仍未完成。
-	- [x] CPS tail-call fact：`TypedFunctionTailCall` 会在 C09 标成 `CpsTailCall`，普通非 multi-shot 调用必须保持尾位置。
+	- [x] CPS tail-call fact：`TypedFunctionTailCall(target)` 会在 C09 标成 `CpsTailCall(target)`，普通非 multi-shot 调用必须保持尾位置。
 	- [x] CPS multi-shot exception fact：ContN continuation facts 会追加 `CpsMaterializedMultiShotFrame`，把 multi-shot frame/package 作为尾递归规则的显式例外。
 - [ ] CIR nanopass IR：清晰分层还不够；需要语言级 CPS/CIR facts，且保证不耦合 Wasm。
 	- [x] CIR/backend boundary gate：compiler/ir/control/closure 不允许出现 Wasm/WAT/Binaryen/funcref/eqref/backend opcode；backend 细节只允许在 backend 层。
@@ -92,7 +95,7 @@
 	- [x] exported main constant slice：`CoreOpFunction` 可 emit `(export "main")` 且返回 `i32.const 42`；真实 source parser execution / wasmtime end-to-end smoke 仍 blocked。
 	- [x] minimal function WAT parse smoke：C11 gate 现在用 Binaryen parse/validate canonical layout + exported `main` 常量返回 WAT，避免 WAT skeleton 语法回归。
 	- [x] tailcall WAT parse smoke：C11 gate 现在用 Binaryen parse/validate `return_call` WAT；真实 typed call graph / tail-position lowering 仍 blocked。
-	- [x] minimal tail-call WAT emission：`CoreFunctionTailCall` 现在 emit `return_call $chiba.tail_target`，用于锁住尾调用代码生成形状；真实 callee symbol resolution 仍未完成。
+	- [x] minimal tail-call WAT emission：`CoreFunctionTailCall(target)` 现在 emit `return_call $chiba.<target>`，用于锁住尾调用代码生成形状；完整 namespace/mangle resolution 仍未完成。
 	- [x] ContN package WAT parse smoke：C11 gate 现在 parse/validate stackless resume + frame-chain/package layout WAT，明确 multi-shot continuation 是 materialized 例外；真实 capture/frame body extraction 仍 blocked。
 
 - [ ] `level-1b/compiler/source/scan.chiba` 只是 truthfulness scaffold，不是语言设计或未来 frontend；第一优先级是让 chibalex/chibacc parser 成为 C07 source facts 的 primary path，然后删除或降级 `scan.chiba`，不能让 byte-level scanner 长期承担 namespace/item/attribute 语义。
