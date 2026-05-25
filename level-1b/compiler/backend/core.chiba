@@ -56,11 +56,7 @@ data CoreFunctionBody {
     CoreFunctionReturnParam0,
     CoreFunctionTailCall(str),
     CoreFunctionTailCallI32Const(str, CoreI32ConstAtom),
-    CoreFunctionTailCallParam0(str),
     CoreFunctionIfElseI32Const(CoreBranchCondition, CoreI32ConstAtom, CoreI32ConstAtom),
-    CoreFunctionIfElseTailCall(CoreBranchCondition, str, str),
-    CoreFunctionIfElseTailCallParam0(CoreBranchCondition, str, str),
-    CoreFunctionIfElseTailCallI32Const(CoreBranchCondition, str, CoreI32ConstAtom, str, CoreI32ConstAtom),
     CoreFunctionBranchJoinPending,
 }
 
@@ -181,29 +177,11 @@ def core_function_body_from_typed(body: TypedFunctionBodyKind): CoreFunctionBody
         TypedFunctionReturnParam0 => CoreFunctionReturnParam0
         TypedFunctionTailCall(target) => CoreFunctionTailCall(target)
         TypedFunctionTailCallI32Const(target, arg) => CoreFunctionTailCallI32Const(target, core_i32_const_atom_from_typed(arg))
-        TypedFunctionTailCallParam0(target) => CoreFunctionTailCallParam0(target)
         TypedFunctionIfElseI32Const(condition, then_atom, else_atom) =>
             CoreFunctionIfElseI32Const(
                 core_branch_condition_from_typed(condition),
                 core_i32_const_atom_from_typed(then_atom),
                 core_i32_const_atom_from_typed(else_atom))
-        TypedFunctionIfElseTailCall(condition, then_target, else_target) =>
-            CoreFunctionIfElseTailCall(
-                core_branch_condition_from_typed(condition),
-                then_target,
-                else_target)
-        TypedFunctionIfElseTailCallParam0(condition, then_target, else_target) =>
-            CoreFunctionIfElseTailCallParam0(
-                core_branch_condition_from_typed(condition),
-                then_target,
-                else_target)
-        TypedFunctionIfElseTailCallI32Const(condition, then_target, then_arg, else_target, else_arg) =>
-            CoreFunctionIfElseTailCallI32Const(
-                core_branch_condition_from_typed(condition),
-                then_target,
-                core_i32_const_atom_from_typed(then_arg),
-                else_target,
-                core_i32_const_atom_from_typed(else_arg))
         TypedFunctionBranchJoinPending => CoreFunctionBranchJoinPending
     }
 
@@ -387,10 +365,6 @@ def core_function_body_terminator(body: Option[CoreFunctionBody]): CoreBlockTerm
     match body {
         Some(CoreFunctionTailCall(_)) => CoreBlockTailCall
         Some(CoreFunctionTailCallI32Const(_, _)) => CoreBlockTailCall
-        Some(CoreFunctionTailCallParam0(_)) => CoreBlockTailCall
-        Some(CoreFunctionIfElseTailCall(_, _, _)) => CoreBlockTailCall
-        Some(CoreFunctionIfElseTailCallParam0(_, _, _)) => CoreBlockTailCall
-        Some(CoreFunctionIfElseTailCallI32Const(_, _, _, _, _)) => CoreBlockTailCall
         Some(CoreFunctionBranchJoinPending) => CoreBlockContinue
         None => CoreBlockContinue
         _ => CoreBlockReturn

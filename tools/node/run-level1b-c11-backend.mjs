@@ -50,11 +50,7 @@ const REQUIRED_TEXT = [
   "CoreFunctionReturnParam0",
   "CoreFunctionTailCall",
   "CoreFunctionTailCallI32Const",
-  "CoreFunctionTailCallParam0",
   "CoreFunctionIfElseI32Const",
-  "CoreFunctionIfElseTailCall",
-  "CoreFunctionIfElseTailCallParam0",
-  "CoreFunctionIfElseTailCallI32Const",
   "CoreFunctionBranchJoinPending",
   "def core_i32_const_atom_from_typed",
   "def core_branch_condition_from_typed",
@@ -165,16 +161,9 @@ const REQUIRED_TEXT = [
   "def empty_wat_module",
   "def emit_core_function",
   "def emit_core_if_else_i32_const",
-  "def emit_core_if_else_tail_call",
-  "def emit_core_if_else_tail_call_param0",
-  "def emit_core_if_else_tail_call_i32_const",
   "def emit_core_function_body",
   "CoreFunctionTailCall(target)",
   "CoreFunctionTailCallI32Const(target, arg)",
-  "CoreFunctionTailCallParam0(target)",
-  "CoreFunctionIfElseTailCall(condition, then_target, else_target)",
-  "CoreFunctionIfElseTailCallParam0(condition, then_target, else_target)",
-  "CoreFunctionIfElseTailCallI32Const(condition, then_target, then_arg, else_target, else_arg)",
   "(export \\\"main\\\")",
   "i32.const 42",
   "return_call $chiba.",
@@ -326,15 +315,6 @@ function checkParamTailcallWatSmoke() {
   pass("param tailcall WAT parse");
 }
 
-function checkParam0TailcallWatSmoke() {
-  const wat = `(module
-(func $chiba.id (param i32) (result i32) local.get 0)
-(func $chiba.forward (param i32) (result i32) local.get 0 return_call $chiba.id)
-)`;
-  compileWat(wat);
-  pass("param0 tailcall WAT parse");
-}
-
 function checkMultiParamFunctionWatSmoke() {
   const wat = `(module
 (func $chiba.add2 (param i32) (param i32) (result i32) local.get 0)
@@ -401,32 +381,6 @@ function checkBranchTailcallWatSmoke() {
   pass("branch tailcall WAT parse");
 }
 
-function checkBranchNoArgTailcallWatSmoke() {
-  const wat = `(module
-(func $chiba.left (result i32) i32.const 42)
-(func $chiba.right (result i32) i32.const 0)
-(func (export "main") (result i32)
-  (if (result i32) (i32.const 1)
-    (then (return_call $chiba.left))
-    (else (return_call $chiba.right))))
-)`;
-  compileWat(wat);
-  pass("branch no-arg tailcall WAT parse");
-}
-
-function checkBranchParam0TailcallWatSmoke() {
-  const wat = `(module
-(func $chiba.left (param i32) (result i32) local.get 0)
-(func $chiba.right (param i32) (result i32) local.get 0)
-(func $chiba.choose (param i32) (result i32)
-  (if (result i32) (local.get 0)
-    (then (local.get 0) (return_call $chiba.left))
-    (else (local.get 0) (return_call $chiba.right))))
-)`;
-  compileWat(wat);
-  pass("branch param0 tailcall WAT parse");
-}
-
 function checkParamConditionBranchTailcallWatSmoke() {
   const wat = `(module
 (func $chiba.id (param i32) (result i32) local.get 0)
@@ -467,14 +421,11 @@ function main() {
   checkMinimalFunctionWatSmoke();
   checkTailcallWatSmoke();
   checkParamTailcallWatSmoke();
-  checkParam0TailcallWatSmoke();
   checkMultiParamFunctionWatSmoke();
   checkSyntheticTailcallTargetWatFixture();
   checkBranchWatSmoke();
   checkParamConditionBranchWatSmoke();
   checkBranchTailcallWatSmoke();
-  checkBranchNoArgTailcallWatSmoke();
-  checkBranchParam0TailcallWatSmoke();
   checkParamConditionBranchTailcallWatSmoke();
   checkContNPackageWatSmoke();
 
