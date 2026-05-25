@@ -196,7 +196,7 @@ def cps_tail_form_kind_from_function(function: TypedFunctionFact): CpsTailFormKi
         TypedExprTailCall(target) => CpsTailCall(target)
         TypedExprTailCallI32Const(target, _) => CpsTailCall(target)
         TypedExprParam0 => CpsTailReturn
-        TypedExprIfElseI32Const(_, _, _) => CpsTailReturn
+        TypedExprIfElse(_, _, _) => CpsTailReturn
         TypedExprBranchJoinPending => CpsTailReturn
         _ => CpsTailReturn
     }
@@ -242,11 +242,8 @@ def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
         TypedExprParam0 => CpsTermReturn(CpsAtomParam0)
         TypedExprTailCall(target) => CpsTermTailCall(target, Vec[CpsAtom].new().freeze())
         TypedExprTailCallI32Const(target, arg) => CpsTermTailCall(target, Vec[CpsAtom].new().push(CpsAtomI32Const(arg)).freeze())
-        TypedExprIfElseI32Const(condition, then_atom, else_atom) =>
-            CpsTermBranch(
-                condition,
-                CpsTermReturn(CpsAtomI32Const(then_atom)),
-                CpsTermReturn(CpsAtomI32Const(else_atom)))
+        TypedExprIfElse(condition, then_expr, else_expr) =>
+            CpsTermBranch(condition, cps_term_from_typed_expr(then_expr), cps_term_from_typed_expr(else_expr))
         TypedExprBranchJoinPending => CpsTermPendingJoin
     }
 

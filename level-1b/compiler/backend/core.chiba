@@ -56,7 +56,7 @@ data CoreExprKind {
     CoreExprParam0,
     CoreExprTailCall(str),
     CoreExprTailCallI32Const(str, CoreI32ConstAtom),
-    CoreExprIfElseI32Const(CoreBranchCondition, CoreI32ConstAtom, CoreI32ConstAtom),
+    CoreExprIfElse(CoreBranchCondition, CoreExprKind, CoreExprKind),
     CoreExprBranchJoinPending,
 }
 
@@ -192,11 +192,11 @@ def core_expr_from_cps_term(term: CpsTermKind): CoreExprKind =
     match term {
         CpsTermReturn(atom) => core_expr_from_cps_atom(atom)
         CpsTermTailCall(target, args) => core_expr_from_cps_tail_call_arg(target, args)
-        CpsTermBranch(condition, CpsTermReturn(CpsAtomI32Const(then_atom)), CpsTermReturn(CpsAtomI32Const(else_atom))) =>
-            CoreExprIfElseI32Const(
+        CpsTermBranch(condition, then_term, else_term) =>
+            CoreExprIfElse(
                 core_branch_condition_from_typed(condition),
-                core_i32_const_atom_from_typed(then_atom),
-                core_i32_const_atom_from_typed(else_atom))
+                core_expr_from_cps_term(then_term),
+                core_expr_from_cps_term(else_term))
         CpsTermPendingJoin => CoreExprBranchJoinPending
         _ => CoreExprBranchJoinPending
     }

@@ -96,7 +96,11 @@ def core_branch_condition_requires_param0(condition: CoreBranchCondition): bool 
 def core_function_body_requires_param0(body: CoreExprKind): bool =
     match body {
         CoreExprParam0 => true
-        CoreExprIfElseI32Const(condition, _, _) => core_branch_condition_requires_param0(condition)
+        CoreExprTailCallI32Const(_, _) => false
+        CoreExprIfElse(condition, then_expr, else_expr) =>
+            if core_branch_condition_requires_param0(condition) { true }
+            else if core_function_body_requires_param0(then_expr) { true }
+            else { core_function_body_requires_param0(else_expr) }
         _ => false
     }
 
@@ -166,6 +170,28 @@ def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
         Some(CoreExprTailCallI32Const(target, _)) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
+        Some(CoreExprIfElse(_, then_expr, else_expr)) =>
+            match validate_core_expr_symbol(module, then_expr) {
+                Some(error) => Some(error)
+                None => validate_core_expr_symbol(module, else_expr)
+            }
+        _ => None
+    }
+
+/// Validate symbol references inside nested Core expressions.
+def validate_core_expr_symbol(module: WasmGcCoreModule, body: CoreExprKind): Option[CoreValidationError] =
+    match body {
+        CoreExprTailCall(target) =>
+            if core_module_contains_symbol(module, target, 0) { None }
+            else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
+        CoreExprTailCallI32Const(target, _) =>
+            if core_module_contains_symbol(module, target, 0) { None }
+            else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
+        CoreExprIfElse(_, then_expr, else_expr) =>
+            match validate_core_expr_symbol(module, then_expr) {
+                Some(error) => Some(error)
+                None => validate_core_expr_symbol(module, else_expr)
+            }
         _ => None
     }
 

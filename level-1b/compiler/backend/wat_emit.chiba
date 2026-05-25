@@ -153,14 +153,27 @@ def emit_core_branch_condition(condition: CoreBranchCondition): String =
         CoreBranchConditionParam0 => "local.get 0"
     }
 
+/// Emit one Core expression without the function result prefix.
+def emit_core_expr_instruction(body: CoreExprKind): String =
+    match body {
+        CoreExprI32FortyTwo => "i32.const 42"
+        CoreExprI32Zero => "i32.const 0"
+        CoreExprParam0 => "local.get 0"
+        CoreExprTailCall(target) => "return_call $chiba.".concat(target)
+        CoreExprTailCallI32Const(target, arg) => emit_core_i32_const_atom(arg).concat(" return_call $chiba.").concat(target)
+        CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_expr(condition, then_expr, else_expr)
+        CoreExprBranchJoinPending => "unreachable"
+        CoreExprUnit => ""
+    }
+
 /// Emit an executable if/else expression.
-def emit_core_if_else_i32_const(condition: CoreBranchCondition, then_atom: CoreI32ConstAtom, else_atom: CoreI32ConstAtom): String =
+def emit_core_if_else_expr(condition: CoreBranchCondition, then_expr: CoreExprKind, else_expr: CoreExprKind): String =
     "(result i32) (if (result i32) ("
         .concat(emit_core_branch_condition(condition))
         .concat(") (then (")
-        .concat(emit_core_i32_const_atom(then_atom))
+        .concat(emit_core_expr_instruction(then_expr))
         .concat(")) (else (")
-        .concat(emit_core_i32_const_atom(else_atom))
+        .concat(emit_core_expr_instruction(else_expr))
         .concat(")))")
 
 /// Emit parameters for the first executable i32 function slice.
@@ -180,7 +193,7 @@ def emit_core_function_body(body: Option[CoreExprKind]): String =
                 .concat(emit_core_i32_const_atom(arg))
                 .concat(" return_call $chiba.")
                 .concat(target)
-        Some(CoreExprIfElseI32Const(condition, then_atom, else_atom)) => emit_core_if_else_i32_const(condition, then_atom, else_atom)
+        Some(CoreExprIfElse(condition, then_expr, else_expr)) => emit_core_if_else_expr(condition, then_expr, else_expr)
         Some(CoreExprBranchJoinPending) => "(result i32) unreachable"
         Some(CoreExprUnit) => ""
         None => ""

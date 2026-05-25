@@ -56,7 +56,7 @@ data TypedExprKind {
     TypedExprParam0,
     TypedExprTailCall(str),
     TypedExprTailCallI32Const(str, TypedI32ConstAtom),
-    TypedExprIfElseI32Const(TypedBranchCondition, TypedI32ConstAtom, TypedI32ConstAtom),
+    TypedExprIfElse(TypedBranchCondition, TypedExprKind, TypedExprKind),
     TypedExprBranchJoinPending,
 }
 
@@ -307,8 +307,27 @@ def typed_branch_condition_from_item_region(text: String, item: TypedItemSkeleto
             }
     }
 
-/// Parse a narrow `if true/false { const } else { const }` body.
-def typed_function_if_else_const_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+/// Pick a non-branch typed expression from a bounded source region.
+def typed_function_non_branch_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    if typed_function_body_returns_param0(text, item, start, end) { Some(TypedExprParam0) }
+    else {
+        match typed_i32_const_atom_exact_from_region(text, start, end) {
+            Some(TypedI32ConstFortyTwo) => Some(TypedExprI32FortyTwo)
+            Some(TypedI32ConstZero) => Some(TypedExprI32Zero)
+            None =>
+                match typed_function_tail_call_i32_const_body(text, item, start, end) {
+                    Some(body) => Some(body)
+                    None =>
+                        match typed_function_tail_call_target_slice(text, start, end) {
+                            Some(target) => Some(TypedExprTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target))))
+                            None => None
+                        }
+                }
+        }
+    }
+
+/// Parse a narrow `if cond { expr } else { expr }` body.
+def typed_function_if_else_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
     match typed_branch_condition_from_item_region(text, item, start, end) {
         Some(condition) => {
             let then_open = typed_source_region_find_byte_or_end(text, start, end, 123)
@@ -319,10 +338,10 @@ def typed_function_if_else_const_body(text: String, item: TypedItemSkeleton, sta
             if then_open >= end || then_close >= end || else_offset >= end || else_open >= end || else_close > end {
                 None
             } else {
-                match typed_i32_const_atom_exact_from_region(text, then_open + 1, then_close) {
-                    Some(then_atom) =>
-                        match typed_i32_const_atom_exact_from_region(text, else_open + 1, else_close) {
-                            Some(else_atom) => Some(TypedExprIfElseI32Const(condition, then_atom, else_atom))
+                match typed_function_non_branch_expr_from_region(text, item, then_open + 1, then_close) {
+                    Some(then_expr) =>
+                        match typed_function_non_branch_expr_from_region(text, item, else_open + 1, else_close) {
+                            Some(else_expr) => Some(TypedExprIfElse(condition, then_expr, else_expr))
                             None => None
                         }
                     None => None
@@ -623,17 +642,15 @@ def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton)
     let start = source_scan_item_body_region_start(text, item.surface.header.offset)
     let end = source_scan_item_region_end(text, item.surface.header.offset)
     if typed_item_has_branching_surface(item) {
-        match typed_function_if_else_const_body(text, item, start, end) {
+        match typed_function_if_else_expr_body(text, item, start, end) {
             Some(body) => body
             None => TypedExprBranchJoinPending
         }
     }
-    else if typed_function_body_returns_param0(text, item, start, end) { TypedExprParam0 }
     else {
-        match typed_i32_const_atom_exact_from_region(text, start, end) {
-            Some(TypedI32ConstFortyTwo) => TypedExprI32FortyTwo
-            Some(TypedI32ConstZero) => TypedExprI32Zero
-            None => typed_function_non_const_body_kind_from_surface(text, item, start, end)
+        match typed_function_non_branch_expr_from_region(text, item, start, end) {
+            Some(body) => body
+            None => TypedExprUnit
         }
     }
 
