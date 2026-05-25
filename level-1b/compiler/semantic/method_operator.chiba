@@ -271,6 +271,29 @@ def operator_candidate_diagnostic_facts(sets: Array[OperatorCandidateSet], curso
     if cursor == sets.len() { out.freeze() }
     else { operator_candidate_diagnostic_facts(sets, cursor + 1, out.push(operator_candidate_diagnostic_fact(sets.get(cursor)))) }
 
+/// Convert an operator candidate status to a semantic diagnostic.
+def operator_candidate_diagnostic(fact: OperatorCandidateDiagnosticFact): Option[SemanticDiagnostic] =
+    match fact.status {
+        OperatorCandidateMissing =>
+            Some(SemanticDiagnostic("<semantic>", 0, 0, "invalid-surface: operator overload candidate missing"))
+        OperatorCandidateAmbiguityPending =>
+            Some(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: operator overload ambiguity check absent"))
+        OperatorCandidateOperandMatchingPending =>
+            Some(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: operator operand matching absent"))
+        OperatorCandidateUnknownOperatorPending =>
+            Some(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: unknown operator lowering absent"))
+    }
+
+/// Collect diagnostics for unresolved operator candidate sets.
+def operator_candidate_diagnostics(facts: Array[OperatorCandidateDiagnosticFact], cursor: usize, out: Vec[SemanticDiagnostic]): Array[SemanticDiagnostic] =
+    if cursor == facts.len() { out.freeze() }
+    else {
+        match operator_candidate_diagnostic(facts.get(cursor)) {
+            Some(diagnostic) => operator_candidate_diagnostics(facts, cursor + 1, out.push(diagnostic))
+            None => operator_candidate_diagnostics(facts, cursor + 1, out)
+        }
+    }
+
 /// Attach candidate sets to the nominal method/operator index.
 def method_operator_index_with_candidates(project: ProjectSurface, facts: Array[MethodSurfaceFact], obligations: Array[OperatorResolutionObligation]): MethodOperatorIndex =
     let entries = method_operator_surface_entries_from_facts(facts, 0, Vec[MethodOperatorSurfaceEntry].new())
@@ -295,8 +318,7 @@ def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex
     } else {
         let obligations = build_operator_resolution_obligations(module)
         let index = method_operator_index_with_candidates(module.alpha.project, module.method_surface, obligations)
-        let _ = operator_candidate_diagnostic_facts(index.operator_candidates, 0, Vec[OperatorCandidateDiagnosticFact].new())
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method/operator index construction absent"))
-            .freeze()))
+        let diagnostics = operator_candidate_diagnostics(operator_candidate_diagnostic_facts(index.operator_candidates, 0, Vec[OperatorCandidateDiagnosticFact].new()), 0, Vec[SemanticDiagnostic].new())
+        if diagnostics.len() == 0 { Ok(index) }
+        else { Err(SemanticDiagnostics(diagnostics)) }
     }
