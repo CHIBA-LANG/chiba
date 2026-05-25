@@ -89,6 +89,7 @@
 	- [x] syntactic no-capture direct path：无明显 capture surface 的 lambda/closure 会生成 empty env layout，并在 env simplify 降成 `ClosureNoCaptureDirect`；capturing env field extraction 与 call-site rewrite 仍未完成。
 - [ ] Cont1 lowering：direct resume / boxed one-shot consumed state machine 没完整。
 	- [x] Cont1 one-shot obligations：Cont1 simplification 已生成 direct resume vs boxed state-machine obligation，并显式要求 consumed state。
+	- [x] Cont1/ContN capture plans：C10 现在为 materialized continuation 生成 `ContinuationCapturePlan`，区分 boxed Cont1 consumed-state、ContN frame body extraction，并固定 Ref capture shared-reference semantics；真实 capture scan/body extraction 仍未完成。
 - [ ] ContN lowering：stackless resume frame、frame chain、repeatable package 没完整 primary。
 	- [x] ContN frame-chain obligations：packaged ContN simplification 已生成 stackless resume function / frame chain / repeatable package obligation；真实 frame extraction 仍未完成。
 	- [x] ContN non-zero frame fact：`ContinuationPackaged` lowering fact 现在会携带至少一个 stackless resume frame shell，避免 C11 收到 zero-frame repeatable package；真实 capture/frame body extraction 仍 fail-closed。

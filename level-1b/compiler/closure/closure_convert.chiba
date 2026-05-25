@@ -53,11 +53,22 @@ type ContinuationOneShotObligation {
     requires_consumed_state: bool,
 }
 
+/// Continuation capture plan before concrete frame/body extraction.
+type ContinuationCapturePlan {
+    owner: BinderId,
+    capability: ContinuationCapabilityKind,
+    requires_capture_scan: bool,
+    requires_frame_body_extraction: bool,
+    ref_capture_uses_shared_reference_semantics: bool,
+    requires_consumed_state: bool,
+}
+
 /// Module after escaping lambdas have explicit code/env packages.
 type ClosureConvertedModule {
     source: SimplifiedContinuationModule,
     layouts: Array[ClosureEnvLayout],
     continuations: Array[ContinuationLoweringFact],
+    continuation_capture_plans: Array[ContinuationCapturePlan],
 }
 
 /// Convert escaping lambdas and packaged continuations to explicit env layouts.
@@ -72,7 +83,8 @@ def convert_closures(module: SimplifiedContinuationModule): Result[ClosureConver
         Ok(ClosureConvertedModule(
             module,
             closure_env_layouts_for_module(module),
-            continuation_lowering_facts(module.decisions, 0, Vec[ContinuationLoweringFact].new())))
+            continuation_lowering_facts(module.decisions, 0, Vec[ContinuationLoweringFact].new()),
+            continuation_capture_plans(module.decisions, 0, Vec[ContinuationCapturePlan].new())))
     }
 
 /// Empty capture list for a directified closure or continuation package.
@@ -169,6 +181,40 @@ def continuation_one_shot_obligations(decisions: Array[ContinuationSimplificatio
         match continuation_one_shot_obligation(decisions.get(index)) {
             Some(obligation) => continuation_one_shot_obligations(decisions, index + 1, out.push(obligation))
             None => continuation_one_shot_obligations(decisions, index + 1, out)
+        }
+    }
+
+/// Build a capture plan for a materialized continuation decision.
+def continuation_capture_plan(decision: ContinuationSimplification): Option[ContinuationCapturePlan] =
+    match decision {
+        ContinuationBoxedOneShot(owner) =>
+            Some(ContinuationCapturePlan {
+                owner: owner,
+                capability: ContinuationCont1,
+                requires_capture_scan: true,
+                requires_frame_body_extraction: false,
+                ref_capture_uses_shared_reference_semantics: true,
+                requires_consumed_state: true,
+            })
+        ContinuationPackaged(owner) =>
+            Some(ContinuationCapturePlan {
+                owner: owner,
+                capability: ContinuationContN,
+                requires_capture_scan: true,
+                requires_frame_body_extraction: true,
+                ref_capture_uses_shared_reference_semantics: true,
+                requires_consumed_state: false,
+            })
+        _ => None
+    }
+
+/// Build capture plans for materialized continuation decisions.
+def continuation_capture_plans(decisions: Array[ContinuationSimplification], index: usize, out: Vec[ContinuationCapturePlan]): Array[ContinuationCapturePlan] =
+    if index == decisions.len() { out.freeze() }
+    else {
+        match continuation_capture_plan(decisions.get(index)) {
+            Some(plan) => continuation_capture_plans(decisions, index + 1, out.push(plan))
+            None => continuation_capture_plans(decisions, index + 1, out)
         }
     }
 
