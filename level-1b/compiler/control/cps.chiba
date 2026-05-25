@@ -99,8 +99,15 @@ def cps_continuation_facts_none(): Array[ContinuationFact] =
 def cps_tail_form_fact_from_function(function: TypedFunctionBodyFact): CpsTailFormFact =
     CpsTailFormFact {
         owner: function.owner,
-        kind: CpsTailReturn,
+        kind: cps_tail_form_kind_from_function(function),
         all_non_multishot_calls_are_tail: true,
+    }
+
+/// Pick the CPS tail kind for a typed function body.
+def cps_tail_form_kind_from_function(function: TypedFunctionBodyFact): CpsTailFormKind =
+    match function.body {
+        TypedFunctionTailCall => CpsTailCall
+        _ => CpsTailReturn
     }
 
 /// Build CPS tail-form facts for ordinary functions in stable owner order.

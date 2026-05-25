@@ -51,6 +51,7 @@ const REQUIRED_TEXT = [
   "type TypedFunctionBodyFact",
   "data TypedFunctionBodyKind",
   "TypedFunctionReturnI32FortyTwo",
+  "TypedFunctionTailCall",
   "functions: Array[TypedFunctionBodyFact]",
   "def typed_function_body_fact_from_skeleton",
   "def typed_function_body_facts_from_skeletons",

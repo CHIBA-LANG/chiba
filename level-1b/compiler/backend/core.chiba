@@ -38,6 +38,7 @@ data CoreFunctionBody {
     CoreFunctionReturnUnit,
     CoreFunctionReturnI32Zero,
     CoreFunctionReturnI32FortyTwo,
+    CoreFunctionTailCall,
 }
 
 /// Core operation class understood by the dumb backend emitter.
@@ -96,6 +97,7 @@ def core_function_body_from_typed(body: TypedFunctionBodyKind): CoreFunctionBody
         TypedFunctionReturnUnit => CoreFunctionReturnUnit
         TypedFunctionReturnI32Zero => CoreFunctionReturnI32Zero
         TypedFunctionReturnI32FortyTwo => CoreFunctionReturnI32FortyTwo
+        TypedFunctionTailCall => CoreFunctionTailCall
     }
 
 /// Lower one typed function fact into a Core function op.

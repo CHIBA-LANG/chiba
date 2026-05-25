@@ -39,6 +39,7 @@ data TypedFunctionBodyKind {
     TypedFunctionReturnUnit,
     TypedFunctionReturnI32Zero,
     TypedFunctionReturnI32FortyTwo,
+    TypedFunctionTailCall,
 }
 
 /// Function body fact that has passed the narrow C08 primary codegen subset.
@@ -274,6 +275,7 @@ def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton)
     let end = source_scan_item_region_end(text, item.surface.header.offset)
     if source_region_has_text(text, start, end, "42") { TypedFunctionReturnI32FortyTwo }
     else if source_region_has_text(text, start, end, "0") { TypedFunctionReturnI32Zero }
+    else if source_region_has_text(text, start, end, "()") { TypedFunctionTailCall }
     else { TypedFunctionReturnUnit }
 
 /// Convert one simple function skeleton into a typed function body fact.

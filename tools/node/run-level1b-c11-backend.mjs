@@ -26,6 +26,7 @@ const REQUIRED_TEXT = [
   "CoreConsumedStateMachine",
   "data CoreFunctionBody",
   "CoreFunctionReturnI32FortyTwo",
+  "CoreFunctionTailCall",
   "export_main: bool",
   "function_body: Option[CoreFunctionBody]",
   "frame_count: usize",
@@ -95,8 +96,10 @@ const REQUIRED_TEXT = [
   "def emit_wat",
   "def empty_wat_module",
   "def emit_core_function",
+  "def emit_tail_target_function",
   "(export \\\"main\\\")",
   "i32.const 42",
+  "return_call $chiba.tail_target",
   "def run_wasm_gc_wat",
 ];
 
@@ -226,9 +229,8 @@ function checkMinimalFunctionWatSmoke() {
 
 function checkTailcallWatSmoke() {
   const wat = `(module
-(type $callee_t (func (result i32)))
-(func $callee (result i32) i32.const 42)
-(func (export "main") (result i32) return_call $callee)
+(func $chiba.tail_target (result i32) i32.const 42)
+(func (export "main") (result i32) return_call $chiba.tail_target)
 )`;
   compileWat(wat);
   pass("tailcall WAT parse");
