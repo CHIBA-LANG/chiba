@@ -60,6 +60,18 @@ _Avoid_: AST primary complete, generated parser executed, parser backend complet
 The arbitrary Chiba expression after `=>` in a grammar alternative or Pratt arm. ChibaCC owns binding labels and splicing this expression into generated parser source; the main Chiba compiler owns parsing, typing, CPS, closure, and backend semantics for the expression.
 _Avoid_: callback syntax, action DSL, restricted action subset, parser-owned typechecking
 
+**ChibaCC action scope**:
+The names available inside a ChibaCC action expression. A labeled binding provides both value and span names such as `name` and `name_span`; positional bindings provide `$0` and `$0_span`; Pratt actions provide `$lhs` and `$lhs_span`; every alternative provides `$span`, while `_` bindings are ignored as values but still contribute to `$span`.
+_Avoid_: i64 cast scope, spanless action, ignored token loss
+
+**ChibaCC single AST model**:
+The ChibaCC rule result model where grammar rules return variants of one user-defined `AST` type rather than each rule declaring its own result type. This favors bootstrap migration and keeps generated parser plumbing uniform.
+_Avoid_: typed rule result model, per-rule AST type, parser-owned type hierarchy
+
+**ChibaCC token binding**:
+The default label binding for a token atom exposes the token payload as the action value and exposes the token span through the paired span name. Full token access must be explicit rather than replacing the common payload binding path.
+_Avoid_: full token by default, manual payload unwrap, spanless payload binding
+
 **Level-1b bootstrap complete**:
 The state where C12 two-round bootstrap comparison succeeds through `level1c -> level1c-next -> level1c-next2` without legacy dependency or oracle dependency. The result must run the required specs and gates outside a Node-only path and record hashes, toolchain versions, and any accepted manifest differences.
 _Avoid_: half-bootstrap, gate-green bootstrap, Node-only success
