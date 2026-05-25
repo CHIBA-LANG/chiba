@@ -74,6 +74,20 @@ def chibacc_trimmed_slice(source: str, start: usize, end: usize): str =
     let right = chibacc_trim_right(source, left, end)
     source.slice(left, right - left)
 
+/// Parse decimal digits into a usize.
+def chibacc_parse_usize_digits(source: str, offset: usize, end: usize, value: usize): usize =
+    if offset >= end { value }
+    else {
+        let byte = source.byte_at(offset)
+        if byte >= 48 && byte <= 57 {
+            chibacc_parse_usize_digits(source, offset + 1, end, value * 10 + (byte - 48))
+        } else { value }
+    }
+
+/// Parse a small decimal usize from a bounded region.
+def chibacc_parse_usize(source: str, start: usize, end: usize): usize =
+    chibacc_parse_usize_digits(source, chibacc_skip_ws(source, start), end, 0)
+
 /// Scan one identifier.
 def chibacc_scan_ident(source: str, offset: usize): usize =
     if offset >= source.len() { offset }
@@ -202,6 +216,106 @@ def chibacc_parse_alternatives_from(source: str, offset: usize, end: usize): Lis
         }
     }
 
+/// Append Pratt prefix lists while preserving source order.
+def chibacc_pratt_prefix_append(left: List[PrattPrefix], right: List[PrattPrefix]): List[PrattPrefix] =
+    match left {
+        ListNil => right
+        ListCons(head, tail) => ListCons(head, chibacc_pratt_prefix_append(tail, right))
+    }
+
+/// Append Pratt infix lists while preserving source order.
+def chibacc_pratt_infix_append(left: List[PrattInfix], right: List[PrattInfix]): List[PrattInfix] =
+    match left {
+        ListNil => right
+        ListCons(head, tail) => ListCons(head, chibacc_pratt_infix_append(tail, right))
+    }
+
+/// Parse one Pratt prefix arm line.
+def chibacc_parse_pratt_prefix_line(source: str, offset: usize, line_end: usize, power: usize): Option[PrattPrefix] =
+    let arrow = chibacc_find_text_until(source, offset, line_end, "=>")
+    if arrow >= line_end { None }
+    else {
+        Some(PrattPrefix {
+            binding_power: power,
+            sequence: GrammarSequence { atoms: chibacc_parse_sequence_atoms(source, offset, arrow) },
+            action: chibacc_parse_action_source(source, arrow, line_end),
+        })
+    }
+
+/// Parse prefix arms inside one `prefix (bp) { ... }` block.
+def chibacc_parse_pratt_prefix_lines(source: str, offset: usize, end: usize, power: usize): List[PrattPrefix] =
+    if offset >= end { ListNil }
+    else {
+        let line_end = chibacc_line_end(source, offset)
+        match chibacc_parse_pratt_prefix_line(source, offset, line_end, power) {
+            Some(arm) => ListCons(arm, chibacc_parse_pratt_prefix_lines(source, line_end + 1, end, power))
+            None => chibacc_parse_pratt_prefix_lines(source, line_end + 1, end, power)
+        }
+    }
+
+/// Parse one Pratt infix arm line.
+def chibacc_parse_pratt_infix_line(source: str, offset: usize, line_end: usize, left_power: usize, right_power: usize): Option[PrattInfix] =
+    let arrow = chibacc_find_text_until(source, offset, line_end, "=>")
+    if arrow >= line_end { None }
+    else {
+        Some(PrattInfix {
+            left_power: left_power,
+            right_power: right_power,
+            sequence: GrammarSequence { atoms: chibacc_parse_sequence_atoms(source, offset, arrow) },
+            action: chibacc_parse_action_source(source, arrow, line_end),
+        })
+    }
+
+/// Parse infix arms inside one `infix(lp, rp) { ... }` block.
+def chibacc_parse_pratt_infix_lines(source: str, offset: usize, end: usize, left_power: usize, right_power: usize): List[PrattInfix] =
+    if offset >= end { ListNil }
+    else {
+        let line_end = chibacc_line_end(source, offset)
+        match chibacc_parse_pratt_infix_line(source, offset, line_end, left_power, right_power) {
+            Some(arm) => ListCons(arm, chibacc_parse_pratt_infix_lines(source, line_end + 1, end, left_power, right_power))
+            None => chibacc_parse_pratt_infix_lines(source, line_end + 1, end, left_power, right_power)
+        }
+    }
+
+/// Parse all Pratt prefix blocks.
+def chibacc_parse_pratt_prefixes_from(source: str, offset: usize, end: usize): List[PrattPrefix] =
+    let prefix = chibacc_find_text_until(source, offset, end, "prefix")
+    if prefix >= end { ListNil }
+    else {
+        let lparen = chibacc_find_byte(source, prefix, 40)
+        let rparen = chibacc_find_byte(source, lparen, 41)
+        let open = chibacc_find_byte(source, rparen, 123)
+        let close = chibacc_find_byte(source, open, 125)
+        if close >= end { ListNil }
+        else {
+            let power = chibacc_parse_usize(source, lparen + 1, rparen)
+            chibacc_pratt_prefix_append(
+                chibacc_parse_pratt_prefix_lines(source, open + 1, close, power),
+                chibacc_parse_pratt_prefixes_from(source, close + 1, end))
+        }
+    }
+
+/// Parse all Pratt infix blocks.
+def chibacc_parse_pratt_infixes_from(source: str, offset: usize, end: usize): List[PrattInfix] =
+    let infix = chibacc_find_text_until(source, offset, end, "infix")
+    if infix >= end { ListNil }
+    else {
+        let lparen = chibacc_find_byte(source, infix, 40)
+        let comma = chibacc_find_byte(source, lparen, 44)
+        let rparen = chibacc_find_byte(source, comma, 41)
+        let open = chibacc_find_byte(source, rparen, 123)
+        let close = chibacc_find_byte(source, open, 125)
+        if close >= end { ListNil }
+        else {
+            let left_power = chibacc_parse_usize(source, lparen + 1, comma)
+            let right_power = chibacc_parse_usize(source, comma + 1, rparen)
+            chibacc_pratt_infix_append(
+                chibacc_parse_pratt_infix_lines(source, open + 1, close, left_power, right_power),
+                chibacc_parse_pratt_infixes_from(source, close + 1, end))
+        }
+    }
+}
+
 /// Return a bounded rule body end before the next rule or data block.
 def chibacc_rule_body_end(source: str, body_start: usize): usize =
     let next_rule = chibacc_find_text(source, body_start, "\nrule")
@@ -277,5 +391,9 @@ def parse_pratt(source: str): Result[GrammarRuleBody, ChibaccParseError] =
     if chibacc_find_text(source, 0, "pratt") >= source.len() {
         Err(chibacc_parse_error(0, "expected pratt body"))
     } else {
-        Ok(GrammarPratt(ListNil, ListNil))
+        let body_start = chibacc_find_byte(source, 0, 123)
+        let body_end = source.len()
+        Ok(GrammarPratt(
+            chibacc_parse_pratt_prefixes_from(source, body_start + 1, body_end),
+            chibacc_parse_pratt_infixes_from(source, body_start + 1, body_end)))
     }

@@ -16,6 +16,7 @@ type LexRuleId {
 type LoweredLexRule {
     id: LexRuleId,
     mode: LexMode,
+    pattern: RegexAst,
     program: RegexProgram,
     action: LexAction,
     transition: LexTransition,
@@ -35,6 +36,7 @@ def LexRule.lower(self, index: usize): LoweredLexRule =
     LoweredLexRule {
         id: LexRuleId { index: index },
         mode: self.mode,
+        pattern: self.pattern,
         program: compile_regex(self.pattern),
         action: self.action,
         transition: self.transition,
