@@ -763,6 +763,58 @@ def typed_function_if_else_expr_body(text: String, item: TypedItemSkeleton, star
         None => None
     }
 
+/// Return true when a bounded match scrutinee is the first parameter.
+def typed_match_scrutinee_is_param0(text: String, item: TypedItemSkeleton, start: usize, open: usize): bool =
+    match typed_function_first_param_name(text, item) {
+        Some(param) => typed_source_region_is_param(text, param, start + "match".len(), open)
+        None => false
+    }
+
+/// Locate the body expression that follows one `pattern =>` arm.
+def typed_match_arm_expr_start(text: String, pattern: usize, end: usize, label: str): usize =
+    if pattern >= end { end }
+    else {
+        let arrow = typed_source_region_find_text_or_end(text, pattern + label.len(), end, "=>")
+        if arrow >= end { end }
+        else { source_skip_spaces(text, arrow + 2) }
+    }
+
+/// Locate the next bool match arm after one body start.
+def typed_match_next_bool_arm(text: String, offset: usize, close: usize): usize =
+    let true_at = typed_source_region_find_text_or_end(text, offset, close, "true")
+    let false_at = typed_source_region_find_text_or_end(text, offset, close, "false")
+    if true_at < false_at { true_at } else { false_at }
+
+/// Parse a narrow bool `match param { true => expr false => expr }` body.
+def typed_function_match_bool_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    let offset = source_skip_spaces(text, start)
+    if source_starts_with_at(text, offset, "match", 0) == false { None }
+    else {
+        let open = typed_source_region_find_byte_or_end(text, offset, end, 123)
+        let close = typed_source_region_find_byte_or_end(text, open, end, 125)
+        if open >= end || close > end { None }
+        else if typed_match_scrutinee_is_param0(text, item, offset, open) == false { None }
+        else {
+            let true_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "true")
+            let false_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "false")
+            if true_pattern >= close || false_pattern >= close { None }
+            else {
+                let true_expr_start = typed_match_arm_expr_start(text, true_pattern, close, "true")
+                let false_expr_start = typed_match_arm_expr_start(text, false_pattern, close, "false")
+                let true_expr_end = typed_match_next_bool_arm(text, true_expr_start, close)
+                let false_expr_end = typed_match_next_bool_arm(text, false_expr_start, close)
+                match typed_function_non_branch_expr_from_region(text, item, true_expr_start, true_expr_end) {
+                    Some(then_expr) =>
+                        match typed_function_non_branch_expr_from_region(text, item, false_expr_start, false_expr_end) {
+                            Some(else_expr) => Some(TypedExprIfElse(TypedBranchConditionParam0, then_expr, else_expr))
+                            None => None
+                        }
+                    None => None
+                }
+            }
+        }
+    }
+
 /// Compare two function-slice source symbols byte-for-byte.
 def typed_function_symbol_eq(left: str, right: str, index: usize): bool =
     if index == left.len() && index == right.len() { true }
@@ -1072,9 +1124,13 @@ def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton)
         }
     }
     else if typed_item_has_branching_surface(item) {
-        match typed_function_if_else_expr_body(text, item, start, end) {
+        match typed_function_match_bool_expr_body(text, item, start, end) {
             Some(body) => body
-            None => TypedExprBranchJoinPending
+            None =>
+                match typed_function_if_else_expr_body(text, item, start, end) {
+                    Some(body) => body
+                    None => TypedExprBranchJoinPending
+                }
         }
     }
     else {
