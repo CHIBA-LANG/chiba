@@ -139,7 +139,10 @@ def chibacc_empty_alternatives(): GrammarRuleBody =
 
 /// Parse one grammar atom identifier with an optional binding prefix.
 def chibacc_parse_atom_token(source: str, start: usize, end: usize): Option[GrammarAtom] =
-    let offset = chibacc_skip_ws(source, start)
+    let first = chibacc_skip_ws(source, start)
+    let offset =
+        if first < end && source.byte_at(first) == 124 { chibacc_skip_ws(source, first + 1) }
+        else { first }
     if offset >= end { None }
     else {
         let ident_end = chibacc_scan_ident(source, offset)
@@ -166,7 +169,10 @@ def chibacc_parse_atom_token(source: str, start: usize, end: usize): Option[Gram
 
 /// Return the end of the current atom token.
 def chibacc_atom_token_end(source: str, start: usize, end: usize): usize =
-    let offset = chibacc_skip_ws(source, start)
+    let first = chibacc_skip_ws(source, start)
+    let offset =
+        if first < end && source.byte_at(first) == 124 { chibacc_skip_ws(source, first + 1) }
+        else { first }
     if offset >= end { end }
     else {
         let ident_end = chibacc_scan_ident(source, offset)
