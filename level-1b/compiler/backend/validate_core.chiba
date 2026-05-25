@@ -83,11 +83,27 @@ def validate_core_cps_tail_form(op: CoreOp): Option[CoreValidationError] =
     }
 
 /// Validate that branch join facts are not emitted as fake function bodies.
+def core_branch_condition_requires_param0(condition: CoreBranchCondition): bool =
+    match condition {
+        CoreBranchConditionParam0 => true
+        _ => false
+    }
+
+/// Return true when a minimal function body reads param0.
+def core_function_body_requires_param0(body: CoreFunctionBody): bool =
+    match body {
+        CoreFunctionReturnParam0 => true
+        CoreFunctionIfElseI32Const(condition, _, _) => core_branch_condition_requires_param0(condition)
+        CoreFunctionIfElseTailCallI32Const(condition, _, _, _, _) => core_branch_condition_requires_param0(condition)
+        _ => false
+    }
+
+/// Validate that branch join facts are not emitted as fake function bodies.
 def validate_core_function_body(op: CoreOp): Option[CoreValidationError] =
     match op.function_body {
         Some(CoreFunctionBranchJoinPending) => Some(CoreMissingBranchBody("branch join function body lowering absent"))
-        Some(CoreFunctionReturnParam0) =>
-            if op.i32_param_count == 0 { Some(CoreMissingBranchBody("parameter return body requires i32 param")) }
+        Some(body) =>
+            if core_function_body_requires_param0(body) && op.i32_param_count == 0 { Some(CoreMissingBranchBody("param0 function body requires i32 param")) }
             else { None }
         _ => None
     }

@@ -90,6 +90,7 @@
 	- [x] typed function Core op：C11 现在会从 C08 typed function body facts 生成 `CoreOpFunction`，并保持 owner / export-main / body fact；真实 block body lowering 仍只覆盖常量返回竖切。
 	- [x] ordinary CPS tail invariant：普通 `CoreOpFunction` 现在必须 lower 成 `CoreBlockReturn` / tail terminator，validator 拒绝 non-tail fallthrough；`ContN` frame/package 仍是 materialized multi-shot 例外。
 	- [x] function-body terminator selection：C11 block obligation 现在按 `CoreFunctionBody` 区分 return / tail-call / pending fallthrough，不再用 `CoreOpFunction.tail = CoreTailCall` 假装全函数 tail-safe。
+	- [x] param0 body validation：C11 validator 会拒绝读取 `local.get 0` 但没有 i32 param 的 function body，包括 return-param 和变量条件 branch/tailcall。
 - [ ] Wasm-GC backend layout：layout 有一部分；真实 lowering 到 Wasm-GC object/funcref/eqref 不完整。
 - [ ] WAT emit：没有 executable WAT；现在 fail-closed。
 	- [x] empty Core WAT baseline：空 validated Core module 现在 emits 最小 `(module)`；真实 Core op WAT lowering 仍 fail-closed。

@@ -102,6 +102,8 @@ const REQUIRED_TEXT = [
   "def validate_core_runtime_state",
   "def validate_core_cps_tail_form",
   "def validate_core_function_body",
+  "def core_branch_condition_requires_param0",
+  "def core_function_body_requires_param0",
   "def validate_core_contn_frame_count",
   "def validate_core_contn_stackless_count",
   "boxed Cont1 must carry consumed-state machine",
