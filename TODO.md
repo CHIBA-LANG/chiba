@@ -23,6 +23,7 @@
 	- [x] namespace ownership facts：alpha/typed skeleton 已把 item owner namespace 线程化进 `TypedModule.namespace_ownership`；import/name resolution 仍未完成。
 	- [x] namespace import facts：source `use` 已经穿过 alpha 进入 `TypedModule.namespace_imports`；真实 visibility/private/conflict/name lookup 仍 fail-closed。
 	- [x] namespace resolution obligations：source import scopes 已生成 visibility/conflict/prelude obligations；真实 symbol lookup/private check 仍未完成。
+	- [x] function symbol uniqueness：C08 已拒绝重复 owner-qualified function symbol；完整 import/name lookup conflict matrix 仍未完成。
 - [ ] method resolution：没做。method index、receiver binding、qualified callee、Self with generics 都缺。
 	- [x] method surface facts：source scan 已抽取 `def Receiver.member` 的 receiver/member slices，后续 method index 不再只靠 boolean。
 	- [x] typed method/operator facts：typed module 已聚合 `MethodSurfaceFact`，保留 owner、receiver、member、operator 标记。

@@ -251,6 +251,29 @@ def typed_functions_have_symbol(functions: Array[TypedFunctionBodyFact], target:
     else if typed_function_symbol_eq(functions.get(index).symbol, target, 0) { true }
     else { typed_functions_have_symbol(functions, target, index + 1) }
 
+/// Return true when the same typed function symbol appears later.
+def typed_functions_have_later_symbol(functions: Array[TypedFunctionBodyFact], target: str, index: usize): bool =
+    if index == functions.len() { false }
+    else if typed_function_symbol_eq(functions.get(index).symbol, target, 0) { true }
+    else { typed_functions_have_later_symbol(functions, target, index + 1) }
+
+/// Return true when typed function symbols are unique.
+def typed_function_symbols_unique(functions: Array[TypedFunctionBodyFact], index: usize): bool =
+    if index == functions.len() { true }
+    else if typed_functions_have_later_symbol(functions, functions.get(index).symbol, index + 1) { false }
+    else { typed_function_symbols_unique(functions, index + 1) }
+
+/// Return true when exported main follows the current no-param ABI slice.
+def typed_function_main_abi_valid(functions: Array[TypedFunctionBodyFact], index: usize): bool =
+    if index == functions.len() { true }
+    else {
+        let function = functions.get(index)
+        if function.is_main {
+            if function.i32_param_count == 0 { typed_function_main_abi_valid(functions, index + 1) }
+            else { false }
+        } else { typed_function_main_abi_valid(functions, index + 1) }
+    }
+
 /// Return true when every minimal tail-call target resolves within this typed module.
 def typed_function_tail_targets_resolved(functions: Array[TypedFunctionBodyFact], index: usize): bool =
     if index == functions.len() { true }
@@ -1181,6 +1204,14 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     } else if type_inference_has_pattern_coverage(skeletons, patterns) == false {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: pattern coverage for typed item skeletons absent"))
+            .freeze()))
+    } else if typed_function_symbols_unique(functions, 0) == false {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "invalid-surface: duplicate function symbol"))
+            .freeze()))
+    } else if typed_function_main_abi_valid(functions, 0) == false {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "invalid-surface: exported main cannot take i32 params in current ABI slice"))
             .freeze()))
     } else if typed_function_tail_targets_resolved(functions, 0) == false {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
