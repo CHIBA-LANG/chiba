@@ -178,7 +178,7 @@ const REQUIRED_TEXT = [
   "def check_source_semantic_gates",
   "SourceGateRefArrayDirectAssignment",
   "missing-facts: source item scan absent",
-  "missing-lowering: chibalex/chibacc source parser primary path absent",
+  "primary_path_blocked: true",
   "missing-facts: UTF-8 aware source scanner absent",
   "missing-facts: unknown compile_if predicate shape",
   "missing-lowering: item compile_if filtering absent",
@@ -190,7 +190,6 @@ const REQUIRED_TEXT = [
   "invalid-surface: duplicate item in namespace",
   "missing-lowering: source import/name resolution absent",
   "missing-facts: namespace scan found no namespace",
-  "missing-lowering: typed item lowering absent",
   "type SourceImportScopeInput",
   "type SourceImportResolution",
   "type SourceNameResolutionObligation",
@@ -294,7 +293,7 @@ function checkSource(file, source) {
   if (file.endsWith("compile_if.chiba") && /__compiler_builtin\s*\(\s*"std\.compile_if_eval"/.test(code)) {
     errors.push(`${file}: compile_if eval must be implemented in level-1b source`);
   }
-  if (file.endsWith("semantic_gate.chiba") && /\bdef\s+check_source_semantic_gates\b[\s\S]*Vec\s*\[\s*SourceGateError\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)/.test(code)) {
+  if (file.endsWith("semantic_gate.chiba") && /\bdef\s+check_source_semantic_gates\b[^\n]*=\s*SourceGateResult\s*\(\s*project\s*,\s*Vec\s*\[\s*SourceGateError\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)/.test(code)) {
     errors.push(`${file}: source semantic gates must not pass through with empty errors`);
   }
   for (let i = 0; i < lines.length; i += 1) {

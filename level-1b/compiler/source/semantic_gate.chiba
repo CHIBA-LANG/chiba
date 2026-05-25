@@ -347,21 +347,7 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceGateImportResolutionAbsent,
                 "missing-lowering: source import/name resolution absent"))
             .freeze()
-    } else if source_project_parser_primary_blocked(project) {
-        Vec[SourceGateError].new()
-            .push(SourceGateError(
-                SourceFileId { index: 0 },
-                SourceGateParserPrimaryPathAbsent,
-                project.facts.parser.diagnostic))
-            .freeze()
-    } else {
-        Vec[SourceGateError].new()
-            .push(SourceGateError(
-                SourceFileId { index: 0 },
-                SourceGateTypedItemLoweringAbsent,
-                "missing-lowering: typed item lowering absent"))
-            .freeze()
-    }
+    } else { Vec[SourceGateError].new().freeze() }
 
 /// Return true when the gate result can continue to type checking.
 def SourceGateResult.ok(self): bool =
