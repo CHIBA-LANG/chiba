@@ -331,28 +331,59 @@ function functionWat(symbol, body, exportName = "") {
   return `(func $chiba.${symbol}${exportText} (result i32) ${body})`;
 }
 
-function tailcallWat(symbol, target) {
-  return functionWat(symbol, `return_call $chiba.${target}`, symbol === "main" ? "main" : "");
+function emitCoreFixtureExpr(expr) {
+  if (expr.kind === "const") return `(i32.const ${expr.value})`;
+  if (expr.kind === "tailcall") return `(return_call $chiba.${expr.target})`;
+  if (expr.kind === "tailcall_const") return `(i32.const ${expr.value}) (return_call $chiba.${expr.target})`;
+  if (expr.kind === "param0") return "(local.get 0)";
+  if (expr.kind === "if") {
+    return `(if (result i32) (${expr.condition}) (then ${emitCoreFixtureExpr(expr.thenExpr)}) (else ${emitCoreFixtureExpr(expr.elseExpr)}))`;
+  }
+  fail(`unknown Core fixture expr ${expr.kind}`);
 }
 
-function tailcallConstWat(symbol, target, value) {
-  return functionWat(symbol, `i32.const ${value} return_call $chiba.${target}`, symbol === "main" ? "main" : "");
+function emitCoreFixtureFunction(fn) {
+  const params = fn.params === 1 ? "(param i32) " : "";
+  const exportName = fn.exportName == null ? "" : ` (export "${fn.exportName}")`;
+  return `(func $chiba.${fn.symbol}${exportName} ${params}(result i32) ${emitCoreFixtureExpr(fn.body)})`;
+}
+
+function emitCoreFixtureModule(functions) {
+  return `(module\n${functions.map(emitCoreFixtureFunction).join("\n")}\n)`;
 }
 
 function checkSyntheticTailcallTargetWatFixture() {
   const directTarget = "callee_from_c08";
   const constTarget = "id_from_c08";
-  const wat = `(module
-${functionWat(directTarget, "i32.const 42")}
-(func $chiba.${constTarget} (param i32) (result i32) local.get 0)
-${tailcallWat("main", directTarget)}
-${tailcallConstWat("const_main", constTarget, 42)}
-)`;
+  const wat = emitCoreFixtureModule([
+    { symbol: directTarget, body: { kind: "const", value: 42 } },
+    { symbol: constTarget, params: 1, body: { kind: "param0" } },
+    { symbol: "main", exportName: "main", body: { kind: "tailcall", target: directTarget } },
+    { symbol: "const_main", body: { kind: "tailcall_const", target: constTarget, value: 42 } },
+  ]);
   if (wat.includes("$chiba.tail_target")) fail("synthetic tail-call WAT must not contain fixed dummy target");
   if (!wat.includes(`return_call $chiba.${directTarget}`)) fail("direct tail-call target did not flow into synthetic WAT fixture");
   if (!wat.includes(`return_call $chiba.${constTarget}`)) fail("i32-const tail-call target did not flow into synthetic WAT fixture");
   compileWat(wat);
-  pass("synthetic tailcall target WAT fixture");
+  pass("Core fixture tailcall target WAT");
+}
+
+function checkCoreFixtureBranchTailcallWat() {
+  const wat = emitCoreFixtureModule([
+    { symbol: "id", params: 1, body: { kind: "param0" } },
+    {
+      symbol: "main",
+      exportName: "main",
+      body: {
+        kind: "if",
+        condition: "i32.const 1",
+        thenExpr: { kind: "tailcall_const", target: "id", value: 42 },
+        elseExpr: { kind: "tailcall_const", target: "id", value: 0 },
+      },
+    },
+  ]);
+  compileWat(wat);
+  pass("Core fixture branch tailcall WAT");
 }
 
 function checkBranchWatSmoke() {
@@ -426,6 +457,7 @@ function main() {
   checkParamTailcallWatSmoke();
   checkMultiParamFunctionWatSmoke();
   checkSyntheticTailcallTargetWatFixture();
+  checkCoreFixtureBranchTailcallWat();
   checkBranchWatSmoke();
   checkParamConditionBranchWatSmoke();
   checkBranchTailcallWatSmoke();
