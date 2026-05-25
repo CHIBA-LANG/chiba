@@ -770,8 +770,8 @@ def source_parsed_module_facts_from_scanned_file(file: SourceFile): SourceParsed
     SourceParsedModuleFacts {
         file: file.id,
         has_token_stream: true,
-        has_ast: true,
-        ast_primary_path: true,
+        has_ast: false,
+        ast_primary_path: false,
         has_recoverable_errors: false,
     }
 
@@ -796,7 +796,7 @@ def scan_project_parser_facts_from_primary_tokens(files: Array[SourceFile]): Sou
         chibacc_spec: "src/frontend/chiba-level1.chibacc",
         token_primary_path_ready: true,
         ast_primary_path_blocked: source_parsed_modules_all_ast_primary(modules, 0) == false,
-        diagnostic: "",
+        diagnostic: "missing-lowering: chibacc AST primary path still scanner-derived",
     }
 
 /// Build source facts from already loaded files.
