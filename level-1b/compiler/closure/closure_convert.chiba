@@ -274,7 +274,7 @@ def stackless_resume_body_from_control(kind: CpsControlTermKind): StacklessResum
 def stackless_resume_body_from_shape(shape: ControlBodyResumeShape, fallback: StacklessResumeBodyKind): StacklessResumeBodyKind =
     match shape {
         ControlBodyResumeConst(value) => StacklessResumeBodyConst(value)
-        ControlBodyResumeParam0 => StacklessResumeBodyParam0
+        ControlBodyResumeParam(index) => StacklessResumeBodyParam(index)
         ControlBodyMultiResumeConst(first, last) => StacklessResumeBodyMultiResume(first, last)
         ControlBodyResumeUnknown => fallback
     }

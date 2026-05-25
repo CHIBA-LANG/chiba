@@ -46,7 +46,7 @@ data TypedI32ConstAtom {
 data TypedBranchCondition {
     TypedBranchConditionTrue,
     TypedBranchConditionFalse,
-    TypedBranchConditionParam0,
+    TypedBranchConditionParam(usize),
 }
 
 /// Typed expression shape used by semantic lowering before CPS.
@@ -637,7 +637,7 @@ def typed_branch_condition_from_item_region(text: String, item: TypedItemSkeleto
                     let offset = source_skip_spaces(text, start)
                     let if_start = source_skip_spaces(text, offset + "if".len())
                     if source_starts_with_at(text, if_start, typed_function_tail_call_target_text(text, param), 0) {
-                        if source_word_boundary_after(text, if_start, param.len) { Some(TypedBranchConditionParam0) }
+                        if source_word_boundary_after(text, if_start, param.len) { Some(TypedBranchConditionParam(0)) }
                         else { None }
                     } else { None }
                 }
@@ -789,7 +789,7 @@ def typed_function_match_bool_expr_body(text: String, item: TypedItemSkeleton, s
                 match typed_function_non_branch_expr_from_region(text, item, true_expr_start, true_expr_end) {
                     Some(then_expr) =>
                         match typed_function_non_branch_expr_from_region(text, item, false_expr_start, false_expr_end) {
-                            Some(else_expr) => Some(TypedExprIfElse(TypedBranchConditionParam0, then_expr, else_expr))
+                            Some(else_expr) => Some(TypedExprIfElse(TypedBranchConditionParam(0), then_expr, else_expr))
                             None => None
                         }
                     None => None

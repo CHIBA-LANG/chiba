@@ -88,7 +88,7 @@ def validate_core_cps_tail_form(op: CoreOp): Option[CoreValidationError] =
 /// Validate that branch join facts are not emitted as fake function bodies.
 def core_branch_condition_requires_param0(condition: CoreBranchCondition): bool =
     match condition {
-        CoreBranchConditionParam0 => true
+        CoreBranchConditionParam(0) => true
         _ => false
     }
 
@@ -126,8 +126,15 @@ def core_function_body_max_param_index(body: CoreExprKind, current: usize): usiz
     match body {
         CoreExprParam(index) => if index > current { index } else { current }
         CoreExprTailCallArgs(_, args) => core_function_body_args_max_param_index(args, 0, current)
-        CoreExprIfElse(_, then_expr, else_expr) =>
-            core_function_body_max_param_index(else_expr, core_function_body_max_param_index(then_expr, current))
+        CoreExprIfElse(condition, then_expr, else_expr) =>
+            core_function_body_max_param_index(else_expr, core_function_body_max_param_index(then_expr, core_branch_condition_max_param_index(condition, current)))
+        _ => current
+    }
+
+/// Return the largest parameter index read by a Core branch condition.
+def core_branch_condition_max_param_index(condition: CoreBranchCondition, current: usize): usize =
+    match condition {
+        CoreBranchConditionParam(index) => if index > current { index } else { current }
         _ => current
     }
 

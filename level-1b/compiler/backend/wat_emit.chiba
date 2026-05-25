@@ -169,7 +169,7 @@ def emit_core_branch_condition(condition: CoreBranchCondition): String =
     match condition {
         CoreBranchConditionTrue => "i32.const 1"
         CoreBranchConditionFalse => "i32.const 0"
-        CoreBranchConditionParam0 => "local.get 0"
+        CoreBranchConditionParam(index) => emit_core_param(index)
     }
 
 /// Emit a local.get instruction for one indexed i32 parameter.

@@ -32,7 +32,7 @@ data ControlBodyKind {
 data ControlBodyResumeShape {
     ControlBodyResumeUnknown,
     ControlBodyResumeConst(usize),
-    ControlBodyResumeParam0,
+    ControlBodyResumeParam(usize),
     ControlBodyMultiResumeConst(usize, usize),
 }
 
@@ -179,7 +179,7 @@ def control_resume_shape_loop(text: String, offset: usize, end: usize, count: us
 /// Build the observed resume shape, preserving direct first-param resumes.
 def control_resume_shape_loop_for_item(text: String, item: TypedItemSkeleton, offset: usize, end: usize, count: usize, first: usize, last: usize, saw_param0: bool): ControlBodyResumeShape =
     if offset >= end {
-        if saw_param0 { ControlBodyResumeParam0 }
+        if saw_param0 { ControlBodyResumeParam(0) }
         else if count == 0 { ControlBodyResumeUnknown }
         else if count == 1 { ControlBodyResumeConst(last) }
         else { ControlBodyMultiResumeConst(first, last) }

@@ -46,7 +46,7 @@ data CoreI32ConstAtom {
 data CoreBranchCondition {
     CoreBranchConditionTrue,
     CoreBranchConditionFalse,
-    CoreBranchConditionParam0,
+    CoreBranchConditionParam(usize),
 }
 
 /// Core expression form after CPS/closure lowering.
@@ -166,7 +166,7 @@ def core_branch_condition_from_typed(condition: TypedBranchCondition): CoreBranc
     match condition {
         TypedBranchConditionTrue => CoreBranchConditionTrue
         TypedBranchConditionFalse => CoreBranchConditionFalse
-        TypedBranchConditionParam0 => CoreBranchConditionParam0
+        TypedBranchConditionParam(index) => CoreBranchConditionParam(index)
     }
 
 /// Convert one CPS atom to Core expression form.
@@ -221,7 +221,7 @@ def core_expr_from_stackless_resume_body(body: StacklessResumeBodyKind): CoreExp
         StacklessResumeBodyShift => CoreExprI32Const(CoreI32ConstZero)
         StacklessResumeBodyReset => CoreExprI32Const(CoreI32ConstZero)
         StacklessResumeBodyConst(value) => core_expr_from_usize(value)
-        StacklessResumeBodyParam0 => CoreExprParam(0)
+        StacklessResumeBodyParam(index) => CoreExprParam(index)
         StacklessResumeBodyMultiResume(_, last) => core_expr_from_usize(last)
         StacklessResumeBodyPending => CoreExprBranchJoinPending
     }
@@ -229,7 +229,7 @@ def core_expr_from_stackless_resume_body(body: StacklessResumeBodyKind): CoreExp
 /// Return the i32 parameter count required by one stackless resume body.
 def core_stackless_resume_param_count(body: StacklessResumeBodyKind): usize =
     match body {
-        StacklessResumeBodyParam0 => 1
+        StacklessResumeBodyParam(index) => index + 1
         _ => 0
     }
 
