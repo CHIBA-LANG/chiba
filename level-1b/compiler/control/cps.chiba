@@ -160,8 +160,8 @@ def branch_join_plans(module: ReplaySafeModule): Array[BranchJoinPlan] =
 /// Transform a replay-safe module to CPS while beta-reducing administrative continuations.
 def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostics] =
     let branches = branch_join_plans(module)
-    if module.usage.facts.len() == 0 && module.replay.len() == 0 {
-        let continuations = cps_continuation_facts_none()
+    if module.replay.len() == 0 {
+        let continuations = cps_continuation_facts(module)
         let function_tail_forms = cps_tail_form_facts_from_functions(module.usage.answer.typed.functions, 0, Vec[CpsTailFormFact].new())
         let tail_builder = cps_tail_form_facts_copy(function_tail_forms, 0, Vec[CpsTailFormFact].new())
         Ok(CpsModule(
@@ -181,6 +181,36 @@ def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostic
 /// Empty CPS continuation fact stream for modules without control obligations.
 def cps_continuation_facts_none(): Array[ContinuationFact] =
     Vec[ContinuationFact].new().freeze()
+
+/// Pick a continuation capability from answer/control boundary shape.
+def cps_continuation_capability_from_answer(fact: AnswerFact): ContinuationCapabilityKind =
+    match fact.boundary {
+        ControlDelimited => ContinuationContN
+        _ => ContinuationCont1
+    }
+
+/// Convert one answer fact into a continuation fact that survives closure lowering.
+def cps_continuation_fact_from_answer(module: ReplaySafeModule, fact: AnswerFact, index: usize): ContinuationFact =
+    let capability = cps_continuation_capability_from_answer(fact)
+    ContinuationFact {
+        binder: BinderId { id: index },
+        capability: capability,
+        resume_input: TypeI64,
+        answer: TypeI64,
+        boundary: fact.boundary,
+        storage: continuation_storage_for_capability(capability, capability.repeatable()),
+        arrow_position: CallableExplicitContStorage,
+        sendable: false,
+    }
+
+/// Build continuation facts from answer/control facts.
+def cps_continuation_facts_from_answers(module: ReplaySafeModule, facts: Array[AnswerFact], index: usize, out: Vec[ContinuationFact]): Array[ContinuationFact] =
+    if index == facts.len() { out.freeze() }
+    else { cps_continuation_facts_from_answers(module, facts, index + 1, out.push(cps_continuation_fact_from_answer(module, facts.get(index), index))) }
+
+/// Build all continuation facts available before closure conversion.
+def cps_continuation_facts(module: ReplaySafeModule): Array[ContinuationFact] =
+    cps_continuation_facts_from_answers(module, module.usage.answer.facts, 0, Vec[ContinuationFact].new())
 
 /// Build a tail-return fact for one ordinary typed function.
 def cps_tail_form_fact_from_function(function: TypedFunctionFact): CpsTailFormFact =

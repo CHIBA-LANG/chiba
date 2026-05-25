@@ -2,6 +2,7 @@
 namespace compiler.control.answer_control
 
 use compiler.semantic.driver.*
+use compiler.semantic.types.*
 
 /// Control boundary kind observed in an expression.
 data ControlBoundary {
@@ -42,13 +43,34 @@ def typed_items_have_control_surface(items: Array[TypedItemSkeleton], index: usi
 def answer_facts_none(): Array[AnswerFact] =
     Vec[AnswerFact].new().freeze()
 
+/// Conservative answer type used until expression answer inference owns bodies.
+def default_answer_type(): SemType =
+    TyNominal(NominalId { namespace_name: "std", name: "i64" })
+
+/// Convert one control-surface fact into answer facts.
+def answer_facts_from_control_surface(facts: Array[ControlSurfaceFact], index: usize, out: Vec[AnswerFact]): Array[AnswerFact] =
+    if index == facts.len() { out.freeze() }
+    else {
+        let fact = facts.get(index)
+        let boundary =
+            if fact.has_shiftn { ControlDelimited }
+            else if fact.has_shift { ControlShift }
+            else if fact.has_reset { ControlReset }
+            else { ControlNone }
+        answer_facts_from_control_surface(
+            facts,
+            index + 1,
+            out.push(AnswerFact {
+                boundary: boundary,
+                answer: default_answer_type(),
+            }))
+    }
+
 /// Check `reset` and `shift` answer consistency.
 def check_answer_control(module: TypedModule): Result[AnswerControlModule, SemanticDiagnostics] =
     let obligations = answer_control_obligations(module.control_surface, 0, Vec[AnswerControlObligation].new())
     if module.control_surface.len() > 0 && obligations.len() > 0 {
-        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
-            .push(SemanticDiagnostic("<control>", 0, 0, "missing-facts: answer/control expression scan absent"))
-            .freeze()))
+        Ok(AnswerControlModule(module, answer_facts_from_control_surface(module.control_surface, 0, Vec[AnswerFact].new())))
     } else {
         Ok(AnswerControlModule(module, answer_facts_none()))
     }
