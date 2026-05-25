@@ -39,6 +39,7 @@ const REQUIRED_TEXT = [
   "CoreFunctionTailCall",
   "CoreFunctionTailCallI32Const",
   "CoreFunctionIfElseI32Const",
+  "CoreFunctionIfElseTailCallI32Const",
   "CoreFunctionBranchJoinPending",
   "def core_i32_const_atom_from_typed",
   "def core_branch_condition_from_typed",
@@ -130,6 +131,7 @@ const REQUIRED_TEXT = [
   "def empty_wat_module",
   "def emit_core_function",
   "def emit_core_if_else_i32_const",
+  "def emit_core_if_else_tail_call_i32_const",
   "(export \\\"main\\\")",
   "i32.const 42",
   "return_call $chiba.",
@@ -289,6 +291,18 @@ function checkBranchWatSmoke() {
   pass("branch WAT parse");
 }
 
+function checkBranchTailcallWatSmoke() {
+  const wat = `(module
+(func $chiba.id (param i32) (result i32) local.get 0)
+(func (export "main") (result i32)
+  (if (result i32) (i32.const 1)
+    (then (i32.const 42) (return_call $chiba.id))
+    (else (i32.const 0) (return_call $chiba.id))))
+)`;
+  compileWat(wat);
+  pass("branch tailcall WAT parse");
+}
+
 function checkContNPackageWatSmoke() {
   const wat = `(module
 (type $chiba.layout.continuation_frame (struct (field funcref) (field eqref)))
@@ -318,6 +332,7 @@ function main() {
   checkTailcallWatSmoke();
   checkParamTailcallWatSmoke();
   checkBranchWatSmoke();
+  checkBranchTailcallWatSmoke();
   checkContNPackageWatSmoke();
 
   primaryPathBlocked("tailcall generated-path smoke requires level-1b end-to-end fixture execution");
