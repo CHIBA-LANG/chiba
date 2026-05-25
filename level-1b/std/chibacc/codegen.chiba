@@ -104,6 +104,7 @@ def append_atom_parse_call(builder: DiagnosticBuilder, atom: GrammarAtom, positi
             builder.push_str("parse_").push_str(name.text).push_str("(tokens, ").push_str(position_expr).push_str(")")
         GrammarBind(_, inner) => append_atom_parse_call(builder, inner, position_expr)
         GrammarOptional(inner) => append_atom_parse_call(builder, inner, position_expr)
+        GrammarRepeatZeroOrMore(inner) => append_atom_parse_call(builder, inner, position_expr)
     }
 
 /// Return the binding name for an atom when it has one.
@@ -163,6 +164,8 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                         .push_str("            }\n")
                         .push_str("        }\n")
                 }
+                GrammarRepeatZeroOrMore(inner) =>
+                    append_alt_steps(builder, tail, action, step + 1, position_expr)
                 GrammarToken(name) =>
                     if parser_atom_is_empty_token(name) {
                         append_alt_steps(builder, tail, action, step + 1, position_expr)
@@ -214,6 +217,7 @@ def append_pratt_infix_atom_parse_call(builder: DiagnosticBuilder, atom: Grammar
             } else { append_atom_parse_call(builder, atom, position_expr) }
         GrammarBind(_, inner) => append_pratt_infix_atom_parse_call(builder, inner, position_expr, rule, right_power)
         GrammarOptional(inner) => append_pratt_infix_atom_parse_call(builder, inner, position_expr, rule, right_power)
+        GrammarRepeatZeroOrMore(inner) => append_pratt_infix_atom_parse_call(builder, inner, position_expr, rule, right_power)
         _ => append_atom_parse_call(builder, atom, position_expr)
     }
 
@@ -233,6 +237,8 @@ def append_pratt_infix_steps(builder: DiagnosticBuilder, rule: LoweredRule, atom
             let atom = parser_atom_unbind(head)
             let step_name = "step".concat(parser_codegen_usize(step))
             match atom {
+                GrammarRepeatZeroOrMore(inner) =>
+                    append_pratt_infix_steps(builder, rule, tail, action, step + 1, position_expr, right_power)
                 GrammarToken(name) =>
                     if parser_atom_is_empty_token(name) {
                         append_pratt_infix_steps(builder, rule, tail, action, step + 1, position_expr, right_power)

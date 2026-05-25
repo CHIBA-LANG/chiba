@@ -107,10 +107,11 @@ def chibacc_atom_from_ident(name: str): GrammarAtom =
     if chibacc_ident_is_token(name) { GrammarToken(name) }
     else { GrammarRuleRef(GrammarName { text: name }) }
 
-/// Apply `?` suffix for optional grammar atoms.
-def chibacc_parse_optional_suffix(source: str, offset: usize, end: usize, atom: GrammarAtom): GrammarAtom =
+/// Apply `?` / `*` suffixes for grammar atoms.
+def chibacc_parse_atom_suffix(source: str, offset: usize, end: usize, atom: GrammarAtom): GrammarAtom =
     let suffix = chibacc_skip_ws(source, offset)
     if suffix < end && source.byte_at(suffix) == 63 { GrammarOptional(atom) }
+    else if suffix < end && source.byte_at(suffix) == 42 { GrammarRepeatZeroOrMore(atom) }
     else { atom }
 
 /// Parse namespace declaration from the header block.
@@ -168,11 +169,11 @@ def chibacc_parse_atom_token(source: str, start: usize, end: usize): Option[Gram
                     let rhs = source.slice(rhs_start, rhs_end - rhs_start)
                     Some(GrammarBind(
                         source.slice(offset, ident_end - offset),
-                        chibacc_parse_optional_suffix(source, rhs_end, end, chibacc_atom_from_ident(rhs))))
+                        chibacc_parse_atom_suffix(source, rhs_end, end, chibacc_atom_from_ident(rhs))))
                 }
             } else {
                 let name = source.slice(offset, ident_end - offset)
-                Some(chibacc_parse_optional_suffix(source, ident_end, end, chibacc_atom_from_ident(name)))
+                Some(chibacc_parse_atom_suffix(source, ident_end, end, chibacc_atom_from_ident(name)))
             }
         }
     }
@@ -191,10 +192,12 @@ def chibacc_atom_token_end(source: str, start: usize, end: usize): usize =
             let rhs_end = chibacc_scan_ident(source, chibacc_skip_ws(source, after_ident + 1))
             let suffix = chibacc_skip_ws(source, rhs_end)
             if suffix < end && source.byte_at(suffix) == 63 { suffix + 1 }
+            else if suffix < end && source.byte_at(suffix) == 42 { suffix + 1 }
             else { rhs_end }
         } else {
             let suffix = chibacc_skip_ws(source, ident_end)
             if suffix < end && source.byte_at(suffix) == 63 { suffix + 1 }
+            else if suffix < end && source.byte_at(suffix) == 42 { suffix + 1 }
             else { ident_end }
         }
     }
