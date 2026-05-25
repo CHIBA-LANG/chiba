@@ -84,6 +84,7 @@
 	- [x] WAT emission obligations：非空 Core ops 现在生成 executable instruction/layout serialization obligations，不再只靠笼统非空判断。
 	- [x] non-empty Core WAT skeleton：已验证 Core op 现在会序列化 canonical Wasm-GC layout type 与 per-op runtime stub，不再整体 fail-closed 于 `executable WAT emission absent`；真实 typed Core body / continuation frame body / chibac-next smoke 仍 blocked。
 	- [x] exported main constant slice：`CoreOpFunction` 可 emit `(export "main")` 且返回 `i32.const 42`；真实 source parser execution / wasmtime end-to-end smoke 仍 blocked。
+	- [x] minimal function WAT parse smoke：C11 gate 现在用 Binaryen parse/validate canonical layout + exported `main` 常量返回 WAT，避免 WAT skeleton 语法回归。
 
 - [ ] `level-1b/compiler/source/scan.chiba` 只是 truthfulness scaffold，不是语言设计或未来 frontend；第一优先级是让 chibalex/chibacc parser 成为 C07 source facts 的 primary path，然后删除或降级 `scan.chiba`，不能让 byte-level scanner 长期承担 namespace/item/attribute 语义。
 - [ ] attribute grammar 必须先补齐 spec/golden，再实现：

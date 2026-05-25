@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { compileWat } from "./wat-compile.mjs";
 
 const ROOT = "level-1b/compiler/backend";
 const REQUIRED_FILES = [
@@ -201,6 +202,22 @@ function checkSource(file, source) {
   return errors;
 }
 
+function checkMinimalFunctionWatSmoke() {
+  const wat = `(module
+(type $chiba.layout.array (array (mut i32)))
+(type $chiba.layout.slice_view (struct (field (ref null $chiba.layout.array)) (field i32) (field i32)))
+(type $chiba.layout.closure_env (struct (field funcref) (field eqref)))
+(type $chiba.layout.continuation_frame (struct (field funcref) (field eqref)))
+(type $chiba.layout.continuation_frame_chain (struct (field (ref null $chiba.layout.continuation_frame)) (field (ref null $chiba.layout.continuation_frame_chain))))
+(type $chiba.layout.boxed_cont1 (struct (field (ref null $chiba.layout.continuation_frame)) (field (mut i32))))
+(type $chiba.layout.contN_package (struct (field (ref null $chiba.layout.continuation_frame_chain)) (field i32)))
+(type $chiba.layout.continuation_package (struct (field i32) (field eqref)))
+(func (export "main") (result i32) i32.const 42)
+)`;
+  compileWat(wat);
+  pass("minimal function WAT parse");
+}
+
 function main() {
   const files = listChiba(ROOT);
   const seen = new Set(files.map((file) => path.basename(file)));
@@ -214,6 +231,7 @@ function main() {
   const errors = files.flatMap((file) => checkSource(file, read(file)));
   if (errors.length !== 0) fail(errors.join("\n"));
   pass("backend source contract");
+  checkMinimalFunctionWatSmoke();
 
   primaryPathBlocked("tailcall WAT smoke requires level-1b typed Core pipeline");
   primaryPathBlocked("chibac-next WAT smoke requires level-1b end-to-end Core pipeline");
