@@ -326,7 +326,7 @@ function tailcallConstWat(symbol, target, value) {
   return functionWat(symbol, `i32.const ${value} return_call $chiba.${target}`, symbol === "main" ? "main" : "");
 }
 
-function checkGeneratedTailcallTargetWatFixture() {
+function checkSyntheticTailcallTargetWatFixture() {
   const directTarget = "callee_from_c08";
   const constTarget = "id_from_c08";
   const wat = `(module
@@ -335,11 +335,11 @@ ${functionWat(directTarget, "i32.const 42")}
 ${tailcallWat("main", directTarget)}
 ${tailcallConstWat("const_main", constTarget, 42)}
 )`;
-  if (wat.includes("$chiba.tail_target")) fail("generated tail-call WAT must not contain fixed dummy target");
-  if (!wat.includes(`return_call $chiba.${directTarget}`)) fail("direct tail-call target did not flow into generated WAT");
-  if (!wat.includes(`return_call $chiba.${constTarget}`)) fail("i32-const tail-call target did not flow into generated WAT");
+  if (wat.includes("$chiba.tail_target")) fail("synthetic tail-call WAT must not contain fixed dummy target");
+  if (!wat.includes(`return_call $chiba.${directTarget}`)) fail("direct tail-call target did not flow into synthetic WAT fixture");
+  if (!wat.includes(`return_call $chiba.${constTarget}`)) fail("i32-const tail-call target did not flow into synthetic WAT fixture");
   compileWat(wat);
-  pass("generated tailcall target WAT fixture");
+  pass("synthetic tailcall target WAT fixture");
 }
 
 function checkBranchWatSmoke() {
@@ -411,7 +411,7 @@ function main() {
   checkMinimalFunctionWatSmoke();
   checkTailcallWatSmoke();
   checkParamTailcallWatSmoke();
-  checkGeneratedTailcallTargetWatFixture();
+  checkSyntheticTailcallTargetWatFixture();
   checkBranchWatSmoke();
   checkParamConditionBranchWatSmoke();
   checkBranchTailcallWatSmoke();
