@@ -164,6 +164,16 @@ def emit_core_if_else_i32_const(condition: CoreBranchCondition, then_atom: CoreI
         .concat(")))")
 
 /// Emit a minimal if/else whose arms both tail-call with an i32 const.
+def emit_core_if_else_tail_call(condition: CoreBranchCondition, then_target: str, else_target: str): String =
+    "(result i32) (if (result i32) ("
+        .concat(emit_core_branch_condition(condition))
+        .concat(") (then (return_call $chiba.")
+        .concat(then_target)
+        .concat(")) (else (return_call $chiba.")
+        .concat(else_target)
+        .concat(")))")
+
+/// Emit a minimal if/else whose arms both tail-call with an i32 const.
 def emit_core_if_else_tail_call_i32_const(condition: CoreBranchCondition, then_target: str, then_arg: CoreI32ConstAtom, else_target: str, else_arg: CoreI32ConstAtom): String =
     "(result i32) (if (result i32) ("
         .concat(emit_core_branch_condition(condition))
@@ -195,6 +205,8 @@ def emit_core_function_body(body: Option[CoreFunctionBody]): String =
                 .concat(" return_call $chiba.")
                 .concat(target)
         Some(CoreFunctionIfElseI32Const(condition, then_atom, else_atom)) => emit_core_if_else_i32_const(condition, then_atom, else_atom)
+        Some(CoreFunctionIfElseTailCall(condition, then_target, else_target)) =>
+            emit_core_if_else_tail_call(condition, then_target, else_target)
         Some(CoreFunctionIfElseTailCallI32Const(condition, then_target, then_arg, else_target, else_arg)) =>
             emit_core_if_else_tail_call_i32_const(condition, then_target, then_arg, else_target, else_arg)
         Some(CoreFunctionBranchJoinPending) => "(result i32) unreachable"

@@ -73,7 +73,6 @@ type MethodOperatorIndex {
     operators: Array[OperatorKey],
     surface_entries: Array[MethodOperatorSurfaceEntry],
     operator_candidates: Array[OperatorCandidateSet],
-    operator_candidate_diagnostics: Array[OperatorCandidateDiagnosticFact],
 }
 
 /// Empty method/operator index for modules without declarations.
@@ -83,7 +82,6 @@ def method_operator_index_empty(): MethodOperatorIndex =
         operators: Vec[OperatorKey].new().freeze(),
         surface_entries: Vec[MethodOperatorSurfaceEntry].new().freeze(),
         operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
-        operator_candidate_diagnostics: Vec[OperatorCandidateDiagnosticFact].new().freeze(),
     }
 
 /// Convert one typed surface fact into a method/operator index input.
@@ -175,7 +173,6 @@ def method_operator_index_from_surface(project: ProjectSurface, facts: Array[Met
         operators: operator_keys_from_surface_entries(project, entries, 0, Vec[OperatorKey].new()),
         surface_entries: entries,
         operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
-        operator_candidate_diagnostics: Vec[OperatorCandidateDiagnosticFact].new().freeze(),
     }
 
 /// Convert one operator-use surface fact into a resolver obligation.
@@ -282,7 +279,6 @@ def method_operator_index_with_candidates(project: ProjectSurface, facts: Array[
         operators: operator_keys_from_surface_entries(project, entries, 0, Vec[OperatorKey].new()),
         surface_entries: entries,
         operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
-        operator_candidate_diagnostics: Vec[OperatorCandidateDiagnosticFact].new().freeze(),
     }
     let candidate_sets = operator_candidate_sets(base, obligations, 0, Vec[OperatorCandidateSet].new())
     MethodOperatorIndex {
@@ -290,7 +286,6 @@ def method_operator_index_with_candidates(project: ProjectSurface, facts: Array[
         operators: base.operators,
         surface_entries: base.surface_entries,
         operator_candidates: candidate_sets,
-        operator_candidate_diagnostics: operator_candidate_diagnostic_facts(candidate_sets, 0, Vec[OperatorCandidateDiagnosticFact].new()),
     }
 
 /// Build the nominal method/operator index.
@@ -299,7 +294,8 @@ def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex
         Ok(method_operator_index_empty())
     } else {
         let obligations = build_operator_resolution_obligations(module)
-        let _ = method_operator_index_with_candidates(module.alpha.project, module.method_surface, obligations)
+        let index = method_operator_index_with_candidates(module.alpha.project, module.method_surface, obligations)
+        let _ = operator_candidate_diagnostic_facts(index.operator_candidates, 0, Vec[OperatorCandidateDiagnosticFact].new())
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method/operator index construction absent"))
             .freeze()))
