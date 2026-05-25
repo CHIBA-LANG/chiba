@@ -66,6 +66,7 @@ const REQUIRED_TEXT = [
   "def typed_i32_const_atom_from_region",
   "def typed_i32_const_atom_exact_len",
   "def typed_i32_const_atom_exact_from_region",
+  "def typed_branch_literal_condition_matches",
   "def typed_branch_condition_from_region",
   "def typed_branch_condition_from_item_region",
   "def typed_function_if_else_const_body",

@@ -277,10 +277,16 @@ def typed_function_tail_call_i32_const_body(text: String, item: TypedItemSkeleto
     }
 
 /// Parse the literal condition of the first executable branch slice.
+def typed_branch_literal_condition_matches(text: String, offset: usize, prefix: str, literal: str): bool =
+    let condition_start = offset + prefix.len()
+    if source_starts_with_at(text, offset, prefix.concat(literal), 0) == false { false }
+    else { source_word_boundary_after(text, condition_start, literal.len()) }
+
+/// Parse the literal condition of the first executable branch slice.
 def typed_branch_condition_from_region(text: String, start: usize, end: usize): Option[TypedBranchCondition] =
     let offset = source_skip_spaces(text, start)
-    if source_starts_with_at(text, offset, "if true", 0) { Some(TypedBranchConditionTrue) }
-    else if source_starts_with_at(text, offset, "if false", 0) { Some(TypedBranchConditionFalse) }
+    if typed_branch_literal_condition_matches(text, offset, "if ", "true") { Some(TypedBranchConditionTrue) }
+    else if typed_branch_literal_condition_matches(text, offset, "if ", "false") { Some(TypedBranchConditionFalse) }
     else { None }
 
 /// Parse a literal or first-parameter branch condition.
