@@ -360,6 +360,72 @@ def typed_function_tail_call_i32_const_arg(text: String, target: SourceNameSlice
         }
     }
 
+/// Return true when a byte can separate simple call arguments.
+def typed_call_arg_separator(byte: u8): bool =
+    if byte == 44 { true }
+    else { byte == 41 }
+
+/// Find the next top-level simple call argument boundary.
+def typed_call_arg_end(text: String, offset: usize, end: usize): usize =
+    if offset >= end { end }
+    else if offset >= text.len() { end }
+    else if typed_call_arg_separator(text.byte_at(offset)) { offset }
+    else { typed_call_arg_end(text, offset + 1, end) }
+
+/// Parse one atom argument in a source-slice call.
+def typed_call_arg_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    if typed_function_body_returns_param0(text, item, start, end) { Some(TypedExprParam0) }
+    else {
+        match typed_i32_const_atom_exact_from_region(text, start, end) {
+            Some(TypedI32ConstFortyTwo) => Some(TypedExprI32FortyTwo)
+            Some(TypedI32ConstZero) => Some(TypedExprI32Zero)
+            Some(atom) => Some(TypedExprI32Const(atom))
+            None => None
+        }
+    }
+
+/// Parse simple comma-separated atom arguments.
+def typed_call_arg_exprs(text: String, item: TypedItemSkeleton, offset: usize, close: usize, out: Vec[TypedExprKind]): Option[Array[TypedExprKind]] =
+    let start = source_skip_spaces(text, offset)
+    if start >= close { Some(out.freeze()) }
+    else {
+        let arg_end = typed_call_arg_end(text, start, close)
+        match typed_call_arg_expr_from_region(text, item, start, arg_end) {
+            Some(arg) => {
+                let next = source_skip_spaces(text, arg_end)
+                if next >= close { Some(out.push(arg).freeze()) }
+                else if text.byte_at(next) == 44 { typed_call_arg_exprs(text, item, next + 1, close, out.push(arg)) }
+                else { None }
+            }
+            None => None
+        }
+    }
+
+/// Parse a source-slice tail call with zero or more simple atom arguments.
+def typed_function_tail_call_args_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    let offset = source_skip_spaces(text, start)
+    if offset >= end { None }
+    else if source_is_ident_start(text.byte_at(offset)) == false { None }
+    else {
+        let name_end = source_scan_namespace_name_end(text, offset)
+        let call_start = source_skip_spaces(text, name_end)
+        if call_start >= end || text.byte_at(call_start) != 40 { None }
+        else {
+            let close = typed_source_region_find_byte_or_end(text, call_start + 1, end, 41)
+            if close >= end { None }
+            else if typed_source_region_only_spaces(text, close + 1, end) == false { None }
+            else {
+                match typed_call_arg_exprs(text, item, call_start + 1, close, Vec[TypedExprKind].new()) {
+                    Some(args) =>
+                        Some(TypedExprTailCallArgs(
+                            typed_resolve_tail_call_target(text, item, text.slice(offset, name_end - offset)),
+                            args))
+                    None => None
+                }
+            }
+        }
+    }
+
 /// Parse a function-slice one-i32-const-argument tail call from a bounded arm.
 def typed_function_tail_call_i32_const_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
     match typed_function_tail_call_i32_const_slice(text, start, end) {
@@ -414,9 +480,13 @@ def typed_function_non_branch_expr_from_region(text: String, item: TypedItemSkel
                 match typed_function_tail_call_i32_const_body(text, item, start, end) {
                     Some(body) => Some(body)
                     None =>
-                        match typed_function_tail_call_target_slice(text, start, end) {
-                            Some(target) => Some(TypedExprTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target))))
-                            None => None
+                        match typed_function_tail_call_args_body(text, item, start, end) {
+                            Some(body) => Some(body)
+                            None =>
+                                match typed_function_tail_call_target_slice(text, start, end) {
+                                    Some(target) => Some(TypedExprTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target))))
+                                    None => None
+                                }
                         }
                 }
         }
