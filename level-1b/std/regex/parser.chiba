@@ -200,6 +200,7 @@ def parse_escape(cursor: RegexCursor): RegexParseResult =
         if byte == 100 { Ok(RegexParseOk { ast: RegexClassExpr(RegexClass { negated: false, atoms: ListCons(RegexClassDigit, ListNil) }), cursor: next.advance() }) }
         else if byte == 115 { Ok(RegexParseOk { ast: RegexClassExpr(RegexClass { negated: false, atoms: ListCons(RegexClassWhitespace, ListNil) }), cursor: next.advance() }) }
         else if byte == 119 { Ok(RegexParseOk { ast: RegexClassExpr(RegexClass { negated: false, atoms: ListCons(RegexClassWord, ListNil) }), cursor: next.advance() }) }
+        else if byte >= 48 && byte <= 57 { Err(RegexParseError { offset: cursor.offset, message: "unsupported regex feature: backreference" }) }
         else { Ok(RegexParseOk { ast: RegexLiteral(regex_char_at(next)), cursor: next.advance() }) }
     }
 
@@ -259,15 +260,17 @@ def regex_find_byte_until(pattern: str, offset: usize, end: usize, byte: u8): us
     else if pattern.byte_at(offset) == byte { offset }
     else { regex_find_byte_until(pattern, offset + 1, end, byte) }
 
-/// Attach lazy mode when a quantifier is followed by `?`.
-def regex_quantifier_apply_lazy(repeat: RegexRepeat, cursor: RegexCursor): RegexQuantifierParseOk =
-    if cursor.at_end() { RegexQuantifierParseOk { repeat: repeat, cursor: cursor } }
+/// Attach lazy mode when a quantifier is followed by `?`, and reject possessive `+`.
+def regex_quantifier_apply_lazy(repeat: RegexRepeat, cursor: RegexCursor): Result[RegexQuantifierParseOk, RegexParseError] =
+    if cursor.at_end() { Ok(RegexQuantifierParseOk { repeat: repeat, cursor: cursor }) }
     else if cursor.pattern.byte_at(cursor.offset) == 63 {
-        RegexQuantifierParseOk {
+        Ok(RegexQuantifierParseOk {
             repeat: RegexRepeat { min: repeat.min, max: repeat.max, mode: RegexLazy },
             cursor: cursor.advance(),
-        }
-    } else { RegexQuantifierParseOk { repeat: repeat, cursor: cursor } }
+        })
+    } else if cursor.pattern.byte_at(cursor.offset) == 43 {
+        Err(RegexParseError { offset: cursor.offset, message: "unsupported regex feature: possessive quantifier" })
+    } else { Ok(RegexQuantifierParseOk { repeat: repeat, cursor: cursor }) }
 
 /// Parse `{m}`, `{m,}`, or `{m,n}`.
 def parse_braced_quantifier(cursor: RegexCursor): Result[RegexQuantifierParseOk, RegexParseError] =
@@ -277,17 +280,17 @@ def parse_braced_quantifier(cursor: RegexCursor): Result[RegexQuantifierParseOk,
         let comma = regex_find_byte_until(cursor.pattern, cursor.offset + 1, close, 44)
         if comma >= close {
             match regex_parse_usize_digits(cursor.pattern, cursor.offset + 1, close, 0, false) {
-                Some(exact) => Ok(regex_quantifier_apply_lazy(regex_repeat(exact, Some(exact)), RegexCursor { pattern: cursor.pattern, offset: close + 1 }))
+                Some(exact) => regex_quantifier_apply_lazy(regex_repeat(exact, Some(exact)), RegexCursor { pattern: cursor.pattern, offset: close + 1 })
                 None => Err(RegexParseError { offset: cursor.offset, message: "expected quantifier count" })
             }
         } else {
             match regex_parse_usize_digits(cursor.pattern, cursor.offset + 1, comma, 0, false) {
                 Some(min) => {
                     if comma + 1 >= close {
-                        Ok(regex_quantifier_apply_lazy(regex_repeat(min, None), RegexCursor { pattern: cursor.pattern, offset: close + 1 }))
+                        regex_quantifier_apply_lazy(regex_repeat(min, None), RegexCursor { pattern: cursor.pattern, offset: close + 1 })
                     } else {
                         match regex_parse_usize_digits(cursor.pattern, comma + 1, close, 0, false) {
-                            Some(value) => Ok(regex_quantifier_apply_lazy(regex_repeat(min, Some(value)), RegexCursor { pattern: cursor.pattern, offset: close + 1 }))
+                            Some(value) => regex_quantifier_apply_lazy(regex_repeat(min, Some(value)), RegexCursor { pattern: cursor.pattern, offset: close + 1 })
                             None => Err(RegexParseError { offset: comma + 1, message: "expected quantifier upper bound" })
                         }
                     }
@@ -311,6 +314,36 @@ def parse_quoted_literal_loop(cursor: RegexCursor, out: Vec[RegexAst]): RegexPar
         parse_quoted_literal_loop(cursor.advance(), out.push(RegexLiteral(regex_char_at(cursor))))
     }
 
+/// Parse a parenthesized regex group after the opening paren has been consumed.
+def parse_group_after_open(cursor: RegexCursor): RegexParseResult =
+    match parse_alternative(cursor) {
+        Ok(inner) =>
+            if inner.cursor.at_end() { Err(RegexParseError { offset: inner.cursor.offset, message: "unterminated group" }) }
+            else if inner.cursor.pattern.byte_at(inner.cursor.offset) == 41 { Ok(RegexParseOk { ast: RegexNonCapture(inner.ast), cursor: inner.cursor.advance() }) }
+            else { Err(RegexParseError { offset: inner.cursor.offset, message: "expected group close" }) }
+        Err(error) => Err(error)
+    }
+
+/// Parse or reject a PCRE-style `(?...)` group prefix.
+def parse_question_group(cursor: RegexCursor): RegexParseResult =
+    let marker = cursor.offset + 2
+    if marker >= cursor.pattern.len() { Err(RegexParseError { offset: cursor.offset, message: "unterminated group" }) }
+    else {
+        let byte = cursor.pattern.byte_at(marker)
+        if byte == 58 { parse_group_after_open(RegexCursor { pattern: cursor.pattern, offset: marker + 1 }) }
+        else if byte == 61 { Err(RegexParseError { offset: cursor.offset, message: "unsupported regex feature: complex lookaround" }) }
+        else if byte == 33 { Err(RegexParseError { offset: cursor.offset, message: "unsupported regex feature: complex lookaround" }) }
+        else if byte == 60 {
+            let next = marker + 1
+            if next < cursor.pattern.len() && cursor.pattern.byte_at(next) == 61 { Err(RegexParseError { offset: cursor.offset, message: "unsupported regex feature: variable-length lookbehind" }) }
+            else if next < cursor.pattern.len() && cursor.pattern.byte_at(next) == 33 { Err(RegexParseError { offset: cursor.offset, message: "unsupported regex feature: variable-length lookbehind" }) }
+            else { Err(RegexParseError { offset: cursor.offset, message: "unsupported regex feature: complex lookaround" }) }
+        }
+        else if byte == 62 { Err(RegexParseError { offset: cursor.offset, message: "unsupported regex feature: atomic group" }) }
+        else if byte == 40 { Err(RegexParseError { offset: cursor.offset, message: "unsupported regex feature: conditional pattern" }) }
+        else { Err(RegexParseError { offset: cursor.offset, message: "unsupported regex feature: complex lookaround" }) }
+    }
+
 /// Parse one atom.
 def parse_atom(cursor: RegexCursor): RegexParseResult =
     if cursor.at_end() { Ok(RegexParseOk { ast: RegexEmpty, cursor: cursor }) }
@@ -322,13 +355,9 @@ def parse_atom(cursor: RegexCursor): RegexParseResult =
         else if byte == 34 { parse_quoted_literal(cursor) }
         else if byte == 91 { parse_class(cursor) }
         else if byte == 40 {
-            match parse_alternative(cursor.advance()) {
-                Ok(inner) =>
-                    if inner.cursor.at_end() { Err(RegexParseError { offset: inner.cursor.offset, message: "unterminated group" }) }
-                    else if inner.cursor.pattern.byte_at(inner.cursor.offset) == 41 { Ok(RegexParseOk { ast: RegexNonCapture(inner.ast), cursor: inner.cursor.advance() }) }
-                    else { Err(RegexParseError { offset: inner.cursor.offset, message: "expected group close" }) }
-                Err(error) => Err(error)
-            }
+            let next = cursor.advance()
+            if next.offset < cursor.pattern.len() && cursor.pattern.byte_at(next.offset) == 63 { parse_question_group(cursor) }
+            else { parse_group_after_open(next) }
         } else { Ok(RegexParseOk { ast: RegexLiteral(regex_char_at(cursor)), cursor: cursor.advance() }) }
     }
 
@@ -338,14 +367,20 @@ def parse_quantifier_suffix(ok: RegexParseOk): RegexParseResult =
     else {
         let byte = ok.cursor.pattern.byte_at(ok.cursor.offset)
         if byte == 42 {
-            let suffix = regex_quantifier_apply_lazy(regex_repeat(0, None), ok.cursor.advance())
-            Ok(RegexParseOk { ast: RegexRepeatExpr(ok.ast, suffix.repeat), cursor: suffix.cursor })
+            match regex_quantifier_apply_lazy(regex_repeat(0, None), ok.cursor.advance()) {
+                Ok(suffix) => Ok(RegexParseOk { ast: RegexRepeatExpr(ok.ast, suffix.repeat), cursor: suffix.cursor })
+                Err(error) => Err(error)
+            }
         } else if byte == 43 {
-            let suffix = regex_quantifier_apply_lazy(regex_repeat(1, None), ok.cursor.advance())
-            Ok(RegexParseOk { ast: RegexRepeatExpr(ok.ast, suffix.repeat), cursor: suffix.cursor })
+            match regex_quantifier_apply_lazy(regex_repeat(1, None), ok.cursor.advance()) {
+                Ok(suffix) => Ok(RegexParseOk { ast: RegexRepeatExpr(ok.ast, suffix.repeat), cursor: suffix.cursor })
+                Err(error) => Err(error)
+            }
         } else if byte == 63 {
-            let suffix = regex_quantifier_apply_lazy(regex_repeat(0, Some(1)), ok.cursor.advance())
-            Ok(RegexParseOk { ast: RegexRepeatExpr(ok.ast, suffix.repeat), cursor: suffix.cursor })
+            match regex_quantifier_apply_lazy(regex_repeat(0, Some(1)), ok.cursor.advance()) {
+                Ok(suffix) => Ok(RegexParseOk { ast: RegexRepeatExpr(ok.ast, suffix.repeat), cursor: suffix.cursor })
+                Err(error) => Err(error)
+            }
         } else if byte == 123 {
             match parse_braced_quantifier(ok.cursor) {
                 Ok(suffix) => Ok(RegexParseOk { ast: RegexRepeatExpr(ok.ast, suffix.repeat), cursor: suffix.cursor })
