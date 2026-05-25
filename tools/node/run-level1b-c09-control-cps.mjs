@@ -172,10 +172,6 @@ function pass(name) {
   console.log(`[PASS] ${name}`);
 }
 
-function primaryPathBlocked(name) {
-  console.log(`[BLOCKED] ${name}`);
-}
-
 function read(file) {
   return fs.readFileSync(file, "utf8");
 }
