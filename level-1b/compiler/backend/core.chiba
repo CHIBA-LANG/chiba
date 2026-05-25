@@ -44,6 +44,7 @@ data CoreI32ConstAtom {
 data CoreBranchCondition {
     CoreBranchConditionTrue,
     CoreBranchConditionFalse,
+    CoreBranchConditionParam0,
 }
 
 /// Minimal function body form accepted by the first executable WAT slice.
@@ -141,6 +142,7 @@ def core_branch_condition_from_typed(condition: TypedBranchCondition): CoreBranc
     match condition {
         TypedBranchConditionTrue => CoreBranchConditionTrue
         TypedBranchConditionFalse => CoreBranchConditionFalse
+        TypedBranchConditionParam0 => CoreBranchConditionParam0
     }
 
 /// Convert a C08 typed function body to backend Core body form.

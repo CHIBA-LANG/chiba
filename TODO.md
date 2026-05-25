@@ -127,6 +127,7 @@
 	- [x] branching Core obligation：C11 已把 `CpsBranchJoinFact` 转成 backend-neutral `CoreBranchJoinLoweringObligation`；真实 executable branch block emission 仍未完成。
 	- [x] branching miscompile guard：C08 遇到 branching body 会标记 `TypedFunctionBranchJoinPending`，C11 validator 拒绝 fake body emission，避免 `if/else` 被常量竖切误编译。
 	- [x] minimal executable branch slice：`if true/false { 42/0 } else { 42/0 }` 已能保留 typed branch body 并 emit executable WAT；变量条件、effect arms、nested branch、match/if-let 仍走 join obligation / pending blocker。
+	- [x] minimal param-condition branch slice：`if flag { ... } else { ... }` 中第一 bool 参数可作为 Wasm i32 条件进入窄 branch lowering；复杂条件仍 pending。
 	- [x] minimal branch tail-call slice：`if true/false { f(42/0) } else { g(42/0) }` 已能保留两臂 tail-call 并 emit `return_call` WAT，保证该窄分支 slice 不退化成非尾调用。
 	- 不能只看 `if` then/happy path；必须同时覆盖 `else`、`else if`、`if let` 成功/失败分支、`match` 每个 arm、default/fallback、短路逻辑和 nested branch。
 	- typed env、pattern binding scope、exhaustiveness/warning、CPS join continuation、branch result type unify 必须一起验收。

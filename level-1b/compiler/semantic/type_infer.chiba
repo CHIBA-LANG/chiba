@@ -44,6 +44,7 @@ data TypedI32ConstAtom {
 data TypedBranchCondition {
     TypedBranchConditionTrue,
     TypedBranchConditionFalse,
+    TypedBranchConditionParam0,
 }
 
 /// Minimal typed body shape accepted by the first codegen vertical slice.
@@ -164,7 +165,17 @@ def typed_function_has_i32_param0(text: String, item: TypedItemSkeleton): bool =
 
 /// Count the narrow i32 params understood by the first executable function slice.
 def typed_function_i32_param_count(text: String, item: TypedItemSkeleton): usize =
-    if typed_function_has_i32_param0(text, item) { 1 } else { 0 }
+    if typed_function_has_i32_param0(text, item) { 1 }
+    else if typed_function_has_bool_param0(text, item) { 1 }
+    else { 0 }
+
+/// Return true when a function header has a first bool parameter.
+def typed_function_has_bool_param0(text: String, item: TypedItemSkeleton): bool =
+    let header_end = item.surface.header.offset + item.surface.header.len
+    match typed_function_first_param_name(text, item) {
+        Some(param) => source_region_has_text(text, source_name_slice_end(param), header_end, "bool")
+        None => false
+    }
 
 /// Return true when a body returns the first parameter directly.
 def typed_function_body_returns_param0(text: String, item: TypedItemSkeleton, start: usize, end: usize): bool =
@@ -216,9 +227,27 @@ def typed_branch_condition_from_region(text: String, start: usize, end: usize): 
     else if source_starts_with_at(text, offset, "if false", 0) { Some(TypedBranchConditionFalse) }
     else { None }
 
-/// Parse a narrow `if true/false { const } else { const }` body.
-def typed_function_if_else_const_body(text: String, start: usize, end: usize): Option[TypedFunctionBodyKind] =
+/// Parse a literal or first-parameter branch condition.
+def typed_branch_condition_from_item_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedBranchCondition] =
     match typed_branch_condition_from_region(text, start, end) {
+        Some(condition) => Some(condition)
+        None =>
+            match typed_function_first_param_name(text, item) {
+                Some(param) => {
+                    let offset = source_skip_spaces(text, start)
+                    let if_start = source_skip_spaces(text, offset + "if".len())
+                    if source_starts_with_at(text, if_start, typed_function_tail_call_target_text(text, param), 0) {
+                        if source_word_boundary_after(text, if_start, param.len) { Some(TypedBranchConditionParam0) }
+                        else { None }
+                    } else { None }
+                }
+                None => None
+            }
+    }
+
+/// Parse a narrow `if true/false { const } else { const }` body.
+def typed_function_if_else_const_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedFunctionBodyKind] =
+    match typed_branch_condition_from_item_region(text, item, start, end) {
         Some(condition) => {
             let then_open = typed_source_region_find_byte_or_end(text, start, end, 123)
             let then_close = typed_source_region_find_byte_or_end(text, then_open, end, 125)
@@ -243,7 +272,7 @@ def typed_function_if_else_const_body(text: String, start: usize, end: usize): O
 
 /// Parse a narrow `if true/false { f(const) } else { g(const) }` body.
 def typed_function_if_else_tail_call_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedFunctionBodyKind] =
-    match typed_branch_condition_from_region(text, start, end) {
+    match typed_branch_condition_from_item_region(text, item, start, end) {
         Some(condition) => {
             let then_open = typed_source_region_find_byte_or_end(text, start, end, 123)
             let then_close = typed_source_region_find_byte_or_end(text, then_open, end, 125)
@@ -548,7 +577,7 @@ def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton)
     let start = source_scan_item_body_region_start(text, item.surface.header.offset)
     let end = source_scan_item_region_end(text, item.surface.header.offset)
     if typed_item_has_branching_surface(item) {
-        match typed_function_if_else_const_body(text, start, end) {
+        match typed_function_if_else_const_body(text, item, start, end) {
             Some(body) => body
             None =>
                 match typed_function_if_else_tail_call_body(text, item, start, end) {

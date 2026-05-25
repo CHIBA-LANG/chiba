@@ -114,6 +114,7 @@ def emit_core_branch_condition(condition: CoreBranchCondition): String =
     match condition {
         CoreBranchConditionTrue => "i32.const 1"
         CoreBranchConditionFalse => "i32.const 0"
+        CoreBranchConditionParam0 => "local.get 0"
     }
 
 /// Emit a minimal executable if/else expression.

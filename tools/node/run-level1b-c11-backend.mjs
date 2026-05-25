@@ -291,6 +291,15 @@ function checkBranchWatSmoke() {
   pass("branch WAT parse");
 }
 
+function checkParamConditionBranchWatSmoke() {
+  const wat = `(module
+(func $chiba.choose (param i32) (result i32)
+  (if (result i32) (local.get 0) (then (i32.const 42)) (else (i32.const 0))))
+)`;
+  compileWat(wat);
+  pass("param-condition branch WAT parse");
+}
+
 function checkBranchTailcallWatSmoke() {
   const wat = `(module
 (func $chiba.id (param i32) (result i32) local.get 0)
@@ -332,6 +341,7 @@ function main() {
   checkTailcallWatSmoke();
   checkParamTailcallWatSmoke();
   checkBranchWatSmoke();
+  checkParamConditionBranchWatSmoke();
   checkBranchTailcallWatSmoke();
   checkContNPackageWatSmoke();
 
