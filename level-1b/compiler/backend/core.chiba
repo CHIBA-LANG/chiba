@@ -179,7 +179,7 @@ def lower_typed_function_fact(fact: TypedFunctionBodyFact): CoreOp =
         i32_param_count: fact.i32_param_count,
         function_body: Some(core_function_body_from_typed(fact.body)),
         layout: None,
-        tail: CoreTailCall,
+        tail: CorePlainCall,
         runtime_state: CoreNoRuntimeState,
         frame_count: 0,
     }
@@ -344,18 +344,29 @@ def lower_continuation_facts(facts: Array[ContinuationLoweringFact], index: usiz
     if index == facts.len() { out.freeze() }
     else { lower_continuation_facts(facts, index + 1, push_continuation_core_ops(out, facts.get(index))) }
 
+/// Pick the block terminator required by one lowered Core function body.
+def core_function_body_terminator(body: Option[CoreFunctionBody]): CoreBlockTerminator =
+    match body {
+        Some(CoreFunctionTailCall(_)) => CoreBlockTailCall
+        Some(CoreFunctionTailCallI32Const(_, _)) => CoreBlockTailCall
+        Some(CoreFunctionIfElseTailCallI32Const(_, _, _, _, _)) => CoreBlockTailCall
+        Some(CoreFunctionBranchJoinPending) => CoreBlockContinue
+        None => CoreBlockContinue
+        _ => CoreBlockReturn
+    }
+
 /// Pick the block terminator required by one Core op.
 def core_block_terminator_for_op(op: CoreOp): CoreBlockTerminator =
-    match op.tail {
-        CoreTailCall =>
-            match op.kind {
-                CoreOpFunction => CoreBlockReturn
-                _ => CoreBlockTailCall
-            }
-        CorePlainCall =>
-            match op.kind {
-                CoreOpTailCall => CoreBlockTailCall
-                _ => CoreBlockContinue
+    match op.kind {
+        CoreOpFunction => core_function_body_terminator(op.function_body)
+        _ =>
+            match op.tail {
+                CoreTailCall => CoreBlockTailCall
+                CorePlainCall =>
+                    match op.kind {
+                        CoreOpTailCall => CoreBlockTailCall
+                        _ => CoreBlockContinue
+                    }
             }
     }
 

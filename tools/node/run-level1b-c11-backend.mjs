@@ -22,6 +22,7 @@ const REQUIRED_TEXT = [
   "block_obligations: Array[CoreBlockLoweringObligation]",
   "branch_join_obligations: Array[CoreBranchJoinLoweringObligation]",
   "def core_block_terminator_for_op",
+  "def core_function_body_terminator",
   "def core_block_lowering_obligation_from_op",
   "def core_block_lowering_obligations",
   "def optimized_closure_cps_module",
