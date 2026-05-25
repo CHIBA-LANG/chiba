@@ -21,6 +21,9 @@ const REQUIRED_TEXT = [
   "LexUtf8RejectInvalid",
   "type LoweredLexer",
   "def lower_chibalex",
+  "def chibalex_parse_namespace",
+  "def parse_regex_def",
+  "def parse_rule",
   "def find_best_rule",
   "def LexState.advance_char",
   "next_char_offset",
@@ -98,6 +101,9 @@ function checkSource(file, source) {
   if (/\b(ptr|pointer|addr|raw)\w*\s*:\s*i64\b/i.test(code)) errors.push(`${rel}: chibalex uses opaque i64 pointer field`);
   if (/missing-lowering: executable chibalex lexer codegen absent|LexerCodegenContractOnly/.test(code)) {
     errors.push(`${rel}: chibalex codegen must not report contract-only success`);
+  }
+  if (/__compiler_builtin\(\"std\.chibalex_parse/.test(code)) {
+    errors.push(`${rel}: chibalex parser must not call std.chibalex_parse compiler builtins`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {

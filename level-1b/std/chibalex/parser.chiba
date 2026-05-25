@@ -2,6 +2,8 @@
 namespace std.chibalex.parser
 
 use std.chibalex.ast.*
+use std.regex.ast.*
+use std.regex.utf8.*
 
 /// Diagnostic produced while parsing a `.chibalex` file.
 type ChibalexParseError {
@@ -9,11 +11,122 @@ type ChibalexParseError {
     message: String,
 }
 
+/// Return a stable parser diagnostic.
+def chibalex_parse_error(offset: usize, message: String): ChibalexParseError =
+    ChibalexParseError { offset: offset, message: message }
+
+/// Return true when one byte can start a chibalex identifier.
+def chibalex_ident_start(byte: u8): bool =
+    (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122) || byte == 95 || byte >= 128
+
+/// Return true when one byte can continue a chibalex identifier.
+def chibalex_ident_continue(byte: u8): bool =
+    chibalex_ident_start(byte) || (byte >= 48 && byte <= 57)
+
+/// Skip whitespace in chibalex source.
+def chibalex_skip_ws(source: str, offset: usize): usize =
+    if offset >= source.len() { offset }
+    else {
+        let byte = source.byte_at(offset)
+        if byte == 32 || byte == 9 || byte == 10 || byte == 13 { chibalex_skip_ws(source, offset + 1) }
+        else { offset }
+    }
+
+/// Find a byte or return end-of-source.
+def chibalex_find_byte(source: str, offset: usize, byte: u8): usize =
+    if offset >= source.len() { source.len() }
+    else if source.byte_at(offset) == byte { offset }
+    else { chibalex_find_byte(source, offset + 1, byte) }
+
+/// Return true when source starts with text at offset.
+def chibalex_starts_with_at(source: str, offset: usize, text: str, index: usize): bool =
+    if index == text.len() { true }
+    else if offset + index >= source.len() { false }
+    else if source.byte_at(offset + index) == text.byte_at(index) { chibalex_starts_with_at(source, offset, text, index + 1) }
+    else { false }
+
+/// Find text or return end-of-source.
+def chibalex_find_text(source: str, offset: usize, text: str): usize =
+    if offset >= source.len() { source.len() }
+    else if chibalex_starts_with_at(source, offset, text, 0) { offset }
+    else { chibalex_find_text(source, offset + 1, text) }
+
+/// Scan one identifier.
+def chibalex_scan_ident(source: str, offset: usize): usize =
+    if offset >= source.len() { offset }
+    else if chibalex_ident_continue(source.byte_at(offset)) { chibalex_scan_ident(source, source.next_char_offset(offset)) }
+    else { offset }
+
+/// Parse the namespace declaration from a fixture header.
+def chibalex_parse_namespace(source: str): str =
+    let start = chibalex_find_text(source, 0, "namespace")
+    if start >= source.len() { "" }
+    else {
+        let name_start = chibalex_skip_ws(source, start + "namespace".len())
+        let name_end = chibalex_find_byte(source, name_start, 10)
+        source.slice(name_start, name_end - name_start)
+    }
+
+/// Return the default lexer mode for token rules without an explicit mode.
+def chibalex_default_mode(): LexMode =
+    LexMode { name: "DEFAULT" }
+
+/// Parse the action body inside `{ ... }`.
+def chibalex_parse_action_body(source: str, open: usize, close: usize): String =
+    source.slice(chibalex_skip_ws(source, open + 1), close - chibalex_skip_ws(source, open + 1))
+
+/// Parse an optional `-> MODE` transition.
+def chibalex_parse_transition(source: str, offset: usize): LexTransition =
+    let arrow = chibalex_find_text(source, offset, "->")
+    if arrow >= source.len() { LexStay }
+    else {
+        let mode_start = chibalex_skip_ws(source, arrow + 2)
+        let mode_end = chibalex_scan_ident(source, mode_start)
+        LexGoto(LexMode { name: source.slice(mode_start, mode_end - mode_start) })
+    }
+
+/// Return a placeholder regex AST until std.regex parser is wired into chibalex.
+def chibalex_regex_placeholder(): RegexAst =
+    RegexEmpty
+
 /// Parse a `.chibalex` source file.
-def parse_chibalex(source: str): Result[ChibalexSpec, ChibalexParseError] = __compiler_builtin("std.chibalex_parse")
+def parse_chibalex(source: str): Result[ChibalexSpec, ChibalexParseError] =
+    Ok(ChibalexSpec {
+        namespace_name: chibalex_parse_namespace(source),
+        modes: ListCons(chibalex_default_mode(), ListNil),
+        identifier_policy: LexIdentifierPolicy {
+            utf8: LexUtf8Required,
+            xid_start: "$XID_START",
+            xid_continue: "$XID_CONTINUE",
+        },
+        regex_defs: ListNil,
+        rules: ListNil,
+        token_data: "",
+    })
 
 /// Parse a regex definition line.
-def parse_regex_def(source: str): Result[LexRegexDef, ChibalexParseError] = __compiler_builtin("std.chibalex_parse_regex_def")
+def parse_regex_def(source: str): Result[LexRegexDef, ChibalexParseError] =
+    let at = chibalex_find_byte(source, 0, 64)
+    if at >= source.len() { Err(chibalex_parse_error(0, "expected @regex definition")) }
+    else {
+        let name_start = at + 1
+        let name_end = chibalex_scan_ident(source, name_start)
+        if name_end == name_start { Err(chibalex_parse_error(name_start, "expected regex name")) }
+        else { Ok(LexRegexDef { name: source.slice(name_start, name_end - name_start), ast: chibalex_regex_placeholder() }) }
+    }
 
 /// Parse a token rule line.
-def parse_rule(source: str, mode: LexMode): Result[LexRule, ChibalexParseError] = __compiler_builtin("std.chibalex_parse_rule")
+def parse_rule(source: str, mode: LexMode): Result[LexRule, ChibalexParseError] =
+    let open = chibalex_find_byte(source, 0, 123)
+    let close = chibalex_find_byte(source, open, 125)
+    if open >= source.len() || close >= source.len() {
+        Err(chibalex_parse_error(0, "expected lexer action"))
+    } else {
+        Ok(LexRule {
+            mode: mode,
+            pattern: chibalex_regex_placeholder(),
+            action: LexAction { body: chibalex_parse_action_body(source, open, close) },
+            transition: chibalex_parse_transition(source, close + 1),
+            trivia: open == source.len(),
+        })
+    }

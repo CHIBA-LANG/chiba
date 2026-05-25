@@ -16,6 +16,7 @@
 - [ ] chibalex/chibacc frontend：chibalex token primary path 已开始替换 scanner fallback；chibacc source AST 还没进 primary path。
 	- [x] source parser facts blocker：`SourceProjectFacts.parser` 已拆分 `token_primary_path_ready` 与 `ast_primary_path_blocked`，不再让 scanner fallback 冒充 parsed AST。
 	- [x] chibalex/chibacc lowering/codegen status：C05/C06 已移除 `ContractOnly`/`missing-lowering` codegen 状态，lowering 从 AST 生成 typed IR，codegen 产出可检查入口文本；完整 generated parser execution 仍未完成。
+	- [x] chibalex parser builtin removal slice：`std.chibalex.parser` 的 top-level namespace / `@regex =` / token rule action+transition 解析已从 `std.chibalex_parse*` compiler builtin 迁到 source-level parser helper；完整 `.chibalex` rule list assembly 与 regex AST parse 仍 blocked。
 - [ ] UTF8, `level-1b/compiler/semantic/adt_tuple_lowering.chiba`, ADT ctor tag canonicalization 当前按 ASCII byte 做 BigCamel -> snake_case，UTF-8 ctor 名会逐 byte 变成 `_` 或错误分词；fix：ctor tag 由 chibacc AST 的 UTF-8/XID identifier token 派生，使用 Unicode-aware case fold / word-boundary 规则，或在该规则落地前对非-ASCII ctor fail-closed。
 	- [x] C08-C11 已线程 `requires_utf8_identifier_lowering`，UTF-8 ADT ctor identifier 不能被当作普通 ASCII tag lowering 静默通过；真实 Unicode-aware case fold / word-boundary 仍未完成。
 - [ ] UTF8, `level-1b/compiler/source/scan.chiba`, C07 transition scanner 仍用 ASCII `source_is_ident_start/continue`、uppercase ctor scan、byte-level item/name scan；day0 UTF-8 identifier 会被漏扫或误分类；fix：让 chibalex/chibacc 成为 source facts primary path，scanner fallback 遇到非-ASCII identifier/source semantic region 必须 fail-closed，不得产完整 facts。
