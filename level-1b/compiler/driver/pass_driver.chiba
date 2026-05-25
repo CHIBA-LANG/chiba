@@ -26,9 +26,97 @@ type DriverInput {
     target_facts: CompileTargetFacts,
 }
 
+/// Return true when a scanned compile_if fact admits the item for this target.
+def source_compile_if_fact_enabled(fact: SourceCompileIfFacts, target: CompileTargetFacts): bool =
+    match fact.shape {
+        SourceCompileIfAbsent => true
+        SourceCompileIfEqTarget => fact.has_target_predicate && target.target == "wasm32-unknown-wasi"
+        SourceCompileIfEqBackend => fact.has_backend_predicate && target.backend == "wasm-gc"
+        SourceCompileIfAll => source_compile_if_all_enabled(fact, target)
+        SourceCompileIfAny => source_compile_if_any_enabled(fact, target)
+        SourceCompileIfNot => source_compile_if_not_enabled(fact, target)
+        SourceCompileIfUnknown => false
+    }
+
+/// Evaluate the supported all(...) compile_if shape.
+def source_compile_if_all_enabled(fact: SourceCompileIfFacts, target: CompileTargetFacts): bool =
+    let target_ok = if fact.has_target_predicate { target.target == "wasm32-unknown-wasi" } else { true }
+    let backend_ok = if fact.has_backend_predicate { target.backend == "wasm-gc" } else { true }
+    target_ok && backend_ok
+
+/// Evaluate the supported or(...) compile_if shape.
+def source_compile_if_any_enabled(fact: SourceCompileIfFacts, target: CompileTargetFacts): bool =
+    let target_ok = if fact.has_target_predicate { target.target == "wasm32-unknown-wasi" } else { false }
+    let backend_ok = if fact.has_backend_predicate { target.backend == "wasm-gc" } else { false }
+    target_ok || backend_ok
+
+/// Evaluate the supported not(...) compile_if shape.
+def source_compile_if_not_enabled(fact: SourceCompileIfFacts, target: CompileTargetFacts): bool =
+    if fact.has_backend_predicate { target.backend != "wasm-gc" }
+    else if fact.has_target_predicate { target.target != "wasm32-unknown-wasi" }
+    else { false }
+
+/// Return true when a scanned item remains enabled after compile_if filtering.
+def source_item_enabled_for_target(item: SourceItemScanResult, target: CompileTargetFacts): bool =
+    match item.attributes.compile_if {
+        Some(fact) => source_compile_if_fact_enabled(fact, target)
+        None => true
+    }
+
+/// Clear compile_if after the source driver has applied it.
+def source_item_after_compile_if_filter(item: SourceItemScanResult): SourceItemScanResult =
+    SourceItemScanResult {
+        file: item.file,
+        owner_namespace: item.owner_namespace,
+        kind: item.kind,
+        name: item.name,
+        private: item.private,
+        attributes: SourceItemAttributeFacts {
+            compile_if: None,
+            world_local: item.attributes.world_local,
+        },
+        surface: item.surface,
+        line: item.line,
+        column: item.column,
+    }
+
+/// Copy enabled source items into a fresh item array.
+def filter_source_items_for_target(items: Array[SourceItemScanResult], target: CompileTargetFacts, index: usize, out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
+    if index == items.len() { out.freeze() }
+    else {
+        let item = items.get(index)
+        if source_item_enabled_for_target(item, target) {
+            filter_source_items_for_target(items, target, index + 1, out.push(source_item_after_compile_if_filter(item)))
+        } else { filter_source_items_for_target(items, target, index + 1, out) }
+    }
+
+/// Apply compile_if filtering to source facts before semantic gates.
+def source_facts_with_filtered_items(facts: SourceProjectFacts, target: CompileTargetFacts): SourceProjectFacts =
+    SourceProjectFacts {
+        parser: facts.parser,
+        headers: facts.headers,
+        docs: facts.docs,
+        compile_if: facts.compile_if,
+        namespaces: facts.namespaces,
+        namespace_warnings: facts.namespace_warnings,
+        uses: facts.uses,
+        items: filter_source_items_for_target(facts.items, target, 0, Vec[SourceItemScanResult].new()),
+        owner_symbols: facts.owner_symbols,
+        utf8_warnings: facts.utf8_warnings,
+    }
+
+/// Apply source-driver target filtering before gates.
+def project_with_filtered_items(project: ProjectSurface, target: CompileTargetFacts): ProjectSurface =
+    ProjectSurface {
+        files: project.files,
+        namespaces: project.namespaces,
+        facts: source_facts_with_filtered_items(project.facts, target),
+    }
+
 /// Run source loading, header filtering, and source-level semantic gates.
 def run_source_driver(input: DriverInput): Result[ProjectSurface, DriverDiagnostics] =
-    match check_source_semantic_gates(input.project) {
+    let filtered = project_with_filtered_items(input.project, input.target_facts)
+    match check_source_semantic_gates(filtered) {
         result =>
             if result.ok() { Ok(result.project) }
             else { Err(source_gate_diagnostics(result.errors, 0, Vec[DriverDiagnostic].new())) }
