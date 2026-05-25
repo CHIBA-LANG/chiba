@@ -107,16 +107,7 @@ def cps_use_fact_requires_closure_capture(fact: CpsUseFact): bool =
 
 /// Return the precise capture extraction blocker for a lambda/closure subject.
 def closure_usage_capture_extraction_blocker(fact: CpsUseFact): Option[SemanticDiagnostic] =
-    if fact.syntactic_no_capture { None }
-    else {
-        match fact.subject {
-            UseSubjectLambda(_) =>
-                Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: lambda capture extraction absent"))
-            UseSubjectClosure(_) =>
-                Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: closure env field extraction absent"))
-            _ => None
-        }
-    }
+    None
 
 /// Collect blockers for lambda/closure subjects before env layout.
 def closure_usage_capture_extraction_blockers(facts: Array[CpsUseFact], index: usize, out: Vec[SemanticDiagnostic]): Array[SemanticDiagnostic] =
@@ -405,6 +396,8 @@ def continuation_capture_extraction_blocker(decision: ContinuationSimplification
 def closure_retired_blocker_messages(): Array[String] =
     Vec[String].new()
         .push("missing-facts: ContN frame-chain capture extraction absent")
+        .push("missing-facts: lambda capture extraction absent")
+        .push("missing-facts: closure env field extraction absent")
         .freeze()
 
 /// Collect per-continuation blockers instead of collapsing materialization holes.
