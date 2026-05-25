@@ -67,12 +67,79 @@ def method_operator_surface_entries_from_facts(facts: Array[MethodSurfaceFact], 
     if index == facts.len() { out.freeze() }
     else { method_operator_surface_entries_from_facts(facts, index + 1, out.push(method_operator_surface_entry_from_fact(facts.get(index)))) }
 
-/// Build an index object that preserves unresolved method/operator declarations.
-def method_operator_index_from_surface(facts: Array[MethodSurfaceFact]): MethodOperatorIndex =
+/// Return source file text for one method/operator surface file id.
+def method_operator_file_text(files: Array[SourceFile], file: SourceFileId, index: usize): String =
+    if index == files.len() { "" }
+    else if files.get(index).id.index == file.index { files.get(index).text }
+    else { method_operator_file_text(files, file, index + 1) }
+
+/// Convert a source slice into text.
+def method_operator_slice_text(text: String, slice: SourceNameSlice): String =
+    text.slice(slice.offset, slice.len)
+
+/// Find last `.` in a method receiver path.
+def method_receiver_last_dot(text: String, index: usize, last: usize): usize =
+    if index == text.len() { last }
+    else if text.byte_at(index) == 46 { method_receiver_last_dot(text, index + 1, index) }
+    else { method_receiver_last_dot(text, index + 1, last) }
+
+/// Convert a receiver source slice into nominal identity.
+def method_receiver_nominal_id(project: ProjectSurface, entry: MethodOperatorSurfaceEntry): NominalId =
+    let text = method_operator_file_text(project.files, entry.file, 0)
+    let receiver = method_operator_slice_text(text, entry.receiver)
+    let dot = method_receiver_last_dot(receiver, 0, receiver.len())
+    if dot == receiver.len() {
+        NominalId { namespace_name: "", name: receiver }
+    } else {
+        NominalId {
+            namespace_name: receiver.slice(0, dot),
+            name: receiver.slice(dot + 1, receiver.len() - dot - 1),
+        }
+    }
+
+/// Convert a method/operator member slice into source text.
+def method_member_name(project: ProjectSurface, entry: MethodOperatorSurfaceEntry): String =
+    method_operator_slice_text(method_operator_file_text(project.files, entry.file, 0), entry.member)
+
+/// Convert one method surface entry into a nominal method key.
+def method_key_from_surface_entry(project: ProjectSurface, entry: MethodOperatorSurfaceEntry): MethodKey =
+    MethodKey {
+        receiver: method_receiver_nominal_id(project, entry),
+        name: method_member_name(project, entry),
+    }
+
+/// Convert one operator surface entry into a nominal operator key.
+def operator_key_from_surface_entry(project: ProjectSurface, entry: MethodOperatorSurfaceEntry): OperatorKey =
+    OperatorKey {
+        receiver: method_receiver_nominal_id(project, entry),
+        operator_name: method_member_name(project, entry),
+    }
+
+/// Build method keys from surface entries.
+def method_keys_from_surface_entries(project: ProjectSurface, entries: Array[MethodOperatorSurfaceEntry], index: usize, out: Vec[MethodKey]): Array[MethodKey] =
+    if index == entries.len() { out.freeze() }
+    else {
+        let entry = entries.get(index)
+        if entry.operator { method_keys_from_surface_entries(project, entries, index + 1, out) }
+        else { method_keys_from_surface_entries(project, entries, index + 1, out.push(method_key_from_surface_entry(project, entry))) }
+    }
+
+/// Build operator keys from surface entries.
+def operator_keys_from_surface_entries(project: ProjectSurface, entries: Array[MethodOperatorSurfaceEntry], index: usize, out: Vec[OperatorKey]): Array[OperatorKey] =
+    if index == entries.len() { out.freeze() }
+    else {
+        let entry = entries.get(index)
+        if entry.operator { operator_keys_from_surface_entries(project, entries, index + 1, out.push(operator_key_from_surface_entry(project, entry))) }
+        else { operator_keys_from_surface_entries(project, entries, index + 1, out) }
+    }
+
+/// Build an index object that preserves resolved method/operator declaration keys.
+def method_operator_index_from_surface(project: ProjectSurface, facts: Array[MethodSurfaceFact]): MethodOperatorIndex =
+    let entries = method_operator_surface_entries_from_facts(facts, 0, Vec[MethodOperatorSurfaceEntry].new())
     MethodOperatorIndex {
-        methods: Vec[MethodKey].new().freeze(),
-        operators: Vec[OperatorKey].new().freeze(),
-        surface_entries: method_operator_surface_entries_from_facts(facts, 0, Vec[MethodOperatorSurfaceEntry].new()),
+        methods: method_keys_from_surface_entries(project, entries, 0, Vec[MethodKey].new()),
+        operators: operator_keys_from_surface_entries(project, entries, 0, Vec[OperatorKey].new()),
+        surface_entries: entries,
     }
 
 /// Convert one operator-use surface fact into a resolver obligation.
@@ -100,7 +167,7 @@ def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex
     if module.method_surface.len() == 0 {
         Ok(method_operator_index_empty())
     } else {
-        let _ = method_operator_index_from_surface(module.method_surface)
+        let _ = method_operator_index_from_surface(module.alpha.project, module.method_surface)
         let _ = build_operator_resolution_obligations(module)
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: method/operator index construction absent"))
