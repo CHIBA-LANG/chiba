@@ -501,6 +501,17 @@ def typed_pipe_prepend_lhs_arg(lhs: TypedExprKind, args: Array[TypedExprKind], i
     if index == args.len() { out.freeze() }
     else { typed_pipe_prepend_lhs_arg(lhs, args, index + 1, out.push(args.get(index))) }
 
+/// Return true when a typed expression can still be used as a direct CPS atom.
+def typed_expr_is_atom_arg(expr: TypedExprKind): bool =
+    match expr {
+        TypedExprI32Zero => true
+        TypedExprI32FortyTwo => true
+        TypedExprI32Const(_) => true
+        TypedExprParam0 => true
+        TypedExprParam(_) => true
+        _ => false
+    }
+
 /// Parse a simple pipe RHS call and expand placeholder/default receiver position.
 def typed_pipe_rhs_expr(text: String, item: TypedItemSkeleton, lhs: TypedExprKind, start: usize, end: usize): Option[TypedExprKind] =
     let offset = source_skip_spaces(text, start)
@@ -538,13 +549,16 @@ def typed_pipe_rhs_expr(text: String, item: TypedItemSkeleton, lhs: TypedExprKin
 
 /// Continue a pipe chain as a left fold over simple RHS call segments.
 def typed_pipe_expr_continue(text: String, item: TypedItemSkeleton, lhs: TypedExprKind, start: usize, end: usize): Option[TypedExprKind] =
-    let pipe = typed_source_region_find_text_or_end(text, start, end, "|>")
-    let segment_end = if pipe < end { pipe } else { end }
-    match typed_pipe_rhs_expr(text, item, lhs, start, segment_end) {
-        Some(next_lhs) =>
-            if pipe < end { typed_pipe_expr_continue(text, item, next_lhs, pipe + 2, end) }
-            else { Some(next_lhs) }
-        None => None
+    if typed_expr_is_atom_arg(lhs) == false { None }
+    else {
+        let pipe = typed_source_region_find_text_or_end(text, start, end, "|>")
+        let segment_end = if pipe < end { pipe } else { end }
+        match typed_pipe_rhs_expr(text, item, lhs, start, segment_end) {
+            Some(next_lhs) =>
+                if pipe < end { typed_pipe_expr_continue(text, item, next_lhs, pipe + 2, end) }
+                else { Some(next_lhs) }
+            None => None
+        }
     }
 
 /// Parse a simple pipe expression into executable left-folded tail-call form.

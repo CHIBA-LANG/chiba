@@ -364,23 +364,34 @@ def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
         TypedExprParam(index) => CpsTermReturn(CpsAtomParam(index))
         TypedExprTailCall(target) => CpsTermTailCall(target, Vec[CpsAtom].new().freeze())
         TypedExprTailCallI32Const(target, arg) => CpsTermTailCall(target, Vec[CpsAtom].new().push(CpsAtomI32Const(arg)).freeze())
-        TypedExprTailCallArgs(target, args) => CpsTermTailCall(target, cps_atoms_from_typed_args(args, 0, Vec[CpsAtom].new()))
+        TypedExprTailCallArgs(target, args) =>
+            match cps_atoms_from_typed_args(args, 0, Vec[CpsAtom].new()) {
+                Some(atoms) => CpsTermTailCall(target, atoms)
+                None => CpsTermPendingJoin
+            }
         TypedExprIfElse(condition, then_expr, else_expr) =>
             CpsTermBranch(condition, cps_term_from_typed_expr(then_expr), cps_term_from_typed_expr(else_expr))
         TypedExprBranchJoinPending => CpsTermPendingJoin
     }
 
+/// Convert one typed call argument only when it is already an atom.
+def cps_atom_from_typed_arg(arg: TypedExprKind): Option[CpsAtom] =
+    match arg {
+        TypedExprI32Zero => Some(CpsAtomI32Const(TypedI32ConstZero))
+        TypedExprI32FortyTwo => Some(CpsAtomI32Const(TypedI32ConstFortyTwo))
+        TypedExprI32Const(atom) => Some(CpsAtomI32Const(atom))
+        TypedExprParam0 => Some(CpsAtomParam0)
+        TypedExprParam(param_index) => Some(CpsAtomParam(param_index))
+        _ => None
+    }
+
 /// Convert typed call arguments that are already atoms into CPS atoms.
-def cps_atoms_from_typed_args(args: Array[TypedExprKind], index: usize, out: Vec[CpsAtom]): Array[CpsAtom] =
-    if index == args.len() { out.freeze() }
+def cps_atoms_from_typed_args(args: Array[TypedExprKind], index: usize, out: Vec[CpsAtom]): Option[Array[CpsAtom]] =
+    if index == args.len() { Some(out.freeze()) }
     else {
-        match args.get(index) {
-            TypedExprI32Zero => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomI32Const(TypedI32ConstZero)))
-            TypedExprI32FortyTwo => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomI32Const(TypedI32ConstFortyTwo)))
-            TypedExprI32Const(atom) => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomI32Const(atom)))
-            TypedExprParam0 => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomParam0))
-            TypedExprParam(param_index) => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomParam(param_index)))
-            _ => cps_atoms_from_typed_args(args, index + 1, out.push(CpsAtomUnit))
+        match cps_atom_from_typed_arg(args.get(index)) {
+            Some(atom) => cps_atoms_from_typed_args(args, index + 1, out.push(atom))
+            None => None
         }
     }
 
