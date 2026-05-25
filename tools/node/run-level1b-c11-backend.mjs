@@ -53,6 +53,7 @@ const REQUIRED_TEXT = [
   "CoreFunctionTailCallParam0",
   "CoreFunctionIfElseI32Const",
   "CoreFunctionIfElseTailCall",
+  "CoreFunctionIfElseTailCallParam0",
   "CoreFunctionIfElseTailCallI32Const",
   "CoreFunctionBranchJoinPending",
   "def core_i32_const_atom_from_typed",
@@ -165,12 +166,14 @@ const REQUIRED_TEXT = [
   "def emit_core_function",
   "def emit_core_if_else_i32_const",
   "def emit_core_if_else_tail_call",
+  "def emit_core_if_else_tail_call_param0",
   "def emit_core_if_else_tail_call_i32_const",
   "def emit_core_function_body",
   "CoreFunctionTailCall(target)",
   "CoreFunctionTailCallI32Const(target, arg)",
   "CoreFunctionTailCallParam0(target)",
   "CoreFunctionIfElseTailCall(condition, then_target, else_target)",
+  "CoreFunctionIfElseTailCallParam0(condition, then_target, else_target)",
   "CoreFunctionIfElseTailCallI32Const(condition, then_target, then_arg, else_target, else_arg)",
   "(export \\\"main\\\")",
   "i32.const 42",
@@ -403,6 +406,19 @@ function checkBranchNoArgTailcallWatSmoke() {
   pass("branch no-arg tailcall WAT parse");
 }
 
+function checkBranchParam0TailcallWatSmoke() {
+  const wat = `(module
+(func $chiba.left (param i32) (result i32) local.get 0)
+(func $chiba.right (param i32) (result i32) local.get 0)
+(func $chiba.choose (param i32) (result i32)
+  (if (result i32) (local.get 0)
+    (then (local.get 0) (return_call $chiba.left))
+    (else (local.get 0) (return_call $chiba.right))))
+)`;
+  compileWat(wat);
+  pass("branch param0 tailcall WAT parse");
+}
+
 function checkParamConditionBranchTailcallWatSmoke() {
   const wat = `(module
 (func $chiba.id (param i32) (result i32) local.get 0)
@@ -449,6 +465,7 @@ function main() {
   checkParamConditionBranchWatSmoke();
   checkBranchTailcallWatSmoke();
   checkBranchNoArgTailcallWatSmoke();
+  checkBranchParam0TailcallWatSmoke();
   checkParamConditionBranchTailcallWatSmoke();
   checkContNPackageWatSmoke();
 

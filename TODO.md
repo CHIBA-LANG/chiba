@@ -160,6 +160,7 @@
 	- [x] minimal param-condition branch slice：`if flag { ... } else { ... }` 中第一 bool 参数可作为 Wasm i32 条件进入窄 branch lowering；复杂条件仍 pending。
 	- [x] minimal branch tail-call slice：`if true/false { f(42/0) } else { g(42/0) }` 已能保留两臂 tail-call 并 emit `return_call` WAT，保证该窄分支 slice 不退化成非尾调用。
 	- [x] minimal branch no-arg tail-call slice：`if true/false/flag { f() } else { g() }` 已能保留两臂 no-arg tail-call 并 emit `return_call` WAT，保证普通非 multi-shot 分支调用保持尾位置。
+	- [x] minimal branch param0 tail-call slice：`if flag { f(x) } else { g(x) }` 已能保留两臂 param0 tail-call 并 emit `local.get 0 return_call` WAT；复杂表达式参数仍 pending。
 	- [x] branch tail-call symbol validation：C08/C11 都会校验 `if/else` 两臂 tail-call target，不让悬空 `return_call` 混进 backend。
 	- 不能只看 `if` then/happy path；必须同时覆盖 `else`、`else if`、`if let` 成功/失败分支、`match` 每个 arm、default/fallback、短路逻辑和 nested branch。
 	- typed env、pattern binding scope、exhaustiveness/warning、CPS join continuation、branch result type unify 必须一起验收。

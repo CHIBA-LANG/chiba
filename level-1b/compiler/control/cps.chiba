@@ -174,6 +174,7 @@ def cps_tail_form_kind_from_function(function: TypedFunctionBodyFact): CpsTailFo
         TypedFunctionReturnParam0 => CpsTailReturn
         TypedFunctionIfElseI32Const(_, _, _) => CpsTailReturn
         TypedFunctionIfElseTailCall(_, then_target, else_target) => CpsTailBranchCall(then_target, else_target)
+        TypedFunctionIfElseTailCallParam0(_, then_target, else_target) => CpsTailBranchCall(then_target, else_target)
         TypedFunctionIfElseTailCallI32Const(_, then_target, _, else_target, _) => CpsTailBranchCall(then_target, else_target)
         TypedFunctionBranchJoinPending => CpsTailReturn
         _ => CpsTailReturn
