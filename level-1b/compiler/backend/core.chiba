@@ -7,6 +7,7 @@ use compiler.ir.closure.*
 use compiler.backend.layout.*
 use compiler.semantic.type_infer.*
 use compiler.semantic.driver.*
+use compiler.semantic.adt_tuple_lowering.*
 use compiler.control.cps.*
 
 /// Direct import target selected before emit.
@@ -102,6 +103,7 @@ type WasmGcCoreModule {
     block_obligations: Array[CoreBlockLoweringObligation],
     branch_join_obligations: Array[CoreBranchJoinLoweringObligation],
     pattern_decision_obligations: Array[CorePatternDecisionLoweringObligation],
+    adt_ctor_obligations: Array[CoreAdtCtorLoweringObligation],
 }
 
 /// Core-to-block lowering obligation before executable WAT emission.
@@ -129,6 +131,15 @@ type CorePatternDecisionLoweringObligation {
     requires_field_extracts: bool,
     failure_env_has_no_bindings: bool,
     missing_static_case_is_error: bool,
+}
+
+/// Core obligation for lowering ADT constructor helper bodies to executable tuple returns.
+type CoreAdtCtorLoweringObligation {
+    helper_name: str,
+    helper_arity: usize,
+    tuple_fields: Array[AdtTupleField],
+    requires_symbol_tag_field: bool,
+    requires_tuple_record_return: bool,
 }
 
 /// Return the closure environment layout used by escaping closures.
@@ -428,6 +439,21 @@ def core_pattern_decision_lowering_obligations(facts: Array[CpsPatternDecisionFa
     if index == facts.len() { out.freeze() }
     else { core_pattern_decision_lowering_obligations(facts, index + 1, out.push(core_pattern_decision_lowering_obligation_from_fact(facts.get(index)))) }
 
+/// Convert one CPS ADT constructor fact into a Core tuple-return lowering obligation.
+def core_adt_ctor_lowering_obligation_from_fact(fact: CpsAdtCtorLoweringFact): CoreAdtCtorLoweringObligation =
+    CoreAdtCtorLoweringObligation {
+        helper_name: fact.helper_name,
+        helper_arity: fact.helper_arity,
+        tuple_fields: fact.source.tuple_fields,
+        requires_symbol_tag_field: fact.returns_canonical_tuple,
+        requires_tuple_record_return: fact.requires_tail_tuple_return,
+    }
+
+/// Convert CPS ADT constructor facts into Core obligations.
+def core_adt_ctor_lowering_obligations(facts: Array[CpsAdtCtorLoweringFact], index: usize, out: Vec[CoreAdtCtorLoweringObligation]): Array[CoreAdtCtorLoweringObligation] =
+    if index == facts.len() { out.freeze() }
+    else { core_adt_ctor_lowering_obligations(facts, index + 1, out.push(core_adt_ctor_lowering_obligation_from_fact(facts.get(index)))) }
+
 /// Append one Core op array to another builder.
 def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[CoreOp] =
     if index == ops.len() { out }
@@ -440,6 +466,7 @@ def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
     let continuation_ops = lower_continuation_facts(module.continuations, 0, Vec[CoreOp].new())
     let branch_join_obligations = core_branch_join_lowering_obligations(optimized_closure_cps_module(module).branch_joins, 0, Vec[CoreBranchJoinLoweringObligation].new())
     let pattern_decision_obligations = core_pattern_decision_lowering_obligations(optimized_closure_cps_module(module).pattern_decisions, 0, Vec[CorePatternDecisionLoweringObligation].new())
+    let adt_ctor_obligations = core_adt_ctor_lowering_obligations(optimized_closure_cps_module(module).adt_ctors, 0, Vec[CoreAdtCtorLoweringObligation].new())
     let ops = append_core_ops(Vec[CoreOp].new(), function_ops, 0)
         |> append_core_ops(closure_ops, 0)
         |> append_core_ops(continuation_ops, 0)
@@ -450,6 +477,7 @@ def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
         block_obligations: core_block_lowering_obligations(ops, 0, Vec[CoreBlockLoweringObligation].new()),
         branch_join_obligations: branch_join_obligations,
         pattern_decision_obligations: pattern_decision_obligations,
+        adt_ctor_obligations: adt_ctor_obligations,
     }
 
 /// Return true when a Core op requires a layout reference.

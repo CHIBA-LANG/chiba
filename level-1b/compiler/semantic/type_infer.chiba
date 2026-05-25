@@ -7,6 +7,7 @@ use compiler.ir.control.*
 use compiler.semantic.alpha.*
 use compiler.semantic.pattern.*
 use compiler.semantic.types.*
+use compiler.semantic.adt_tuple_lowering.*
 
 /// Coarse typed item category before full item lowering.
 data TypedItemSkeletonKind {
@@ -712,6 +713,143 @@ def typed_function_body_facts_from_skeletons(project: ProjectSurface, skeletons:
         }
     }
 
+/// Find one byte in a bounded source region.
+def typed_adt_find_byte_or_end(text: String, offset: usize, end: usize, byte: u8): usize =
+    if offset >= end { end }
+    else if offset >= text.len() { end }
+    else if text.byte_at(offset) == byte { offset }
+    else { typed_adt_find_byte_or_end(text, offset + 1, end, byte) }
+
+/// Return true for bytes ignored between data constructors.
+def typed_adt_ctor_separator(byte: u8): bool =
+    if byte == 32 { true }
+    else if byte == 9 { true }
+    else if byte == 10 { true }
+    else if byte == 13 { true }
+    else if byte == 44 { true }
+    else { false }
+
+/// Find the next constructor name inside a data body.
+def typed_adt_next_ctor_offset(text: String, offset: usize, end: usize): usize =
+    if offset >= end { end }
+    else if offset >= text.len() { end }
+    else if source_is_uppercase_ident_start(text.byte_at(offset)) { offset }
+    else { typed_adt_next_ctor_offset(text, offset + 1, end) }
+
+/// Return true when one payload type byte contributes to arity.
+def typed_adt_payload_token_byte(byte: u8): bool =
+    if typed_adt_ctor_separator(byte) { false }
+    else if byte == 40 { false }
+    else if byte == 41 { false }
+    else { true }
+
+/// Count top-level payload commas while respecting generic brackets.
+def typed_adt_payload_arity_loop(text: String, offset: usize, end: usize, square_depth: usize, seen_token: bool, commas: usize): usize =
+    if offset >= end {
+        if seen_token { commas + 1 } else { 0 }
+    } else if offset >= text.len() {
+        if seen_token { commas + 1 } else { 0 }
+    } else {
+        let byte = text.byte_at(offset)
+        if byte == 41 && square_depth == 0 {
+            if seen_token { commas + 1 } else { 0 }
+        } else if byte == 91 {
+            typed_adt_payload_arity_loop(text, offset + 1, end, square_depth + 1, seen_token, commas)
+        } else if byte == 93 {
+            typed_adt_payload_arity_loop(text, offset + 1, end, if square_depth > 0 { square_depth - 1 } else { 0 }, seen_token, commas)
+        } else if byte == 44 && square_depth == 0 {
+            typed_adt_payload_arity_loop(text, offset + 1, end, square_depth, seen_token, commas + 1)
+        } else {
+            typed_adt_payload_arity_loop(text, offset + 1, end, square_depth, seen_token || typed_adt_payload_token_byte(byte), commas)
+        }
+    }
+
+/// Count payload arity from an opening paren offset.
+def typed_adt_payload_arity(text: String, open: usize, end: usize): usize =
+    typed_adt_payload_arity_loop(text, open + 1, end, 0, false, 0)
+
+/// Find the close paren for one constructor payload.
+def typed_adt_payload_close_or_end(text: String, offset: usize, end: usize, square_depth: usize): usize =
+    if offset >= end { end }
+    else if offset >= text.len() { end }
+    else {
+        let byte = text.byte_at(offset)
+        if byte == 41 && square_depth == 0 { offset }
+        else if byte == 91 { typed_adt_payload_close_or_end(text, offset + 1, end, square_depth + 1) }
+        else if byte == 93 { typed_adt_payload_close_or_end(text, offset + 1, end, if square_depth > 0 { square_depth - 1 } else { 0 }) }
+        else { typed_adt_payload_close_or_end(text, offset + 1, end, square_depth) }
+    }
+
+/// Build placeholder payload types until full type-expression lowering owns constructor signatures.
+def typed_adt_payload_types(owner_seed: usize, arity: usize, index: usize, out: Vec[SemType]): Array[SemType] =
+    if index == arity { out.freeze() }
+    else {
+        typed_adt_payload_types(
+            owner_seed,
+            arity,
+            index + 1,
+            out.push(TyVar(TypeVar { index: owner_seed * 1000 + index + 1 })))
+    }
+
+/// Build nominal data identity from source owner namespace and item name.
+def typed_adt_data_nominal_id(text: String, item: TypedItemSkeleton, name: SourceNameSlice): NominalId =
+    NominalId {
+        namespace_name: match item.owner_namespace {
+            Some(namespace) => typed_namespace_symbol_text(text, namespace)
+            None => ""
+        },
+        name: typed_function_tail_call_target_text(text, name),
+    }
+
+/// Scan one data body and lower each constructor to canonical tuple contract.
+def typed_adt_ctors_from_data_body(text: String, data_type: NominalId, owner_seed: usize, offset: usize, end: usize, out: Vec[LoweredAdtCtor]): Vec[LoweredAdtCtor] =
+    let ctor_offset = typed_adt_next_ctor_offset(text, offset, end)
+    if ctor_offset >= end { out }
+    else {
+        let ctor_end = source_scan_namespace_name_end(text, ctor_offset)
+        let ctor_name = text.slice(ctor_offset, ctor_end - ctor_offset)
+        let after_name = source_skip_spaces(text, ctor_end)
+        let arity = if after_name < end && text.byte_at(after_name) == 40 { typed_adt_payload_arity(text, after_name, end) } else { 0 }
+        let next_offset = if after_name < end && text.byte_at(after_name) == 40 {
+            typed_adt_payload_close_or_end(text, after_name + 1, end, 0) + 1
+        } else { ctor_end }
+        typed_adt_ctors_from_data_body(
+            text,
+            data_type,
+            owner_seed,
+            next_offset,
+            end,
+            out.push(lower_adt_ctor(AdtVariantDecl {
+                data_type: data_type,
+                ctor_name: ctor_name,
+                tag: AdtVariantTag { symbol: adt_ctor_symbol_from_name(ctor_name) },
+                payload: typed_adt_payload_types(owner_seed, arity, 0, Vec[SemType].new()),
+            })))
+    }
+
+/// Lower constructor facts from one data skeleton.
+def typed_adt_ctors_from_skeleton(project: ProjectSurface, item: TypedItemSkeleton, out: Vec[LoweredAdtCtor]): Vec[LoweredAdtCtor] =
+    match item.skeleton_kind {
+        TypedItemData =>
+            match item.name {
+                Some(name) => {
+                    let text = typed_source_file_text(project.files, item.file, 0)
+                    let region_end = source_scan_item_region_end(text, item.surface.header.offset)
+                    let body_open = typed_adt_find_byte_or_end(text, item.surface.header.offset, region_end, 123)
+                    let body_close = typed_adt_find_byte_or_end(text, body_open, region_end, 125)
+                    if body_open >= region_end { out }
+                    else { typed_adt_ctors_from_data_body(text, typed_adt_data_nominal_id(text, item, name), item.binder.id, body_open + 1, body_close, out) }
+                }
+                None => out
+            }
+        _ => out
+    }
+
+/// Build all ADT constructor tuple contracts from data skeletons.
+def typed_adt_ctors_from_skeletons(project: ProjectSurface, skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[LoweredAdtCtor]): Array[LoweredAdtCtor] =
+    if index == skeletons.len() { out.freeze() }
+    else { typed_adt_ctors_from_skeletons(project, skeletons, index + 1, typed_adt_ctors_from_skeleton(project, skeletons.get(index), out)) }
+
 /// Return true when item surfaces mention callable or explicit continuation storage types.
 def typed_item_skeletons_have_callable_storage_surface(skeletons: Array[TypedItemSkeleton], index: usize): bool =
     if index == skeletons.len() { false }
@@ -1342,6 +1480,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let operator_use_surface = operator_use_surface_facts_from_skeletons(skeletons, 0, Vec[OperatorUseSurfaceFact].new())
     let closure_surface = closure_surface_facts_from_skeletons(skeletons, 0, Vec[ClosureSurfaceFact].new())
     let functions = typed_function_body_facts_from_skeletons(module.project, skeletons, 0, Vec[TypedFunctionBodyFact].new())
+    let adt_ctors = typed_adt_ctors_from_skeletons(module.project, skeletons, 0, Vec[LoweredAdtCtor].new())
     if skeletons.len() == 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: typed item skeletons absent"))
@@ -1432,7 +1571,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: callable storage fact generation absent"))
                 .freeze()))
         } else if callable_storage.len() == 0 && closure_surface.len() > 0 && closure_surface_all_syntactic_no_capture(closure_surface, 0) && functions.len() > 0 {
-            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
+            Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
         } else {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: callable storage type expression and body integration absent"))
@@ -1488,7 +1627,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: namespace ownership fact generation absent"))
                 .freeze()))
         } else if functions.len() > 0 && module.uses.len() == 0 {
-            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
+            Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
         } else {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
@@ -1516,7 +1655,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
         }
     } else {
         if functions.len() > 0 {
-            Ok(typed_module_from_skeletons(module, skeletons, functions, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
+            Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
         } else {
             Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
                 .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
@@ -1525,11 +1664,12 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
-def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], functions: Array[TypedFunctionBodyFact], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], namespace_imports: Array[NamespaceImportFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], patterns: PatternFacts, intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact], closure_surface: Array[ClosureSurfaceFact]): TypedModule =
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], functions: Array[TypedFunctionBodyFact], adt_ctors: Array[LoweredAdtCtor], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], namespace_imports: Array[NamespaceImportFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], patterns: PatternFacts, intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact], closure_surface: Array[ClosureSurfaceFact]): TypedModule =
     TypedModule {
         alpha: module,
         items: skeletons,
         functions: functions,
+        adt_ctors: adt_ctors,
         callable_storage: callable_storage,
         namespace_ownership: namespace_ownership,
         namespace_imports: namespace_imports,

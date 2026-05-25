@@ -61,6 +61,8 @@
 	- [x] pipe repeated-placeholder gate：spec 与 checkpoint fixture 已锁定 `a |> f(b,_,_) == f(b,a,a)`；真实 lowering 仍未完成。
 	- [x] pipe lowering obligations：typed pass 已把 pipe surface 转成 `PipeLoweringObligation`，并显式记录 repeated `_` 共享一次 lhs eval；真实 expansion/desugar 仍未完成。
 - [ ] ADT tuple bridge：Ctor <-> (:ctor, ...)、tuple_to_adt/adt_to_tuple intrinsic lowering 没完整。
+	- [x] C08 data skeleton ctor scan：从 `data` item 粗扫 constructor 名与 arity，生成 canonical `LoweredAdtCtor`；payload type 暂用稳定 type-var 占位，完整 type expr lowering 仍未完成。
+	- [x] C09/C11 ctor obligation threading：`LoweredAdtCtor` 已进入 CPS/Core obligation；C11 validator 对未 executable 的 ADT ctor tuple helper fail-closed，不再静默丢弃。
 - [ ] compiler intrinsic namespace：有部分 contract；真实 intrinsic resolution/lowering 没完整。
 	- [x] compiler intrinsic surface facts：typed module 已记录 compiler intrinsic call 与 tuple type surface；真实 intrinsic namespace resolution/lowering 仍 fail-closed。
 	- [x] intrinsic lowering obligations：typed pass 已把 compiler intrinsic/tuple bridge surface 转成 `IntrinsicLoweringObligation`，固定 `compiler.intrinsic` namespace；真实 resolution/lowering 仍未完成。

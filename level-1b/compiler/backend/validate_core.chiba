@@ -14,6 +14,7 @@ data CoreValidationError {
     CoreNonTailCps(str),
     CoreMissingBranchBody(str),
     CoreMissingPatternDecision(str),
+    CoreMissingAdtCtorLowering(str),
     CoreIllegalRuntimeState(str),
     CoreIllegalContinuationPackage(str),
 }
@@ -347,9 +348,14 @@ def validate_core_pattern_decisions(module: WasmGcCoreModule, out: Vec[CoreValid
     if module.pattern_decision_obligations.len() == 0 { out }
     else { out.push(CoreMissingPatternDecision("pattern decision tree lowering absent")) }
 
+/// Validate that ADT constructor helper obligations are not silently dropped before executable lowering.
+def validate_core_adt_ctor_lowering(module: WasmGcCoreModule, out: Vec[CoreValidationError]): Vec[CoreValidationError] =
+    if module.adt_ctor_obligations.len() == 0 { out }
+    else { out.push(CoreMissingAdtCtorLowering("ADT constructor tuple helper lowering absent")) }
+
 /// Validate symbols, layouts, tailcall facts, and continuation packages.
 def validate_wasm_gc_core(module: WasmGcCoreModule): Result[ValidatedCoreModule, Array[CoreValidationError]] =
-    match validate_core_pattern_decisions(module, validate_core_ops(module, 0, Vec[CoreValidationError].new())).freeze() {
+    match validate_core_adt_ctor_lowering(module, validate_core_pattern_decisions(module, validate_core_ops(module, 0, Vec[CoreValidationError].new()))).freeze() {
         errors =>
             if errors.len() == 0 { Ok(ValidatedCoreModule { core: module }) }
             else { Err(errors) }

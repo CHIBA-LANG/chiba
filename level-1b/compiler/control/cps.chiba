@@ -4,6 +4,7 @@ namespace compiler.control.cps
 use compiler.control.replay_safety.*
 use compiler.ir.control.*
 use compiler.semantic.driver.*
+use compiler.semantic.adt_tuple_lowering.*
 
 /// CPS continuation representation.
 data CpsContinuation {
@@ -19,6 +20,7 @@ type CpsModule {
     tail_forms: Array[CpsTailFormFact],
     branch_joins: Array[CpsBranchJoinFact],
     pattern_decisions: Array[CpsPatternDecisionFact],
+    adt_ctors: Array[CpsAdtCtorLoweringFact],
 }
 
 /// Tail shape after one-pass CPS and administrative beta reduction.
@@ -74,6 +76,15 @@ type CpsPatternDecisionFact {
     lowers_to_if_else_and_field_extract: bool,
     failure_env_has_no_bindings: bool,
     missing_static_case_is_error: bool,
+}
+
+/// CPS-level constructor helper lowering fact.
+type CpsAdtCtorLoweringFact {
+    source: LoweredAdtCtor,
+    helper_name: str,
+    helper_arity: usize,
+    returns_canonical_tuple: bool,
+    requires_tail_tuple_return: bool,
 }
 
 /// Pick the primary branch-join kind for a coarse branching plan.
@@ -133,7 +144,8 @@ def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostic
             continuations,
             cps_tail_form_facts_from_continuations(continuations, 0, tail_builder),
             cps_branch_join_facts_from_plans(branches, 0, Vec[CpsBranchJoinFact].new()),
-            cps_pattern_decision_facts(module.usage.answer.typed)))
+            cps_pattern_decision_facts(module.usage.answer.typed),
+            cps_adt_ctor_lowering_facts(module.usage.answer.typed.adt_ctors, 0, Vec[CpsAdtCtorLoweringFact].new())))
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<control>", 0, 0, "missing-lowering: one-pass CPS with administrative beta-reduction absent"))
@@ -234,3 +246,18 @@ def cps_pattern_decision_facts_from_steps(module: TypedModule, steps: Array[Patt
 /// Build all CPS pattern decision facts from typed pattern facts.
 def cps_pattern_decision_facts(module: TypedModule): Array[CpsPatternDecisionFact] =
     cps_pattern_decision_facts_from_steps(module, module.pattern_dft_steps, 0, Vec[CpsPatternDecisionFact].new())
+
+/// Convert one semantic ADT ctor helper into a CPS tail tuple-return obligation.
+def cps_adt_ctor_lowering_fact_from_ctor(ctor: LoweredAdtCtor): CpsAdtCtorLoweringFact =
+    CpsAdtCtorLoweringFact {
+        source: ctor,
+        helper_name: ctor.helper_name,
+        helper_arity: ctor.helper_arity,
+        returns_canonical_tuple: ctor.body.returns_canonical_tuple,
+        requires_tail_tuple_return: true,
+    }
+
+/// Build CPS ADT ctor lowering facts in source constructor order.
+def cps_adt_ctor_lowering_facts(ctors: Array[LoweredAdtCtor], index: usize, out: Vec[CpsAdtCtorLoweringFact]): Array[CpsAdtCtorLoweringFact] =
+    if index == ctors.len() { out.freeze() }
+    else { cps_adt_ctor_lowering_facts(ctors, index + 1, out.push(cps_adt_ctor_lowering_fact_from_ctor(ctors.get(index)))) }

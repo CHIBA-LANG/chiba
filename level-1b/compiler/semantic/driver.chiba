@@ -39,6 +39,7 @@ type TypedModule {
     alpha: AlphaModule,
     items: Array[TypedItemSkeleton],
     functions: Array[TypedFunctionBodyFact],
+    adt_ctors: Array[LoweredAdtCtor],
     callable_storage: Array[CallableStorageFact],
     namespace_ownership: Array[NamespaceOwnershipFact],
     namespace_imports: Array[NamespaceImportFact],
