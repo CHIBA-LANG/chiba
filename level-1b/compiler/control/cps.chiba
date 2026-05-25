@@ -192,12 +192,34 @@ def cps_tail_form_fact_from_function(function: TypedFunctionFact): CpsTailFormFa
 
 /// Pick the CPS tail kind for a typed function body.
 def cps_tail_form_kind_from_function(function: TypedFunctionFact): CpsTailFormKind =
-    match function.body {
+    cps_tail_form_kind_from_expr(function.body)
+
+/// Pick the CPS tail kind for one typed expression.
+def cps_tail_form_kind_from_expr(body: TypedExprKind): CpsTailFormKind =
+    match body {
         TypedExprTailCall(target) => CpsTailCall(target)
         TypedExprTailCallI32Const(target, _) => CpsTailCall(target)
         TypedExprParam0 => CpsTailReturn
-        TypedExprIfElse(_, _, _) => CpsTailReturn
+        TypedExprIfElse(_, then_expr, else_expr) => cps_tail_form_kind_from_branch(then_expr, else_expr)
         TypedExprBranchJoinPending => CpsTailReturn
+        _ => CpsTailReturn
+    }
+
+/// Preserve branch tail-call facts when both arms are direct tail calls.
+def cps_tail_form_kind_from_branch(then_expr: TypedExprKind, else_expr: TypedExprKind): CpsTailFormKind =
+    match then_expr {
+        TypedExprTailCall(then_target) =>
+            match else_expr {
+                TypedExprTailCall(else_target) => CpsTailBranchCall(then_target, else_target)
+                TypedExprTailCallI32Const(else_target, _) => CpsTailBranchCall(then_target, else_target)
+                _ => CpsTailReturn
+            }
+        TypedExprTailCallI32Const(then_target, _) =>
+            match else_expr {
+                TypedExprTailCall(else_target) => CpsTailBranchCall(then_target, else_target)
+                TypedExprTailCallI32Const(else_target, _) => CpsTailBranchCall(then_target, else_target)
+                _ => CpsTailReturn
+            }
         _ => CpsTailReturn
     }
 

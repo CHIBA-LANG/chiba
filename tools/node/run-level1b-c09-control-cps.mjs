@@ -104,6 +104,8 @@ const REQUIRED_TEXT = [
   "def cps_adt_ctor_lowering_fact_from_ctor",
   "def cps_adt_ctor_lowering_facts",
   "def cps_tail_form_kind_from_function",
+  "def cps_tail_form_kind_from_expr",
+  "def cps_tail_form_kind_from_branch",
   "def cps_tail_form_fact_from_function",
   "def cps_tail_form_facts_from_functions",
   "def cps_tail_form_fact_from_continuation",
