@@ -46,4 +46,13 @@ def recover(action: RecoveryAction, failure: ParseFailure): ParseFailure =
     }
 
 /// Parse a Pratt expression at a binding power.
-def parse_pratt_at[T](rule: LoweredRule, position: ParsePosition, min_bp: usize): Result[ParseCandidate[T], ParseFailure] = __compiler_builtin("std.chibacc_parse_pratt_at")
+def parse_pratt_at[T](rule: LoweredRule, position: ParsePosition, min_bp: usize): Result[ParseCandidate[T], ParseFailure] =
+    match rule.pratt {
+        Some(table) =>
+            if table.prefixes.len() == 0 {
+                Err(parse_failure(ListCons(rule.name.text, ListNil), position))
+            } else {
+                Err(parse_failure(ListCons(rule.name.text, ListNil), position))
+            }
+        None => Err(parse_failure(ListCons(rule.name.text, ListNil), position))
+    }

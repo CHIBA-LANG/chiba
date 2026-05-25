@@ -22,6 +22,9 @@ const REQUIRED_TEXT = [
   "GrammarTypeContN",
   "type PrattTable",
   "data RecoveryAction",
+  "def chibacc_parse_namespace",
+  "def chibacc_parse_start_name",
+  "def chibacc_parse_rule_name",
   "def lower_chibacc",
   "def retry_alternative",
   "def parse_pratt_at",
@@ -99,6 +102,9 @@ function checkSource(file, source) {
   if (/\b(ptr|pointer|addr|raw)\w*\s*:\s*i64\b/i.test(code)) errors.push(`${rel}: chibacc uses opaque i64 pointer field`);
   if (/missing-lowering: executable chibacc parser codegen absent|ParserCodegenContractOnly/.test(code)) {
     errors.push(`${rel}: chibacc codegen must not report contract-only success`);
+  }
+  if (/__compiler_builtin\(\"std\.chibacc_parse/.test(code)) {
+    errors.push(`${rel}: chibacc parser must not call std.chibacc_parse compiler builtins`);
   }
   if (rel === "engine.chiba" && /\bshift\s+retry\b/.test(code)) {
     errors.push(`${rel}: parser retry must use multi-shot shiftn retry`);

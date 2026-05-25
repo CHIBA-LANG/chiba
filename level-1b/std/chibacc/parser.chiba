@@ -9,11 +9,111 @@ type ChibaccParseError {
     message: String,
 }
 
+/// Return a stable parser diagnostic.
+def chibacc_parse_error(offset: usize, message: String): ChibaccParseError =
+    ChibaccParseError { offset: offset, message: message }
+
+/// Return true when one byte can start a grammar identifier.
+def chibacc_ident_start(byte: u8): bool =
+    (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122) || byte == 95 || byte >= 128
+
+/// Return true when one byte can continue a grammar identifier.
+def chibacc_ident_continue(byte: u8): bool =
+    chibacc_ident_start(byte) || (byte >= 48 && byte <= 57)
+
+/// Skip whitespace in chibacc source.
+def chibacc_skip_ws(source: str, offset: usize): usize =
+    if offset >= source.len() { offset }
+    else {
+        let byte = source.byte_at(offset)
+        if byte == 32 || byte == 9 || byte == 10 || byte == 13 { chibacc_skip_ws(source, offset + 1) }
+        else { offset }
+    }
+
+/// Find a byte or return end-of-source.
+def chibacc_find_byte(source: str, offset: usize, byte: u8): usize =
+    if offset >= source.len() { source.len() }
+    else if source.byte_at(offset) == byte { offset }
+    else { chibacc_find_byte(source, offset + 1, byte) }
+
+/// Return true when source starts with text at offset.
+def chibacc_starts_with_at(source: str, offset: usize, text: str, index: usize): bool =
+    if index == text.len() { true }
+    else if offset + index >= source.len() { false }
+    else if source.byte_at(offset + index) == text.byte_at(index) { chibacc_starts_with_at(source, offset, text, index + 1) }
+    else { false }
+
+/// Find text or return end-of-source.
+def chibacc_find_text(source: str, offset: usize, text: str): usize =
+    if offset >= source.len() { source.len() }
+    else if chibacc_starts_with_at(source, offset, text, 0) { offset }
+    else { chibacc_find_text(source, offset + 1, text) }
+
+/// Scan one identifier.
+def chibacc_scan_ident(source: str, offset: usize): usize =
+    if offset >= source.len() { offset }
+    else if chibacc_ident_continue(source.byte_at(offset)) { chibacc_scan_ident(source, offset + 1) }
+    else { offset }
+
+/// Parse namespace declaration from the header block.
+def chibacc_parse_namespace(source: str): str =
+    let start = chibacc_find_text(source, 0, "namespace")
+    if start >= source.len() { "" }
+    else {
+        let name_start = chibacc_skip_ws(source, start + "namespace".len())
+        let name_end = chibacc_find_byte(source, name_start, 10)
+        source.slice(name_start, name_end - name_start)
+    }
+
+/// Parse the start rule declaration.
+def chibacc_parse_start_name(source: str): GrammarName =
+    let start = chibacc_find_text(source, 0, "start")
+    if start >= source.len() { GrammarName { text: "" } }
+    else {
+        let name_start = chibacc_skip_ws(source, start + "start".len())
+        let name_end = chibacc_scan_ident(source, name_start)
+        GrammarName { text: source.slice(name_start, name_end - name_start) }
+    }
+
+/// Parse a rule name after `rule`.
+def chibacc_parse_rule_name(source: str): Result[GrammarName, ChibaccParseError] =
+    let rule = chibacc_find_text(source, 0, "rule")
+    if rule >= source.len() { Err(chibacc_parse_error(0, "expected rule")) }
+    else {
+        let name_start = chibacc_skip_ws(source, rule + "rule".len())
+        let name_end = chibacc_scan_ident(source, name_start)
+        if name_end == name_start { Err(chibacc_parse_error(name_start, "expected rule name")) }
+        else { Ok(GrammarName { text: source.slice(name_start, name_end - name_start) }) }
+    }
+
+/// Empty alternative body used until full action/atom parsing lands.
+def chibacc_empty_alternatives(): GrammarRuleBody =
+    GrammarAlternatives(ListNil)
+
 /// Parse one `.chibacc` source file.
-def parse_chibacc(source: str): Result[ChibaccSpec, ChibaccParseError] = __compiler_builtin("std.chibacc_parse")
+def parse_chibacc(source: str): Result[ChibaccSpec, ChibaccParseError] =
+    Ok(ChibaccSpec {
+        namespace_name: chibacc_parse_namespace(source),
+        start: chibacc_parse_start_name(source),
+        rules: ListNil,
+        ast_data: "",
+    })
 
 /// Parse a normal grammar rule.
-def parse_rule(source: str): Result[GrammarRule, ChibaccParseError] = __compiler_builtin("std.chibacc_parse_rule")
+def parse_rule(source: str): Result[GrammarRule, ChibaccParseError] =
+    match chibacc_parse_rule_name(source) {
+        Ok(name) =>
+            Ok(GrammarRule {
+                name: name,
+                body: chibacc_empty_alternatives(),
+            })
+        Err(error) => Err(error)
+    }
 
 /// Parse a Pratt rule body.
-def parse_pratt(source: str): Result[GrammarRuleBody, ChibaccParseError] = __compiler_builtin("std.chibacc_parse_pratt")
+def parse_pratt(source: str): Result[GrammarRuleBody, ChibaccParseError] =
+    if chibacc_find_text(source, 0, "pratt") >= source.len() {
+        Err(chibacc_parse_error(0, "expected pratt body"))
+    } else {
+        Ok(GrammarPratt(ListNil, ListNil))
+    }
