@@ -98,12 +98,19 @@ def core_function_body_requires_param0(body: CoreExprKind): bool =
         CoreExprParam0 => true
         CoreExprTailCallParam0(_) => true
         CoreExprTailCallI32Const(_, _) => false
+        CoreExprTailCallArgs(_, args) => core_function_body_args_require_param0(args, 0)
         CoreExprIfElse(condition, then_expr, else_expr) =>
             if core_branch_condition_requires_param0(condition) { true }
             else if core_function_body_requires_param0(then_expr) { true }
             else { core_function_body_requires_param0(else_expr) }
         _ => false
     }
+
+/// Return true when any Core expression argument reads param0.
+def core_function_body_args_require_param0(args: Array[CoreExprKind], index: usize): bool =
+    if index == args.len() { false }
+    else if core_function_body_requires_param0(args.get(index)) { true }
+    else { core_function_body_args_require_param0(args, index + 1) }
 
 /// Validate that branch join facts are not emitted as fake function bodies.
 def validate_core_function_body(op: CoreOp): Option[CoreValidationError] =
@@ -174,6 +181,9 @@ def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
         Some(CoreExprTailCallParam0(target)) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
+        Some(CoreExprTailCallArgs(target, args)) =>
+            if core_module_contains_symbol(module, target, 0) == false { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
+            else { validate_core_expr_arg_symbols(module, args, 0) }
         Some(CoreExprIfElse(_, then_expr, else_expr)) =>
             match validate_core_expr_symbol(module, then_expr) {
                 Some(error) => Some(error)
@@ -194,12 +204,25 @@ def validate_core_expr_symbol(module: WasmGcCoreModule, body: CoreExprKind): Opt
         CoreExprTailCallParam0(target) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
+        CoreExprTailCallArgs(target, args) =>
+            if core_module_contains_symbol(module, target, 0) == false { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
+            else { validate_core_expr_arg_symbols(module, args, 0) }
         CoreExprIfElse(_, then_expr, else_expr) =>
             match validate_core_expr_symbol(module, then_expr) {
                 Some(error) => Some(error)
                 None => validate_core_expr_symbol(module, else_expr)
             }
         _ => None
+    }
+
+/// Validate symbol references inside Core expression arguments.
+def validate_core_expr_arg_symbols(module: WasmGcCoreModule, args: Array[CoreExprKind], index: usize): Option[CoreValidationError] =
+    if index == args.len() { None }
+    else {
+        match validate_core_expr_symbol(module, args.get(index)) {
+            Some(error) => Some(error)
+            None => validate_core_expr_arg_symbols(module, args, index + 1)
+        }
     }
 
 /// Validate that materialized runtime ops keep source owner provenance.

@@ -172,6 +172,19 @@ def emit_core_branch_condition(condition: CoreBranchCondition): String =
         CoreBranchConditionParam0 => "local.get 0"
     }
 
+/// Emit Core tail-call arguments in evaluation order.
+def emit_core_tail_call_args(args: Array[CoreExprKind], index: usize): String =
+    if index == args.len() { "" }
+    else {
+        let current = emit_core_expr_instruction(args.get(index))
+        if index + 1 == args.len() { current }
+        else { current.concat(" ").concat(emit_core_tail_call_args(args, index + 1)) }
+    }
+
+/// Emit a multi-argument Core tail call.
+def emit_core_tail_call_args_expr(target: str, args: Array[CoreExprKind]): String =
+    emit_core_tail_call_args(args, 0).concat(" return_call $chiba.").concat(target)
+
 /// Emit one Core expression without the function result prefix.
 def emit_core_expr_instruction(body: CoreExprKind): String =
     match body {
@@ -182,6 +195,7 @@ def emit_core_expr_instruction(body: CoreExprKind): String =
         CoreExprTailCall(target) => "return_call $chiba.".concat(target)
         CoreExprTailCallI32Const(target, arg) => emit_core_i32_const_atom(arg).concat(" return_call $chiba.").concat(target)
         CoreExprTailCallParam0(target) => "local.get 0 return_call $chiba.".concat(target)
+        CoreExprTailCallArgs(target, args) => emit_core_tail_call_args_expr(target, args)
         CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_expr(condition, then_expr, else_expr)
         CoreExprBranchJoinPending => "unreachable"
         CoreExprUnit => ""
@@ -217,6 +231,8 @@ def emit_core_function_body(body: Option[CoreExprKind]): String =
                 .concat(target)
         Some(CoreExprTailCallParam0(target)) =>
             "(result i32) local.get 0 return_call $chiba.".concat(target)
+        Some(CoreExprTailCallArgs(target, args)) =>
+            "(result i32) ".concat(emit_core_tail_call_args_expr(target, args))
         Some(CoreExprIfElse(condition, then_expr, else_expr)) => emit_core_if_else_expr(condition, then_expr, else_expr)
         Some(CoreExprBranchJoinPending) => "(result i32) unreachable"
         Some(CoreExprUnit) => ""

@@ -59,6 +59,7 @@ data CoreExprKind {
     CoreExprTailCall(str),
     CoreExprTailCallI32Const(str, CoreI32ConstAtom),
     CoreExprTailCallParam0(str),
+    CoreExprTailCallArgs(str, Array[CoreExprKind]),
     CoreExprIfElse(CoreBranchCondition, CoreExprKind, CoreExprKind),
     CoreExprBranchJoinPending,
 }
@@ -188,9 +189,15 @@ def core_expr_from_usize(value: usize): CoreExprKind =
     else if value == 42 { CoreExprI32FortyTwo }
     else { CoreExprI32Const(CoreI32ConstSmall(value)) }
 
-/// Convert a one-argument CPS tail call to Core expression form.
+/// Convert CPS tail-call arguments to Core atoms.
+def core_expr_args_from_cps_atoms(args: Array[CpsAtom], index: usize, out: Vec[CoreExprKind]): Array[CoreExprKind] =
+    if index == args.len() { out.freeze() }
+    else { core_expr_args_from_cps_atoms(args, index + 1, out.push(core_expr_from_cps_atom(args.get(index)))) }
+
+/// Convert a CPS tail call to Core expression form.
 def core_expr_from_cps_tail_call_arg(target: str, args: Array[CpsAtom]): CoreExprKind =
     if args.len() == 0 { CoreExprTailCall(target) }
+    else if args.len() > 1 { CoreExprTailCallArgs(target, core_expr_args_from_cps_atoms(args, 0, Vec[CoreExprKind].new())) }
     else {
         match args.get(0) {
             CpsAtomI32Const(atom) => CoreExprTailCallI32Const(target, core_i32_const_atom_from_typed(atom))
@@ -419,6 +426,8 @@ def core_function_body_terminator(body: Option[CoreExprKind]): CoreBlockTerminat
     match body {
         Some(CoreExprTailCall(_)) => CoreBlockTailCall
         Some(CoreExprTailCallI32Const(_, _)) => CoreBlockTailCall
+        Some(CoreExprTailCallParam0(_)) => CoreBlockTailCall
+        Some(CoreExprTailCallArgs(_, _)) => CoreBlockTailCall
         Some(CoreExprBranchJoinPending) => CoreBlockContinue
         None => CoreBlockContinue
         _ => CoreBlockReturn
