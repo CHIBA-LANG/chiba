@@ -148,6 +148,20 @@ def typed_i32_const_atom_from_region(text: String, start: usize, end: usize): Op
 def typed_source_region_only_spaces(text: String, offset: usize, end: usize): bool =
     source_skip_spaces(text, offset) >= end
 
+/// Pick an exact i32 const atom when it is the full tail expression.
+def typed_i32_const_atom_exact_len(text: String, start: usize, end: usize, atom: TypedI32ConstAtom, len: usize): Option[TypedI32ConstAtom] =
+    let offset = source_skip_spaces(text, start)
+    if typed_source_region_only_spaces(text, offset + len, end) { Some(atom) }
+    else { None }
+
+/// Pick the minimal i32 const atom only when it occupies the full source region.
+def typed_i32_const_atom_exact_from_region(text: String, start: usize, end: usize): Option[TypedI32ConstAtom] =
+    match typed_i32_const_atom_from_region(text, start, end) {
+        Some(TypedI32ConstZero) => typed_i32_const_atom_exact_len(text, start, end, TypedI32ConstZero, 1)
+        Some(TypedI32ConstFortyTwo) => typed_i32_const_atom_exact_len(text, start, end, TypedI32ConstFortyTwo, 2)
+        None => None
+    }
+
 /// Return true when a narrow const call argument length is exactly closed in tail position.
 def typed_i32_const_call_arg_exact_len(text: String, arg_start: usize, end: usize, len: usize): bool =
     let close = source_skip_spaces(text, arg_start + len)
@@ -299,9 +313,9 @@ def typed_function_if_else_const_body(text: String, item: TypedItemSkeleton, sta
             if then_open >= end || then_close >= end || else_offset >= end || else_open >= end || else_close > end {
                 None
             } else {
-                match typed_i32_const_atom_from_region(text, then_open + 1, then_close) {
+                match typed_i32_const_atom_exact_from_region(text, then_open + 1, then_close) {
                     Some(then_atom) =>
-                        match typed_i32_const_atom_from_region(text, else_open + 1, else_close) {
+                        match typed_i32_const_atom_exact_from_region(text, else_open + 1, else_close) {
                             Some(else_atom) => Some(TypedFunctionIfElseI32Const(condition, then_atom, else_atom))
                             None => None
                         }
@@ -635,21 +649,27 @@ def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton)
         }
     }
     else if typed_function_body_returns_param0(text, item, start, end) { TypedFunctionReturnParam0 }
-    else if typed_function_body_starts_with_atom(text, start, end, "42") { TypedFunctionReturnI32FortyTwo }
-    else if typed_function_body_starts_with_atom(text, start, end, "0") { TypedFunctionReturnI32Zero }
     else {
-        match typed_function_tail_call_i32_const_slice(text, start, end) {
-            Some(target) =>
-                match typed_function_tail_call_i32_const_arg(text, target, end) {
-                    Some(arg) => TypedFunctionTailCallI32Const(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)), arg)
-                    None => TypedFunctionReturnUnit
-                }
-            None =>
-                match typed_function_tail_call_target_slice(text, start, end) {
-                    Some(target) => TypedFunctionTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)))
-                    None => TypedFunctionReturnUnit
-                }
+        match typed_i32_const_atom_exact_from_region(text, start, end) {
+            Some(TypedI32ConstFortyTwo) => TypedFunctionReturnI32FortyTwo
+            Some(TypedI32ConstZero) => TypedFunctionReturnI32Zero
+            None => typed_function_non_const_body_kind_from_surface(text, item, start, end)
         }
+    }
+
+/// Pick the non-const minimal typed body form from the source body region.
+def typed_function_non_const_body_kind_from_surface(text: String, item: TypedItemSkeleton, start: usize, end: usize): TypedFunctionBodyKind =
+    match typed_function_tail_call_i32_const_slice(text, start, end) {
+        Some(target) =>
+            match typed_function_tail_call_i32_const_arg(text, target, end) {
+                Some(arg) => TypedFunctionTailCallI32Const(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)), arg)
+                None => TypedFunctionReturnUnit
+            }
+        None =>
+            match typed_function_tail_call_target_slice(text, start, end) {
+                Some(target) => TypedFunctionTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)))
+                None => TypedFunctionReturnUnit
+            }
     }
 
 /// Convert one simple function skeleton into a typed function body fact.
