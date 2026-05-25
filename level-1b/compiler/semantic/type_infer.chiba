@@ -73,13 +73,24 @@ type TypedFunctionBodyFact {
 }
 
 /// Scan a minimal no-argument tail-call target from a function body region.
+def typed_no_arg_call_exact(text: String, call_start: usize, end: usize): bool =
+    if call_start >= end { false }
+    else if text.byte_at(call_start) != 40 { false }
+    else {
+        let close = source_skip_spaces(text, call_start + 1)
+        if close >= end { false }
+        else if text.byte_at(close) != 41 { false }
+        else { typed_source_region_only_spaces(text, close + 1, end) }
+    }
+
+/// Scan a minimal no-argument tail-call target from a function body region.
 def typed_function_tail_call_target_slice(text: String, offset: usize, end: usize): Option[SourceNameSlice] =
     if offset >= end { None }
     else if offset >= text.len() { None }
     else if source_is_ident_start(text.byte_at(offset)) {
         let name_end = source_scan_namespace_name_end(text, offset)
         let call_start = source_skip_spaces(text, name_end)
-        if call_start + 1 < end && text.byte_at(call_start) == 40 && text.byte_at(call_start + 1) == 41 {
+        if typed_no_arg_call_exact(text, call_start, end) {
             Some(SourceNameSlice { offset: offset, len: name_end - offset })
         } else { typed_function_tail_call_target_slice(text, offset + 1, end) }
     } else { typed_function_tail_call_target_slice(text, offset + 1, end) }

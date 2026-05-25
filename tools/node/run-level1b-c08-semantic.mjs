@@ -62,6 +62,7 @@ const REQUIRED_TEXT = [
   "TypedFunctionIfElseI32Const",
   "TypedFunctionIfElseTailCallI32Const",
   "TypedFunctionBranchJoinPending",
+  "def typed_no_arg_call_exact",
   "def typed_i32_const_atom_from_region",
   "def typed_branch_condition_from_region",
   "def typed_branch_condition_from_item_region",
