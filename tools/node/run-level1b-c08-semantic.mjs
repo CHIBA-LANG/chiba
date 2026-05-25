@@ -91,6 +91,7 @@ const REQUIRED_TEXT = [
   "def typed_function_main_abi_valid",
   "invalid-surface: duplicate function symbol",
   "invalid-surface: exported main cannot take i32 params in current ABI slice",
+  "def typed_function_tail_targets_resolved_for_body",
   "def typed_function_tail_targets_resolved",
   "missing-lowering: namespace-aware typed callee resolution absent",
   "functions: Array[TypedFunctionBodyFact]",

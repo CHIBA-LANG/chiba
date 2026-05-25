@@ -312,6 +312,18 @@ function checkBranchTailcallWatSmoke() {
   pass("branch tailcall WAT parse");
 }
 
+function checkParamConditionBranchTailcallWatSmoke() {
+  const wat = `(module
+(func $chiba.id (param i32) (result i32) local.get 0)
+(func $chiba.choose (param i32) (result i32)
+  (if (result i32) (local.get 0)
+    (then (i32.const 42) (return_call $chiba.id))
+    (else (i32.const 0) (return_call $chiba.id))))
+)`;
+  compileWat(wat);
+  pass("param-condition branch tailcall WAT parse");
+}
+
 function checkContNPackageWatSmoke() {
   const wat = `(module
 (type $chiba.layout.continuation_frame (struct (field funcref) (field eqref)))
@@ -343,6 +355,7 @@ function main() {
   checkBranchWatSmoke();
   checkParamConditionBranchWatSmoke();
   checkBranchTailcallWatSmoke();
+  checkParamConditionBranchTailcallWatSmoke();
   checkContNPackageWatSmoke();
 
   primaryPathBlocked("tailcall generated-path smoke requires level-1b end-to-end fixture execution");

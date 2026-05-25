@@ -342,17 +342,23 @@ def typed_function_main_abi_valid(functions: Array[TypedFunctionBodyFact], index
     }
 
 /// Return true when every minimal tail-call target resolves within this typed module.
+def typed_function_tail_targets_resolved_for_body(functions: Array[TypedFunctionBodyFact], body: TypedFunctionBodyKind): bool =
+    match body {
+        TypedFunctionTailCall(target) => typed_functions_have_symbol(functions, target, 0)
+        TypedFunctionTailCallI32Const(target, _) => typed_functions_have_symbol(functions, target, 0)
+        TypedFunctionIfElseTailCallI32Const(_, then_target, _, else_target, _) =>
+            if typed_functions_have_symbol(functions, then_target, 0) {
+                typed_functions_have_symbol(functions, else_target, 0)
+            } else { false }
+        _ => true
+    }
+
+/// Return true when every function body has resolved minimal tail-call targets.
 def typed_function_tail_targets_resolved(functions: Array[TypedFunctionBodyFact], index: usize): bool =
     if index == functions.len() { true }
-    else {
-        match typed_function_tail_call_target(functions.get(index).body) {
-            Some(target) =>
-                if typed_functions_have_symbol(functions, target, 0) {
-                    typed_function_tail_targets_resolved(functions, index + 1)
-                } else { false }
-            None => typed_function_tail_targets_resolved(functions, index + 1)
-        }
-    }
+    else if typed_function_tail_targets_resolved_for_body(functions, functions.get(index).body) {
+        typed_function_tail_targets_resolved(functions, index + 1)
+    } else { false }
 
 /// Stable item-to-namespace ownership fact after alpha conversion.
 type NamespaceOwnershipFact {
