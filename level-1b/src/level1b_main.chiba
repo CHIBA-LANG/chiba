@@ -1,7 +1,21 @@
 namespace bootstrap
 
 use compiler.cli.*
+use compiler.driver.nanopass_pipeline.*
+use compiler.source.compile_if.*
+use compiler.source.project.*
 
 /// Seed entry until level-1b owns parser, semantic checker, and WAT emission.
-def main(): i64 =
-    if cli_ready_for_codegen(cli_default_config()) { 0 } else { 1 }
+def main(): i64 = {
+    let cli = cli_default_config()
+    let request = CompileRequest {
+        cli: cli,
+        inputs: Vec[String].new().freeze(),
+        includes: Vec[IncludeDir].new().freeze(),
+        target_facts: wasm_gc_wasi_facts(),
+    }
+    match compile_request_to_wat(request) {
+        Ok(_) => 0
+        Err(_) => if cli_ready_for_codegen(cli) { 2 } else { 1 }
+    }
+}

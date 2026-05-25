@@ -6,6 +6,8 @@ use compiler.semantic.driver.*
 use compiler.control.driver.*
 use compiler.closure.driver.*
 use compiler.backend.driver.*
+use compiler.source.project.*
+use compiler.source.compile_if.*
 
 /// Pipeline stage marker for diagnostics and dumps.
 data PipelineStage {
@@ -20,6 +22,14 @@ data PipelineStage {
 type PipelineArtifact {
     stage: PipelineStage,
     diagnostics: DriverDiagnostics,
+}
+
+/// User-facing compile request after CLI parsing but before source loading.
+type CompileRequest {
+    cli: ChibacCliConfig,
+    inputs: Array[String],
+    includes: Array[IncludeDir],
+    target_facts: CompileTargetFacts,
 }
 
 /// Convert one semantic diagnostic to a driver diagnostic.
@@ -49,6 +59,14 @@ def run_nanopass_wat(input: DriverInput): Result[WatModule, DriverDiagnostics] =
             }
         Err(errors) => Err(errors)
     }
+
+/// Load the requested project and run the full WAT pipeline.
+def compile_request_to_wat(request: CompileRequest): Result[WatModule, DriverDiagnostics] =
+    run_nanopass_wat(DriverInput {
+        cli: request.cli,
+        project: load_project(request.inputs, request.includes),
+        target_facts: request.target_facts,
+    })
 
 /// Return true when a pipeline stage is after semantic checking.
 def PipelineStage.after_semantic(self): bool =

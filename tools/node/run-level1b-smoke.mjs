@@ -29,10 +29,15 @@ const source = fs.readFileSync(SOURCE, "utf8");
 if (/def\s+main\s*\(\s*\)\s*:\s*i64\s*=\s*42\b/.test(source)) {
   fail("level-1b smoke source", "seed main must not be a magic-number placeholder");
 }
-if (!source.includes("cli_ready_for_codegen") || !source.includes("cli_default_config")) {
-  fail("level-1b smoke source", "seed main must be wired to the CLI readiness contract");
+if (!source.includes("compile_request_to_wat") || !source.includes("CompileRequest")) {
+  fail("level-1b smoke source", "seed main must call the level-1b nanopass compile entry");
 }
 pass("level-1b smoke source exists");
-primaryPathBlocked("level-1b seed compile requires level-1b primary compiler execution");
+const pipeline = fs.readFileSync(path.join(PROJECT, "compiler", "driver", "nanopass_pipeline.chiba"), "utf8");
+if (!pipeline.includes("def compile_request_to_wat") || !pipeline.includes("run_nanopass_wat")) {
+  fail("level-1b compile entry", "nanopass pipeline must expose compile_request_to_wat over run_nanopass_wat");
+}
+pass("level-1b compile entry wired");
+primaryPathBlocked("level-1b seed compile requires generated frontend/runtime execution");
 primaryPathBlocked("level-1b WAT smoke requires level-1b WAT emission");
 console.log(`[BLOCKED] level-1b smoke artifact ${WAT}`);
