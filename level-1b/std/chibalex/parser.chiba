@@ -99,6 +99,18 @@ def chibalex_regex_def_lookup(defs: List[LexRegexDef], name: str): Option[RegexA
             else { chibalex_regex_def_lookup(tail, name) }
     }
 
+/// Apply a regex quantifier suffix that follows a named chibalex regex reference.
+def chibalex_apply_reference_suffix(pattern: str, offset: usize, ast: RegexAst): RegexAst =
+    let suffix = chibalex_skip_ws(pattern, offset)
+    if suffix >= pattern.len() { ast }
+    else {
+        let byte = pattern.byte_at(suffix)
+        if byte == 42 { RegexRepeatExpr(ast, regex_repeat(0, None)) }
+        else if byte == 43 { RegexRepeatExpr(ast, regex_repeat(1, None)) }
+        else if byte == 63 { RegexRepeatExpr(ast, regex_repeat(0, Some(1))) }
+        else { ast }
+    }
+
 /// Parse the namespace declaration from a fixture header.
 def chibalex_parse_namespace(source: str): str =
     let start = chibalex_find_text(source, 0, "namespace")
@@ -198,7 +210,7 @@ def chibalex_parse_rule_pattern_with_defs(source: str, start: usize, end: usize,
         let name_end = chibalex_scan_ident(pattern, 1)
         let name = pattern.slice(1, name_end - 1)
         match chibalex_regex_def_lookup(defs, name) {
-            Some(ast) => ast
+            Some(ast) => chibalex_apply_reference_suffix(pattern, name_end, ast)
             None => RegexEmpty
         }
     } else {
