@@ -535,6 +535,9 @@ type IntrinsicSurfaceFact {
     file: SourceFileId,
     has_compiler_intrinsic_call: bool,
     has_tuple_type_surface: bool,
+    has_tuple_to_adt: bool,
+    has_adt_to_tuple: bool,
+    has_unsafe_cast: bool,
 }
 
 /// Compiler intrinsic lowering obligation before namespace resolution.
@@ -542,7 +545,11 @@ type IntrinsicLoweringObligation {
     owner: BinderId,
     file: SourceFileId,
     intrinsic_namespace: String,
+    tuple_to_adt_identity: Option[AdtTupleIntrinsicIdentity],
+    adt_to_tuple_identity: Option[AdtTupleIntrinsicIdentity],
     requires_tuple_bridge: bool,
+    requires_method_first_bridge: bool,
+    unsafe_cast_is_compiler_only: bool,
     requires_compiler_intrinsic_resolution: bool,
 }
 
@@ -1182,26 +1189,44 @@ def typed_item_has_intrinsic_surface(item: TypedItemSkeleton): bool =
     if item.surface.has_compiler_intrinsic_call { true }
     else { item.surface.has_tuple_type_surface }
 
+/// Return true when one typed item region contains exact compiler intrinsic text.
+def typed_item_region_has_intrinsic_text(project: ProjectSurface, item: TypedItemSkeleton, text: str): bool =
+    let file_text = typed_source_file_text(project.files, item.file, 0)
+    source_region_has_text(file_text, item.surface.header.offset, source_scan_item_region_end(file_text, item.surface.header.offset), text)
+
 /// Create one intrinsic surface fact from an item skeleton.
-def intrinsic_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[IntrinsicSurfaceFact] =
+def intrinsic_surface_fact_from_skeleton(project: ProjectSurface, item: TypedItemSkeleton): Option[IntrinsicSurfaceFact] =
     if typed_item_has_intrinsic_surface(item) {
         Some(IntrinsicSurfaceFact {
             owner: item.binder,
             file: item.file,
             has_compiler_intrinsic_call: item.surface.has_compiler_intrinsic_call,
             has_tuple_type_surface: item.surface.has_tuple_type_surface,
+            has_tuple_to_adt: typed_item_region_has_intrinsic_text(project, item, "tuple_to_adt["),
+            has_adt_to_tuple: typed_item_region_has_intrinsic_text(project, item, "adt_to_tuple["),
+            has_unsafe_cast: typed_item_region_has_intrinsic_text(project, item, "unsafe_cast["),
         })
     } else { None }
 
 /// Generate intrinsic surface facts in stable binder order.
-def intrinsic_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[IntrinsicSurfaceFact]): Array[IntrinsicSurfaceFact] =
+def intrinsic_surface_facts_from_skeletons(project: ProjectSurface, skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[IntrinsicSurfaceFact]): Array[IntrinsicSurfaceFact] =
     if index == skeletons.len() { out.freeze() }
     else {
-        match intrinsic_surface_fact_from_skeleton(skeletons.get(index)) {
-            Some(fact) => intrinsic_surface_facts_from_skeletons(skeletons, index + 1, out.push(fact))
-            None => intrinsic_surface_facts_from_skeletons(skeletons, index + 1, out)
+        match intrinsic_surface_fact_from_skeleton(project, skeletons.get(index)) {
+            Some(fact) => intrinsic_surface_facts_from_skeletons(project, skeletons, index + 1, out.push(fact))
+            None => intrinsic_surface_facts_from_skeletons(project, skeletons, index + 1, out)
         }
     }
+
+/// Return tuple_to_adt identity when surface mentions that bridge.
+def intrinsic_tuple_to_adt_identity(fact: IntrinsicSurfaceFact): Option[AdtTupleIntrinsicIdentity] =
+    if fact.has_tuple_to_adt { Some(adt_tuple_intrinsic_identity(TupleToAdt)) }
+    else { None }
+
+/// Return adt_to_tuple identity when surface mentions that bridge.
+def intrinsic_adt_to_tuple_identity(fact: IntrinsicSurfaceFact): Option[AdtTupleIntrinsicIdentity] =
+    if fact.has_adt_to_tuple { Some(adt_tuple_intrinsic_identity(AdtToTuple)) }
+    else { None }
 
 /// Convert one intrinsic surface fact into a lowering obligation.
 def intrinsic_lowering_obligation_from_surface(fact: IntrinsicSurfaceFact): IntrinsicLoweringObligation =
@@ -1209,7 +1234,11 @@ def intrinsic_lowering_obligation_from_surface(fact: IntrinsicSurfaceFact): Intr
         owner: fact.owner,
         file: fact.file,
         intrinsic_namespace: "compiler.intrinsic",
+        tuple_to_adt_identity: intrinsic_tuple_to_adt_identity(fact),
+        adt_to_tuple_identity: intrinsic_adt_to_tuple_identity(fact),
         requires_tuple_bridge: fact.has_tuple_type_surface,
+        requires_method_first_bridge: fact.has_tuple_to_adt || fact.has_adt_to_tuple,
+        unsafe_cast_is_compiler_only: fact.has_unsafe_cast,
         requires_compiler_intrinsic_resolution: fact.has_compiler_intrinsic_call,
     }
 
@@ -1473,7 +1502,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let pipe_lowering_obligations = pipe_lowering_obligations_from_surface(pipe_surface, 0, Vec[PipeLoweringObligation].new())
     let pattern_surface = pattern_surface_facts_from_skeletons(skeletons, 0, Vec[PatternSurfaceFact].new())
     let pattern_lowering_obligations = pattern_lowering_obligations_from_surface(pattern_surface, 0, Vec[PatternLoweringObligation].new())
-    let intrinsic_surface = intrinsic_surface_facts_from_skeletons(skeletons, 0, Vec[IntrinsicSurfaceFact].new())
+    let intrinsic_surface = intrinsic_surface_facts_from_skeletons(module.project, skeletons, 0, Vec[IntrinsicSurfaceFact].new())
     let intrinsic_lowering_obligations = intrinsic_lowering_obligations_from_surface(intrinsic_surface, 0, Vec[IntrinsicLoweringObligation].new())
     let generic_surface = generic_surface_facts_from_skeletons(skeletons, 0, Vec[GenericSurfaceFact].new())
     let generic_template_obligations = generic_template_obligations_from_surface(generic_surface, 0, Vec[GenericTemplateObligation].new())

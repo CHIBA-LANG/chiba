@@ -66,6 +66,7 @@
 - [ ] compiler intrinsic namespace：有部分 contract；真实 intrinsic resolution/lowering 没完整。
 	- [x] compiler intrinsic surface facts：typed module 已记录 compiler intrinsic call 与 tuple type surface；真实 intrinsic namespace resolution/lowering 仍 fail-closed。
 	- [x] intrinsic lowering obligations：typed pass 已把 compiler intrinsic/tuple bridge surface 转成 `IntrinsicLoweringObligation`，固定 `compiler.intrinsic` namespace；真实 resolution/lowering 仍未完成。
+	- [x] intrinsic identity split：C08 已区分 `tuple_to_adt` / `adt_to_tuple` / `unsafe_cast`，tuple bridge 绑定 `AdtTupleIntrinsicIdentity`，`unsafe_cast` 标记 compiler-only；真实 namespace lookup 与 executable lowering 仍未完成。
 - [ ] answer/control scan：reset/shift/shiftn answer facts 没做。
 	- [x] control surface detection：source/typed surface 已标记 reset/shift/shiftn；无 delimited-control syntax 的 module 可越过 answer_control，出现 control syntax 仍 fail-closed。
 	- [x] control surface facts：`TypedModule.control_surface` 聚合 reset/shift/shiftn owner facts，answer_control 以后消费该事实流。
