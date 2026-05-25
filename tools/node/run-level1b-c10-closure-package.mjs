@@ -6,6 +6,10 @@ const ROOT = "level-1b/compiler/closure";
 const CONTRACT_FILES = [
   "level-1b/compiler/ir/closure.chiba",
 ];
+const NO_CAPTURE_FIXTURE = "level-1b/supports/pre-c10-smokes/no_capture_direct.chiba";
+const CAPTURE_FIXTURE = "level-1b/supports/pre-c10-smokes/capture_env.chiba";
+const MULTISHOT_FIXTURE = "level-1b/supports/pre-c10-smokes/multishot_package.chiba";
+const UNSAFE_FIXTURE = "level-1b/supports/pre-c10-smokes/unsafe_capture_invalid.chiba";
 const REQUIRED_FILES = [
   "continuation_simplify.chiba",
   "closure_convert.chiba",
@@ -197,7 +201,23 @@ function main() {
   if (errors.length !== 0) fail(errors.join("\n"));
   pass("closure source contract");
 
-  primaryPathBlocked("no-capture closure directification smoke requires level-1b end-to-end fixture execution");
+  const noCapture = read(NO_CAPTURE_FIXTURE);
+  if (!noCapture.includes("{|value: i64| value + 1 }")) {
+    fail("no-capture closure fixture must keep immediately-called lambda shape");
+  }
+  if (!joined.includes("function.no_capture()") || !joined.includes("ClosureNoCaptureDirect")) {
+    fail("closure simplification must keep no-capture directification path");
+  }
+  pass("no-capture directification fixture");
+
+  for (const [file, needle] of [
+    [CAPTURE_FIXTURE, "capture_env"],
+    [MULTISHOT_FIXTURE, "multi"],
+    [UNSAFE_FIXTURE, "unsafe"],
+  ]) {
+    if (!read(file).includes(needle)) fail(`C10 fixture missing ${needle}: ${file}`);
+  }
+
   primaryPathBlocked("capturing closure env requires level-1b nanopass execution");
   primaryPathBlocked("multi-shot continuation package requires level-1b nanopass execution");
   primaryPathBlocked("unsafe capture rejection requires level-1b semantic checker diagnostics");
