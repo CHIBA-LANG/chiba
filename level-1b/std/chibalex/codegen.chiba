@@ -242,12 +242,87 @@ def append_lexer_emit_branches(rules: Array[LoweredLexRule], index: usize, build
     if index == rules.len() { builder }
     else { append_lexer_emit_branches(rules, index + 1, append_lexer_emit_branch(builder, rules.get(index))) }
 
+/// Return true when a byte can appear in a generated token constructor name.
+def lexer_action_ctor_byte(byte: u8): bool =
+    if byte >= 65 && byte <= 90 { true }
+    else if byte >= 97 && byte <= 122 { true }
+    else if byte >= 48 && byte <= 57 { true }
+    else { byte == 95 }
+
+/// Find the end of the token constructor in an action such as `Ident(s)`.
+def lexer_action_ctor_end(action: String, offset: usize): usize =
+    if offset >= action.len() { offset }
+    else if lexer_action_ctor_byte(action.byte_at(offset)) { lexer_action_ctor_end(action, offset + 1) }
+    else { offset }
+
+/// Return the constructor name emitted by one token action.
+def lexer_action_ctor_name(action: String): str =
+    action.slice(0, lexer_action_ctor_end(action, 0))
+
+/// Return true when the token action carries the matched slice as payload.
+def lexer_action_has_payload(action: String): bool =
+    let end = lexer_action_ctor_end(action, 0)
+    end < action.len() && action.byte_at(end) == 40
+
+/// Append one token reflection match arm for `generated_name`.
+def append_token_name_arm(builder: DiagnosticBuilder, rule: LoweredLexRule): DiagnosticBuilder =
+    if rule.trivia { builder }
+    else {
+        let ctor = lexer_action_ctor_name(rule.action.body)
+        let payload = lexer_action_has_payload(rule.action.body)
+        builder
+            .push_str("        ")
+            .push_str(ctor)
+            .push_str(if payload { "(_) => \"" } else { " => \"" })
+            .push_str(ctor)
+            .push_str("\"\n")
+    }
+
+/// Append token reflection name arms.
+def append_token_name_arms(rules: Array[LoweredLexRule], index: usize, builder: DiagnosticBuilder): DiagnosticBuilder =
+    if index == rules.len() { builder }
+    else { append_token_name_arms(rules, index + 1, append_token_name_arm(builder, rules.get(index))) }
+
+/// Append one token reflection match arm for `generated_payload`.
+def append_token_payload_arm(builder: DiagnosticBuilder, rule: LoweredLexRule): DiagnosticBuilder =
+    if rule.trivia { builder }
+    else if lexer_action_has_payload(rule.action.body) == false { builder }
+    else {
+        builder
+            .push_str("        ")
+            .push_str(lexer_action_ctor_name(rule.action.body))
+            .push_str("(value) => value\n")
+    }
+
+/// Append token reflection payload arms.
+def append_token_payload_arms(rules: Array[LoweredLexRule], index: usize, builder: DiagnosticBuilder): DiagnosticBuilder =
+    if index == rules.len() { builder }
+    else { append_token_payload_arms(rules, index + 1, append_token_payload_arm(builder, rules.get(index))) }
+
+/// Append generated Token reflection helpers consumed by generated parsers.
+def append_token_reflection_helpers(builder: DiagnosticBuilder, lexer: LoweredLexer): DiagnosticBuilder =
+    append_token_payload_arms(
+        lexer.rules,
+        0,
+        append_token_name_arms(
+            lexer.rules,
+            0,
+            builder
+                .push_str("def Token.generated_name(self): str =\n")
+                .push_str("    match self {\n"))
+            .push_str("        _ => \"\"\n")
+            .push_str("    }\n")
+            .push_str("def Token.generated_payload(self): str =\n")
+            .push_str("    match self {\n"))
+        .push_str("        _ => \"\"\n")
+        .push_str("    }\n")
+
 /// Append generated runtime helpers.
 def append_lexer_runtime(builder: DiagnosticBuilder, lexer: LoweredLexer): DiagnosticBuilder =
     append_lexer_emit_branches(
         lexer.rules,
         0,
-        builder
+        append_token_reflection_helpers(builder, lexer)
             .push_str("def generated_start_mode(): LexMode = generated_lexer().modes.get(0)\n")
             .push_str("def generated_after_transition(rule: LoweredLexRule, state: LexState): LexState =\n")
             .push_str("    match rule.transition {\n")
