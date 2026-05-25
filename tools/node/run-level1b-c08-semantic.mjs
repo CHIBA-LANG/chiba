@@ -53,6 +53,7 @@ const REQUIRED_TEXT = [
   "data TypedFunctionBodyKind",
   "TypedFunctionReturnI32FortyTwo",
   "TypedFunctionTailCall",
+  "TypedFunctionBranchJoinPending",
   "def typed_function_tail_call_target_slice",
   "def typed_function_tail_call_target_text",
   "def typed_function_body_starts_with_atom",

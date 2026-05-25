@@ -15,6 +15,7 @@ def core_validation_diagnostic(error: CoreValidationError): SemanticDiagnostic =
         CoreMissingOwner(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreIllegalTailCall(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreNonTailCps(message) => SemanticDiagnostic("<backend>", 0, 0, message)
+        CoreMissingBranchBody(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreIllegalRuntimeState(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreIllegalContinuationPackage(message) => SemanticDiagnostic("<backend>", 0, 0, message)
     }

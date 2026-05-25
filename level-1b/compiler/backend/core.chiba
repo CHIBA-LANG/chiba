@@ -40,6 +40,7 @@ data CoreFunctionBody {
     CoreFunctionReturnI32Zero,
     CoreFunctionReturnI32FortyTwo,
     CoreFunctionTailCall(str),
+    CoreFunctionBranchJoinPending,
 }
 
 /// Core operation class understood by the dumb backend emitter.
@@ -118,6 +119,7 @@ def core_function_body_from_typed(body: TypedFunctionBodyKind): CoreFunctionBody
         TypedFunctionReturnI32Zero => CoreFunctionReturnI32Zero
         TypedFunctionReturnI32FortyTwo => CoreFunctionReturnI32FortyTwo
         TypedFunctionTailCall(target) => CoreFunctionTailCall(target)
+        TypedFunctionBranchJoinPending => CoreFunctionBranchJoinPending
     }
 
 /// Lower one typed function fact into a Core function op.

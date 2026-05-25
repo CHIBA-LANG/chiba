@@ -108,6 +108,7 @@ def emit_core_function_body(body: Option[CoreFunctionBody]): String =
         Some(CoreFunctionReturnI32FortyTwo) => "(result i32) i32.const 42"
         Some(CoreFunctionReturnI32Zero) => "(result i32) i32.const 0"
         Some(CoreFunctionTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
+        Some(CoreFunctionBranchJoinPending) => "(result i32) unreachable"
         Some(CoreFunctionReturnUnit) => ""
         None => ""
     }

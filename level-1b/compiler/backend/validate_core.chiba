@@ -11,6 +11,7 @@ data CoreValidationError {
     CoreMissingOwner(str),
     CoreIllegalTailCall(str),
     CoreNonTailCps(str),
+    CoreMissingBranchBody(str),
     CoreIllegalRuntimeState(str),
     CoreIllegalContinuationPackage(str),
 }
@@ -77,6 +78,13 @@ def validate_core_cps_tail_form(op: CoreOp): Option[CoreValidationError] =
             }
         CoreOpContNPackage => None
         CoreOpContinuationFrameChain => None
+        _ => None
+    }
+
+/// Validate that branch join facts are not emitted as fake function bodies.
+def validate_core_function_body(op: CoreOp): Option[CoreValidationError] =
+    match op.function_body {
+        Some(CoreFunctionBranchJoinPending) => Some(CoreMissingBranchBody("branch join function body lowering absent"))
         _ => None
     }
 
@@ -234,6 +242,7 @@ def validate_core_op(module: WasmGcCoreModule, op: CoreOp, out: Vec[CoreValidati
         |> push_validation_error(validate_core_owner(op))
         |> push_validation_error(validate_core_tail(op))
         |> push_validation_error(validate_core_cps_tail_form(op))
+        |> push_validation_error(validate_core_function_body(op))
         |> push_validation_error(validate_core_runtime_state(op))
         |> push_validation_error(validate_core_continuation_package(op))
         |> push_validation_error(validate_core_contn_frame_count(op))

@@ -40,6 +40,7 @@ data TypedFunctionBodyKind {
     TypedFunctionReturnI32Zero,
     TypedFunctionReturnI32FortyTwo,
     TypedFunctionTailCall(str),
+    TypedFunctionBranchJoinPending,
 }
 
 /// Function body fact that has passed the narrow C08 primary codegen subset.
@@ -331,7 +332,8 @@ def typed_item_surface_returns_i32(text: String, item: TypedItemSkeleton): bool 
 def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton): TypedFunctionBodyKind =
     let start = source_scan_item_body_region_start(text, item.surface.header.offset)
     let end = source_scan_item_region_end(text, item.surface.header.offset)
-    if typed_function_body_starts_with_atom(text, start, end, "42") { TypedFunctionReturnI32FortyTwo }
+    if typed_item_has_branching_surface(item) { TypedFunctionBranchJoinPending }
+    else if typed_function_body_starts_with_atom(text, start, end, "42") { TypedFunctionReturnI32FortyTwo }
     else if typed_function_body_starts_with_atom(text, start, end, "0") { TypedFunctionReturnI32Zero }
     else {
         match typed_function_tail_call_target_slice(text, start, end) {

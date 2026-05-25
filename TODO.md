@@ -120,6 +120,7 @@
 	- [x] branching surface facts：source/typed facts 已记录 if/else/else-if/if-let/match/short-circuit，供 typed lowering 和 CPS join planning 使用。
 	- [x] branching CPS join fact：CPS pass 已把 branching surface 转成 `BranchJoinPlan` / `CpsBranchJoinFact`，并要求所有 arm 回到同一 tail；真实表达式级 join continuation body lowering 仍未完成。
 	- [x] branching Core obligation：C11 已把 `CpsBranchJoinFact` 转成 backend-neutral `CoreBranchJoinLoweringObligation`；真实 executable branch block emission 仍未完成。
+	- [x] branching miscompile guard：C08 遇到 branching body 会标记 `TypedFunctionBranchJoinPending`，C11 validator 拒绝 fake body emission，避免 `if/else` 被常量竖切误编译。
 	- 不能只看 `if` then/happy path；必须同时覆盖 `else`、`else if`、`if let` 成功/失败分支、`match` 每个 arm、default/fallback、短路逻辑和 nested branch。
 	- typed env、pattern binding scope、exhaustiveness/warning、CPS join continuation、branch result type unify 必须一起验收。
 	- 所有 branching lowering gate 必须包含 “then/else 都有副作用或不同 binder” 的 fixture，避免再出现看了 if 不看 else、match branching 一坨但漏分支的情况。

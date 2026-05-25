@@ -143,6 +143,7 @@ def cps_tail_form_fact_from_function(function: TypedFunctionBodyFact): CpsTailFo
 def cps_tail_form_kind_from_function(function: TypedFunctionBodyFact): CpsTailFormKind =
     match function.body {
         TypedFunctionTailCall(target) => CpsTailCall(target)
+        TypedFunctionBranchJoinPending => CpsTailReturn
         _ => CpsTailReturn
     }
 
