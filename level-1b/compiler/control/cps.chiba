@@ -287,7 +287,6 @@ def cps_tail_form_kind_from_function(function: TypedFunctionFact): CpsTailFormKi
 def cps_tail_form_kind_from_expr(body: TypedExprKind): CpsTailFormKind =
     match body {
         TypedExprTailCall(target) => CpsTailCall(target)
-        TypedExprTailCallI32Const(target, _) => CpsTailCall(target)
         TypedExprTailCallArgs(target, _) => CpsTailCall(target)
         TypedExprParam0 => CpsTailReturn
         TypedExprIfElse(_, then_expr, else_expr) => cps_tail_form_kind_from_branch(then_expr, else_expr)
@@ -301,20 +300,12 @@ def cps_tail_form_kind_from_branch(then_expr: TypedExprKind, else_expr: TypedExp
         TypedExprTailCall(then_target) =>
             match else_expr {
                 TypedExprTailCall(else_target) => CpsTailBranchCall(then_target, else_target)
-                TypedExprTailCallI32Const(else_target, _) => CpsTailBranchCall(then_target, else_target)
-                _ => CpsTailReturn
-            }
-        TypedExprTailCallI32Const(then_target, _) =>
-            match else_expr {
-                TypedExprTailCall(else_target) => CpsTailBranchCall(then_target, else_target)
-                TypedExprTailCallI32Const(else_target, _) => CpsTailBranchCall(then_target, else_target)
                 TypedExprTailCallArgs(else_target, _) => CpsTailBranchCall(then_target, else_target)
                 _ => CpsTailReturn
             }
         TypedExprTailCallArgs(then_target, _) =>
             match else_expr {
                 TypedExprTailCall(else_target) => CpsTailBranchCall(then_target, else_target)
-                TypedExprTailCallI32Const(else_target, _) => CpsTailBranchCall(then_target, else_target)
                 TypedExprTailCallArgs(else_target, _) => CpsTailBranchCall(then_target, else_target)
                 _ => CpsTailReturn
             }
@@ -363,7 +354,6 @@ def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
         TypedExprParam0 => CpsTermReturn(CpsAtomParam0)
         TypedExprParam(index) => CpsTermReturn(CpsAtomParam(index))
         TypedExprTailCall(target) => CpsTermTailCall(target, Vec[CpsAtom].new().freeze())
-        TypedExprTailCallI32Const(target, arg) => CpsTermTailCall(target, Vec[CpsAtom].new().push(CpsAtomI32Const(arg)).freeze())
         TypedExprTailCallArgs(target, args) =>
             match cps_atoms_from_typed_args(args, 0, Vec[CpsAtom].new()) {
                 Some(atoms) => CpsTermTailCall(target, atoms)

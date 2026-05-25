@@ -58,7 +58,6 @@ data CoreExprKind {
     CoreExprParam0,
     CoreExprParam(usize),
     CoreExprTailCall(str),
-    CoreExprTailCallI32Const(str, CoreI32ConstAtom),
     CoreExprTailCallParam0(str),
     CoreExprTailCallArgs(str, Array[CoreExprKind]),
     CoreExprIfElse(CoreBranchCondition, CoreExprKind, CoreExprKind),
@@ -202,7 +201,7 @@ def core_expr_from_cps_tail_call_arg(target: str, args: Array[CpsAtom]): CoreExp
     else if args.len() > 1 { CoreExprTailCallArgs(target, core_expr_args_from_cps_atoms(args, 0, Vec[CoreExprKind].new())) }
     else {
         match args.get(0) {
-            CpsAtomI32Const(atom) => CoreExprTailCallI32Const(target, core_i32_const_atom_from_typed(atom))
+            CpsAtomI32Const(atom) => CoreExprTailCallArgs(target, Vec[CoreExprKind].new().push(CoreExprI32Const(core_i32_const_atom_from_typed(atom))).freeze())
             CpsAtomParam0 => CoreExprTailCallParam0(target)
             CpsAtomParam(index) => CoreExprTailCallArgs(target, Vec[CoreExprKind].new().push(CoreExprParam(index)).freeze())
             _ => CoreExprBranchJoinPending
@@ -436,7 +435,6 @@ def lower_continuation_facts(facts: Array[ContinuationLoweringFact], index: usiz
 def core_function_body_terminator(body: Option[CoreExprKind]): CoreBlockTerminator =
     match body {
         Some(CoreExprTailCall(_)) => CoreBlockTailCall
-        Some(CoreExprTailCallI32Const(_, _)) => CoreBlockTailCall
         Some(CoreExprTailCallParam0(_)) => CoreBlockTailCall
         Some(CoreExprTailCallArgs(_, _)) => CoreBlockTailCall
         Some(CoreExprBranchJoinPending) => CoreBlockContinue

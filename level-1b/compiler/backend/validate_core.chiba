@@ -98,7 +98,6 @@ def core_function_body_requires_param0(body: CoreExprKind): bool =
         CoreExprParam0 => true
         CoreExprParam(index) => index == 0
         CoreExprTailCallParam0(_) => true
-        CoreExprTailCallI32Const(_, _) => false
         CoreExprTailCallArgs(_, args) => core_function_body_args_require_param0(args, 0)
         CoreExprIfElse(condition, then_expr, else_expr) =>
             if core_branch_condition_requires_param0(condition) { true }
@@ -194,9 +193,6 @@ def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
         Some(CoreExprTailCall(target)) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
-        Some(CoreExprTailCallI32Const(target, _)) =>
-            if core_module_contains_symbol(module, target, 0) { None }
-            else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
         Some(CoreExprTailCallParam0(target)) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
@@ -215,9 +211,6 @@ def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
 def validate_core_expr_symbol(module: WasmGcCoreModule, body: CoreExprKind): Option[CoreValidationError] =
     match body {
         CoreExprTailCall(target) =>
-            if core_module_contains_symbol(module, target, 0) { None }
-            else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
-        CoreExprTailCallI32Const(target, _) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
         CoreExprTailCallParam0(target) =>

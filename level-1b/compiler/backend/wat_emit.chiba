@@ -198,7 +198,6 @@ def emit_core_expr_instruction(body: CoreExprKind): String =
         CoreExprParam0 => "local.get 0"
         CoreExprParam(index) => emit_core_param(index)
         CoreExprTailCall(target) => "return_call $chiba.".concat(target)
-        CoreExprTailCallI32Const(target, arg) => emit_core_i32_const_atom(arg).concat(" return_call $chiba.").concat(target)
         CoreExprTailCallParam0(target) => "local.get 0 return_call $chiba.".concat(target)
         CoreExprTailCallArgs(target, args) => emit_core_tail_call_args_expr(target, args)
         CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_expr(condition, then_expr, else_expr)
@@ -230,11 +229,6 @@ def emit_core_function_body(body: Option[CoreExprKind]): String =
         Some(CoreExprParam0) => "(result i32) local.get 0"
         Some(CoreExprParam(index)) => "(result i32) ".concat(emit_core_param(index))
         Some(CoreExprTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
-        Some(CoreExprTailCallI32Const(target, arg)) =>
-            "(result i32) "
-                .concat(emit_core_i32_const_atom(arg))
-                .concat(" return_call $chiba.")
-                .concat(target)
         Some(CoreExprTailCallParam0(target)) =>
             "(result i32) local.get 0 return_call $chiba.".concat(target)
         Some(CoreExprTailCallArgs(target, args)) =>

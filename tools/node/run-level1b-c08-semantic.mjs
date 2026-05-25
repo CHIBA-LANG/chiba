@@ -82,7 +82,7 @@ const REQUIRED_TEXT = [
   "TypedExprI32FortyTwo",
   "TypedExprParam0",
   "TypedExprTailCall",
-  "TypedExprTailCallI32Const",
+  "TypedExprTailCallArgs",
   "TypedExprIfElse",
   "TypedExprBranchJoinPending",
   "data TypedExprVisitKind",

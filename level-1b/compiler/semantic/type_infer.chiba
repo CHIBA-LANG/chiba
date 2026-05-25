@@ -59,7 +59,6 @@ data TypedExprKind {
     TypedExprParam(usize),
     TypedExprTailCall(str),
     TypedExprTailCallArgs(str, Array[TypedExprKind]),
-    TypedExprTailCallI32Const(str, TypedI32ConstAtom),
     TypedExprIfElse(TypedBranchCondition, TypedExprKind, TypedExprKind),
     TypedExprBranchJoinPending,
 }
@@ -103,7 +102,6 @@ def typed_expr_visit_kind(expr: TypedExprKind): TypedExprVisitKind =
         TypedExprParam(_) => TypedVisitAtom
         TypedExprTailCall(_) => TypedVisitTailCall
         TypedExprTailCallArgs(_, _) => TypedVisitTailCall
-        TypedExprTailCallI32Const(_, _) => TypedVisitTailCall
         TypedExprIfElse(_, _, _) => TypedVisitBranch
         TypedExprBranchJoinPending => TypedVisitPending
     }
@@ -619,7 +617,9 @@ def typed_function_tail_call_i32_const_body(text: String, item: TypedItemSkeleto
     match typed_function_tail_call_i32_const_slice(text, start, end) {
         Some(target) =>
             match typed_function_tail_call_i32_const_arg(text, target, end) {
-                Some(arg) => Some(TypedExprTailCallI32Const(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)), arg))
+                Some(arg) => Some(TypedExprTailCallArgs(
+                    typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)),
+                    Vec[TypedExprKind].new().push(typed_expr_from_i32_atom(arg)).freeze()))
                 None => None
             }
         None => None
@@ -827,7 +827,6 @@ def typed_function_symbol_eq(left: str, right: str, index: usize): bool =
 def typed_function_tail_call_target(body: TypedExprKind): Option[str] =
     match body {
         TypedExprTailCall(target) => Some(target)
-        TypedExprTailCallI32Const(target, _) => Some(target)
         TypedExprTailCallArgs(target, _) => Some(target)
         _ => None
     }
@@ -865,7 +864,6 @@ def typed_function_main_abi_valid(functions: Array[TypedFunctionFact], index: us
 def typed_function_tail_targets_resolved_for_body(functions: Array[TypedFunctionFact], body: TypedExprKind): bool =
     match body {
         TypedExprTailCall(target) => typed_functions_have_symbol(functions, target, 0)
-        TypedExprTailCallI32Const(target, _) => typed_functions_have_symbol(functions, target, 0)
         TypedExprTailCallArgs(target, args) =>
             typed_functions_have_symbol(functions, target, 0) && typed_function_tail_targets_resolved_for_args(functions, args, 0)
         TypedExprIfElse(_, then_expr, else_expr) =>
@@ -1145,7 +1143,9 @@ def typed_function_non_const_body_kind_from_surface(text: String, item: TypedIte
     match typed_function_tail_call_i32_const_slice(text, start, end) {
         Some(target) =>
             match typed_function_tail_call_i32_const_arg(text, target, end) {
-                Some(arg) => TypedExprTailCallI32Const(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)), arg)
+                Some(arg) => TypedExprTailCallArgs(
+                    typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)),
+                    Vec[TypedExprKind].new().push(typed_expr_from_i32_atom(arg)).freeze())
                 None => TypedExprUnit
             }
         None =>
