@@ -212,7 +212,8 @@ def typed_function_body_returns_param0(text: String, item: TypedItemSkeleton, st
         Some(param) => {
             let offset = source_skip_spaces(text, start)
             if source_starts_with_at(text, offset, typed_function_tail_call_target_text(text, param), 0) == false { false }
-            else { source_word_boundary_after(text, offset, param.len) }
+            else if source_word_boundary_after(text, offset, param.len) == false { false }
+            else { typed_source_region_only_spaces(text, offset + param.len, end) }
         }
         None => false
     }

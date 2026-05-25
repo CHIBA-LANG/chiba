@@ -42,6 +42,7 @@
 		- [x] minimal callee symbol check：极窄尾调用 target 必须能在当前 typed function set 中解析到同名函数；同 namespace 裸调用会解析成 owner-qualified symbol，完整 import/mangle-aware call graph 仍未完成。
 		- [x] minimal i32 const call exactness：`f(42)` 窄 tail-call slice 现在要求 const arg 精确闭合且处于尾位置，避免把 `f(42 + x)` / `f(42, y)` / `f(42) + 1` 误编译成 `f(42)`。
 		- [x] minimal no-arg call exactness：`f()` 窄 tail-call slice 现在要求空参数精确闭合且处于尾位置，避免把 `f() + 1` 误编译成 `f()`。
+		- [x] minimal param return exactness：`id(x)=x` 窄 return-param slice 现在要求参数名处于尾位置，避免把 `x + 1` 误编译成 `x`。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 	- [x] generic surface facts：typed module 已记录 explicit params、auto-generic、explicit instantiation、generic Self method surface；真实 template body checking 与 instantiation discharge 仍 fail-closed。
 	- [x] generic template obligations：typed pass 已把 generic surface 转成 `GenericTemplateObligation`，区分显式参数、auto-generic、实例化 discharge、generic Self receiver binding。
