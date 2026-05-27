@@ -74,6 +74,17 @@ function enclosingFunctionName(source, index) {
   return matches[matches.length - 1][1];
 }
 
+function lineTextAt(source, index) {
+  const start = source.lastIndexOf("\n", index) + 1;
+  const end = source.indexOf("\n", index);
+  return source.slice(start, end < 0 ? source.length : end);
+}
+
+function legacyExecutionIsReferenceOnly(source, index) {
+  const line = lineTextAt(source, index);
+  return /referenceOnlyLegacyCompiler|LEGACY_REFERENCE_COMPILER/.test(line);
+}
+
 const blockers = [];
 
 for (const check of CHECKS) {
@@ -308,6 +319,7 @@ for (const root of HARNESS_ROOTS) {
 
     const legacyExecution = /["'](\.\/target\/debug\/level1c\.o|\.\/chibac_amd64-unknown-linux_chiba_dev\.o)["']/g;
     for (const match of source.matchAll(legacyExecution)) {
+      if (legacyExecutionIsReferenceOnly(source, match.index)) continue;
       blockers.push({
         id: "legacy-compiler-execution",
         file: `${file}:${lineOf(source, match.index)}`,

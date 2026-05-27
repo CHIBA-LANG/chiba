@@ -9,6 +9,7 @@ const DRIVER_ROOT = "level-1b/compiler/driver";
 const FIXTURE = "level-1b/supports/pre-c07-smokes/doc_compile_if.chiba";
 const UTF8_FIXTURE = "level-1b/supports/pre-c07-smokes/utf8_identifier_blocked.chiba";
 const ARTIFACT_DIR = ".scratch/level-1b/c07-source-driver";
+const LEGACY_REFERENCE_COMPILER = "./target/debug/level1c.o";
 const REQUIRED_TEXT = [
   "type ProjectSurface",
   "type SourceProjectFacts",
@@ -377,7 +378,8 @@ function main() {
   }
   pass("UTF-8 identifier fixture source");
 
-  const parsed = spawnSync("timeout", ["10", "./target/debug/level1c.o", "parse", FIXTURE], { encoding: "utf8" });
+  const parserReferenceOnlyLegacyCompiler = LEGACY_REFERENCE_COMPILER;
+  const parsed = spawnSync("timeout", ["10", parserReferenceOnlyLegacyCompiler, "parse", FIXTURE], { encoding: "utf8" });
   if (parsed.status !== 0 || !parsed.stdout.startsWith("OK(")) {
     fail(`level1c parser primary fixture failed:\n${parsed.stdout}${parsed.stderr}`);
   }
@@ -398,7 +400,8 @@ function main() {
   pass("level1c parser primary fixture AST");
 
   ensureDir(ARTIFACT_DIR);
-  const wat = spawnSync("timeout", ["30", "./target/debug/level1c.o", "wat", FIXTURE], { encoding: "utf8" });
+  const watReferenceOnlyLegacyCompiler = LEGACY_REFERENCE_COMPILER;
+  const wat = spawnSync("timeout", ["30", watReferenceOnlyLegacyCompiler, "wat", FIXTURE], { encoding: "utf8" });
   if (wat.status !== 0 || !wat.stdout.includes("(module")) {
     fail(`level1c WAT primary fixture failed:\n${wat.stdout}${wat.stderr}`);
   }

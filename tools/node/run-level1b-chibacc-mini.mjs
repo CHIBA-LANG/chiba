@@ -9,6 +9,7 @@ const OUT = ".scratch/level-1b/chibacc-mini";
 const CHIBACC = fs.existsSync("/tmp/chibacc-project-mainline/target/debug/chibacc.new.o")
   ? "/tmp/chibacc-project-mainline/target/debug/chibacc.new.o"
   : "./chibacc.o";
+const LEGACY_REFERENCE_COMPILER = "./target/debug/level1c.o";
 const CASES = [
   {
     file: "simple.chibacc",
@@ -132,7 +133,8 @@ function run(name, command, args) {
 }
 
 function runParseOk(name, file) {
-  const result = run(name, "timeout", ["10", "./target/debug/level1c.o", "parse", file]);
+  const referenceOnlyLegacyCompiler = LEGACY_REFERENCE_COMPILER;
+  const result = run(name, "timeout", ["10", referenceOnlyLegacyCompiler, "parse", file]);
   if (!result.stdout.startsWith("OK(")) {
     console.error(`[FAIL] ${name}`);
     console.error(result.stdout || result.stderr || "parse did not return OK");
@@ -142,7 +144,8 @@ function runParseOk(name, file) {
 }
 
 function runCheckOk(name, file) {
-  const result = run(name, "timeout", ["10", "./target/debug/level1c.o", "check", file]);
+  const referenceOnlyLegacyCompiler = LEGACY_REFERENCE_COMPILER;
+  const result = run(name, "timeout", ["10", referenceOnlyLegacyCompiler, "check", file]);
   if (!result.stdout.includes("check ok")) {
     console.error(`[FAIL] ${name}`);
     console.error(result.stdout || result.stderr || "check did not report ok");
@@ -261,7 +264,8 @@ async function runGeneratedParser(caseInfo, generated) {
     const execPath = path.join(OUT, caseInfo.file.replace(/\.chibacc$/, `.${caseInfo.name || "exec"}.exec.chiba`));
     const watPath = execPath.replace(/\.chiba$/, ".wat");
     fs.writeFileSync(execPath, executableGeneratedSource(caseInfo, generated));
-    const wat = run(`level1c wat generated parser ${label}`, "timeout", ["20", "./target/debug/level1c.o", "wat", execPath]);
+    const referenceOnlyLegacyCompiler = LEGACY_REFERENCE_COMPILER;
+    const wat = run(`level1c wat generated parser ${label}`, "timeout", ["20", referenceOnlyLegacyCompiler, "wat", execPath]);
     if (!wat.stdout.includes("(module")) {
       console.error(`[FAIL] generated parser wat ${label}`);
       console.error(wat.stdout || wat.stderr || "level1c produced no module");

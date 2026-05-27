@@ -15,3 +15,9 @@ def literal_branch(): i32 = if true { 7 } else { 13 }
 
 /// Parameter branch with tail-call arms.
 def choose(flag: bool): i32 = if flag { id(7) } else { id(13) }
+
+/// Match lowering with explicit bool arms.
+def choose_match(flag: bool): i32 = match flag {
+    true => id(7)
+    false => id(13)
+}

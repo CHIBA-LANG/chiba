@@ -435,6 +435,16 @@ function readFunctionBody(source, offset) {
     return { body: source.slice(cursor + 1, close), end: close + 1 };
   }
   const nextLine = source.indexOf("\n", cursor);
+  const bodyOpen = source.indexOf("{", cursor);
+  const nextDef = source.indexOf("\ndef ", cursor);
+  const nextDoc = source.indexOf("\n///", cursor);
+  const nextItem = [nextDef, nextDoc].filter((index) => index >= 0).reduce((left, right) => Math.min(left, right), source.length);
+  if (bodyOpen >= 0 && bodyOpen < nextItem) {
+    const close = findMatchingBrace(source, bodyOpen);
+    if (nextLine >= 0 && close > nextLine) {
+      return { body: source.slice(cursor, close + 1), end: close + 1 };
+    }
+  }
   const end = nextLine < 0 ? source.length : nextLine;
   return { body: source.slice(cursor, end), end };
 }
@@ -477,6 +487,15 @@ function sourceExprToCore(expr, fn) {
       condition: sourceConditionToCore(ifMatch[1], fn),
       thenExpr: sourceExprToCore(ifMatch[2], fn),
       elseExpr: sourceExprToCore(ifMatch[3], fn),
+    };
+  }
+  const matchBool = /^match\s+(.+?)\s*\{\s*true\s*=>\s*([\s\S]+?)\s*false\s*=>\s*([\s\S]+?)\s*\}$/.exec(text);
+  if (matchBool != null) {
+    return {
+      kind: "if",
+      condition: sourceConditionToCore(matchBool[1], fn),
+      thenExpr: sourceExprToCore(matchBool[2], fn),
+      elseExpr: sourceExprToCore(matchBool[3], fn),
     };
   }
   const callMatch = /^([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$/.exec(text);
@@ -673,6 +692,7 @@ function checkSourcePrimaryBackendWat() {
   if (!wat.includes("i32.const 7")) fail("source primary backend fixture must preserve small const 7");
   if (!wat.includes("i32.const 13")) fail("source primary backend fixture must preserve distinct else-arm const 13");
   if (!wat.includes("return_call $chiba.id")) fail("source primary backend fixture must lower tail calls as return_call");
+  if (!wat.includes("(export \"choose_match\")")) fail("source primary backend fixture must include executable match lowering");
   checkWatArtifactRunnable("source-primary-backend", wat, [
     { exportName: "id", args: [19], expectedStdout: "19" },
     { exportName: "seven", expectedStdout: "7" },
@@ -680,6 +700,8 @@ function checkSourcePrimaryBackendWat() {
     { exportName: "literal_branch", expectedStdout: "7" },
     { exportName: "choose", args: [1], expectedStdout: "7" },
     { exportName: "choose", args: [0], expectedStdout: "13" },
+    { exportName: "choose_match", args: [1], expectedStdout: "7" },
+    { exportName: "choose_match", args: [0], expectedStdout: "13" },
   ]);
 }
 
