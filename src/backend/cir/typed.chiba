@@ -536,10 +536,13 @@ def cir_typed_method_result_from_receiver(receiver: CirType, field: Str, fallbac
 
 def cir_typed_known_callee_result(name: Str): CirType =
     if streq(name, mk_str("Vec.new", 7)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("vec_new", 7)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Vec.push", 8)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("vec_push", 8)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Vec.extend", 10)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Vec.extend_loop", 15)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Vec.freeze", 10)) != 0 { CirTyConst(mk_str("Array", 5)) }
+    else if streq(name, mk_str("vec_get", 7)) != 0 { CirTyUnknown }
     else if streq(name, mk_str("GeneratedParser.text", 20)) != 0 { CirTyString }
     else if streq(name, mk_str("generated_parser_text", 21)) != 0 { CirTyString }
     else if streq(name, mk_str("str.concat", 10)) != 0 { CirTyString }

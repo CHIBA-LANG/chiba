@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
+import { compileWat, extractModule } from "./wat-compile.mjs";
 
 const ROOT = "level-1b/supports/chibacc-mini";
 const OUT = ".scratch/level-1b/chibacc-mini";
@@ -120,7 +121,7 @@ const CASES = [
 ];
 
 function run(name, command, args) {
-  const result = spawnSync(command, args, { encoding: "utf8" });
+  const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (result.status !== 0) {
     console.error(`[FAIL] ${name}`);
     console.error(`${result.stdout || ""}${result.stderr || ""}`.split("\n").slice(0, 40).join("\n"));
@@ -150,9 +151,21 @@ function runCheckOk(name, file) {
   return result;
 }
 
+async function runWatMain(watPath) {
+  const raw = fs.readFileSync(watPath, "utf8");
+  const wat = extractModule(raw);
+  const buffer = compileWat(wat, {});
+  const instance = await WebAssembly.instantiate(buffer, { env: new Proxy({}, { get: () => () => 0n }) });
+  const main = instance.instance.exports.main;
+  if (typeof main !== "function") {
+    throw new Error(`wat module does not export main`);
+  }
+  return String(main() || 0);
+}
+
 fs.mkdirSync(OUT, { recursive: true });
 
-function tokenDataSource(tokens) {
+function tokenDataSource(tokens, generated) {
   const names = new Set(["Eof"]);
   for (const token of tokens || []) {
     const match = token.match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\((.*)\))?$/);
@@ -163,8 +176,12 @@ function tokenDataSource(tokens) {
     }
     names.add(match[1]);
   }
+  for (const match of generated.matchAll(/\bdef\s+match_token_([A-Za-z_][A-Za-z0-9_]*)_span\b/g)) {
+    names.add(match[1]);
+  }
   const variants = [...names].map((name) => {
     if (tokens.some((token) => token.startsWith(`${name}(`))) return `    ${name}(Str),`;
+    if (new RegExp(`\\b${name}\\(v\\)\\s*=>`).test(generated)) return `    ${name}(Str),`;
     return `    ${name},`;
   });
   return `data Token {\n${variants.join("\n")}\n}\n\ntype TokenSpan {\n    token: Token,\n    start: i64,\n    end: i64,\n}\n\n`;
@@ -201,7 +218,7 @@ function executableGeneratedSource(caseInfo, generated) {
     console.error("generated parser missing MatchResult insertion point");
     process.exit(1);
   }
-  return `${withoutShortCircuit.slice(0, astEnd)}${tokenDataSource(caseInfo.tokens || [])}${withoutShortCircuit.slice(astEnd)}\n${mainSource(caseInfo)}`;
+  return `${withoutShortCircuit.slice(0, astEnd)}${tokenDataSource(caseInfo.tokens || [], generated)}${withoutShortCircuit.slice(astEnd)}\n${mainSource(caseInfo)}`;
 }
 
 function blockTailMatchDefs(source) {
@@ -229,7 +246,7 @@ function blockTailMatchDefs(source) {
   return out.join("\n");
 }
 
-function runGeneratedParser(caseInfo, generated) {
+async function runGeneratedParser(caseInfo, generated) {
   const label = caseInfo.name == null ? caseInfo.file : `${caseInfo.file}:${caseInfo.name}`;
   if (!generated.includes("def parse_tokens")) {
     console.error(`[FAIL] generated parser case ${label}`);
@@ -251,8 +268,15 @@ function runGeneratedParser(caseInfo, generated) {
       process.exit(1);
     }
     fs.writeFileSync(watPath, wat.stdout);
-    const executed = run(`run generated parser wat ${label}`, "timeout", ["20", "node", "tools/node/run-wat.mjs", watPath, "--invoke", "main"]);
-    const actual = executed.stdout.trim().split(/\s+/).pop();
+    let actual = "";
+    try {
+      actual = await runWatMain(watPath);
+      console.log(`[PASS] run generated parser wat ${label}`);
+    } catch (error) {
+      console.error(`[FAIL] run generated parser wat ${label}`);
+      console.error(error && error.stack ? error.stack : error && error.message ? error.message : JSON.stringify(error));
+      process.exit(1);
+    }
     if (actual !== "0") {
       console.error(`[FAIL] generated parser AST ${label}`);
       console.error(`expected main -> 0, got ${actual}`);
@@ -274,5 +298,5 @@ for (const caseInfo of CASES) {
       process.exit(1);
     }
   }
-  runGeneratedParser(caseInfo, generated);
+  await runGeneratedParser(caseInfo, generated);
 }
