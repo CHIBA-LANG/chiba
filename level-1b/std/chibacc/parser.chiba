@@ -275,12 +275,37 @@ def chibacc_parse_sequence_atoms(source: str, offset: usize, end: usize): List[G
 }
 
 /// Parse a semantic action after `=>` on one alternative line.
-def chibacc_parse_action_source(source: str, arrow: usize, line_end: usize): GrammarAction = {
-    let start = chibacc_skip_ws(source, arrow + 2)
-    let semi = chibacc_find_byte(source, start, 59)
-    let end = if semi < line_end { semi } else { line_end }
+def chibacc_parse_action_source(source: str, arrow: usize, line_end: usize): GrammarAction =
+    chibacc_parse_balanced_action_source(source, arrow + 2, line_end)
+
+/// Parse a semantic action after `=>` while preserving balanced Chiba expressions.
+def chibacc_parse_balanced_action_source(source: str, action_start: usize, line_end: usize): GrammarAction = {
+    let start = chibacc_skip_ws(source, action_start)
+    let end = chibacc_action_end_balanced(source, start, line_end, 0, 0, 0)
     GrammarAction { source: chibacc_trimmed_slice(source, start, end) }
 }
+
+/// Return true when a balanced action can stop at the current byte.
+def chibacc_action_can_stop(source: str, offset: usize, line_end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize): bool =
+    if paren_depth > 0 || brace_depth > 0 || bracket_depth > 0 { false }
+    else if offset >= line_end { true }
+    else if chibacc_byte_at(source, offset) == 59 { true }
+    else { false }
+
+/// Find the end of a Chiba semantic action without cutting nested delimiters.
+def chibacc_action_end_balanced(source: str, offset: usize, line_end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize): usize =
+    if chibacc_action_can_stop(source, offset, line_end, paren_depth, brace_depth, bracket_depth) { offset }
+    else if offset >= chibacc_len(source) { offset }
+    else {
+        let byte = chibacc_byte_at(source, offset)
+        if byte == 40 { chibacc_action_end_balanced(source, offset + 1, line_end, paren_depth + 1, brace_depth, bracket_depth) }
+        else if byte == 41 { chibacc_action_end_balanced(source, offset + 1, line_end, if paren_depth > 0 { paren_depth - 1 } else { 0 }, brace_depth, bracket_depth) }
+        else if byte == 123 { chibacc_action_end_balanced(source, offset + 1, line_end, paren_depth, brace_depth + 1, bracket_depth) }
+        else if byte == 125 { chibacc_action_end_balanced(source, offset + 1, line_end, paren_depth, if brace_depth > 0 { brace_depth - 1 } else { 0 }, bracket_depth) }
+        else if byte == 91 { chibacc_action_end_balanced(source, offset + 1, line_end, paren_depth, brace_depth, bracket_depth + 1) }
+        else if byte == 93 { chibacc_action_end_balanced(source, offset + 1, line_end, paren_depth, brace_depth, if bracket_depth > 0 { bracket_depth - 1 } else { 0 }) }
+        else { chibacc_action_end_balanced(source, offset + 1, line_end, paren_depth, brace_depth, bracket_depth) }
+    }
 
 /// Parse one alternative line.
 def chibacc_parse_alternative_line(source: str, offset: usize, line_end: usize): Option[GrammarAlternative] = {

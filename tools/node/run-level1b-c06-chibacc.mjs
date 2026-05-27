@@ -25,6 +25,8 @@ const REQUIRED_TEXT = [
   "def chibacc_parse_namespace",
   "def chibacc_parse_start_name",
   "def chibacc_parse_rule_name",
+  "def chibacc_parse_balanced_action_source",
+  "def chibacc_action_end_balanced",
   "def lower_chibacc",
   "def retry_alternative",
   "def parse_pratt_at",
