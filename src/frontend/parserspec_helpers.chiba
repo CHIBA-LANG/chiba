@@ -4,6 +4,7 @@ use metalstd.option.*
 use metalstd.str.*
 use metalstd.vec.*
 use lexer.chiba_level1.*
+use frontend.lexer_spec.*
 use parser.chiba_level1.*
 
 def asttostring(ast: AST): Str = {
@@ -933,9 +934,7 @@ def parser_error_token_to_str(tokens: Vec, i: i64): Str = {
         out
     } else {
         let ts = vec_get(tokens, i) as TokenSpan
-        let _ = parser_span_to_str(out, ts.span)
-        let _ = str_push_sp(out)
-        let _ = parser_token_kind_to_str(out, ts.token)
+        let _ = tokenspan_to_str(out, ts)
         out
     }
 }

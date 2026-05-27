@@ -133,3 +133,62 @@ Domain expert: "No. Run a spec alignment audit first, then decide which stubs be
 Dev: "The truthfulness audit fails. Did we break the build?"
 
 Domain expert: "No. It is a feedback loop for known false-green paths; failure means it found blockers that must not be hidden."
+
+## Current Working Context — 2026-05-27
+
+**Active P0 checkpoint**:
+Current work is paused mid-mainline on generated ChibaCC parser WAT execution.
+This is not P0 complete. The active task is to make real generated parser source
+parse, check, emit WAT, and run under the WAT runner without hand-written WAT or
+`.scratch` edits.
+
+**Current failing command**:
+
+```sh
+timeout 20 node tools/node/run-wat.mjs .scratch/level-1b/chibacc-mini/simple.exec.exec.wat --invoke main
+```
+
+**Failure meaning**:
+The generated parser source is close enough to parse/check and emit WAT, but
+WAT validation fails because the active backend still leaks `i64` assumptions
+into ref-shaped values. In this slice `AST`, `Vec`, `TokenSpan`, token payload
+`Str`, and `Option[AST]` must lower to ref-compatible WAT shapes.
+
+**Key files for continuation**:
+
+- `tools/node/run-level1b-chibacc-mini.mjs`: mini ChibaCC generated parser runner and executable WAT harness.
+- `src/backend/wasm/wat.chiba`: active WAT emitter/runtime currently failing type correctness for generated parser execution.
+- `src/backend/cir/typed.chiba`: active CIR typing pass; may need stronger local/cast/pattern type propagation.
+- `level0/src/chibacc/codegen.chiba`: native generator source used by the current temp chibacc build.
+- `level-1b/std/chibacc/codegen.chiba`: level-1b chibacc generator model, not yet the full primary path.
+
+**Current local invariant**:
+For generated parser execution, `MatchResult` carries `AST`, not `i64`, and
+`LabeledAST` carries `OK(AST, Vec)` / `Err(Option[AST], Vec)`. Do not convert
+these back to `i64` just to satisfy a narrow WAT validator issue.
+
+**Immediate implementation direction**:
+
+- Make WAT local declarations derive from real typed values, not default `i64`.
+- Preserve `Str` as `(ref $array_u8)`, `AST`/nominal/data/record/vector as `eqref`
+  or their concrete heap refs as appropriate.
+- Make match pattern payload binders local-type aware.
+- Treat casts such as `__v0 as Str` as layout-aware ref casts/no-ops, not numeric casts.
+- Keep fixes in source/generator/backend; generated artifacts should be refreshed,
+  not manually patched.
+
+**Validation ladder for this checkpoint**:
+
+```sh
+timeout 300 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1c_main.chiba --output level1c.o
+timeout 120 vp run level1b:chibacc-mini
+timeout 120 vp run level1b:c08-semantic
+timeout 120 vp run level1b:c09-control-cps
+timeout 120 vp run level1b:c10-closure-package
+timeout 120 vp run level1b:c11-backend
+git diff --check
+```
+
+**Collaboration note**:
+If another engineer starts here, read `HANDOFF.md` first. It contains the exact
+temporary checkpoint state, known failing errors, and the do-not-do list.

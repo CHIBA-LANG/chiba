@@ -263,7 +263,14 @@ def source_project_has_duplicate_item(project: ProjectSurface): bool =
 
 /// Build fail-closed source gate diagnostics from source scan facts.
 def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
-    if source_project_has_utf8_warning(project) {
+    if source_project_parser_primary_blocked(project) {
+        Vec[SourceGateError].new()
+            .push(SourceGateError(
+                SourceFileId { index: 0 },
+                SourceGateParserPrimaryPathAbsent,
+                project.facts.parser.diagnostic))
+            .freeze()
+    } else if source_project_has_utf8_warning(project) {
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },

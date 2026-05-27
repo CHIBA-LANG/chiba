@@ -279,6 +279,27 @@ def typed_source_region_find_text_or_end(text: String, offset: usize, end: usize
     else if source_starts_with_at(text, offset, needle, 0) { offset }
     else { typed_source_region_find_text_or_end(text, offset + 1, end, needle) }
 
+/// Find the matching `}` for a `{` while preserving nested expression bodies.
+def typed_source_region_matching_brace(text: String, open: usize, end: usize, depth: usize): usize =
+    if open >= end { end }
+    else if open >= text.len() { end }
+    else {
+        let next = open + 1
+        if text.byte_at(open) == 123 { typed_source_region_matching_brace(text, next, end, depth + 1) }
+        else if text.byte_at(open) == 125 {
+            if depth == 1 { open }
+            else { typed_source_region_matching_brace(text, next, end, depth - 1) }
+        }
+        else { typed_source_region_matching_brace(text, next, end, depth) }
+    }
+
+/// Find the matching `}` for one known opening brace.
+def typed_source_region_match_open_brace(text: String, open: usize, end: usize): usize =
+    if open >= end { end }
+    else if open >= text.len() { end }
+    else if text.byte_at(open) != 123 { end }
+    else { typed_source_region_matching_brace(text, open, end, 0) }
+
 /// Return the first parameter name in a function header.
 def typed_function_first_param_name(text: String, item: TypedItemSkeleton): Option[SourceNameSlice] =
     let header_start = item.surface.header.offset
@@ -334,6 +355,10 @@ def typed_source_region_is_param(text: String, param: SourceNameSlice, start: us
     else if source_word_boundary_after(text, offset, param.len) == false { false }
     else { typed_source_region_only_spaces(text, offset + param.len, end) }
 
+/// Return true when a source type slice is one of the primitive direct backend types.
+def typed_type_slice_is_primitive_i32_like(text: String, ty: SourceNameSlice): bool =
+    source_name_slice_eq_text(text, ty, "i32") || source_name_slice_eq_text(text, ty, "bool")
+
 /// Pick an indexed function parameter from a bounded source region.
 def typed_function_param_index_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[usize] =
     typed_function_param_index_from_region_loop(text, item, start, end, item.surface.header.offset, 0)
@@ -359,6 +384,47 @@ def typed_function_param_index_from_region_loop(text: String, item: TypedItemSke
         }
     }
 
+/// Return the type annotation slice for a parameter declaration.
+def typed_function_param_type_slice(text: String, param: SourceNameSlice, decl_end: usize): Option[SourceNameSlice] =
+    let colon = typed_source_region_find_byte_or_end(text, source_name_slice_end(param), decl_end, 58)
+    if colon >= decl_end { None }
+    else {
+        let ty_start = source_skip_spaces(text, colon + 1)
+        if ty_start >= decl_end { None }
+        else {
+            let ty_end = source_scan_namespace_name_end(text, ty_start)
+            if ty_end <= ty_start { None }
+            else { Some(SourceNameSlice { offset: ty_start, len: ty_end - ty_start }) }
+        }
+    }
+
+/// Pick a parameter type slice when a bounded region exactly names that parameter.
+def typed_function_param_type_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[SourceNameSlice] =
+    typed_function_param_type_from_region_loop(text, item, start, end, item.surface.header.offset)
+
+/// Scan function params until the source region matches one param name.
+def typed_function_param_type_from_region_loop(text: String, item: TypedItemSkeleton, start: usize, end: usize, offset: usize): Option[SourceNameSlice] =
+    let close = typed_function_param_list_close(text, item)
+    let param_start = source_skip_spaces(text, offset)
+    let open = typed_source_region_find_byte_or_end(text, item.surface.header.offset, item.surface.header.offset + item.surface.header.len, 40)
+    let scan_start = if param_start <= open { source_skip_spaces(text, open + 1) } else { param_start }
+    if scan_start >= close { None }
+    else {
+        match source_scan_ident_slice(text, scan_start) {
+            Some(param) => {
+                let decl_end = typed_function_param_decl_end(text, source_name_slice_end(param), close)
+                if typed_source_region_is_param(text, param, start, end) {
+                    typed_function_param_type_slice(text, param, decl_end)
+                } else {
+                    let next = source_skip_spaces(text, decl_end)
+                    if next < close && text.byte_at(next) == 44 { typed_function_param_type_from_region_loop(text, item, start, end, next + 1) }
+                    else { None }
+                }
+            }
+            None => None
+        }
+    }
+
 /// Pick a typed indexed parameter expression from a bounded source region.
 def typed_function_param_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
     match typed_function_param_index_from_region(text, item, start, end) {
@@ -366,50 +432,39 @@ def typed_function_param_expr_from_region(text: String, item: TypedItemSkeleton,
         None => None
     }
 
-/// Scan a function-slice one-i32-const-argument tail-call target from a function body.
-def typed_function_tail_call_i32_const_slice(text: String, offset: usize, end: usize): Option[SourceNameSlice] =
-    if offset >= end { None }
-    else if offset >= text.len() { None }
-    else if source_is_ident_start(text.byte_at(offset)) {
-        let name_end = source_scan_namespace_name_end(text, offset)
-        let call_start = source_skip_spaces(text, name_end)
-        if call_start < end && text.byte_at(call_start) == 40 {
-            let arg_start = source_skip_spaces(text, call_start + 1)
-            match typed_i32_const_atom_from_region(text, arg_start, end) {
-                Some(arg) =>
-                    if typed_i32_const_call_arg_exact(text, arg_start, end, arg) {
-                        Some(SourceNameSlice { offset: offset, len: name_end - offset })
-                    } else { typed_function_tail_call_i32_const_slice(text, offset + 1, end) }
-                None => typed_function_tail_call_i32_const_slice(text, offset + 1, end)
-            }
-        } else { typed_function_tail_call_i32_const_slice(text, offset + 1, end) }
-    } else { typed_function_tail_call_i32_const_slice(text, offset + 1, end) }
-
-/// Pick the i32 const argument of a function-slice tail call.
-def typed_function_tail_call_i32_const_arg(text: String, target: SourceNameSlice, end: usize): Option[TypedI32ConstAtom] =
-    let call_start = source_skip_spaces(text, source_name_slice_end(target))
-    if call_start >= end { None }
-    else {
-        let arg_start = source_skip_spaces(text, call_start + 1)
-        match typed_i32_const_atom_from_region(text, arg_start, end) {
-            Some(arg) =>
-                if typed_i32_const_call_arg_exact(text, arg_start, end, arg) { Some(arg) }
-                else { None }
-            None => None
-        }
-    }
-
 /// Return true when a byte can separate simple call arguments.
 def typed_call_arg_separator(byte: u8): bool =
     if byte == 44 { true }
     else { byte == 41 }
 
-/// Find the next top-level simple call argument boundary.
+/// Find the next top-level call argument boundary.
 def typed_call_arg_end(text: String, offset: usize, end: usize): usize =
+    typed_call_arg_end_nested(text, offset, end, 0, 0, 0)
+
+/// Find the next top-level call argument boundary while preserving nested delimiters.
+def typed_call_arg_end_nested(text: String, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize): usize =
     if offset >= end { end }
     else if offset >= text.len() { end }
-    else if typed_call_arg_separator(text.byte_at(offset)) { offset }
-    else { typed_call_arg_end(text, offset + 1, end) }
+    else {
+        let byte = text.byte_at(offset)
+        if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 && typed_call_arg_separator(byte) { offset }
+        else if byte == 40 { typed_call_arg_end_nested(text, offset + 1, end, paren_depth + 1, brace_depth, bracket_depth) }
+        else if byte == 41 {
+            if paren_depth == 0 { offset }
+            else { typed_call_arg_end_nested(text, offset + 1, end, paren_depth - 1, brace_depth, bracket_depth) }
+        }
+        else if byte == 123 { typed_call_arg_end_nested(text, offset + 1, end, paren_depth, brace_depth + 1, bracket_depth) }
+        else if byte == 125 {
+            if brace_depth == 0 { offset }
+            else { typed_call_arg_end_nested(text, offset + 1, end, paren_depth, brace_depth - 1, bracket_depth) }
+        }
+        else if byte == 91 { typed_call_arg_end_nested(text, offset + 1, end, paren_depth, brace_depth, bracket_depth + 1) }
+        else if byte == 93 {
+            if bracket_depth == 0 { offset }
+            else { typed_call_arg_end_nested(text, offset + 1, end, paren_depth, brace_depth, bracket_depth - 1) }
+        }
+        else { typed_call_arg_end_nested(text, offset + 1, end, paren_depth, brace_depth, bracket_depth) }
+    }
 
 /// Parse one atom argument in a source-slice call.
 def typed_call_arg_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
@@ -418,7 +473,7 @@ def typed_call_arg_expr_from_region(text: String, item: TypedItemSkeleton, start
         None =>
         match typed_i32_const_atom_exact_from_region(text, start, end) {
             Some(atom) => Some(TypedExprI32Const(atom))
-            None => None
+            None => typed_function_expr_from_region(text, item, start, end)
         }
     }
 
@@ -469,6 +524,11 @@ def typed_pipe_args_have_placeholder(text: String, offset: usize, close: usize):
 def typed_pipe_prepend_lhs_arg(lhs: TypedExprKind, args: Array[TypedExprKind], index: usize, out: Vec[TypedExprKind]): Array[TypedExprKind] =
     if index == args.len() { out.freeze() }
     else { typed_pipe_prepend_lhs_arg(lhs, args, index + 1, out.push(args.get(index))) }
+
+/// Append one receiver expression before explicit method call arguments.
+def typed_method_receiver_first_args(receiver: TypedExprKind, args: Array[TypedExprKind], index: usize, out: Vec[TypedExprKind]): Array[TypedExprKind] =
+    if index == args.len() { out.freeze() }
+    else { typed_method_receiver_first_args(receiver, args, index + 1, out.push(args.get(index))) }
 
 /// Return true when a typed expression can still be used as a direct CPS atom.
 def typed_expr_is_atom_arg(expr: TypedExprKind): bool =
@@ -563,7 +623,10 @@ def typed_function_tail_call_args_body(text: String, item: TypedItemSkeleton, st
     else {
         let name_end = source_scan_namespace_name_end(text, offset)
         let call_start = source_skip_spaces(text, name_end)
-        if call_start >= end || text.byte_at(call_start) != 40 { None }
+        if call_start < end && text.byte_at(call_start) == 46 {
+            typed_method_tail_call_args_body(text, item, offset, name_end, call_start, end)
+        }
+        else if call_start >= end || text.byte_at(call_start) != 40 { None }
         else {
             let close = typed_source_region_find_byte_or_end(text, call_start + 1, end, 41)
             if close >= end { None }
@@ -580,17 +643,106 @@ def typed_function_tail_call_args_body(text: String, item: TypedItemSkeleton, st
         }
     }
 
-/// Parse a function-slice one-i32-const-argument tail call from a bounded arm.
-def typed_function_tail_call_i32_const_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
-    match typed_function_tail_call_i32_const_slice(text, start, end) {
-        Some(target) =>
-            match typed_function_tail_call_i32_const_arg(text, target, end) {
-                Some(arg) => Some(TypedExprTailCallArgs(
-                    typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)),
-                    Vec[TypedExprKind].new().push(typed_expr_from_i32_atom(arg)).freeze()))
+/// Parse a single top-level infix operator expression that maps to a method protocol call.
+def typed_operator_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    match typed_operator_find_add(text, source_skip_spaces(text, start), end, 0, 0, 0) {
+        Some(op) => typed_operator_add_expr_body(text, item, start, op, end)
+        None => None
+    }
+
+/// Find a top-level `+` operator in a bounded expression.
+def typed_operator_find_add(text: String, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize): Option[usize] =
+    if offset >= end { None }
+    else if offset >= text.len() { None }
+    else {
+        let byte = text.byte_at(offset)
+        if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 && byte == 43 { Some(offset) }
+        else if byte == 40 { typed_operator_find_add(text, offset + 1, end, paren_depth + 1, brace_depth, bracket_depth) }
+        else if byte == 41 {
+            typed_operator_find_add(text, offset + 1, end, if paren_depth > 0 { paren_depth - 1 } else { 0 }, brace_depth, bracket_depth)
+        }
+        else if byte == 123 { typed_operator_find_add(text, offset + 1, end, paren_depth, brace_depth + 1, bracket_depth) }
+        else if byte == 125 {
+            typed_operator_find_add(text, offset + 1, end, paren_depth, if brace_depth > 0 { brace_depth - 1 } else { 0 }, bracket_depth)
+        }
+        else if byte == 91 { typed_operator_find_add(text, offset + 1, end, paren_depth, brace_depth, bracket_depth + 1) }
+        else if byte == 93 {
+            typed_operator_find_add(text, offset + 1, end, paren_depth, brace_depth, if bracket_depth > 0 { bracket_depth - 1 } else { 0 })
+        }
+        else { typed_operator_find_add(text, offset + 1, end, paren_depth, brace_depth, bracket_depth) }
+    }
+
+/// Lower nominal `left + right` to `Receiver.op_add(left, right)` when receiver type is known.
+def typed_operator_add_expr_body(text: String, item: TypedItemSkeleton, start: usize, op: usize, end: usize): Option[TypedExprKind] =
+    match typed_function_expr_from_region(text, item, start, op) {
+        Some(left) =>
+            match typed_function_expr_from_region(text, item, op + 1, end) {
+                Some(right) =>
+                    match typed_function_param_type_from_region(text, item, start, op) {
+                        Some(receiver_ty) =>
+                            if typed_type_slice_is_primitive_i32_like(text, receiver_ty) { None }
+                            else {
+                                Some(TypedExprTailCallArgs(
+                                    typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, receiver_ty).concat(".op_add")),
+                                    Vec[TypedExprKind].new().push(left).push(right).freeze()))
+                            }
+                        None => None
+                    }
                 None => None
             }
         None => None
+    }
+
+/// Parse a source-slice receiver.method(args) call as receiver-first method form.
+def typed_method_tail_call_args_body(text: String, item: TypedItemSkeleton, receiver_start: usize, receiver_end: usize, dot: usize, end: usize): Option[TypedExprKind] =
+    let member_start = source_skip_spaces(text, dot + 1)
+    if member_start >= end || source_is_ident_start(text.byte_at(member_start)) == false { None }
+    else {
+        let member_end = source_scan_namespace_name_end(text, member_start)
+        let call_start = source_skip_spaces(text, member_end)
+        if call_start >= end || text.byte_at(call_start) != 40 { None }
+        else {
+            let close = typed_source_region_find_byte_or_end(text, call_start + 1, end, 41)
+            if close >= end { None }
+            else if typed_source_region_only_spaces(text, close + 1, end) == false { None }
+            else {
+                match typed_call_arg_exprs(text, item, call_start + 1, close, Vec[TypedExprKind].new()) {
+                    Some(args) => typed_method_or_qualified_call_expr(text, item, receiver_start, receiver_end, member_start, member_end, args)
+                    None => None
+                }
+            }
+        }
+    }
+
+/// Parse a dotted call as either receiver method or qualified static function.
+def typed_method_or_qualified_call_expr(text: String, item: TypedItemSkeleton, receiver_start: usize, receiver_end: usize, member_start: usize, member_end: usize, args: Array[TypedExprKind]): Option[TypedExprKind] =
+    match typed_call_arg_expr_from_region(text, item, receiver_start, receiver_end) {
+        Some(receiver) =>
+            Some(TypedExprTailCallArgs(
+                typed_method_target_from_receiver(text, item, receiver_start, receiver_end, member_start, member_end),
+                typed_method_receiver_first_args(receiver, args, 0, Vec[TypedExprKind].new().push(receiver))))
+        None =>
+            Some(TypedExprTailCallArgs(
+                typed_resolve_tail_call_target(
+                    text,
+                    item,
+                    text.slice(receiver_start, receiver_end - receiver_start).concat(".").concat(text.slice(member_start, member_end - member_start))),
+                args))
+    }
+
+/// Resolve a method call target through the receiver's declared nominal type when available.
+def typed_method_target_from_receiver(text: String, item: TypedItemSkeleton, receiver_start: usize, receiver_end: usize, member_start: usize, member_end: usize): str =
+    match typed_function_param_type_from_region(text, item, receiver_start, receiver_end) {
+        Some(receiver_ty) =>
+            typed_resolve_tail_call_target(
+                text,
+                item,
+                typed_function_tail_call_target_text(text, receiver_ty).concat(".").concat(text.slice(member_start, member_end - member_start)))
+        None =>
+            typed_resolve_tail_call_target(
+                text,
+                item,
+                text.slice(receiver_start, receiver_end - receiver_start).concat(".").concat(text.slice(member_start, member_end - member_start)))
     }
 
 /// Parse the literal condition of the first executable branch slice.
@@ -613,7 +765,8 @@ def typed_branch_condition_from_item_region(text: String, item: TypedItemSkeleto
         None => {
             let offset = source_skip_spaces(text, start)
             let if_start = source_skip_spaces(text, offset + "if".len())
-            match typed_function_param_index_from_region(text, item, if_start, end) {
+            let condition_end = typed_source_region_find_byte_or_end(text, if_start, end, 123)
+            match typed_function_param_index_from_region(text, item, if_start, condition_end) {
                 Some(index) => Some(TypedBranchConditionParam(index))
                 None => None
             }
@@ -622,27 +775,29 @@ def typed_branch_condition_from_item_region(text: String, item: TypedItemSkeleto
 
 /// Pick a non-branch typed expression from a bounded source region.
 def typed_function_non_branch_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
-    match typed_pipe_expr_body(text, item, start, end) {
-        Some(pipe) => Some(pipe)
+    match typed_operator_expr_body(text, item, start, end) {
+        Some(operator) => Some(operator)
         None =>
-        match typed_function_param_expr_from_region(text, item, start, end) {
-            Some(param) => Some(param)
+        match typed_pipe_expr_body(text, item, start, end) {
+            Some(pipe) => Some(pipe)
             None =>
-            match typed_i32_const_atom_exact_from_region(text, start, end) {
-                Some(atom) => Some(TypedExprI32Const(atom))
+            match typed_function_param_expr_from_region(text, item, start, end) {
+                Some(param) => Some(param)
                 None =>
-                    match typed_function_tail_call_i32_const_body(text, item, start, end) {
-                        Some(body) => Some(body)
-                        None =>
-                            match typed_function_tail_call_args_body(text, item, start, end) {
-                                Some(body) => Some(body)
-                                None =>
-                                    match typed_function_tail_call_target_slice(text, start, end) {
-                                        Some(target) => Some(TypedExprTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target))))
-                                        None => None
-                                    }
-                            }
-                    }
+                match typed_i32_const_atom_exact_from_region(text, start, end) {
+                    Some(atom) => Some(TypedExprI32Const(atom))
+                    None =>
+                        match typed_function_tail_call_args_body(text, item, start, end) {
+                            Some(body) => Some(body)
+                            None =>
+                                match typed_function_tail_call_target_slice(text, start, end) {
+                                    Some(target) => Some(TypedExprTailCallArgs(
+                                        typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)),
+                                        Vec[TypedExprKind].new().freeze()))
+                                    None => None
+                                }
+                        }
+                }
             }
         }
     }
@@ -701,19 +856,30 @@ def typed_function_if_else_expr_body(text: String, item: TypedItemSkeleton, star
     match typed_branch_condition_from_item_region(text, item, start, end) {
         Some(condition) => {
             let then_open = typed_source_region_find_byte_or_end(text, start, end, 123)
-            let then_close = typed_source_region_find_byte_or_end(text, then_open, end, 125)
+            let then_close = typed_source_region_match_open_brace(text, then_open, end)
             let else_offset = typed_source_region_find_text_or_end(text, then_close, end, "else")
-            let else_open = typed_source_region_find_byte_or_end(text, else_offset, end, 123)
-            let else_close = typed_source_region_find_byte_or_end(text, else_open, end, 125)
-            if then_open >= end || then_close >= end || else_offset >= end || else_open >= end || else_close > end {
+            let else_body = source_skip_spaces(text, else_offset + "else".len())
+            let else_open = typed_source_region_find_byte_or_end(text, else_body, end, 123)
+            let else_close = typed_source_region_match_open_brace(text, else_open, end)
+            if then_open >= end || then_close >= end || else_offset >= end {
                 None
             } else {
-                match typed_function_non_branch_expr_from_region(text, item, then_open + 1, then_close) {
-                    Some(then_expr) =>
-                        match typed_function_non_branch_expr_from_region(text, item, else_open + 1, else_close) {
+                match typed_function_expr_from_region(text, item, then_open + 1, then_close) {
+                    Some(then_expr) => {
+                        let else_start =
+                            if source_starts_with_at(text, else_body, "if", 0) { else_body }
+                            else { else_open + 1 }
+                        let else_end =
+                            if source_starts_with_at(text, else_body, "if", 0) { end }
+                            else { else_close }
+                        if else_start >= end || else_end > end { None }
+                        else {
+                            match typed_function_expr_from_region(text, item, else_start, else_end) {
                             Some(else_expr) => Some(TypedExprIfElse(condition, then_expr, else_expr))
                             None => None
                         }
+                        }
+                    }
                     None => None
                 }
             }
@@ -746,7 +912,7 @@ def typed_function_match_bool_expr_body(text: String, item: TypedItemSkeleton, s
     if source_starts_with_at(text, offset, "match", 0) == false { None }
     else {
         let open = typed_source_region_find_byte_or_end(text, offset, end, 123)
-        let close = typed_source_region_find_byte_or_end(text, open, end, 125)
+        let close = typed_source_region_match_open_brace(text, open, end)
         if open >= end || close > end { None }
         else {
             match typed_match_scrutinee_param_index(text, item, offset, open) {
@@ -759,9 +925,9 @@ def typed_function_match_bool_expr_body(text: String, item: TypedItemSkeleton, s
                         let false_expr_start = typed_match_arm_expr_start(text, false_pattern, close, "false")
                         let true_expr_end = typed_match_next_bool_arm(text, true_expr_start, close)
                         let false_expr_end = typed_match_next_bool_arm(text, false_expr_start, close)
-                        match typed_function_non_branch_expr_from_region(text, item, true_expr_start, true_expr_end) {
+                        match typed_function_expr_from_region(text, item, true_expr_start, true_expr_end) {
                             Some(then_expr) =>
-                                match typed_function_non_branch_expr_from_region(text, item, false_expr_start, false_expr_end) {
+                                match typed_function_expr_from_region(text, item, false_expr_start, false_expr_end) {
                                     Some(else_expr) => Some(TypedExprIfElse(TypedBranchConditionParam(param_index), then_expr, else_expr))
                                     None => None
                                 }
@@ -773,6 +939,24 @@ def typed_function_match_bool_expr_body(text: String, item: TypedItemSkeleton, s
             }
         }
     }
+
+/// Pick a typed expression from a bounded source region.
+def typed_function_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    let offset = source_skip_spaces(text, start)
+    if offset >= end { None }
+    else if source_starts_with_at(text, offset, "match", 0) {
+        match typed_function_match_bool_expr_body(text, item, offset, end) {
+            Some(body) => Some(body)
+            None => typed_function_non_branch_expr_from_region(text, item, offset, end)
+        }
+    }
+    else if source_starts_with_at(text, offset, "if", 0) {
+        match typed_function_if_else_expr_body(text, item, offset, end) {
+            Some(body) => Some(body)
+            None => typed_function_non_branch_expr_from_region(text, item, offset, end)
+        }
+    }
+    else { typed_function_non_branch_expr_from_region(text, item, offset, end) }
 
 /// Compare two function-slice source symbols byte-for-byte.
 def typed_function_symbol_eq(left: str, right: str, index: usize): bool =
@@ -1080,38 +1264,13 @@ def typed_function_body_kind_from_surface(text: String, item: TypedItemSkeleton)
             None => TypedExprUnit
         }
     }
-    else if typed_item_has_branching_surface(item) {
-        match typed_function_match_bool_expr_body(text, item, start, end) {
+    else {
+        match typed_function_expr_from_region(text, item, start, end) {
             Some(body) => body
             None =>
-                match typed_function_if_else_expr_body(text, item, start, end) {
-                    Some(body) => body
-                    None => TypedExprBranchJoinPending
-                }
+                if typed_item_has_branching_surface(item) { TypedExprBranchJoinPending }
+                else { TypedExprUnit }
         }
-    }
-    else {
-        match typed_function_non_branch_expr_from_region(text, item, start, end) {
-            Some(body) => body
-            None => TypedExprUnit
-        }
-    }
-
-/// Pick the non-const function-slice typed body form from the source body region.
-def typed_function_non_const_body_kind_from_surface(text: String, item: TypedItemSkeleton, start: usize, end: usize): TypedExprKind =
-    match typed_function_tail_call_i32_const_slice(text, start, end) {
-        Some(target) =>
-            match typed_function_tail_call_i32_const_arg(text, target, end) {
-                Some(arg) => TypedExprTailCallArgs(
-                    typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)),
-                    Vec[TypedExprKind].new().push(typed_expr_from_i32_atom(arg)).freeze())
-                None => TypedExprUnit
-            }
-        None =>
-            match typed_function_tail_call_target_slice(text, start, end) {
-                Some(target) => TypedExprTailCall(typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)))
-                None => TypedExprUnit
-            }
     }
 
 /// Convert one simple function skeleton into a typed function body fact.

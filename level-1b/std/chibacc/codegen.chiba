@@ -60,6 +60,32 @@ def parser_codegen_usize(value: usize): String =
 def append_parser_quoted(builder: DiagnosticBuilder, text: str): DiagnosticBuilder =
     builder.push_str(r#"""#).push_str(text).push_str(r#"""#)
 
+/// Append a list of expected token names into generated parser source.
+def append_recovery_expected_source(builder: DiagnosticBuilder, expected: List[str]): DiagnosticBuilder =
+    match expected {
+        ListNil => { builder.push_str("ListNil") }
+        ListCons(head, tail) => {
+            append_recovery_expected_source(append_parser_quoted(builder.push_str("ListCons("), head).push_str(", "), tail).push_str(")")
+        }
+    }
+
+/// Append a RecoveryAction expression into generated parser source.
+def append_recovery_action_source(builder: DiagnosticBuilder, action: RecoveryAction): DiagnosticBuilder =
+    match action {
+        RecoveryNone => builder.push_str("RecoveryNone")
+        RecoveryInsert(token) => append_parser_quoted(builder.push_str("RecoveryInsert("), token).push_str(")")
+        RecoverySkipUntil(expected) =>
+            append_recovery_expected_source(builder.push_str("RecoverySkipUntil("), expected).push_str(")")
+    }
+
+/// Append `recover(action, error)` for one alternative failure.
+def append_recover_error_source(builder: DiagnosticBuilder, action: RecoveryAction): DiagnosticBuilder =
+    append_recovery_action_source(builder.push_str("recover("), action).push_str(", error)")
+
+/// Append one generated `Err(error)` branch with alternative recovery.
+def append_recover_error_branch_source(builder: DiagnosticBuilder, action: RecoveryAction): DiagnosticBuilder =
+    append_recover_error_source(builder.push_str("            Err(error) => Err("), action).push_str(")\n")
+
 /// Return true when source starts with a fixed string at offset.
 def parser_codegen_starts_with_at(source: String, offset: usize, needle: str, index: usize): bool =
     if index == needle.len() { true }
@@ -186,7 +212,7 @@ def append_repeat_consumer_functions(builder: DiagnosticBuilder, prefix: str, at
     }
 
 /// Append recursive parse steps for one alternative.
-def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], action: GrammarAction, step: usize, position_expr: str, repeat_prefix: str): DiagnosticBuilder =
+def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], action: GrammarAction, recovery: RecoveryAction, step: usize, position_expr: str, repeat_prefix: str): DiagnosticBuilder =
     match atoms {
         ListNil =>
             append_action_source(
@@ -213,12 +239,13 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                             step_name),
                         tail,
                         action,
+                        recovery,
                         step + 1,
                         step_name.concat(".position"),
                         repeat_prefix)
                         .push_str(r#"            }\n"#)
                         .push_str(r#"            Err(_) => {\n"#)
-                    append_alt_steps(with_success, tail, action, step + 1, position_expr, repeat_prefix)
+                    append_alt_steps(with_success, tail, action, recovery, step + 1, position_expr, repeat_prefix)
                         .push_str(r#"            }\n"#)
                         .push_str(r#"        }\n"#)
                 }
@@ -233,6 +260,7 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                             .push_str(r#") => {\n"#)
                         tail,
                         action,
+                        recovery,
                         step + 1,
                         step_name.concat(".position"),
                         repeat_prefix)
@@ -258,6 +286,7 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                             .push_str(r#") => {\n"#)
                         tail,
                         action,
+                        recovery,
                         step + 1,
                         step_name.concat(".position"),
                         repeat_prefix)
@@ -269,9 +298,9 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                         .push_str(r#"        }\n"#)
                 GrammarToken(name) =>
                     if parser_atom_is_empty_token(name) {
-                        append_alt_steps(builder, tail, action, step + 1, position_expr, repeat_prefix)
+                        append_alt_steps(builder, tail, action, recovery, step + 1, position_expr, repeat_prefix)
                     } else {
-                        append_alt_steps(
+                        let with_success = append_alt_steps(
                             append_atom_binding(
                                 append_atom_parse_call(builder.push_str("        match "), atom, position_expr)
                                     .push_str(r#" {\n"#)
@@ -282,15 +311,17 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                                 step_name),
                             tail,
                             action,
+                            recovery,
                             step + 1,
                             step_name.concat(".position"),
                             repeat_prefix)
                             .push_str(r#"            }\n"#)
-                            .push_str("            Err(error) => Err(error)\n")
+                        append_recover_error_branch_source(with_success, recovery)
                             .push_str(r#"        }\n"#)
                     }
                 _ =>
-                    append_alt_steps(
+                    {
+                        let with_success = append_alt_steps(
                         append_atom_binding(
                             append_atom_parse_call(builder.push_str("        match "), atom, position_expr)
                                 .push_str(r#" {\n"#)
@@ -301,12 +332,14 @@ def append_alt_steps(builder: DiagnosticBuilder, atoms: List[GrammarAtom], actio
                             step_name),
                         tail,
                         action,
+                        recovery,
                         step + 1,
                         step_name.concat(".position"),
                         repeat_prefix)
                         .push_str(r#"            }\n"#)
-                        .push_str("            Err(error) => Err(error)\n")
-                        .push_str(r#"        }\n"#)
+                        append_recover_error_branch_source(with_success, recovery)
+                            .push_str(r#"        }\n"#)
+                    }
             }
         }
     }
@@ -453,6 +486,7 @@ def append_alternative_function(builder: DiagnosticBuilder, rule: LoweredRule, a
             .push_str("(tokens: Array[TokenSpan], position: ParsePosition): Result[ParseCandidate[AST], ParseFailure] =\n"),
         alt.sequence.atoms,
         alt.action,
+        alt.recovery,
         0,
         "position",
         "parse_".concat(rule.name.text).concat("_alt_").concat(parser_codegen_usize(alt.index)))
@@ -500,6 +534,7 @@ def append_pratt_prefix_function(builder: DiagnosticBuilder, rule: LoweredRule, 
             .push_str("(tokens: Array[TokenSpan], position: ParsePosition): Result[ParseCandidate[AST], ParseFailure] =\n"),
         arm.sequence.atoms,
         arm.action,
+        RecoveryNone,
         0,
         "position",
         "parse_".concat(rule.name.text).concat("_prefix_").concat(parser_codegen_usize(index)))

@@ -243,3 +243,175 @@ pnpm -s run smoke:parser-errors
 pnpm -s run semantic:gates
 pnpm -s run checkpoint:gates
 ```
+
+---
+
+# Temporary handoff checkpoint — P0 mainline WAT execution
+
+Date: 2026-05-27
+
+This checkpoint exists so another engineer can continue from the exact current
+state. It is **not** a P0 completion checkpoint.
+
+## Current branch and dirty scope
+
+- Branch: `master`
+- Remote tracking: `master...origin/master`
+- Current worktree has 19 modified files before this handoff update.
+- The large generated file `src/frontend/chiba_level1_parser.chiba` is modified because the frontend grammar was regenerated earlier. Do not hand-edit generated parser output; change `src/frontend/chiba-level1.chibacc` / generator helpers and regenerate.
+- The most recent manual edit before this handoff was in `tools/node/run-level1b-chibacc-mini.mjs`: generated harness token pushes no longer cast `TokenSpan` to `i64`.
+
+Modified areas currently in the worktree:
+
+- `TODO.md`: small truthful notes about global constants and missing match cases.
+- `level-1b/compiler/*`: semantic/CPS/backend fact threading work.
+- `level-1b/std/chibacc/codegen.chiba`: recovery-codegen plumbing.
+- `level0/src/chibacc/*`: native chibacc generator/runtime changes used as the current generator source.
+- `src/backend/cir/*`: typed/alpha support for the active level1c path.
+- `src/backend/wasm/wat.chiba`: WAT runtime/type/emission support for generated parser execution.
+- `src/frontend/*`: chibacc grammar/helper/parser refresh.
+- `tools/node/run-level1b-*.mjs`: runner and mini generated-parser WAT execution harness changes.
+
+## Active objective
+
+User objective remains:
+
+- finish all P0,
+- do not add extra gates/TODO as substitute progress,
+- include unit tests,
+- compile real, inspectable, runnable WAT/wasm,
+- only call back for chibacc proper once P0 blockers are actually cleared.
+
+Do not mark P0 done from this checkpoint. The immediate local task is narrower:
+make `level1b:chibacc-mini` generated parser WAT validate and run through
+`tools/node/run-wat.mjs`, then expand coverage to C08-C11 and the remaining P0
+semantic slices.
+
+## Last reproduced failure
+
+Command:
+
+```sh
+timeout 20 node tools/node/run-wat.mjs .scratch/level-1b/chibacc-mini/simple.exec.exec.wat --invoke main
+```
+
+Observed failure class:
+
+- Binaryen/Wasm validator rejects generated parser WAT.
+- The source parser file parses/checks and WAT is emitted, but WAT local/param
+  types are inconsistent.
+
+Representative errors:
+
+- `match_token_Ident_span`: `MatchOK` expects first arg `AST`/`eqref`, but local payload was emitted with the wrong WAT type.
+- `match_token`: `streq` expects `(ref $array_u8)` args, but local `want` was emitted as the wrong WAT type.
+- `parse_rule_0_alt_0_step_*`: `__v*` AST step params and locals are still inconsistently typed.
+- `harness_tokens`: `tokens` local and `vec_push` args were emitted as `i64` instead of ref/`eqref`.
+
+Current generated source shape from `.scratch/level-1b/chibacc-mini/simple.exec.exec.chiba` is already closer to the intended model:
+
+```chiba
+data MatchResult {
+    MatchOK(AST, i64, i64),
+    MatchFail(i64)
+}
+
+data LabeledAST {
+    OK(AST, Vec),
+    Err(Option[AST], Vec)
+}
+
+def parse_rule_0_alt_0_step_3(..., __v0: AST, __v1: AST, __v2: AST): MatchResult = {
+    let name: Str = __v0 as Str
+    let value: Str = __v2 as Str
+    MatchOK(Assign(name, value), pos, recovered)
+}
+```
+
+So the next problem is mostly active `level1c.o` WAT emission/type propagation,
+not a generated-source parse problem.
+
+## Immediate next fix
+
+Continue in `src/backend/wasm/wat.chiba` and, if needed,
+`src/backend/cir/typed.chiba`.
+
+Expected fixes:
+
+- local declarations for `L1StmtLet` should derive from the value expression
+  type instead of defaulting to `i64`;
+- local declarations for `L2StmtLet` already have explicit `CirType`, but verify
+  casts like `__v0 as Str` become `(ref $array_u8)` locals;
+- match-pattern payload binders must declare locals using the matched variant
+  field type, not always `i64`;
+- function params should continue using `wat_param_valtype(...)` against source
+  AST declarations, because generated parser functions now declare `AST`, `Str`,
+  `Vec`, and `TokenSpan`;
+- casts between `AST`/nominal/`Str` need real WAT casts or layout-aware no-op,
+  not scalar `i64` behavior.
+
+After any source fix, rebuild and rerun:
+
+```sh
+timeout 300 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1c_main.chiba --output level1c.o
+timeout 120 vp run level1b:chibacc-mini
+```
+
+If only inspecting the existing emitted WAT error, use:
+
+```sh
+timeout 20 node tools/node/run-wat.mjs .scratch/level-1b/chibacc-mini/simple.exec.exec.wat --invoke main
+```
+
+## Important generator note
+
+`tools/node/run-level1b-chibacc-mini.mjs` currently prefers:
+
+```js
+/tmp/chibacc-project-mainline/target/debug/chibacc.new.o
+```
+
+if it exists, otherwise `./chibacc.o`.
+
+This means the generated parser used by the mini runner may come from the
+temporary `/tmp/chibacc-project-mainline` generator, not only from files in this
+repo. If continuing from a fresh environment, either rebuild that temp generator
+or point the runner at the intended native chibacc binary.
+
+Known rebuild command for that temp generator:
+
+```sh
+timeout 120 ./chibac_amd64-unknown-linux_chiba_dev.o --project /tmp/chibacc-project-mainline --entry main.chibacc.chiba --output chibacc.new.o
+```
+
+The `--output` must be a relative filename in that command.
+
+## Current P0 truth
+
+P0 is still incomplete. The current closest blocker is generated parser WAT
+execution, but the broader P0 still includes:
+
+- chibacc-mini generated parser WAT execution;
+- C08-C11 real AST/CPS/Core/WAT input coverage beyond narrow slices;
+- namespace/method/operator resolution;
+- typed AST traversal and real expression elaboration;
+- pattern/pipe/ADT tuple/intrinsic lowering;
+- one-pass CPS + beta over real expressions and branches;
+- closure/Cont1/ContN capture extraction and lowering, especially ContN frame bodies;
+- UTF-8/XID shared frontend source;
+- regex VM/bootstrap subset;
+- chibalex/chibacc self-host primary path.
+
+Do not claim “only chibacc remains”.
+
+## Do not do
+
+- Do not write new gate TODOs instead of implementing the blocker.
+- Do not edit `.scratch` generated files as the fix.
+- Do not hand-edit `src/frontend/chiba_level1_parser.chiba`; regenerate it.
+- Do not use `chibac_amd64-unknown-linux_chiba_dev.o` as proof for level-1b
+  generated parser execution. It is the level0 seed used to rebuild
+  `target/debug/level1c.o`.
+- Do not introduce fake-total node types such as `ExprI32Add`,
+  `TypedExprTailCallI32Const`, or `CoreExprParam0` to pass a narrow case.
+- Do not couple CIR to Wasm-GC layout or WAT opcodes.

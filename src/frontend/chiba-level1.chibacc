@@ -627,7 +627,7 @@ rule if_else_after_else ::=
     ;
 
 rule match_expr ::= 
-    KwMatch value:match_value LBrace arms:match_arm_list RBrace => Expr_Match(value, arms)
+    KwMatch value:match_value LBrace arms:match_arm_list => Expr_Match(value, arms)
     ;
 
 rule match_value ::= 
@@ -658,8 +658,12 @@ rule control_label_opt ::=
     ;
 
 rule match_arm_list ::= 
-    _:trivia_list arm:match_arm rest:match_arm_list => MatchArm_Cons(arm, rest)
-    | => MatchArm_End
+    _:trivia_list body:match_arm_list_after_trivia => body
+    ;
+
+rule match_arm_list_after_trivia ::=
+    RBrace => MatchArm_End
+    | arm:match_arm rest:match_arm_list => MatchArm_Cons(arm, rest)
     ;
 
 rule match_arm ::= 
@@ -668,6 +672,7 @@ rule match_arm ::=
 
 rule match_arm_value ::=
     block:block_expr => block
+    | name:Ident rest:match_value_ident_rest => expr_from_match_ident_rest(name, rest)
     | value:expr => value
     ;
 

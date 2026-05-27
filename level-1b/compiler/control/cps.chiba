@@ -37,6 +37,7 @@ data CpsAtom {
 data CpsTermKind {
     CpsTermReturn(CpsAtom),
     CpsTermTailCall(str, Array[CpsAtom]),
+    CpsTermTailCallExprs(str, Array[CpsTermKind]),
     CpsTermBranch(TypedBranchCondition, CpsTermKind, CpsTermKind),
     CpsTermApplyContinuation(CpsContinuation, CpsAtom),
     CpsTermPendingJoin,
@@ -353,7 +354,7 @@ def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
         TypedExprTailCallArgs(target, args) =>
             match cps_atoms_from_typed_args(args, 0, Vec[CpsAtom].new()) {
                 Some(atoms) => CpsTermTailCall(target, atoms)
-                None => CpsTermPendingJoin
+                None => CpsTermTailCallExprs(target, cps_terms_from_typed_args(args, 0, Vec[CpsTermKind].new()))
             }
         TypedExprIfElse(condition, then_expr, else_expr) =>
             CpsTermBranch(condition, cps_term_from_typed_expr(then_expr), cps_term_from_typed_expr(else_expr))
@@ -377,6 +378,11 @@ def cps_atoms_from_typed_args(args: Array[TypedExprKind], index: usize, out: Vec
             None => None
         }
     }
+
+/// Convert typed call arguments into CPS terms when argument lowering is not atomic.
+def cps_terms_from_typed_args(args: Array[TypedExprKind], index: usize, out: Vec[CpsTermKind]): Array[CpsTermKind] =
+    if index == args.len() { out.freeze() }
+    else { cps_terms_from_typed_args(args, index + 1, out.push(cps_term_from_typed_expr(args.get(index)))) }
 
 /// Convert one typed function into the CPS term fact consumed by Core.
 def cps_term_fact_from_function(function: TypedFunctionFact): CpsTermFact =

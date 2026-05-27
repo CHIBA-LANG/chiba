@@ -168,10 +168,53 @@ def alpha_match_arms(arms: CirMatchArmList, ctx: AlphaCtx): CirMatchArmList =
         CirMatchArmEnd => CirMatchArmEnd
         CirMatchArmCons(arm, rest) =>
             match arm {
-                L0MatchArm(pat, guard, value) =>
-                    CirMatchArmCons(L1MatchArm(pat, guard, alpha_expr(value, ctx)), alpha_match_arms(rest, ctx))
+                L0MatchArm(pat, guard, value) => {
+                    let old_env = alpha_env_get(ctx)
+                    let _ = alpha_bind_pattern_ctx(ctx, pat)
+                    let value2 = alpha_expr(value, ctx)
+                    let _ = alpha_env_set(ctx, old_env)
+                    CirMatchArmCons(L1MatchArm(pat, guard, value2), alpha_match_arms(rest, ctx))
+                }
                 _ => CirMatchArmCons(arm, alpha_match_arms(rest, ctx))
             }
+    }
+
+def alpha_bind_pattern_list_ctx(ctx: AlphaCtx, xs: AST): i64 =
+    match xs {
+        PatternList_Cons(head, tail) => {
+            let _ = alpha_bind_pattern_ctx(ctx, head)
+            alpha_bind_pattern_list_ctx(ctx, tail)
+        }
+        _ => 0
+    }
+
+def alpha_bind_pattern_ctx(ctx: AlphaCtx, pat: AST): i64 =
+    match pat {
+        Pattern_IdentStart(name, rest) =>
+            match rest {
+                PatternAfterIdent_Bind(inner) => {
+                    let id = alpha_fresh(ctx)
+                    let _ = alpha_env_push_ctx(ctx, name, id, 0)
+                    alpha_bind_pattern_ctx(ctx, inner)
+                }
+                PatternAfterIdent_Atom(tail) =>
+                    match tail {
+                        PatternIdent_Name =>
+                            if name.len == 0 { 0 }
+                            else {
+                                let id = alpha_fresh(ctx)
+                                alpha_env_push_ctx(ctx, name, id, 0)
+                            }
+                        PatternIdent_Call(args) => alpha_bind_pattern_list_ctx(ctx, args)
+                        _ => 0
+                    }
+                _ => 0
+            }
+        Pattern_Paren(first, tail) => {
+            let _ = alpha_bind_pattern_ctx(ctx, first)
+            alpha_bind_pattern_list_ctx(ctx, tail)
+        }
+        _ => 0
     }
 
 def alpha_expr(expr: CirExpr, ctx: AlphaCtx): CirExpr =

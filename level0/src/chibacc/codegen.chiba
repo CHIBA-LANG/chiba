@@ -362,6 +362,26 @@ def find_sync_token_name(items: Vec, i: i64): Str =
         else { find_sync_token_name(items, i + 1) }
     }
 
+def sync_stop_token_name(sync_name: Str): Str =
+    if streq(sync_name, mk_str("FatArrow", 8)) != 0 { mk_str("RBrace", 6) }
+    else { str_empty() }
+
+def emit_recovery_position_expr(out: Str, sync_name: Str): i64 = {
+    let stop_name = sync_stop_token_name(sync_name)
+    let _ = if stop_name.len > 0 {
+        let _ = str_push_cstr(out, "let recover_pos = find_token_position_before(tokens, fail_pos, ")
+        let _ = emit_str_expr(out, sync_name)
+        let _ = str_push_cstr(out, ", ")
+        let _ = emit_str_expr(out, stop_name)
+        str_push_cstr(out, ")")
+    } else {
+        let _ = str_push_cstr(out, "let recover_pos = find_token_position(tokens, fail_pos, ")
+        let _ = emit_str_expr(out, sync_name)
+        str_push_cstr(out, ")")
+    }
+    str_push(out, 10)
+}
+
 def emit_value_params(out: Str, count: i64, i: i64): i64 =
     if i >= count { 0 }
     else {
@@ -518,9 +538,9 @@ def emit_atom_parse_expr(out: Str, rules: Vec, atom: IrAtom): i64 =
                 str_push_cstr(out, "match_eof(tokens, pos)")
             }
             else if is_token_name(name) != 0 {
-                let _ = str_push_cstr(out, "match_token_")
-                let _ = str_append(out, name)
-                let _ = str_push_cstr(out, "(tokens, pos)")
+                let _ = str_push_cstr(out, "match_token(tokens, pos, ")
+                let _ = emit_str_expr(out, name)
+                let _ = str_push(out, 41)
                 0
             }
             else {
@@ -642,9 +662,11 @@ def emit_pratt_done_fn(out: Str, rule_i: i64, kind: cstr, block_i: i64, arm_i: i
             } else { 0 }
             let _ = emit_label_bindings(out, items, 0)
             let _ = emit_indent(out, 1)
-            let _ = str_push_cstr(out, "MatchOK((")
+            let _ = str_push_cstr(out, "let __action_ast: AST = ")
             let _ = emit_action_piece(out, action, 0)
-            let _ = str_push_cstr(out, ") as i64, pos, recovered)\n")
+            let _ = str_push_cstr(out, "\n")
+            let _ = emit_line_cstr(out, 1, c"let __action_value: i64 = __action_ast as i64")
+            let _ = emit_line_cstr(out, 1, c"MatchOK(__action_value, pos, recovered)")
             let _ = emit_line_cstr(out, 0, c"}")
             let _ = str_push(out, 10)
             0
@@ -692,7 +714,7 @@ def emit_pratt_step_fn(out: Str, rules: Vec, rule_i: i64, rule_name: Str, kind: 
                         let _ = str_push_cstr(out, "(tokens: Vec, pos: i64, recovered: i64")
                         let _ = emit_lhs_param(out, has_lhs)
                         let _ = emit_value_params(out, step_i, 0)
-                        let _ = str_push_cstr(out, "): MatchResult =\n")
+                        let _ = str_push_cstr(out, "): MatchResult = {\n")
                         let _ = emit_indent(out, 1)
                         let _ = str_push_cstr(out, "match ")
                         let _ = emit_pratt_arm_item_fn_name(out, rule_i, kind, block_i, arm_i, step_i)
@@ -700,20 +722,18 @@ def emit_pratt_step_fn(out: Str, rules: Vec, rule_i: i64, rule_name: Str, kind: 
                         let _ = emit_indent(out, 2)
                         let _ = str_push_cstr(out, "MatchOK(__v")
                         let _ = emit_i64(out, step_i)
-                        let _ = str_push_cstr(out, ", pos1, recovered1) => ")
+                        let _ = str_push_cstr(out, ", pos1, recovered1) => { ")
                         let _ = emit_pratt_arm_step_fn_name(out, rule_i, kind, block_i, arm_i, step_i + 1)
                         let _ = str_push_cstr(out, "(tokens, pos1, recover_or(recovered, recovered1)")
                         let _ = emit_lhs_arg(out, has_lhs)
                         let _ = emit_value_args(out, step_i, 0)
                         let _ = str_push_cstr(out, ", __v")
                         let _ = emit_i64(out, step_i)
-                        let _ = str_push_cstr(out, ")\n")
+                        let _ = str_push_cstr(out, ") }\n")
                         let _ = if sync_name.len > 0 {
                             let _ = emit_line_cstr(out, 2, c"MatchFail(fail_pos) => {")
                             let _ = emit_indent(out, 3)
-                            let _ = str_push_cstr(out, "let recover_pos = find_token_position(tokens, fail_pos, ")
-                            let _ = emit_str_expr(out, sync_name)
-                            let _ = str_push_cstr(out, ")\n")
+                            let _ = emit_recovery_position_expr(out, sync_name)
                             let _ = emit_line_cstr(out, 3, c"if recover_pos >= 0 {")
                             let _ = emit_indent(out, 4)
                             let _ = str_push_cstr(out, "match ")
@@ -731,9 +751,10 @@ def emit_pratt_step_fn(out: Str, rules: Vec, rule_i: i64, rule_name: Str, kind: 
                             let _ = emit_line_cstr(out, 2, c"}")
                             0
                         } else {
-                            emit_line_cstr(out, 2, c"MatchFail(fail_pos) => MatchFail(fail_pos)")
+                            emit_line_cstr(out, 2, c"MatchFail(fail_pos) => { MatchFail(fail_pos) }")
                         }
                         let _ = emit_line_cstr(out, 1, c"}")
+                        let _ = emit_line_cstr(out, 0, c"}")
                         let _ = str_push(out, 10)
                         emit_pratt_step_fn(out, rules, rule_i, rule_name, kind, block_i, arm_i, alt, step_i + 1, self_bp, has_lhs)
                     }
@@ -937,7 +958,7 @@ def emit_pratt_arm_dispatch_case_fns(out: Str, rule_i: i64, kind: cstr, block_i:
         let _ = str_push_cstr(out, "(tokens, pos")
         let _ = emit_lhs_arg(out, has_lhs)
         let _ = str_push_cstr(out, ") {\n")
-        let _ = emit_line_cstr(out, 2, c"MatchOK(ast, pos1, recovered) => MatchOK(ast, pos1, recovered)")
+        let _ = emit_line_cstr(out, 2, c"MatchOK(ast, pos1, recovered) => { MatchOK(ast, pos1, recovered) }")
         if arm_i + 1 >= vec_len(arms) {
             let _ = emit_line_cstr(out, 2, c"MatchFail(fail_pos) => MatchFail(fail_pos)")
         } else {
@@ -1031,14 +1052,14 @@ def emit_pratt_prefix_dispatch_case_fn(out: Str, rule_i: i64, prefixes: Vec, blo
         let _ = emit_indent(out, 0)
         let _ = str_push_cstr(out, "def ")
         let _ = emit_pratt_prefix_dispatch_case_fn_name(out, rule_i, block_i)
-        let _ = str_push_cstr(out, "(tokens: Vec, pos: i64): MatchResult =\n")
+        let _ = str_push_cstr(out, "(tokens: Vec, pos: i64): MatchResult = {\n")
         let _ = emit_indent(out, 1)
         let _ = str_push_cstr(out, "match ")
         let _ = emit_pratt_block_fn_name(out, rule_i, c"prefix", block_i)
         let _ = str_push_cstr(out, "(tokens, pos) {\n")
         let _ = emit_line_cstr(out, 2, c"MatchOK(ast, pos1, recovered) => MatchOK(ast, pos1, recovered)")
         let _ = if block_i + 1 >= vec_len(prefixes) {
-            emit_line_cstr(out, 2, c"MatchFail(fail_pos) => MatchFail(fail_pos)")
+            emit_line_cstr(out, 2, c"MatchFail(fail_pos) => { MatchFail(fail_pos) }")
         } else {
             let _ = emit_line_cstr(out, 2, c"MatchFail(fail_pos) => {")
             let _ = emit_line_cstr(out, 3, c"if fail_pos > pos { MatchFail(fail_pos) }")
@@ -1049,6 +1070,7 @@ def emit_pratt_prefix_dispatch_case_fn(out: Str, rule_i: i64, prefixes: Vec, blo
             emit_line_cstr(out, 2, c"}")
         }
         let _ = emit_line_cstr(out, 1, c"}")
+        let _ = emit_line_cstr(out, 0, c"}")
         let _ = str_push(out, 10)
         emit_pratt_prefix_dispatch_case_fn(out, rule_i, prefixes, block_i + 1)
     }
@@ -1293,9 +1315,11 @@ def emit_done_fn(out: Str, rule_i: i64, alt_i: i64, alt: IrAlt): i64 =
             let _ = str_push_cstr(out, "): MatchResult = {\n")
             let _ = emit_label_bindings(out, items, 0)
             let _ = emit_indent(out, 1)
-            let _ = str_push_cstr(out, "MatchOK((")
+            let _ = str_push_cstr(out, "let __action_ast: AST = ")
             let _ = str_append(out, action)
-            let _ = str_push_cstr(out, ") as i64, pos, recovered)\n")
+            let _ = str_push_cstr(out, "\n")
+            let _ = emit_line_cstr(out, 1, c"let __action_value: i64 = __action_ast as i64")
+            let _ = emit_line_cstr(out, 1, c"MatchOK(__action_value, pos, recovered)")
             let _ = emit_line_cstr(out, 0, c"}")
             let _ = str_push(out, 10)
             0
@@ -1336,7 +1360,7 @@ def emit_step_fn(out: Str, rules: Vec, rule_i: i64, alt_i: i64, alt: IrAlt, step
                         let _ = emit_step_fn_name(out, rule_i, alt_i, step_i)
                         let _ = str_push_cstr(out, "(tokens: Vec, pos: i64, recovered: i64")
                         let _ = emit_value_params(out, step_i, 0)
-                        let _ = str_push_cstr(out, "): MatchResult =\n")
+                        let _ = str_push_cstr(out, "): MatchResult = {\n")
                         let _ = emit_indent(out, 1)
                         let _ = str_push_cstr(out, "match ")
                         let _ = emit_item_fn_name(out, rule_i, alt_i, step_i)
@@ -1344,27 +1368,24 @@ def emit_step_fn(out: Str, rules: Vec, rule_i: i64, alt_i: i64, alt: IrAlt, step
                         let _ = emit_indent(out, 2)
                         let _ = str_push_cstr(out, "MatchOK(__v")
                         let _ = emit_i64(out, step_i)
-                        let _ = str_push_cstr(out, ", pos1, recovered1) => ")
+                        let _ = str_push_cstr(out, ", pos1, recovered1) => { ")
                         let _ = emit_step_fn_name(out, rule_i, alt_i, step_i + 1)
                         let _ = str_push_cstr(out, "(tokens, pos1, recover_or(recovered, recovered1)")
                         let _ = emit_value_args(out, step_i, 0)
                         let _ = str_push_cstr(out, ", __v")
                         let _ = emit_i64(out, step_i)
-                        let _ = str_push_cstr(out, ")\n")
+                        let _ = str_push_cstr(out, ") }\n")
                         let _ = if sync_name.len > 0 {
                             let _ = emit_line_cstr(out, 2, c"MatchFail(fail_pos) => {")
                             let _ = emit_indent(out, 3)
-                            let _ = str_push_cstr(out, "let recover_pos = find_token_position(tokens, fail_pos, ")
-                            let _ = emit_str_expr(out, sync_name)
-                            let _ = str_push_cstr(out, ")\n")
+                            let _ = emit_recovery_position_expr(out, sync_name)
                             let _ = emit_line_cstr(out, 3, c"if recover_pos >= 0 {")
                             let _ = emit_indent(out, 4)
                             let _ = str_push_cstr(out, "match ")
                             let _ = emit_step_fn_name(out, rule_i, alt_i, step_i + 1)
                             let _ = str_push_cstr(out, "(tokens, recover_pos, recover_or(recovered, 1)")
                             let _ = emit_value_args(out, step_i, 0)
-                            let _ = str_push_cstr(out, ", 0")
-                            let _ = str_push_cstr(out, ") {\n")
+                            let _ = str_push_cstr(out, ", 0) {\n")
                             let _ = emit_line_cstr(out, 5, c"MatchOK(ast, pos2, recovered2) => MatchOK(ast, pos2, recovered2)")
                             let _ = emit_line_cstr(out, 5, c"MatchFail(fail_pos1) => MatchFail(fail_pos1)")
                             let _ = emit_line_cstr(out, 4, c"}")
@@ -1373,9 +1394,10 @@ def emit_step_fn(out: Str, rules: Vec, rule_i: i64, alt_i: i64, alt: IrAlt, step
                             let _ = emit_line_cstr(out, 2, c"}")
                             0
                         } else {
-                            emit_line_cstr(out, 2, c"MatchFail(fail_pos) => MatchFail(fail_pos)")
+                            emit_line_cstr(out, 2, c"MatchFail(fail_pos) => { MatchFail(fail_pos) }")
                         }
                         let _ = emit_line_cstr(out, 1, c"}")
+                        let _ = emit_line_cstr(out, 0, c"}")
                         let _ = str_push(out, 10)
                         emit_step_fn(out, rules, rule_i, alt_i, alt, step_i + 1)
                     }
@@ -1551,7 +1573,7 @@ def emit_rule_alt_dispatch_fn(out: Str, rule_i: i64, alts: Vec, alt_i: i64): i64
         let _ = emit_indent(out, 0)
         let _ = str_push_cstr(out, "def ")
         let _ = emit_rule_dispatch_fn_name(out, rule_i, alt_i)
-        let _ = str_push_cstr(out, "(tokens: Vec, pos: i64): MatchResult =\n")
+        let _ = str_push_cstr(out, "(tokens: Vec, pos: i64): MatchResult = {\n")
         let _ = emit_indent(out, 1)
         let _ = str_push_cstr(out, "match ")
         let _ = emit_alt_fn_name(out, rule_i, alt_i)
@@ -1570,6 +1592,7 @@ def emit_rule_alt_dispatch_fn(out: Str, rule_i: i64, alts: Vec, alt_i: i64): i64
             emit_line_cstr(out, 2, c"}")
         }
         let _ = emit_line_cstr(out, 1, c"}")
+        let _ = emit_line_cstr(out, 0, c"}")
         let _ = str_push(out, 10)
         emit_rule_alt_dispatch_fn(out, rule_i, alts, alt_i + 1)
     }
@@ -1638,7 +1661,8 @@ def emit_support_helpers(out: Str, token_names: Vec, bound_names: Vec): i64 = {
     let _ = emit_line_cstr(out, 1, c"token_prefix_loop(tokens, 0, n, vec_new())")
     let _ = str_push(out, 10)
     let _ = emit_line_cstr(out, 0, c"def token_prefix_loop(tokens: Vec, i: i64, n: i64, out: Vec): Vec =")
-    let _ = emit_line_cstr(out, 1, c"if i >= n || i >= vec_len(tokens) { out }")
+    let _ = emit_line_cstr(out, 1, c"if i >= n { out }")
+    let _ = emit_line_cstr(out, 1, c"else if i >= vec_len(tokens) { out }")
     let _ = emit_line_cstr(out, 1, c"else {")
     let _ = emit_line_cstr(out, 2, c"let _ = vec_push(out, vec_get(tokens, i))")
     let _ = emit_line_cstr(out, 2, c"token_prefix_loop(tokens, i + 1, n, out)")
@@ -1651,39 +1675,40 @@ def emit_support_helpers(out: Str, token_names: Vec, bound_names: Vec): i64 = {
     let _ = emit_line_cstr(out, 1, c"else { 0 }")
     let _ = str_push(out, 10)
 
-    // ── TokenSpan-aware match_token (dispatcher) ───────────────
-    // The tokens Vec now contains TokenSpan objects (as i64).
-    // For each known token name we generate a dedicated match function.
-    // The match_token dispatcher checks `want` and calls the right one.
-    // Tokens on the bound_names list get payload extraction,
-    // others return 0 as the value.
-    let _ = emit_per_token_match_fns(out, token_names, bound_names)
-
-    let _ = emit_line_cstr(out, 0, c"def match_token(tokens: Vec, pos: i64, want: Str): MatchResult =")
-    let _ = emit_match_token_dispatcher(out, token_names, 0)
+    let _ = if vec_len(token_names) > 32 {
+        emit_compact_match_token(out, token_names, bound_names)
+    } else {
+        emit_small_match_token(out, token_names, bound_names)
+    }
     let _ = str_push(out, 10)
 
-    let _ = emit_line_cstr(out, 0, c"def match_eof(tokens: Vec, pos: i64): MatchResult =")
+    let _ = emit_line_cstr(out, 0, c"def match_eof(tokens: Vec, pos: i64): MatchResult = {")
     let _ = emit_line_cstr(out, 1, c"if pos >= vec_len(tokens) { MatchOK(0 as i64, pos, 0) }")
     let _ = emit_line_cstr(out, 1, c"else {")
     let _ = emit_line_cstr(out, 2, c"let ts = vec_get(tokens, pos) as TokenSpan")
-    let _ = emit_line_cstr(out, 2, c"match ts.token {")
-    let _ = emit_line_cstr(out, 3, c"Eof => MatchOK(0 as i64, pos + 1, 0)")
-    let _ = emit_line_cstr(out, 3, c"_ => MatchFail(pos)")
+    let _ = emit_line_cstr(out, 2, c"let token = ts.token")
+    let _ = emit_line_cstr(out, 2, c"match token {")
+    let _ = emit_line_cstr(out, 3, c"Eof => { MatchOK(0 as i64, pos + 1, 0) }")
+    let _ = emit_line_cstr(out, 3, c"_ => { MatchFail(pos) }")
     let _ = emit_line_cstr(out, 2, c"}")
     let _ = emit_line_cstr(out, 1, c"}")
+    let _ = emit_line_cstr(out, 0, c"}")
     let _ = str_push(out, 10)
 
     // Error recovery helpers — also TokenSpan aware
-    let _ = emit_line_cstr(out, 0, c"def token_name_matches_span(ts: TokenSpan, name: Str): i64 =")
-    let _ = emit_token_is_dispatcher_if(out, token_names, bound_names, 0)
+    let _ = if vec_len(token_names) > 32 {
+        emit_compact_token_name_matches_span(out, token_names, bound_names)
+    } else {
+        emit_small_token_name_matches_span(out, token_names, bound_names)
+    }
     let _ = str_push(out, 10)
 
-    let _ = emit_line_cstr(out, 0, c"def token_matches_name(tokens: Vec, pos: i64, name: Str): i64 =")
+    let _ = emit_line_cstr(out, 0, c"def token_matches_name(tokens: Vec, pos: i64, name: Str): i64 = {")
     let _ = emit_line_cstr(out, 1, c"if streq(name, mk_str(\"Eof\", 3)) != 0 {")
     let _ = emit_line_cstr(out, 2, c"if pos >= vec_len(tokens) { 1 } else {")
     let _ = emit_line_cstr(out, 3, c"let ts = vec_get(tokens, pos) as TokenSpan")
-    let _ = emit_line_cstr(out, 3, c"match ts.token { Eof => 1  _ => 0 }")
+    let _ = emit_line_cstr(out, 3, c"let token = ts.token")
+    let _ = emit_line_cstr(out, 3, c"match token { Eof => { 1 }  _ => { 0 } }")
     let _ = emit_line_cstr(out, 2, c"}")
     let _ = emit_line_cstr(out, 1, c"}")
     let _ = emit_line_cstr(out, 1, c"else if pos < vec_len(tokens) {")
@@ -1691,12 +1716,20 @@ def emit_support_helpers(out: Str, token_names: Vec, bound_names: Vec): i64 = {
     let _ = emit_line_cstr(out, 2, c"token_name_matches_span(ts, name)")
     let _ = emit_line_cstr(out, 1, c"}")
     let _ = emit_line_cstr(out, 1, c"else { 0 }")
+    let _ = emit_line_cstr(out, 0, c"}")
     let _ = str_push(out, 10)
 
     let _ = emit_line_cstr(out, 0, c"def find_token_position(tokens: Vec, pos: i64, name: Str): i64 =")
     let _ = emit_line_cstr(out, 1, c"if pos > vec_len(tokens) { 0 - 1 }")
     let _ = emit_line_cstr(out, 1, c"else if token_matches_name(tokens, pos, name) != 0 { pos }")
     let _ = emit_line_cstr(out, 1, c"else { find_token_position(tokens, pos + 1, name) }")
+    let _ = str_push(out, 10)
+    let _ = emit_line_cstr(out, 0, c"def find_token_position_before(tokens: Vec, pos: i64, name: Str, stop: Str): i64 = {")
+    let _ = emit_line_cstr(out, 1, c"if pos > vec_len(tokens) { 0 - 1 }")
+    let _ = emit_line_cstr(out, 1, c"else if token_matches_name(tokens, pos, stop) != 0 { 0 - 1 }")
+    let _ = emit_line_cstr(out, 1, c"else if token_matches_name(tokens, pos, name) != 0 { pos }")
+    let _ = emit_line_cstr(out, 1, c"else { find_token_position_before(tokens, pos + 1, name, stop) }")
+    let _ = emit_line_cstr(out, 0, c"}")
     let _ = str_push(out, 10)
     0
 }
@@ -1741,163 +1774,256 @@ def emit_token_constructor_pattern(out: Str, name: Str, arity: i64, is_bound: i6
     } else { 0 }
 }
 
-// Generate: def match_token_<Name>(tokens: Vec, pos: i64): MatchResult = ...
-def emit_per_token_match_fns(out: Str, token_names: Vec, bound_names: Vec): i64 =
-    emit_per_token_match_fns_loop(out, token_names, bound_names, 0)
-
-def emit_per_token_match_fns_loop(out: Str, token_names: Vec, bound_names: Vec, i: i64): i64 =
-    if i >= vec_len(token_names) { 0 }
-    else {
-        let name = vec_get(token_names, i) as Str
-        let is_bound = token_name_in_bound_list(name, bound_names)
-        let arity = token_match_arity(name, is_bound)
-        let _ = emit_indent(out, 0)
-        let _ = str_push_cstr(out, "def match_token_")
-        let _ = str_append(out, name)
-        let _ = str_push_cstr(out, "(tokens: Vec, pos: i64): MatchResult =\n")
-        let _ = emit_indent(out, 1)
-        let _ = str_push_cstr(out, "if pos < vec_len(tokens) {\n")
-        let _ = emit_indent(out, 2)
-        let _ = str_push_cstr(out, "let ts = vec_get(tokens, pos) as TokenSpan\n")
-        let _ = emit_indent(out, 2)
-        let _ = str_push_cstr(out, "match ts.token {\n")
-        let _ = emit_indent(out, 3)
-        let _ = emit_token_constructor_pattern(out, name, arity, is_bound)
-        if is_bound != 0 {
-            let _ = str_push_cstr(out, " => MatchOK(v as i64, pos + 1, 0)\n")
-        } else {
-            let _ = str_push_cstr(out, " => MatchOK(0 as i64, pos + 1, 0)\n")
-        }
-        let _ = emit_indent(out, 3)
-        let _ = str_push_cstr(out, "_ => MatchFail(pos)\n")
-        let _ = emit_indent(out, 2)
-        let _ = str_push_cstr(out, "}\n")
-        let _ = emit_indent(out, 1)
-        let _ = str_push_cstr(out, "}\n")
-        let _ = emit_indent(out, 1)
-        let _ = str_push_cstr(out, "else { MatchFail(pos) }\n")
-        let _ = str_push(out, 10)
-        emit_per_token_match_fns_loop(out, token_names, bound_names, i + 1)
-    }
-
-// Generate: if streq(want, mk_str("X", N)) != 0 { match_token_X(tokens, pos) } else ...
-def emit_match_token_case_fn_name(out: Str, i: i64): i64 = {
-    let _ = str_push_cstr(out, "match_token_case_")
-    emit_i64(out, i)
+def emit_token_fn_name(out: Str, prefix: cstr, name: Str): i64 = {
+    let _ = str_push_cstr(out, prefix)
+    str_append(out, name)
 }
 
-def emit_match_token_dispatch_case_fns(out: Str, token_names: Vec, i: i64): i64 =
+def emit_one_token_match_fn(out: Str, name: Str, bound_names: Vec): i64 = {
+    let is_bound = token_name_in_bound_list(name, bound_names)
+    let arity = token_match_arity(name, is_bound)
+    let _ = emit_indent(out, 0)
+    let _ = str_push_cstr(out, "def ")
+    let _ = emit_token_fn_name(out, c"match_token_", name)
+    let _ = str_push_cstr(out, "(tokens: Vec, pos: i64): MatchResult = {\n")
+    let _ = emit_line_cstr(out, 1, c"if pos < vec_len(tokens) {")
+    let _ = emit_line_cstr(out, 2, c"let ts = vec_get(tokens, pos) as TokenSpan")
+    let _ = emit_line_cstr(out, 2, c"let token = ts.token")
+    let _ = emit_line_cstr(out, 2, c"match token {")
+    let _ = emit_indent(out, 3)
+    let _ = emit_token_constructor_pattern(out, name, arity, is_bound)
+    let _ = str_push_cstr(out, " => { ")
+    let _ = if is_bound != 0 {
+        str_push_cstr(out, "MatchOK(v as i64, pos + 1, 0)")
+    } else {
+        str_push_cstr(out, "MatchOK(0 as i64, pos + 1, 0)")
+    }
+    let _ = str_push_cstr(out, " }\n")
+    let _ = emit_line_cstr(out, 3, c"_ => { MatchFail(pos) }")
+    let _ = emit_line_cstr(out, 2, c"}")
+    let _ = emit_line_cstr(out, 1, c"}")
+    let _ = emit_line_cstr(out, 1, c"else { MatchFail(pos) }")
+    let _ = emit_line_cstr(out, 0, c"}")
+    str_push(out, 10)
+}
+
+def emit_per_token_match_fns(out: Str, token_names: Vec, bound_names: Vec, i: i64): i64 =
     if i >= vec_len(token_names) { 0 }
     else {
         let name = vec_get(token_names, i) as Str
-        let _ = emit_indent(out, 0)
-        let _ = str_push_cstr(out, "def ")
-        let _ = emit_match_token_case_fn_name(out, i)
-        let _ = str_push_cstr(out, "(tokens: Vec, pos: i64, want: Str): MatchResult =\n")
-        let _ = emit_indent(out, 1)
-        let _ = str_push_cstr(out, "if streq(want, ")
-        let _ = emit_str_expr(out, name)
-        let _ = str_push_cstr(out, ") != 0 {\n")
-        let _ = emit_indent(out, 2)
-        let _ = str_push_cstr(out, "match_token_")
-        let _ = str_append(out, name)
-        let _ = str_push_cstr(out, "(tokens, pos)\n")
-        if i + 1 >= vec_len(token_names) {
-            let _ = emit_line_cstr(out, 1, c"}")
-            let _ = emit_line_cstr(out, 1, c"else {")
-            let _ = emit_line_cstr(out, 2, c"MatchFail(pos)")
-            let _ = emit_line_cstr(out, 1, c"}")
-        } else {
-            let _ = emit_line_cstr(out, 1, c"}")
-            let _ = emit_line_cstr(out, 1, c"else {")
-            let _ = emit_indent(out, 2)
-            let _ = emit_match_token_case_fn_name(out, i + 1)
-            let _ = str_push_cstr(out, "(tokens, pos, want)\n")
-            let _ = emit_line_cstr(out, 1, c"}")
-        }
-        let _ = str_push(out, 10)
-        emit_match_token_dispatch_case_fns(out, token_names, i + 1)
+        let _ = emit_one_token_match_fn(out, name, bound_names)
+        emit_per_token_match_fns(out, token_names, bound_names, i + 1)
     }
 
 def emit_match_token_dispatcher(out: Str, token_names: Vec, i: i64): i64 =
     if i >= vec_len(token_names) {
-        let _ = emit_line_cstr(out, 1, c"MatchFail(pos)")
-        0
-    }
-    else {
+        emit_line_cstr(out, 1, c"MatchFail(pos)")
+    } else {
         let name = vec_get(token_names, i) as Str
         let _ = emit_indent(out, 1)
-        let _ = if i == 0 { str_push_cstr(out, "if streq(want, ") }
-                else { str_push_cstr(out, "else if streq(want, ") }
+        let _ = if i == 0 { str_push_cstr(out, "if streq(want, ") } else { str_push_cstr(out, "else if streq(want, ") }
         let _ = emit_str_expr(out, name)
-        let _ = str_push_cstr(out, ") != 0 {\n")
-        let _ = emit_indent(out, 2)
-        let _ = str_push_cstr(out, "match_token_")
-        let _ = str_append(out, name)
-        let _ = str_push_cstr(out, "(tokens, pos)\n")
-        let _ = emit_line_cstr(out, 1, c"}")
-        if i + 1 >= vec_len(token_names) {
-            let _ = emit_line_cstr(out, 1, c"else {")
-            let _ = emit_line_cstr(out, 2, c"MatchFail(pos)")
-            let _ = emit_line_cstr(out, 1, c"}")
-            0
-        } else {
-            emit_match_token_dispatcher(out, token_names, i + 1)
-        }
+        let _ = str_push_cstr(out, ") != 0 { ")
+        let _ = emit_token_fn_name(out, c"match_token_", name)
+        let _ = str_push_cstr(out, "(tokens, pos) }\n")
+        emit_match_token_dispatcher(out, token_names, i + 1)
     }
 
-// Generate: if streq(name, mk_str("X", N)) != 0 { match ts.token { X.. } } else if ...
-def emit_token_is_dispatcher_if(out: Str, token_names: Vec, bound_names: Vec, i: i64): i64 =
-    if i >= vec_len(token_names) {
-        let _ = emit_line_cstr(out, 1, c"0")
-        0
+def emit_one_token_is_fn(out: Str, name: Str, bound_names: Vec): i64 = {
+    let is_bound = token_name_in_bound_list(name, bound_names)
+    let arity = token_match_arity(name, is_bound)
+    let _ = emit_indent(out, 0)
+    let _ = str_push_cstr(out, "def ")
+    let _ = emit_token_fn_name(out, c"token_is_", name)
+    let _ = str_push_cstr(out, "(ts: TokenSpan): i64 = {\n")
+    let _ = emit_line_cstr(out, 1, c"let token = ts.token")
+    let _ = emit_line_cstr(out, 1, c"match token {")
+    let _ = emit_indent(out, 2)
+    let _ = emit_token_constructor_pattern(out, name, arity, 0)
+    let _ = str_push_cstr(out, " => { 1 }\n")
+    let _ = emit_line_cstr(out, 2, c"_ => { 0 }")
+    let _ = emit_line_cstr(out, 1, c"}")
+    let _ = emit_line_cstr(out, 0, c"}")
+    str_push(out, 10)
+}
+
+def emit_per_token_is_fns(out: Str, token_names: Vec, bound_names: Vec, i: i64): i64 =
+    if i >= vec_len(token_names) { 0 }
+    else {
+        let name = vec_get(token_names, i) as Str
+        let _ = emit_one_token_is_fn(out, name, bound_names)
+        emit_per_token_is_fns(out, token_names, bound_names, i + 1)
     }
+
+def emit_token_is_dispatcher_if(out: Str, token_names: Vec, i: i64): i64 =
+    if i >= vec_len(token_names) {
+        emit_line_cstr(out, 1, c"0")
+    } else {
+        let name = vec_get(token_names, i) as Str
+        let _ = emit_indent(out, 1)
+        let _ = if i == 0 { str_push_cstr(out, "if streq(name, ") } else { str_push_cstr(out, "else if streq(name, ") }
+        let _ = emit_str_expr(out, name)
+        let _ = str_push_cstr(out, ") != 0 { ")
+        let _ = emit_token_fn_name(out, c"token_is_", name)
+        let _ = str_push_cstr(out, "(ts) }\n")
+        emit_token_is_dispatcher_if(out, token_names, i + 1)
+    }
+
+def emit_compact_match_token(out: Str, token_names: Vec, bound_names: Vec): i64 = {
+    let _ = emit_line_cstr(out, 0, c"def match_token(tokens: Vec, pos: i64, want: Str): MatchResult = {")
+    let _ = emit_line_cstr(out, 1, c"if pos < vec_len(tokens) {")
+    let _ = emit_line_cstr(out, 2, c"let ts = vec_get(tokens, pos) as TokenSpan")
+    let _ = emit_line_cstr(out, 2, c"let token = ts.token")
+    let _ = emit_match_token_if_chain(out, token_names, bound_names, 2, 0)
+    let _ = emit_line_cstr(out, 1, c"}")
+    let _ = emit_line_cstr(out, 1, c"else { MatchFail(pos) }")
+    emit_line_cstr(out, 0, c"}")
+}
+
+def emit_small_match_token(out: Str, token_names: Vec, bound_names: Vec): i64 = {
+    emit_compact_match_token(out, token_names, bound_names)
+}
+
+def emit_compact_token_name_matches_span(out: Str, token_names: Vec, bound_names: Vec): i64 = {
+    let _ = emit_line_cstr(out, 0, c"def token_name_matches_span(ts: TokenSpan, name: Str): i64 = {")
+    let _ = emit_line_cstr(out, 1, c"let token = ts.token")
+    let _ = emit_token_name_if_chain(out, token_names, bound_names, 1, 0)
+    emit_line_cstr(out, 0, c"}")
+}
+
+def emit_small_token_name_matches_span(out: Str, token_names: Vec, bound_names: Vec): i64 = {
+    emit_compact_token_name_matches_span(out, token_names, bound_names)
+}
+
+def emit_match_token_single_match(out: Str, name: Str, bound_names: Vec, indent: i64): i64 = {
+    let is_bound = token_name_in_bound_list(name, bound_names)
+    let arity = token_match_arity(name, is_bound)
+    let _ = emit_line_cstr(out, indent, c"match token {")
+    let _ = emit_indent(out, indent + 1)
+    let _ = emit_token_constructor_pattern(out, name, arity, is_bound)
+    let _ = str_push_cstr(out, " => { ")
+    let _ = if is_bound != 0 {
+        str_push_cstr(out, "MatchOK(v as i64, pos + 1, 0)")
+    } else {
+        str_push_cstr(out, "MatchOK(0 as i64, pos + 1, 0)")
+    }
+    let _ = str_push_cstr(out, " }\n")
+    let _ = emit_line_cstr(out, indent + 1, c"_ => { MatchFail(pos) }")
+    emit_line_cstr(out, indent, c"}")
+}
+
+def emit_match_token_if_chain(out: Str, token_names: Vec, bound_names: Vec, indent: i64, i: i64): i64 =
+    if i >= vec_len(token_names) {
+        emit_line_cstr(out, indent, c"MatchFail(pos)")
+    } else {
+        let name = vec_get(token_names, i) as Str
+        let _ = emit_indent(out, indent)
+        let _ = str_push_cstr(out, "if streq(want, ")
+        let _ = emit_str_expr(out, name)
+        let _ = str_push_cstr(out, ") != 0 {\n")
+        let _ = emit_match_token_single_match(out, name, bound_names, indent + 1)
+        let _ = emit_line_cstr(out, indent, c"}")
+        let _ = emit_line_cstr(out, indent, c"else {")
+        let _ = emit_match_token_if_chain(out, token_names, bound_names, indent + 1, i + 1)
+        emit_line_cstr(out, indent, c"}")
+    }
+
+def emit_token_name_single_match(out: Str, name: Str, bound_names: Vec, indent: i64): i64 = {
+    let is_bound = token_name_in_bound_list(name, bound_names)
+    let arity = token_match_arity(name, is_bound)
+    let _ = emit_line_cstr(out, indent, c"match token {")
+    let _ = emit_indent(out, indent + 1)
+    let _ = emit_token_constructor_pattern(out, name, arity, 0)
+    let _ = str_push_cstr(out, " => { 1 }\n")
+    let _ = emit_line_cstr(out, indent + 1, c"_ => { 0 }")
+    emit_line_cstr(out, indent, c"}")
+}
+
+def emit_token_name_if_chain(out: Str, token_names: Vec, bound_names: Vec, indent: i64, i: i64): i64 =
+    if i >= vec_len(token_names) {
+        emit_line_cstr(out, indent, c"0")
+    } else {
+        let name = vec_get(token_names, i) as Str
+        let _ = emit_indent(out, indent)
+        let _ = str_push_cstr(out, "if streq(name, ")
+        let _ = emit_str_expr(out, name)
+        let _ = str_push_cstr(out, ") != 0 {\n")
+        let _ = emit_token_name_single_match(out, name, bound_names, indent + 1)
+        let _ = emit_line_cstr(out, indent, c"}")
+        let _ = emit_line_cstr(out, indent, c"else {")
+        let _ = emit_token_name_if_chain(out, token_names, bound_names, indent + 1, i + 1)
+        emit_line_cstr(out, indent, c"}")
+    }
+
+def emit_match_token_cases(out: Str, token_names: Vec, bound_names: Vec, i: i64): i64 =
+    if i >= vec_len(token_names) { 0 }
     else {
         let name = vec_get(token_names, i) as Str
         let is_bound = token_name_in_bound_list(name, bound_names)
         let arity = token_match_arity(name, is_bound)
-        let _ = emit_indent(out, 1)
-        let _ = if i == 0 { str_push_cstr(out, "if streq(name, ") }
-                else { str_push_cstr(out, "else if streq(name, ") }
-        let _ = emit_str_expr(out, name)
-        let _ = str_push_cstr(out, ") != 0 {\n")
-        let _ = emit_indent(out, 2)
-        let _ = str_push_cstr(out, "match ts.token {\n")
         let _ = emit_indent(out, 3)
-        let _ = emit_token_constructor_pattern(out, name, arity, 0)
-        let _ = str_push_cstr(out, " => 1\n")
-        let _ = emit_line_cstr(out, 3, c"_ => 0")
-        let _ = emit_line_cstr(out, 2, c"}")
-        let _ = emit_line_cstr(out, 1, c"}")
-        if i + 1 >= vec_len(token_names) {
-            let _ = emit_line_cstr(out, 1, c"else {")
-            let _ = emit_line_cstr(out, 2, c"0")
-            let _ = emit_line_cstr(out, 1, c"}")
-            0
+        let _ = emit_token_constructor_pattern(out, name, arity, is_bound)
+        let _ = str_push_cstr(out, " => { ")
+        let _ = str_push_cstr(out, "if streq(want, ")
+        let _ = emit_str_expr(out, name)
+        let _ = str_push_cstr(out, ") != 0 { ")
+        let _ = if is_bound != 0 {
+            str_push_cstr(out, "MatchOK(v as i64, pos + 1, 0)")
         } else {
-            emit_token_is_dispatcher_if(out, token_names, bound_names, i + 1)
+            str_push_cstr(out, "MatchOK(0 as i64, pos + 1, 0)")
         }
+        let _ = str_push_cstr(out, " } else { MatchFail(pos) } }\n")
+        emit_match_token_cases(out, token_names, bound_names, i + 1)
+    }
+
+def emit_token_name_match_cases(out: Str, token_names: Vec, bound_names: Vec, i: i64): i64 =
+    if i >= vec_len(token_names) { 0 }
+    else {
+        let name = vec_get(token_names, i) as Str
+        let is_bound = token_name_in_bound_list(name, bound_names)
+        let arity = token_match_arity(name, is_bound)
+        let _ = emit_indent(out, 2)
+        let _ = emit_token_constructor_pattern(out, name, arity, 0)
+        let _ = str_push_cstr(out, " => { if streq(name, ")
+        let _ = emit_str_expr(out, name)
+        let _ = str_push_cstr(out, ") != 0 { 1 } else { 0 } }\n")
+        emit_token_name_match_cases(out, token_names, bound_names, i + 1)
     }
 
 def emit_start_fn(out: Str, ir: GrammarIr): i64 = {
     let start_idx = find_rule_index(ir_rules(ir), ir_start_rule(ir))
 
     // ── parse_tokens: production entry point (tokens from lexer) ──
-    let _ = emit_line_cstr(out, 0, c"def parse_tokens(tokens: Vec): LabeledAST = {")
+    let _ = emit_line_cstr(out, 0, c"def finish_parse_tokens_eof_ok(tokens: Vec, ast: i64, pos: i64): LabeledAST =")
+    let _ = emit_line_cstr(out, 1, c"OK(ast, token_prefix(tokens, pos))")
+    let _ = str_push(out, 10)
+    let _ = emit_line_cstr(out, 0, c"def finish_parse_tokens_eof_fail(tokens: Vec, ast: i64, pos: i64): LabeledAST =")
+    let _ = emit_line_cstr(out, 1, c"Err(Some(ast), token_prefix(tokens, pos))")
+    let _ = str_push(out, 10)
+    let _ = emit_line_cstr(out, 0, c"def finish_parse_tokens_eof_result(tokens: Vec, ast: i64, pos: i64, result: MatchResult): LabeledAST = {")
+    let _ = emit_line_cstr(out, 1, c"match result {")
+    let _ = emit_line_cstr(out, 2, c"MatchOK(_, _, _) => { finish_parse_tokens_eof_ok(tokens, ast, pos) }")
+    let _ = emit_line_cstr(out, 2, c"MatchFail(_) => { finish_parse_tokens_eof_fail(tokens, ast, pos) }")
+    let _ = emit_line_cstr(out, 1, c"}")
+    let _ = emit_line_cstr(out, 0, c"}")
+    let _ = str_push(out, 10)
+    let _ = emit_line_cstr(out, 0, c"def finish_parse_tokens_eof(tokens: Vec, ast: i64, pos: i64): LabeledAST =")
+    let _ = emit_line_cstr(out, 1, c"finish_parse_tokens_eof_result(tokens, ast, pos, match_eof(tokens, pos))")
+    let _ = str_push(out, 10)
+    let _ = emit_line_cstr(out, 0, c"def finish_parse_tokens(tokens: Vec, ast: i64, pos: i64, recovered: i64): LabeledAST =")
+    let _ = emit_line_cstr(out, 1, c"if recovered != 0 { Err(Some(ast), token_prefix(tokens, pos)) }")
+    let _ = emit_line_cstr(out, 1, c"else { finish_parse_tokens_eof(tokens, ast, pos) }")
+    let _ = str_push(out, 10)
+    let _ = emit_line_cstr(out, 0, c"def parse_tokens(tokens: Vec): LabeledAST =")
     let _ = emit_indent(out, 1)
-    let _ = str_push_cstr(out, "match ")
+    let _ = str_push_cstr(out, "parse_tokens_result(tokens, ")
     let _ = if start_idx >= 0 { emit_rule_fn_name(out, start_idx) } else { str_push_cstr(out, "match_eof") }
-    let _ = str_push_cstr(out, "(tokens, 0) {\n")
-    let _ = emit_line_cstr(out, 2, c"MatchOK(ast, pos, recovered) => {")
-    let _ = emit_line_cstr(out, 3, c"if recovered != 0 { Err(Some(ast), token_prefix(tokens, pos)) }")
-    let _ = emit_line_cstr(out, 3, c"else {")
-    let _ = emit_line_cstr(out, 4, c"match match_eof(tokens, pos) {")
-    let _ = emit_line_cstr(out, 5, c"MatchOK(_, _, _) => OK(ast, token_prefix(tokens, pos))")
-    let _ = emit_line_cstr(out, 5, c"MatchFail(_) => Err(Some(ast), token_prefix(tokens, pos))")
-    let _ = emit_line_cstr(out, 4, c"}")
-    let _ = emit_line_cstr(out, 3, c"}")
-    let _ = emit_line_cstr(out, 2, c"}")
-    let _ = emit_line_cstr(out, 2, c"MatchFail(fail_pos) => Err(None, token_prefix(tokens, fail_pos))")
+    let _ = str_push_cstr(out, "(tokens, 0))\n")
+    let _ = str_push(out, 10)
+    let _ = emit_line_cstr(out, 0, c"def parse_tokens_result(tokens: Vec, result: MatchResult): LabeledAST = {")
+    let _ = emit_line_cstr(out, 1, c"match result {")
+    let _ = emit_line_cstr(out, 2, c"MatchOK(ast, pos, recovered) => { finish_parse_tokens(tokens, ast, pos, recovered) }")
+    let _ = emit_line_cstr(out, 2, c"MatchFail(fail_pos) => { Err(None, token_prefix(tokens, fail_pos)) }")
     let _ = emit_line_cstr(out, 1, c"}")
     let _ = emit_line_cstr(out, 0, c"}")
     let _ = str_push(out, 10)

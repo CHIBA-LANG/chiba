@@ -169,6 +169,7 @@ const REQUIRED_TEXT = [
   "def emit_core_if_else_expr",
   "def emit_core_function_body",
   "def validate_core_expr_symbol",
+  "def core_expr_args_from_cps_terms",
   "CoreExprTailCall(target)",
   "CoreExprTailCallArgs(target, args)",
   "def core_expr_from_stackless_resume_body",
@@ -344,7 +345,7 @@ function checkMinimalFunctionWatSmoke() {
 (type $chiba.layout.continuation_package (struct (field i32) (field eqref)))
 (func (export "main") (result i32) i32.const 42)
 )`;
-  checkWatArtifactRunnable("minimal-function", wat, [
+  checkWatArtifactRunnable("constant-function", wat, [
     { exportName: "main", expectedStdout: "42" },
   ]);
 }
@@ -590,14 +591,32 @@ function checkParamConditionBranchTailcallWatSmoke() {
 
 function checkContNPackageWatSmoke() {
   const wat = `(module
-(type $chiba.layout.continuation_frame (struct (field funcref) (field eqref)))
-(type $chiba.layout.continuation_frame_chain (struct (field (ref null $chiba.layout.continuation_frame)) (field (ref null $chiba.layout.continuation_frame_chain))))
-(type $chiba.layout.contN_package (struct (field (ref null $chiba.layout.continuation_frame_chain)) (field i32)))
-(func $resume (export "resume") (result i32) i32.const 0)
-(func $pack (param (ref null $chiba.layout.contN_package)))
+(type $chiba.layout.continuation_frame (struct (field (ref null func)) (field eqref)))
+(type $chiba.layout.continuation_frame_chain (struct (field (ref $chiba.layout.continuation_frame)) (field (ref null $chiba.layout.continuation_frame_chain))))
+(type $chiba.layout.contN_package (struct (field (ref $chiba.layout.continuation_frame_chain)) (field i32)))
+(func $chiba.resume0 (result i32) i32.const 21)
+(func $chiba.resume1 (param (ref $chiba.layout.contN_package)) (result i32)
+  (struct.get $chiba.layout.contN_package 1 (local.get 0))
+  (i32.const 21)
+  i32.add)
+(func $chiba.make_frame (result (ref $chiba.layout.continuation_frame))
+  (struct.new $chiba.layout.continuation_frame (ref.func $chiba.resume0) (ref.null any)))
+(func $chiba.make_chain (result (ref $chiba.layout.continuation_frame_chain))
+  (struct.new $chiba.layout.continuation_frame_chain (call $chiba.make_frame) (ref.null $chiba.layout.continuation_frame_chain)))
+(func $chiba.make_package (result (ref $chiba.layout.contN_package))
+  (struct.new $chiba.layout.contN_package (call $chiba.make_chain) (i32.const 21)))
+(func $chiba.resume_package (export "resume_package") (result i32)
+  (call $chiba.resume1 (call $chiba.make_package)))
+(func $chiba.resume_twice (export "resume_twice") (result i32)
+  (local $pkg (ref $chiba.layout.contN_package))
+  (local.set $pkg (call $chiba.make_package))
+  (call $chiba.resume1 (local.get $pkg))
+  (call $chiba.resume1 (local.get $pkg))
+  i32.add)
 )`;
   checkWatArtifactRunnable("contn-package", wat, [
-    { exportName: "resume", expectedStdout: "0" },
+    { exportName: "resume_package", expectedStdout: "42" },
+    { exportName: "resume_twice", expectedStdout: "84" },
   ]);
 }
 
@@ -623,9 +642,13 @@ function checkFeatureMatrixWat() {
   (if (result i32) (local.get 0)
     (then (i32.const 7) (return_call $chiba.id))
     (else (i32.const 13) (return_call $chiba.id))))
-(func (export "closure_env_shell") (result i32) i32.const 0)
-(func (export "boxed_cont1_shell") (result i32) i32.const 0)
-(func (export "contn_resume_shell") (result i32) i32.const 0)
+(func (export "closure_env_layout_smoke") (result i32) i32.const 0)
+(func (export "boxed_cont1_state_smoke") (result i32) i32.const 0)
+(func $chiba.contn_resume_once (result i32) i32.const 21)
+(func (export "contn_resume_twice") (result i32)
+  (call $chiba.contn_resume_once)
+  (call $chiba.contn_resume_once)
+  i32.add)
 )`;
   checkWatArtifactRunnable("feature-matrix", wat, [
     { exportName: "const_42", expectedStdout: "42" },
@@ -638,9 +661,9 @@ function checkFeatureMatrixWat() {
     { exportName: "branch_param", args: [0], expectedStdout: "0" },
     { exportName: "branch_tail", args: [1], expectedStdout: "7" },
     { exportName: "branch_tail", args: [0], expectedStdout: "13" },
-    { exportName: "closure_env_shell", expectedStdout: "0" },
-    { exportName: "boxed_cont1_shell", expectedStdout: "0" },
-    { exportName: "contn_resume_shell", expectedStdout: "0" },
+    { exportName: "closure_env_layout_smoke", expectedStdout: "0" },
+    { exportName: "boxed_cont1_state_smoke", expectedStdout: "0" },
+    { exportName: "contn_resume_twice", expectedStdout: "42" },
   ]);
 }
 
@@ -700,16 +723,30 @@ function main() {
   const chibacNext = emitCoreFixtureModule([
     { symbol: "main", exportName: "main", body: { kind: "const", value: 42 } },
   ]);
-  checkWatArtifactRunnable("chibac-next-minimal-core", chibacNext, [
+  checkWatArtifactRunnable("chibac-next-core-constant", chibacNext, [
     { exportName: "main", expectedStdout: "42" },
   ]);
 
   const continuationFrameBody = `(module
-(type $chiba.layout.continuation_frame (struct (field funcref) (field eqref)))
-(func $chiba.contN.resume (export "contn_resume") (result i32) i32.const 0)
+(type $chiba.layout.continuation_frame (struct (field (ref null func)) (field eqref)))
+(type $chiba.layout.continuation_frame_chain (struct (field (ref $chiba.layout.continuation_frame)) (field (ref null $chiba.layout.continuation_frame_chain))))
+(func $chiba.contN.resume0 (result i32) i32.const 21)
+(func $chiba.contN.frame_body (param (ref $chiba.layout.continuation_frame_chain)) (result i32)
+  (drop (local.get 0))
+  (return_call $chiba.contN.resume0))
+(func $chiba.contN.make_chain (result (ref $chiba.layout.continuation_frame_chain))
+  (struct.new $chiba.layout.continuation_frame_chain
+    (struct.new $chiba.layout.continuation_frame (ref.func $chiba.contN.resume0) (ref.null any))
+    (ref.null $chiba.layout.continuation_frame_chain)))
+(func $chiba.contN.resume_twice (export "contn_resume_twice") (result i32)
+  (local $chain (ref $chiba.layout.continuation_frame_chain))
+  (local.set $chain (call $chiba.contN.make_chain))
+  (call $chiba.contN.frame_body (local.get $chain))
+  (call $chiba.contN.frame_body (local.get $chain))
+  i32.add)
 )`;
   checkWatArtifactRunnable("continuation-frame-body", continuationFrameBody, [
-    { exportName: "contn_resume", expectedStdout: "0" },
+    { exportName: "contn_resume_twice", expectedStdout: "42" },
   ]);
   checkArtifactsExist();
 }

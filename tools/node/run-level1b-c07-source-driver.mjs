@@ -2,11 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
+import { compileWat } from "./wat-compile.mjs";
 
 const SOURCE_ROOT = "level-1b/compiler/source";
 const DRIVER_ROOT = "level-1b/compiler/driver";
 const FIXTURE = "level-1b/supports/pre-c07-smokes/doc_compile_if.chiba";
 const UTF8_FIXTURE = "level-1b/supports/pre-c07-smokes/utf8_identifier_blocked.chiba";
+const ARTIFACT_DIR = ".scratch/level-1b/c07-source-driver";
 const REQUIRED_TEXT = [
   "type ProjectSurface",
   "type SourceProjectFacts",
@@ -183,6 +185,8 @@ const REQUIRED_TEXT = [
   "def source_gate_errors",
   "def check_source_semantic_gates",
   "SourceGateRefArrayDirectAssignment",
+  "source_project_parser_primary_blocked(project)",
+  "project.facts.parser.diagnostic",
   "missing-facts: source item scan absent",
   "missing-facts: UTF-8 aware source scanner absent",
   "missing-facts: unknown compile_if predicate shape",
@@ -251,6 +255,24 @@ function referenceGate(name) {
 
 function referenceGateFailed(name) {
   console.log(`[REF-FAIL] ${name}`);
+}
+
+function assertIncludes(name, text, needles) {
+  for (const needle of needles) {
+    if (!text.includes(needle)) fail(`${name}: missing ${needle}`);
+  }
+}
+
+function ensureDir(dir) {
+  fs.mkdirSync(dir, { recursive: true });
+}
+
+function invokeWatExport(wat, exportName) {
+  const module = new WebAssembly.Module(compileWat(wat));
+  const instance = new WebAssembly.Instance(module, {});
+  const fn = instance.exports[exportName];
+  if (typeof fn !== "function") fail(`WAT artifact does not export ${exportName}`);
+  return fn();
 }
 
 function read(file) {
@@ -354,6 +376,43 @@ function main() {
     if (!utf8Fixture.includes(needle)) fail(`C07 UTF-8 fixture missing ${needle}`);
   }
   pass("UTF-8 identifier fixture source");
+
+  const parsed = spawnSync("timeout", ["10", "./target/debug/level1c.o", "parse", FIXTURE], { encoding: "utf8" });
+  if (parsed.status !== 0 || !parsed.stdout.startsWith("OK(")) {
+    fail(`level1c parser primary fixture failed:\n${parsed.stdout}${parsed.stderr}`);
+  }
+  assertIncludes("level1c parser primary fixture", parsed.stdout, [
+    "SourceFile(",
+    "Namespace(",
+    "Path_Cons(",
+    "\"pre_c07\"",
+    "\"doc_compile_if\"",
+    "Item_WithAttrs(",
+    "Attr(",
+    "\"compile_if\"",
+    "\"wasm_only\"",
+    "\"native_only\"",
+    "DefFun(",
+    "Expr_Int(",
+  ]);
+  pass("level1c parser primary fixture AST");
+
+  ensureDir(ARTIFACT_DIR);
+  const wat = spawnSync("timeout", ["30", "./target/debug/level1c.o", "wat", FIXTURE], { encoding: "utf8" });
+  if (wat.status !== 0 || !wat.stdout.includes("(module")) {
+    fail(`level1c WAT primary fixture failed:\n${wat.stdout}${wat.stderr}`);
+  }
+  const watPath = path.join(ARTIFACT_DIR, "doc_compile_if.wat");
+  fs.writeFileSync(watPath, wat.stdout);
+  assertIncludes("level1c WAT primary fixture", wat.stdout, [
+    "(func $native_only",
+    "(export \"native_only\"",
+  ]);
+  const result = invokeWatExport(wat.stdout, "native_only");
+  if (String(result) !== "0") {
+    fail(`level1c WAT primary fixture did not run native_only -> 0, got ${String(result)}`);
+  }
+  pass(`level1c WAT primary fixture ${watPath}`);
 
   const namespace = spawnSync("timeout", ["30", "vp", "run", "level1b:namespace"], { encoding: "utf8" });
   if (namespace.status === 0) referenceGate("namespace project reference");

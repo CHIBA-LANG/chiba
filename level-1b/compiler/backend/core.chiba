@@ -188,6 +188,11 @@ def core_expr_args_from_cps_atoms(args: Array[CpsAtom], index: usize, out: Vec[C
     if index == args.len() { out.freeze() }
     else { core_expr_args_from_cps_atoms(args, index + 1, out.push(core_expr_from_cps_atom(args.get(index)))) }
 
+/// Convert CPS tail-call expression arguments to Core expressions.
+def core_expr_args_from_cps_terms(args: Array[CpsTermKind], index: usize, out: Vec[CoreExprKind]): Array[CoreExprKind] =
+    if index == args.len() { out.freeze() }
+    else { core_expr_args_from_cps_terms(args, index + 1, out.push(core_expr_from_cps_term(args.get(index)))) }
+
 /// Convert a CPS tail call to Core expression form.
 def core_expr_from_cps_tail_call_arg(target: str, args: Array[CpsAtom]): CoreExprKind =
     if args.len() == 0 { CoreExprTailCall(target) }
@@ -205,6 +210,7 @@ def core_expr_from_cps_term(term: CpsTermKind): CoreExprKind =
     match term {
         CpsTermReturn(atom) => core_expr_from_cps_atom(atom)
         CpsTermTailCall(target, args) => core_expr_from_cps_tail_call_arg(target, args)
+        CpsTermTailCallExprs(target, args) => CoreExprTailCallArgs(target, core_expr_args_from_cps_terms(args, 0, Vec[CoreExprKind].new()))
         CpsTermBranch(condition, then_term, else_term) =>
             CoreExprIfElse(
                 core_branch_condition_from_typed(condition),

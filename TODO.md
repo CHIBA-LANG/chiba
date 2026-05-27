@@ -318,6 +318,7 @@
 - [ ] global variable / init block 规则
 	- **目标**:
 		- `def ONE:i64 = 1` 这类全局值稳定可用；
+		- 常量/全局值 surface 收敛到 `def x: T = const`，后续清理 `def x(): T = const` 这种零参函数伪常量；
 		- record/global init block 有确定执行时机；
 		- `def VAR2 = VAR` 这类依赖可行；
 		- cycle / co-dependent global 稳定拒绝。
@@ -598,6 +599,8 @@
 
 1. `public use` reexport 暂时不支持, 新增 `public` 关键字可以加在 `def` `use` `type` `data` 之类的前面，但是保持默认 `public` 语义
 2. prelude 应该默认就直接 use 一堆 std 和 intrinsics
+3. level0 里面的 asm 块在 level-1b 是空缺的，这里我觉得可以打洞 + 不做校验 直接 emit wasm
+4. match number string tuple record 的处理
 
 ## 当前优先级顺序
 

@@ -102,6 +102,22 @@ def cir_typed_type_first_arg(ty: AST, fallback: CirType): CirType =
         _ => fallback
     }
 
+def cir_typed_type_to_ast(ty: CirType): AST =
+    match ty {
+        CirTyI64 => Type_Path(mk_str("i64", 3), Type_Tail_End)
+        CirTyI32 => Type_Path(mk_str("i32", 3), Type_Tail_End)
+        CirTyUsize => Type_Path(mk_str("usize", 5), Type_Tail_End)
+        CirTyBool => Type_Path(mk_str("bool", 4), Type_Tail_End)
+        CirTyString => Type_Path(mk_str("String", 6), Type_Tail_End)
+        CirTyStr => Type_Path(mk_str("str", 3), Type_Tail_End)
+        CirTySliceU8 => Type_Path(mk_str("Slice", 5), Type_Tail_End)
+        CirTyConst(name) => Type_Path(name, Type_Tail_End)
+        CirTyNominal(id, _) => Type_Path(id.local_name, Type_Tail_End)
+        CirTyData(id, _) => Type_Path(id.local_name, Type_Tail_End)
+        CirTyUnion(id, _) => Type_Path(id.local_name, Type_Tail_End)
+        _ => Type_Path(mk_str("", 0), Type_Tail_End)
+    }
+
 def cir_typed_header_items(ast: AST): AST =
     match ast {
         SourceFile(_, _, items) => items
@@ -643,7 +659,7 @@ def cir_typed_stmt_in_g(stmt: CirStmt, env: CirTypeEnv, globals: CirGlobalTypeEn
         L1StmtLet(binder, value) => {
             let value2 = cir_typed_expr_in_g(value, env, globals)
             let ty = cir_typed_expr_type(value2)
-            CirTypedStmtResult { stmt: L2StmtLet(binder, ty, value2), env: cir_type_env_add(env, binder, ty, Type_Path(mk_str("", 0), Type_Tail_End)) }
+            CirTypedStmtResult { stmt: L2StmtLet(binder, ty, value2), env: cir_type_env_add(env, binder, ty, cir_typed_type_to_ast(ty)) }
         }
         L1StmtLetPattern(pat, value) => CirTypedStmtResult { stmt: L2StmtLetPattern(pat, cir_typed_expr_in_g(value, env, globals)), env: env }
         L1StmtAssign(lhs, rhs) => CirTypedStmtResult { stmt: L2StmtAssign(cir_typed_expr_in_g(lhs, env, globals), cir_typed_expr_in_g(rhs, env, globals)), env: env }
