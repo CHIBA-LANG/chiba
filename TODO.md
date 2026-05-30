@@ -54,6 +54,7 @@
 	- [x] namespace resolution obligations：source import scopes 已生成 visibility/conflict/prelude obligations；真实 symbol lookup/private check 仍未完成。
 	- [x] function symbol uniqueness：C08 已拒绝重复 owner-qualified function symbol；完整 import/name lookup conflict matrix 仍未完成。
 	- [x] namespace resolution fact slice：C08 已生成 `NamespaceResolutionFact`，把 item owner、file import count、current-namespace-priority、private visibility check、ambiguous import reject policy 串进 typed module；真实 symbol table lookup、private 跨 namespace 拒绝、use/prelude conflict matrix 仍未完成。
+	- [x] AST-owned namespace resolution facts：C08 现在从 parser-owned `TypedAstOwnerSymbolFact` 生成 `NamespaceResolutionFact`，直接使用 AST owner namespace 字符串证明 owner namespace 存在，不再需要伪造 scanner `NamespaceNameSlice` 才能让 full parser item 进入 namespace resolution fact stream。
 - [ ] method resolution：没做。method index、receiver binding、qualified callee、Self with generics 都缺。
 	- [x] method surface facts：source scan 已抽取 `def Receiver.member` 的 receiver/member slices，后续 method index 不再只靠 boolean。
 	- [x] typed method/operator facts：typed module 已聚合 `MethodSurfaceFact`，保留 owner、receiver、member、operator 标记。

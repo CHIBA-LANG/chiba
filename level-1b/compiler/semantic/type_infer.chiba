@@ -2222,22 +2222,56 @@ def namespace_import_count_for_file(imports: Array[NamespaceImportFact], file: S
         namespace_import_count_for_file(imports, file, index + 1, count + 1)
     } else { namespace_import_count_for_file(imports, file, index + 1, count) }
 
-/// Create a namespace resolution fact for one typed item skeleton.
-def namespace_resolution_fact_from_skeleton(item: TypedItemSkeleton, imports: Array[NamespaceImportFact]): NamespaceResolutionFact =
-    NamespaceResolutionFact {
-        owner: item.binder,
-        file: item.file,
-        has_owner_namespace: match item.owner_namespace { Some(_) => true None => false },
-        explicit_import_count: namespace_import_count_for_file(imports, item.file, 0, 0),
-        current_namespace_precedes_imports: true,
-        requires_private_visibility_check: true,
-        rejects_ambiguous_imports: true,
+/// Create a namespace resolution fact for one scanner-owned item skeleton.
+def namespace_resolution_fact_from_skeleton(item: TypedItemSkeleton, imports: Array[NamespaceImportFact]): Option[NamespaceResolutionFact] =
+    match item.owner_namespace {
+        Some(_) =>
+            Some(NamespaceResolutionFact {
+                owner: item.binder,
+                file: item.file,
+                has_owner_namespace: true,
+                explicit_import_count: namespace_import_count_for_file(imports, item.file, 0, 0),
+                current_namespace_precedes_imports: true,
+                requires_private_visibility_check: true,
+                rejects_ambiguous_imports: true,
+            })
+        None => None
     }
 
 /// Generate namespace/name resolution facts in stable item order.
 def namespace_resolution_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], imports: Array[NamespaceImportFact], index: usize, out: Vec[NamespaceResolutionFact]): Array[NamespaceResolutionFact] =
     if index == skeletons.len() { out.freeze() }
-    else { namespace_resolution_facts_from_skeletons(skeletons, imports, index + 1, out.push(namespace_resolution_fact_from_skeleton(skeletons.get(index), imports))) }
+    else {
+        match namespace_resolution_fact_from_skeleton(skeletons.get(index), imports) {
+            Some(fact) => namespace_resolution_facts_from_skeletons(skeletons, imports, index + 1, out.push(fact))
+            None => namespace_resolution_facts_from_skeletons(skeletons, imports, index + 1, out)
+        }
+    }
+
+/// Create a namespace resolution fact from a parser-owned AST item.
+def namespace_resolution_fact_from_ast_owner(origin: TypedAstOwnerSymbolFact, imports: Array[NamespaceImportFact]): NamespaceResolutionFact =
+    NamespaceResolutionFact {
+        owner: origin.owner,
+        file: origin.file,
+        has_owner_namespace: origin.owner_namespace.len() > 0,
+        explicit_import_count: namespace_import_count_for_file(imports, origin.file, 0, 0),
+        current_namespace_precedes_imports: true,
+        requires_private_visibility_check: true,
+        rejects_ambiguous_imports: true,
+    }
+
+/// Append parser-owned AST namespace facts without fabricating scanner source slices.
+def namespace_resolution_facts_append_ast_owners(origins: Array[TypedAstOwnerSymbolFact], imports: Array[NamespaceImportFact], index: usize, out: Vec[NamespaceResolutionFact]): Array[NamespaceResolutionFact] =
+    if index == origins.len() { out.freeze() }
+    else { namespace_resolution_facts_append_ast_owners(origins, imports, index + 1, out.push(namespace_resolution_fact_from_ast_owner(origins.get(index), imports))) }
+
+/// Generate namespace/name resolution facts from scanner skeletons plus parser-owned AST owners.
+def namespace_resolution_facts_from_primary_items(skeletons: Array[TypedItemSkeleton], ast_owners: Array[TypedAstOwnerSymbolFact], imports: Array[NamespaceImportFact]): Array[NamespaceResolutionFact] =
+    namespace_resolution_facts_append_ast_owners(
+        ast_owners,
+        imports,
+        0,
+        namespace_resolution_facts_from_skeletons(skeletons, imports, 0, Vec[NamespaceResolutionFact].new()).to_vec())
 
 /// Return true when namespace resolution facts preserve lookup priority and ambiguity policy.
 def namespace_resolution_facts_policy_valid(facts: Array[NamespaceResolutionFact], index: usize): bool =
@@ -3027,7 +3061,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let namespace_ownership = namespace_ownership_facts_from_skeletons(skeletons, 0, Vec[NamespaceOwnershipFact].new())
     let ast_owner_symbols = ast_owner_symbol_facts_from_alpha(module.ast_owner_origins, 0, Vec[TypedAstOwnerSymbolFact].new())
     let namespace_imports = namespace_import_facts_from_uses(module.uses, 0, Vec[NamespaceImportFact].new())
-    let namespace_resolution = namespace_resolution_facts_from_skeletons(skeletons, namespace_imports, 0, Vec[NamespaceResolutionFact].new())
+    let namespace_resolution = namespace_resolution_facts_from_primary_items(skeletons, ast_owner_symbols, namespace_imports)
     let method_surface = method_surface_facts_from_skeletons(skeletons, 0, Vec[MethodSurfaceFact].new())
     let method_use_surface = method_use_surface_facts_from_skeletons(module.project, skeletons, 0, Vec[MethodUseSurfaceFact].new())
     let branching_surface = branching_surface_facts_from_skeletons(skeletons, 0, Vec[BranchingSurfaceFact].new())
