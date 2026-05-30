@@ -92,7 +92,7 @@ rule namespace_decl ::=
     ;
 
 rule path ::= 
-    head:path_name tail:path_tail => Path_Cons(head, tail)
+    head:path_name tail:path_tail => Path_Cons(head as Str, tail)
     ;
 
 rule path_name ::= 
@@ -682,7 +682,7 @@ rule match_guard ::=
     ;
 
 rule extern_expr ::= 
-    KwExtern abi:extern_abi_lit symbol:extern_abi_lit => Expr_ExternImport(abi, symbol)
+    KwExtern abi:extern_abi_lit symbol:extern_abi_lit => Expr_ExternImport(abi as Str, symbol as Str)
     ;
 
 rule extern_abi_lit ::=
@@ -1033,7 +1033,7 @@ rule arg_tail ::=
 {
     data AST {
         SourceFile(AST, AST, AST),
-        Namespace(Str),
+        Namespace(AST),
         NamespaceNone,
 
         Attr_Cons(AST, AST),

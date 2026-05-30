@@ -57,6 +57,9 @@ type SourceNamespaceScanWarning {
 type SourceUseScanResult {
     file: SourceFileId,
     path: SourceNameSlice,
+    group_prefix: Option[SourceNameSlice],
+    group_member: Option[SourceNameSlice],
+    group_member_count: usize,
     glob: bool,
     multi: bool,
     line: usize,
@@ -72,6 +75,59 @@ type SourceOwnerSymbolFact {
     private: bool,
     line: usize,
     column: usize,
+}
+
+/// Parser-owned owner symbol fact before full SourceItem replacement.
+data SourceAstExprShape {
+    SourceAstExprUnknown,
+    SourceAstExprI32Const,
+    SourceAstExprI32AddMul,
+    SourceAstExprI32IfElse,
+    SourceAstExprI32PrefixNeg,
+    SourceAstExprI32MatchParam,
+}
+
+/// Parser-owned expression node kind before full AST object lowering.
+data SourceAstExprNodeKind {
+    SourceAstExprNodeUnknown,
+    SourceAstExprNodeI32Const,
+    SourceAstExprNodeParam,
+    SourceAstExprNodeBinary,
+    SourceAstExprNodePrefixNeg,
+    SourceAstExprNodeIfElse,
+    SourceAstExprNodeMatch,
+}
+
+/// Parser-owned expression node fact for recursive source AST traversal.
+type SourceAstExprNodeFact {
+    file: SourceFileId,
+    owner_namespace: String,
+    owner_name: String,
+    node_id: usize,
+    kind: SourceAstExprNodeKind,
+    value: usize,
+    param_index: usize,
+    left: usize,
+    right: usize,
+    then_node: usize,
+    else_node: usize,
+}
+
+/// Parser-owned owner symbol fact before full SourceItem replacement.
+type SourceAstOwnerSymbolFact {
+    file: SourceFileId,
+    owner_namespace: String,
+    name: String,
+    body_shape: SourceAstExprShape,
+    has_i32_const_body: bool,
+    i32_const_body: usize,
+    has_i32_add_mul_body: bool,
+    has_i32_if_else_body: bool,
+    has_i32_prefix_neg_body: bool,
+    has_i32_match_param_body: bool,
+    namespace_count: usize,
+    def_item_count: usize,
+    from_chibacc: bool,
 }
 
 /// Header attributes discovered before item parsing.
@@ -226,6 +282,51 @@ type SourceParsedModuleFacts {
     has_token_stream: bool,
     has_ast: bool,
     ast_primary_path: bool,
+    ast_item_count: usize,
+    ast_namespace_count: usize,
+    ast_def_item_count: usize,
+    ast_owner_symbol_count: usize,
+    ast_from_chibacc: bool,
+    has_recoverable_errors: bool,
+}
+
+/// Verified generated frontend evidence for one source module.
+type SourceFrontendEvidence {
+    file: SourceFileId,
+    has_token_stream: bool,
+    has_ast: bool,
+    ast_item_count: usize,
+    ast_namespace_count: usize,
+    ast_def_item_count: usize,
+    ast_owner_symbol_count: usize,
+    ast_owner_namespace: String,
+    ast_def_item_name: String,
+    ast_def_body_shape: SourceAstExprShape,
+    ast_def_has_i32_const_body: bool,
+    ast_def_i32_const_body: usize,
+    ast_def_has_i32_add_mul_body: bool,
+    ast_def_has_i32_if_else_body: bool,
+    ast_def_has_i32_prefix_neg_body: bool,
+    ast_branch_owner_namespace: String,
+    ast_branch_def_item_name: String,
+    ast_branch_body_shape: SourceAstExprShape,
+    ast_branch_has_if_else_body: bool,
+    ast_neg_owner_namespace: String,
+    ast_neg_def_item_name: String,
+    ast_neg_body_shape: SourceAstExprShape,
+    ast_neg_has_prefix_neg_body: bool,
+    ast_match_owner_namespace: String,
+    ast_match_def_item_name: String,
+    ast_match_body_shape: SourceAstExprShape,
+    ast_match_has_param_body: bool,
+    ast_expression_owner_namespace: String,
+    ast_expression_def_item_name: String,
+    ast_expression_body_shape: SourceAstExprShape,
+    ast_expression_has_add_mul_body: bool,
+    ast_expression_has_if_else_body: bool,
+    ast_expression_has_prefix_neg_body: bool,
+    ast_expr_node_count: usize,
+    ast_from_chibacc: bool,
     has_recoverable_errors: bool,
 }
 
@@ -251,6 +352,8 @@ type SourceProjectFacts {
     uses: Array[SourceUseScanResult],
     items: Array[SourceItemScanResult],
     owner_symbols: Array[SourceOwnerSymbolFact],
+    ast_owner_symbols: Array[SourceAstOwnerSymbolFact],
+    ast_expr_nodes: Array[SourceAstExprNodeFact],
     utf8_warnings: Array[SourceUtf8ScanWarning],
 }
 

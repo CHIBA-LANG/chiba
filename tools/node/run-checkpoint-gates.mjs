@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
+import { compileWat, extractModule } from "./wat-compile.mjs";
 
 const ROOT = "supports/checkpoint";
 const SEMANTIC_ROOT = "supports/semantic-gates";
@@ -56,9 +57,18 @@ function emitWat(file, outName) {
   return out;
 }
 
-function runWat(file, expected) {
-  const result = spawnSync(process.execPath, ["tools/node/run-wat.mjs", file, "--invoke", "main"], { encoding: "utf8" });
-  assert(`run ${file}`, result.status === 0 && result.stdout.trim() === expected, result.stdout || result.stderr);
+async function runWat(file, expected) {
+  try {
+    const wat = extractModule(read(file));
+    const buffer = compileWat(wat, {});
+    const instance = await WebAssembly.instantiate(buffer, { env: new Proxy({}, { get: () => () => 0n }) });
+    const main = instance.instance.exports.main;
+    assert(`run ${file}`, typeof main === "function", "wat module does not export main");
+    const actual = String(main() || 0);
+    assert(`run ${file}`, actual === expected, actual);
+  } catch (error) {
+    fail(`run ${file}`, error && error.stack ? error.stack : error && error.message ? error.message : String(error));
+  }
 }
 
 function assertIncludes(name, source, needles) {
@@ -82,14 +92,14 @@ function checkSyntaxSurface() {
   pass(name);
 }
 
-function checkPipeGlobalStringRuntime() {
+async function checkPipeGlobalStringRuntime() {
   const name = "checkpoint pipe/global/string runtime";
   const file = path.join(ROOT, "correctness/pipe_global_string.chiba");
   checkOk(file);
   const wat = emitWat(file, "pipe_global_string.wat");
   const source = read(wat);
   assertIncludes(name, source, ["call $inc", "call $add3", "call $finish", "call $__chiba_string_concat2"]);
-  runWat(wat, "142");
+  await runWat(wat, "142");
   pass(name);
 }
 
@@ -177,7 +187,7 @@ function checkCompileIfMutualExclusion() {
 }
 
 checkSyntaxSurface();
-checkPipeGlobalStringRuntime();
+await checkPipeGlobalStringRuntime();
 checkMethods();
 checkOperatorIndexing();
 checkGenericsRows();

@@ -19,8 +19,9 @@ def core_validation_diagnostic(error: CoreValidationError): SemanticDiagnostic =
         CoreIllegalRuntimeState(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreMissingBranchBody(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreMissingPatternDecision(message) => SemanticDiagnostic("<backend>", 0, 0, message)
-        CoreMissingAdtCtorLowering(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreMissingUtf8IdentifierLowering(message) => SemanticDiagnostic("<backend>", 0, 0, message)
+        CoreInvalidTupleNominalIdentity(message) => SemanticDiagnostic("<backend>", 0, 0, message)
+        CoreInvalidIntrinsicBridge(message) => SemanticDiagnostic("<backend>", 0, 0, message)
         CoreIllegalContinuationPackage(message) => SemanticDiagnostic("<backend>", 0, 0, message)
     }
 

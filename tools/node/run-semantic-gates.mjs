@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
+import { compileWat, extractModule } from "./wat-compile.mjs";
 
 const ROOT = "supports/semantic-gates";
 const WAT_DIR = ".scratch/semantic-gates/wat";
@@ -93,6 +94,20 @@ function pass(name) {
 
 function assert(name, condition, message) {
   if (!condition) fail(name, message);
+}
+
+async function runWatMain(file, expected) {
+  try {
+    const wat = extractModule(read(file));
+    const buffer = compileWat(wat, {});
+    const instance = await WebAssembly.instantiate(buffer, { env: new Proxy({}, { get: () => () => 0n }) });
+    const main = instance.instance.exports.main;
+    assert(`run ${file}`, typeof main === "function", "wat module does not export main");
+    const actual = String(main() || 0);
+    assert(`run ${file}`, actual === expected, actual);
+  } catch (error) {
+    fail(`run ${file}`, error && error.stack ? error.stack : error && error.message ? error.message : String(error));
+  }
 }
 
 function parseOk(file) {
@@ -330,7 +345,7 @@ function checkStringReturnAbi() {
   pass(name);
 }
 
-function checkPipeLowering() {
+async function checkPipeLowering() {
   const name = "pipe parser and codegen gates";
   const file = path.join(ROOT, "pipe.chiba");
   const refInc = /L1Ref(?:Global|Unresolved)\("inc"\)/;
@@ -355,8 +370,7 @@ function checkPipeLowering() {
   assert(name, wat.includes("call $add"), "placeholder pipe WAT call to add missing");
   assert(name, wat.includes("call $finish"), "pipe chain WAT call to finish missing");
 
-  const runWat = run(process.execPath, ["tools/node/run-wat.mjs", path.join(WAT_DIR, "pipe.wat"), "--invoke", "main"]);
-  assert(name, runWat.status === 0 && runWat.stdout.trim() === "36", runWat.stdout || runWat.stderr);
+  await runWatMain(path.join(WAT_DIR, "pipe.wat"), "36");
   pass(name);
 }
 
@@ -602,7 +616,7 @@ checkCheckedTemplateInstantiation();
 checkNamespaceMerge();
 checkStringSlice();
 checkStringReturnAbi();
-checkPipeLowering();
+await checkPipeLowering();
 checkPatternParams();
 checkAdtTupleLowering();
 checkMemory();

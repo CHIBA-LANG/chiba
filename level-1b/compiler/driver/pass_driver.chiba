@@ -102,6 +102,8 @@ def source_facts_with_filtered_items(facts: SourceProjectFacts, target: CompileT
         uses: facts.uses,
         items: filter_source_items_for_target(facts.items, target, 0, Vec[SourceItemScanResult].new()),
         owner_symbols: facts.owner_symbols,
+        ast_owner_symbols: facts.ast_owner_symbols,
+        ast_expr_nodes: facts.ast_expr_nodes,
         utf8_warnings: facts.utf8_warnings,
     }
 

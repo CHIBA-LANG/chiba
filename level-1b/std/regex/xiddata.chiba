@@ -1499,3 +1499,13 @@ def codepoint_is_xid_start(codepoint: u32): bool =
 /// Return true when codepoint has Unicode XID_Continue property.
 def codepoint_is_xid_continue(codepoint: u32): bool =
     xid_range_contains(xid_continue_ranges(), codepoint, 0)
+
+/// i64 bridge for generated lexer code that still carries decoded codepoints as i64.
+def codepoint_i64_is_xid_start(codepoint: i64): bool =
+    if codepoint < 0 { false }
+    else { codepoint_is_xid_start(codepoint as u32) }
+
+/// i64 bridge for generated lexer code that still carries decoded codepoints as i64.
+def codepoint_i64_is_xid_continue(codepoint: i64): bool =
+    if codepoint < 0 { false }
+    else { codepoint_is_xid_continue(codepoint as u32) }

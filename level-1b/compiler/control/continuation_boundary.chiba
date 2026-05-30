@@ -2,6 +2,7 @@
 namespace compiler.control.continuation_boundary
 
 use compiler.control.continuation_usage.*
+use compiler.ir.control.*
 use compiler.semantic.driver.*
 
 /// Boundary target where a continuation cannot cross.
@@ -33,12 +34,27 @@ data ContinuationBoundaryCheck {
 /// Check whether active continuations cross a world/thread boundary.
 def check_continuation_boundary(module: UsageModule): Result[UsageModule, SemanticDiagnostics] =
     let obligations = continuation_boundary_obligations(module.facts, 0, Vec[ContinuationBoundaryObligation].new())
-    if continuation_boundary_obligations_same_thread_world(obligations, 0) { Ok(module) }
+    if callable_storages_cross_send_boundary(module.answer.typed.callable_storage, 0) {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<control>", 0, 0, "continuation crosses world/thread/send boundary"))
+            .freeze()))
+    } else if continuation_boundary_obligations_same_thread_world(obligations, 0) { Ok(module) }
     else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<control>", 0, 0, "continuation crosses world/thread/send boundary"))
             .freeze()))
     }
+
+/// Return true when sendable callable storage still admits continuation variants.
+def callable_storage_crosses_send_boundary(fact: CallableStorageFact): bool =
+    if fact.sendable { callable_storage_variants_have_continuation(fact.variants, 0) }
+    else { false }
+
+/// Check all callable storage facts for continuation variants crossing send boundaries.
+def callable_storages_cross_send_boundary(facts: Array[CallableStorageFact], index: usize): bool =
+    if index == facts.len() { false }
+    else if callable_storage_crosses_send_boundary(facts.get(index)) { true }
+    else { callable_storages_cross_send_boundary(facts, index + 1) }
 
 /// Current bootstrap lowering keeps continuations in the same thread/world unless sendable storage says otherwise.
 def continuation_boundary_obligations_same_thread_world(obligations: Array[ContinuationBoundaryObligation], index: usize): bool =

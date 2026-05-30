@@ -51,21 +51,51 @@ def callable_storage_variants_have_contn(variants: Array[CallableStorageVariant]
 def usage_fact_from_callable_storage(fact: CallableStorageFact): UsageFact =
     UsageFact(fact.owner, callable_storage_usage_count(fact))
 
+/// Pick use count from a concrete delimited-control body.
+def usage_count_from_control_body(fact: ControlBodyFact): UsageCount =
+    match fact.kind {
+        ControlBodyShiftN => UseMany
+        ControlBodyShift => UseOne
+        ControlBodyReset => UseOne
+    }
+
+/// Convert one control body into a continuation usage fact.
+def usage_fact_from_control_body(fact: ControlBodyFact): UsageFact =
+    UsageFact(fact.owner, usage_count_from_control_body(fact))
+
 /// Build coarse usage facts from typed callable/continuation storage obligations.
 def usage_facts_from_callable_storage(facts: Array[CallableStorageFact], index: usize, out: Vec[UsageFact]): Array[UsageFact] =
     if index == facts.len() { out.freeze() }
     else { usage_facts_from_callable_storage(facts, index + 1, out.push(usage_fact_from_callable_storage(facts.get(index)))) }
 
+/// Append callable storage usage facts into an existing builder.
+def usage_facts_from_callable_storage_to_vec(facts: Array[CallableStorageFact], index: usize, out: Vec[UsageFact]): Vec[UsageFact] =
+    if index == facts.len() { out }
+    else { usage_facts_from_callable_storage_to_vec(facts, index + 1, out.push(usage_fact_from_callable_storage(facts.get(index)))) }
+
+/// Append continuation usage facts from reset/shift/shiftn bodies.
+def usage_facts_from_control_bodies(facts: Array[ControlBodyFact], index: usize, out: Vec[UsageFact]): Array[UsageFact] =
+    if index == facts.len() { out.freeze() }
+    else { usage_facts_from_control_bodies(facts, index + 1, out.push(usage_fact_from_control_body(facts.get(index)))) }
+
 /// Empty usage fact stream for modules without callable/continuation obligations.
 def usage_facts_none(): Array[UsageFact] =
     Vec[UsageFact].new().freeze()
 
+/// Build all usage facts available before full expression traversal.
+def usage_facts_from_module(module: AnswerControlModule): Array[UsageFact] =
+    usage_facts_from_control_bodies(
+        module.control_bodies,
+        0,
+        usage_facts_from_callable_storage_to_vec(module.typed.callable_storage, 0, Vec[UsageFact].new()))
+
 /// Analyze binder, lambda, closure, and continuation usage.
 def analyze_usage(module: AnswerControlModule): Result[UsageModule, SemanticDiagnostics] =
-    if module.typed.callable_storage.len() == 0 {
+    let facts = usage_facts_from_module(module)
+    if facts.len() == 0 {
         Ok(UsageModule(module, usage_facts_none()))
     } else {
-        Ok(UsageModule(module, usage_facts_from_callable_storage(module.typed.callable_storage, 0, Vec[UsageFact].new())))
+        Ok(UsageModule(module, facts))
     }
 
 /// Module annotated with usage facts.

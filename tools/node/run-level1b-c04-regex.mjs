@@ -24,8 +24,22 @@ const REQUIRED_TEXT = [
   "data RegexInstruction",
   "type RegexProgram",
   "type RegexMatch",
+  "type RegexAcceptedMatch",
+  "type RegexCompileFragmentResult",
+  "def regex_compile_state_fragment",
+  "def regex_compile_state_alternative",
+  "def regex_compile_state_repeat",
+  "def regex_compile_required_repeat_fragments",
   "def RegexProgram.longest_at",
+  "def regex_initial_captures",
+  "def regex_capture_enter",
+  "def regex_capture_exit",
+  "def regex_best_match",
   "def str.next_char_offset",
+  "def str.utf8_valid_at",
+  "def str.utf8_codepoint_at",
+  "def str.is_xid_start_at",
+  "def str.is_xid_continue_at",
   "def codepoint_is_xid_start",
   "def codepoint_is_xid_continue",
   "def xid_range_contains",
@@ -108,6 +122,12 @@ function checkSource(file, source) {
     if (code.includes(`__compiler_builtin("${builtin}")`)) {
       errors.push(`${rel}: UTF-8 boundary helper must be level-1b source, not ${builtin}`);
     }
+  }
+  if (rel === "program.chiba" && /RegexAlternative\(items\)\s*=>\s*RegexCompileState\s*\{[\s\S]{0,180}regex_compile_alternative/.test(code)) {
+    errors.push(`${rel}: alternation capture numbering must use state-based compilation`);
+  }
+  if (rel === "program.chiba" && /RegexRepeatExpr\(inner,\s*repeat\)\s*=>\s*RegexCompileState\s*\{[\s\S]{0,180}regex_compile_repeat/.test(code)) {
+    errors.push(`${rel}: repeat capture numbering must use state-based compilation`);
   }
   for (let i = 0; i < lines.length; i += 1) {
     if (isPublicItem(lines[i]) && previousDocBlock(lines, i).length === 0) {

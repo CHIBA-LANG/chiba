@@ -9,6 +9,7 @@ const DRIVER_ROOT = "level-1b/compiler/driver";
 const FIXTURE = "level-1b/supports/pre-c07-smokes/doc_compile_if.chiba";
 const UTF8_FIXTURE = "level-1b/supports/pre-c07-smokes/utf8_identifier_blocked.chiba";
 const ARTIFACT_DIR = ".scratch/level-1b/c07-source-driver";
+const CHIBACC_EVIDENCE = ".scratch/level-1b/chibacc-mini/ast-primary-evidence.json";
 const LEGACY_REFERENCE_COMPILER = "./target/debug/level1c.o";
 const REQUIRED_TEXT = [
   "type ProjectSurface",
@@ -32,9 +33,52 @@ const REQUIRED_TEXT = [
   "SourceFrontendScannerFallback",
   "SourceFrontendChibalexChibaccPrimary",
   "type SourceParsedModuleFacts",
+  "type SourceFrontendEvidence",
+  "data SourceAstExprShape",
+  "SourceAstExprUnknown",
+  "SourceAstExprI32Const",
+  "SourceAstExprI32AddMul",
+  "SourceAstExprI32IfElse",
+  "SourceAstExprI32PrefixNeg",
+  "SourceAstExprI32MatchParam",
+  "data SourceAstExprNodeKind",
+  "type SourceAstExprNodeFact",
+  "ast_expr_node_count: usize",
+  "ast_expr_nodes: Array[SourceAstExprNodeFact]",
   "type SourceParserFacts",
   "parser: SourceParserFacts",
   "ast_primary_path: bool",
+  "ast_item_count: usize",
+  "ast_namespace_count: usize",
+  "ast_def_item_count: usize",
+  "ast_owner_symbol_count: usize",
+  "ast_owner_namespace: String",
+  "ast_def_item_name: String",
+  "ast_def_body_shape: SourceAstExprShape",
+  "ast_def_has_i32_const_body: bool",
+  "ast_def_i32_const_body: usize",
+  "ast_def_has_i32_add_mul_body: bool",
+  "ast_def_has_i32_if_else_body: bool",
+  "ast_def_has_i32_prefix_neg_body: bool",
+  "ast_branch_owner_namespace: String",
+  "ast_branch_def_item_name: String",
+  "ast_branch_body_shape: SourceAstExprShape",
+  "ast_branch_has_if_else_body: bool",
+  "ast_neg_owner_namespace: String",
+  "ast_neg_def_item_name: String",
+  "ast_neg_body_shape: SourceAstExprShape",
+  "ast_neg_has_prefix_neg_body: bool",
+  "ast_match_owner_namespace: String",
+  "ast_match_def_item_name: String",
+  "ast_match_body_shape: SourceAstExprShape",
+  "ast_match_has_param_body: bool",
+  "ast_expression_owner_namespace: String",
+  "ast_expression_def_item_name: String",
+  "ast_expression_body_shape: SourceAstExprShape",
+  "ast_expression_has_add_mul_body: bool",
+  "ast_expression_has_if_else_body: bool",
+  "ast_expression_has_prefix_neg_body: bool",
+  "ast_from_chibacc: bool",
   "token_primary_path_ready: bool",
   "ast_primary_path_blocked: bool",
   "data SourceItemKind",
@@ -144,6 +188,33 @@ const REQUIRED_TEXT = [
   "def source_scan_items_line",
   "def source_parsed_module_facts_from_scanned_file",
   "def source_parsed_modules_all_ast_primary",
+  "def source_parsed_module_has_primary_item_facts",
+  "module.ast_item_count > 0 && module.ast_namespace_count > 0 && module.ast_def_item_count > 0 && module.ast_owner_symbol_count > 0",
+  "source_parsed_module_has_primary_item_facts(modules.get(index))",
+  "def source_frontend_evidence_matches_module",
+  "def source_parsed_module_with_frontend_evidence",
+  "evidence.ast_namespace_count > 0",
+  "evidence.ast_def_item_count > 0",
+  "evidence.ast_owner_symbol_count > 0",
+  "ast_namespace_count: evidence.ast_namespace_count",
+  "ast_def_item_count: evidence.ast_def_item_count",
+  "ast_owner_symbol_count: evidence.ast_owner_symbol_count",
+  "def source_parsed_modules_apply_frontend_evidence",
+  "def source_parsed_modules_apply_frontend_evidence_all",
+  "def scan_project_parser_facts_from_primary_evidence",
+  "def scan_project_source_facts_from_primary_evidence",
+  "def project_with_primary_frontend_evidence",
+  "type SourceAstOwnerSymbolFact",
+  "ast_owner_symbols: Array[SourceAstOwnerSymbolFact]",
+  "owner_namespace: String",
+  "name: String",
+  "has_i32_const_body: bool",
+  "i32_const_body: usize",
+  "has_i32_add_mul_body: bool",
+  "def source_ast_owner_symbol_from_evidence",
+  "def source_ast_expression_owner_symbol_from_evidence",
+  "def source_ast_owner_symbols_from_evidence",
+  "ast_owner_symbols: facts.ast_owner_symbols",
   "def scan_project_parsed_modules_from_files",
   "def scan_project_parser_facts_from_primary_tokens",
   "token_primary_path_ready: true",
@@ -185,6 +256,10 @@ const REQUIRED_TEXT = [
   "SourceGateTypedItemLoweringAbsent",
   "def source_gate_errors",
   "def check_source_semantic_gates",
+  "def source_project_has_ast_namespace",
+  "def source_project_has_ast_item",
+  "source_project_has_namespace(project) == false && source_project_has_ast_namespace(project) == false",
+  "source_project_has_item(project) == false && source_project_has_ast_item(project) == false",
   "SourceGateRefArrayDirectAssignment",
   "source_project_parser_primary_blocked(project)",
   "project.facts.parser.diagnostic",
@@ -198,15 +273,24 @@ const REQUIRED_TEXT = [
   "missing-facts: source def body or initializer absent",
   "invalid-surface: Self only valid in method receiver scope",
   "invalid-surface: duplicate item in namespace",
-  "missing-lowering: source import/name resolution absent",
+  "invalid-surface: duplicate use import in scope",
   "missing-facts: namespace scan found no namespace",
   "type SourceImportScopeInput",
+  "type SourceResolvedImport",
+  "group_prefix: Option[SourceNameSlice]",
+  "group_member: Option[SourceNameSlice]",
+  "group_member_count: usize",
+  "grouped: bool",
   "type SourceImportResolution",
   "type SourceNameResolutionObligation",
+  "resolved_imports: Array[SourceResolvedImport]",
   "obligations: Array[SourceNameResolutionObligation]",
   "requires_visibility_check: bool",
   "requires_conflict_check: bool",
   "def source_import_scope_for_header",
+  "def source_resolved_imports",
+  "def source_scan_first_group_member",
+  "def source_scan_group_member_count",
   "def source_name_resolution_obligation_from_scope",
   "def source_name_resolution_obligations",
   "def resolve_source_imports",
@@ -278,6 +362,14 @@ function invokeWatExport(wat, exportName) {
 
 function read(file) {
   return fs.readFileSync(file, "utf8");
+}
+
+function readJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (error) {
+    fail(`missing or invalid JSON evidence ${file}: ${error.message}`);
+  }
 }
 
 function listChiba(dir) {
@@ -416,6 +508,125 @@ function main() {
     fail(`level1c WAT primary fixture did not run native_only -> 0, got ${String(result)}`);
   }
   pass(`level1c WAT primary fixture ${watPath}`);
+
+  const evidence = readJson(CHIBACC_EVIDENCE);
+  const astCases = Array.isArray(evidence.cases) ? evidence.cases.filter((item) => item.hasAstCheck) : [];
+  if (astCases.length < 5) fail("chibacc mini AST evidence does not cover enough generated parser cases");
+  const calculatorAst = astCases.find((item) => item.label === "calculator.chibacc");
+  if (calculatorAst == null) fail("chibacc mini AST evidence must include calculator grammar primary AST execution");
+  for (const item of astCases) {
+    const expectedMainResult = typeof item.expectedMainResult === "string" ? item.expectedMainResult : "0";
+    if (item.ranWat !== true || item.mainResult !== expectedMainResult || typeof item.generated !== "string") {
+      fail(`chibacc mini AST evidence is not executable for ${item.label || "<unknown>"}`);
+    }
+    if (typeof item.astItemCount !== "number" || item.astItemCount <= 0) {
+      fail(`chibacc mini AST evidence has no AST item count for ${item.label || "<unknown>"}`);
+    }
+  }
+  if (typeof calculatorAst.wat !== "string" || !calculatorAst.wat.endsWith("calculator.exec.exec.wat")) {
+    fail("calculator chibacc mini AST evidence must point at the generated executable WAT artifact");
+  }
+  if (calculatorAst.mainResult !== "14" || calculatorAst.expectedMainResult !== "14") {
+    fail("calculator chibacc mini AST evidence must execute parsed precedence program to 14");
+  }
+  pass(`chibacc mini AST primary evidence ${CHIBACC_EVIDENCE}`);
+
+  const fullGrammar = evidence.fullGrammar || {};
+  if (fullGrammar.checked !== true) fail("full chiba-level1 chibacc grammar was not checked");
+  if (fullGrammar.standaloneChecked !== true) fail("full chiba-level1 generated parser standalone check did not pass");
+  if (fullGrammar.compiledWat !== true) fail("full chiba-level1 generated parser WAT was not compiled");
+  if (fullGrammar.ranExecutableWat !== true) fail("full chiba-level1 executable parser WAT was not run");
+  if (fullGrammar.executableMainResult !== "27" || fullGrammar.expectedExecutableMainResult !== "27") {
+    fail("full chiba-level1 executable parser must run combined source harness to main -> 27");
+  }
+  if (fullGrammar.ranExpressionExecutableWat !== true) fail("full chiba-level1 expression parser WAT must run");
+  if (fullGrammar.expressionMainResult !== "14" || fullGrammar.expectedExpressionMainResult !== "14") {
+    fail("full chiba-level1 expression parser WAT must execute add/mul expression to 14");
+  }
+  if (fullGrammar.astNamespaceCount !== 1 || fullGrammar.astDefItemCount !== 4 || fullGrammar.astItemCount !== 4 || fullGrammar.astOwnerSymbolCount !== 4) {
+    fail("full chiba-level1 executable parser evidence must expose namespace, def item, and owner symbol AST counts");
+  }
+  if (fullGrammar.astExprNodeCount !== 14 || fullGrammar.ast_expr_node_count !== 14) {
+    fail("full chiba-level1 executable parser evidence must expose recursive AST expression node facts");
+  }
+  if (fullGrammar.astOwnerNamespace !== "demo" || fullGrammar.astDefItemName !== "main") {
+    fail("full chiba-level1 executable parser evidence must expose parser-owned demo::main symbol");
+  }
+  if (fullGrammar.astDefHasI32ConstBody !== false || fullGrammar.astDefI32ConstBody !== 0 || fullGrammar.astDefHasI32AddMulBody !== true || fullGrammar.astDefHasI32IfElseBody !== false || fullGrammar.astDefHasI32PrefixNegBody !== false) {
+    fail("full chiba-level1 executable parser evidence must expose parser-owned main add/mul body");
+  }
+  if (fullGrammar.astDefBodyShape !== "SourceAstExprI32AddMul") {
+    fail("full chiba-level1 executable parser evidence must expose typed AST expression shape");
+  }
+  if (fullGrammar.astBranchOwnerNamespace !== "demo" || fullGrammar.astBranchDefItemName !== "branch" || fullGrammar.astBranchBodyShape !== "SourceAstExprI32IfElse" || fullGrammar.astBranchHasIfElseBody !== true) {
+    fail("full chiba-level1 executable parser evidence must expose parser-owned demo::branch if/else body");
+  }
+  if (fullGrammar.astNegOwnerNamespace !== "demo" || fullGrammar.astNegDefItemName !== "neg" || fullGrammar.astNegBodyShape !== "SourceAstExprI32PrefixNeg" || fullGrammar.astNegHasPrefixNegBody !== true) {
+    fail("full chiba-level1 executable parser evidence must expose parser-owned demo::neg prefix neg body");
+  }
+  if (fullGrammar.astMatchOwnerNamespace !== "demo" || fullGrammar.astMatchDefItemName !== "choose" || fullGrammar.astMatchBodyShape !== "SourceAstExprI32MatchParam" || fullGrammar.astMatchHasParamBody !== true) {
+    fail("full chiba-level1 executable parser evidence must expose parser-owned demo::choose match-param body");
+  }
+  if (fullGrammar.astExpressionOwnerNamespace !== "demo" || fullGrammar.astExpressionDefItemName !== "main" || fullGrammar.astExpressionHasAddMulBody !== true || fullGrammar.astExpressionHasIfElseBody !== false || fullGrammar.astExpressionHasPrefixNegBody !== false) {
+    fail("full chiba-level1 executable parser evidence must expose parser-owned demo::main add/mul AST body");
+  }
+  if (fullGrammar.astExpressionBodyShape !== "SourceAstExprI32AddMul") {
+    fail("full chiba-level1 expression parser evidence must expose typed AST expression shape");
+  }
+  for (const key of ["generated", "standalone", "wat", "executable", "executableWat", "expressionExecutable", "expressionExecutableWat"]) {
+    if (typeof fullGrammar[key] !== "string" || !fs.existsSync(fullGrammar[key])) {
+      fail(`full chiba-level1 generated parser evidence missing ${key}`);
+    }
+  }
+  const fullWat = read(fullGrammar.wat);
+  if (!fullWat.includes("(module")) fail("full chiba-level1 generated parser WAT artifact is not a module");
+  compileWat(fullWat);
+  const fullExecWat = read(fullGrammar.executableWat);
+  if (!fullExecWat.includes("(module")) fail("full chiba-level1 executable parser WAT artifact is not a module");
+  compileWat(fullExecWat);
+  const fullExprExecWat = read(fullGrammar.expressionExecutableWat);
+  if (!fullExprExecWat.includes("(module")) fail("full chiba-level1 expression parser WAT artifact is not a module");
+  compileWat(fullExprExecWat);
+  pass(`full chiba-level1 generated parser WAT evidence ${fullGrammar.wat}`);
+
+  const scanSource = read(path.join(SOURCE_ROOT, "scan.chiba"));
+  assertIncludes("compiler-side primary frontend evidence bridge", scanSource, [
+    "parser: scan_project_parser_facts_from_primary_evidence(project.files, evidence)",
+    "facts: scan_project_source_facts_from_primary_evidence(project, evidence)",
+    "ast_owner_symbols: source_ast_owner_symbols_from_evidence(evidence, 0, Vec[SourceAstOwnerSymbolFact].new())",
+    "ast_expr_nodes: source_ast_expr_nodes_from_evidence(evidence, 0, Vec[SourceAstExprNodeFact].new())",
+    "def source_ast_expr_nodes_from_evidence",
+    "def source_ast_expr_nodes_for_shape",
+    "Binary node value uses PrimitiveBinaryOp ordinal",
+    "SourceAstExprNodeBinary, 2",
+    "owner_namespace: evidence.ast_owner_namespace",
+    "name: evidence.ast_def_item_name",
+    "body_shape: evidence.ast_def_body_shape",
+    "has_i32_const_body: evidence.ast_def_has_i32_const_body",
+    "i32_const_body: evidence.ast_def_i32_const_body",
+    "has_i32_add_mul_body: evidence.ast_def_has_i32_add_mul_body",
+    "has_i32_if_else_body: evidence.ast_def_has_i32_if_else_body",
+    "has_i32_prefix_neg_body: evidence.ast_def_has_i32_prefix_neg_body",
+    "owner_namespace: evidence.ast_branch_owner_namespace",
+    "name: evidence.ast_branch_def_item_name",
+    "body_shape: evidence.ast_branch_body_shape",
+    "has_i32_if_else_body: evidence.ast_branch_has_if_else_body",
+    "owner_namespace: evidence.ast_neg_owner_namespace",
+    "name: evidence.ast_neg_def_item_name",
+    "body_shape: evidence.ast_neg_body_shape",
+    "has_i32_prefix_neg_body: evidence.ast_neg_has_prefix_neg_body",
+    "owner_namespace: evidence.ast_match_owner_namespace",
+    "name: evidence.ast_match_def_item_name",
+    "body_shape: evidence.ast_match_body_shape",
+    "has_i32_match_param_body: evidence.ast_match_has_param_body",
+    "owner_namespace: evidence.ast_expression_owner_namespace",
+    "name: evidence.ast_expression_def_item_name",
+    "body_shape: evidence.ast_expression_body_shape",
+    "has_i32_add_mul_body: evidence.ast_expression_has_add_mul_body",
+    "has_i32_if_else_body: evidence.ast_expression_has_if_else_body",
+    "has_i32_prefix_neg_body: evidence.ast_expression_has_prefix_neg_body",
+  ]);
+  pass("compiler-side primary frontend evidence bridge");
 
   const namespace = spawnSync("timeout", ["30", "vp", "run", "level1b:namespace"], { encoding: "utf8" });
   if (namespace.status === 0) referenceGate("namespace project reference");

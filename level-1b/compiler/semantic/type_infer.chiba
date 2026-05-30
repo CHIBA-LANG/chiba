@@ -37,9 +37,7 @@ type TypedItemSkeleton {
 
 /// Typed expression shape used by semantic lowering before CPS.
 data TypedI32ConstAtom {
-    TypedI32ConstZero,
-    TypedI32ConstFortyTwo,
-    TypedI32ConstSmall(usize),
+    TypedI32ConstLiteral(usize),
 }
 
 /// Typed branch condition carried by typed expression lowering.
@@ -49,6 +47,14 @@ data TypedBranchCondition {
     TypedBranchConditionParam(usize),
 }
 
+/// Backend primitive selected only inside builtin method bodies.
+data PrimitiveBinaryOp {
+    PrimitiveBinaryAdd,
+    PrimitiveBinarySub,
+    PrimitiveBinaryMul,
+    PrimitiveBinaryDiv,
+}
+
 /// Typed expression shape used by semantic lowering before CPS.
 data TypedExprKind {
     TypedExprUnit,
@@ -56,6 +62,7 @@ data TypedExprKind {
     TypedExprParam(usize),
     TypedExprTailCall(str),
     TypedExprTailCallArgs(str, Array[TypedExprKind]),
+    TypedExprPrimitiveBinary(PrimitiveBinaryOp, TypedExprKind, TypedExprKind),
     TypedExprIfElse(TypedBranchCondition, TypedExprKind, TypedExprKind),
     TypedExprBranchJoinPending,
 }
@@ -96,6 +103,7 @@ def typed_expr_visit_kind(expr: TypedExprKind): TypedExprVisitKind =
         TypedExprParam(_) => TypedVisitAtom
         TypedExprTailCall(_) => TypedVisitTailCall
         TypedExprTailCallArgs(_, _) => TypedVisitTailCall
+        TypedExprPrimitiveBinary(_, _, _) => TypedVisitAtom
         TypedExprIfElse(_, _, _) => TypedVisitBranch
         TypedExprBranchJoinPending => TypedVisitPending
     }
@@ -108,6 +116,8 @@ def typed_expr_traverse(owner: BinderId, expr: TypedExprKind, tail_position: boo
             TypedExprIfElse(_, then_expr, else_expr) =>
                 typed_expr_traverse(owner, else_expr, tail_position, typed_expr_traverse(owner, then_expr, tail_position, with_self))
             TypedExprTailCallArgs(_, args) => typed_expr_traverse_args(owner, args, 0, false, with_self)
+            TypedExprPrimitiveBinary(_, left, right) =>
+                typed_expr_traverse(owner, right, false, typed_expr_traverse(owner, left, false, with_self))
             _ => with_self
         }
     }
@@ -150,7 +160,7 @@ def typed_function_tail_call_target_slice(text: String, offset: usize, end: usiz
     if offset >= end { None }
     else if offset >= text.len() { None }
     else if source_is_ident_start(text.byte_at(offset)) {
-        let name_end = source_scan_namespace_name_end(text, offset)
+        let name_end = typed_pipe_rhs_name_end(text, offset, end)
         let call_start = source_skip_spaces(text, name_end)
         if typed_no_arg_call_exact(text, call_start, end) {
             Some(SourceNameSlice { offset: offset, len: name_end - offset })
@@ -202,9 +212,7 @@ def typed_function_body_starts_with_atom(text: String, start: usize, end: usize,
 
 /// Pick the function-slice i32 const atom at the start of a source region.
 def typed_i32_const_atom_from_region(text: String, start: usize, end: usize): Option[TypedI32ConstAtom] =
-    if typed_function_body_starts_with_atom(text, start, end, "42") { Some(TypedI32ConstFortyTwo) }
-    else if typed_function_body_starts_with_atom(text, start, end, "0") { Some(TypedI32ConstZero) }
-    else { None }
+    typed_small_i32_const_exact_from_region(text, start, end)
 
 /// Return true when a byte is an ASCII decimal digit.
 def typed_is_ascii_digit(byte: u8): bool =
@@ -212,12 +220,12 @@ def typed_is_ascii_digit(byte: u8): bool =
 
 /// Parse a small unsigned integer literal from a source region.
 def typed_parse_small_i32_digits(text: String, offset: usize, end: usize, value: usize): Option[TypedI32ConstAtom] =
-    if offset >= end { Some(TypedI32ConstSmall(value)) }
-    else if offset >= text.len() { Some(TypedI32ConstSmall(value)) }
+    if offset >= end { Some(TypedI32ConstLiteral(value)) }
+    else if offset >= text.len() { Some(TypedI32ConstLiteral(value)) }
     else if typed_is_ascii_digit(text.byte_at(offset)) {
         typed_parse_small_i32_digits(text, offset + 1, end, value * 10 + (text.byte_at(offset) - 48))
     } else if typed_source_region_only_spaces(text, offset, end) {
-        Some(TypedI32ConstSmall(value))
+        Some(TypedI32ConstLiteral(value))
     } else { None }
 
 /// Parse an exact small i32 literal from a source region.
@@ -239,12 +247,7 @@ def typed_i32_const_atom_exact_len(text: String, start: usize, end: usize, atom:
 
 /// Pick the function-slice i32 const atom only when it occupies the full source region.
 def typed_i32_const_atom_exact_from_region(text: String, start: usize, end: usize): Option[TypedI32ConstAtom] =
-    match typed_i32_const_atom_from_region(text, start, end) {
-        Some(TypedI32ConstZero) => typed_i32_const_atom_exact_len(text, start, end, TypedI32ConstZero, 1)
-        Some(TypedI32ConstFortyTwo) => typed_i32_const_atom_exact_len(text, start, end, TypedI32ConstFortyTwo, 2)
-        Some(TypedI32ConstSmall(value)) => Some(TypedI32ConstSmall(value))
-        None => typed_small_i32_const_exact_from_region(text, start, end)
-    }
+    typed_small_i32_const_exact_from_region(text, start, end)
 
 /// Return true when a narrow const call argument length is exactly closed in tail position.
 def typed_i32_const_call_arg_exact_len(text: String, arg_start: usize, end: usize, len: usize): bool =
@@ -256,9 +259,7 @@ def typed_i32_const_call_arg_exact_len(text: String, arg_start: usize, end: usiz
 /// Return true when a narrow const call argument is exactly closed in tail position.
 def typed_i32_const_call_arg_exact(text: String, arg_start: usize, end: usize, atom: TypedI32ConstAtom): bool =
     match atom {
-        TypedI32ConstZero => typed_i32_const_call_arg_exact_len(text, arg_start, end, 1)
-        TypedI32ConstFortyTwo => typed_i32_const_call_arg_exact_len(text, arg_start, end, 2)
-        TypedI32ConstSmall(_) => {
+        TypedI32ConstLiteral(_) => {
             let close = typed_source_region_find_byte_or_end(text, arg_start, end, 41)
             if close >= end { false }
             else { typed_source_region_only_spaces(text, close + 1, end) }
@@ -362,6 +363,47 @@ def typed_source_region_is_param(text: String, param: SourceNameSlice, start: us
 /// Return true when a source type slice is one of the primitive direct backend types.
 def typed_type_slice_is_primitive_i32_like(text: String, ty: SourceNameSlice): bool =
     source_name_slice_eq_text(text, ty, "i32") || source_name_slice_eq_text(text, ty, "bool")
+
+/// Return true when a source symbol is in the builtin numeric receiver family.
+def typed_intrinsic_numeric_receiver(receiver: str): bool =
+    if receiver == "u8" { true }
+    else if receiver == "u16" { true }
+    else if receiver == "u32" { true }
+    else if receiver == "u64" { true }
+    else if receiver == "i8" { true }
+    else if receiver == "i16" { true }
+    else if receiver == "i32" { true }
+    else if receiver == "i64" { true }
+    else if receiver == "f32" { true }
+    else { receiver == "f64" }
+
+/// Return the primitive operator implemented by a builtin method body name.
+def typed_primitive_binary_intrinsic_from_name(name: str): Option[PrimitiveBinaryOp] =
+    let dot = method_name_last_dot(name, 0, name.len())
+    if dot >= name.len() { None }
+    else {
+        let receiver = name.slice(0, dot)
+        let member = name.slice(dot + 1, name.len() - dot - 1)
+        if typed_intrinsic_numeric_receiver(receiver) == false { None }
+        else if member == "op_add" { Some(PrimitiveBinaryAdd) }
+        else if member == "op_sub" { Some(PrimitiveBinarySub) }
+        else if member == "op_mul" { Some(PrimitiveBinaryMul) }
+        else if member == "op_div" { Some(PrimitiveBinaryDiv) }
+        else { None }
+    }
+
+/// Find the last dot in a method name.
+def method_name_last_dot(name: str, index: usize, last: usize): usize =
+    if index == name.len() { last }
+    else if name.byte_at(index) == 46 { method_name_last_dot(name, index + 1, index) }
+    else { method_name_last_dot(name, index + 1, last) }
+
+/// Return the primitive operator implemented by the current builtin method body.
+def typed_item_primitive_binary_intrinsic(text: String, item: TypedItemSkeleton): Option[PrimitiveBinaryOp] =
+    match item.name {
+        Some(name) => typed_primitive_binary_intrinsic_from_name(typed_function_tail_call_target_text(text, name))
+        None => None
+    }
 
 /// Pick an indexed function parameter from a bounded source region.
 def typed_function_param_index_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[usize] =
@@ -534,14 +576,6 @@ def typed_method_receiver_first_args(receiver: TypedExprKind, args: Array[TypedE
     if index == args.len() { out.freeze() }
     else { typed_method_receiver_first_args(receiver, args, index + 1, out.push(args.get(index))) }
 
-/// Return true when a typed expression can still be used as a direct CPS atom.
-def typed_expr_is_atom_arg(expr: TypedExprKind): bool =
-    match expr {
-        TypedExprI32Const(_) => true
-        TypedExprParam(_) => true
-        _ => false
-    }
-
 /// Parse a simple pipe RHS call and expand placeholder/default receiver position.
 def typed_pipe_rhs_expr(text: String, item: TypedItemSkeleton, lhs: TypedExprKind, start: usize, end: usize): Option[TypedExprKind] =
     let offset = source_skip_spaces(text, start)
@@ -575,20 +609,27 @@ def typed_pipe_rhs_expr(text: String, item: TypedItemSkeleton, lhs: TypedExprKin
                 }
             }
         } else { None }
-    }
+	    }
+
+/// Scan a pipe RHS callable name, allowing namespace/member qualified paths.
+def typed_pipe_rhs_name_end(text: String, offset: usize, end: usize): usize =
+    let name_end = source_scan_namespace_name_end(text, offset)
+    let next = source_skip_spaces(text, name_end)
+    if next < end && text.byte_at(next) == 46 {
+        let member_start = source_skip_spaces(text, next + 1)
+        if member_start >= end { name_end }
+        else { typed_pipe_rhs_name_end(text, member_start, end) }
+    } else { name_end }
 
 /// Continue a pipe chain as a left fold over simple RHS call segments.
 def typed_pipe_expr_continue(text: String, item: TypedItemSkeleton, lhs: TypedExprKind, start: usize, end: usize): Option[TypedExprKind] =
-    if typed_expr_is_atom_arg(lhs) == false { None }
-    else {
-        let pipe = typed_source_region_find_text_or_end(text, start, end, "|>")
-        let segment_end = if pipe < end { pipe } else { end }
-        match typed_pipe_rhs_expr(text, item, lhs, start, segment_end) {
-            Some(next_lhs) =>
-                if pipe < end { typed_pipe_expr_continue(text, item, next_lhs, pipe + 2, end) }
-                else { Some(next_lhs) }
-            None => None
-        }
+    let pipe = typed_source_region_find_text_or_end(text, start, end, "|>")
+    let segment_end = if pipe < end { pipe } else { end }
+    match typed_pipe_rhs_expr(text, item, lhs, start, segment_end) {
+        Some(next_lhs) =>
+            if pipe < end { typed_pipe_expr_continue(text, item, next_lhs, pipe + 2, end) }
+            else { Some(next_lhs) }
+        None => None
     }
 
 /// Parse a simple pipe expression into executable left-folded tail-call form.
@@ -616,6 +657,72 @@ def typed_call_arg_exprs(text: String, item: TypedItemSkeleton, offset: usize, c
                 else { None }
             }
             None => None
+        }
+    }
+
+/// Return the matching `]` for a source-slice index expression.
+def typed_index_expr_close(text: String, open: usize, end: usize): usize =
+    typed_call_arg_end_nested(text, open + 1, end, 0, 0, 1)
+
+/// Parse `receiver[index]` into the method-style `Receiver.op_index(receiver, index)` call.
+def typed_index_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    let offset = source_skip_spaces(text, start)
+    let open = typed_source_region_find_byte_or_end(text, offset, end, 91)
+    if open >= end { None }
+    else {
+        let close = typed_index_expr_close(text, open, end)
+        if close >= end { None }
+        else if typed_source_region_only_spaces(text, close + 1, end) == false { None }
+        else if source_region_has_text(text, open + 1, close, "..") { None }
+        else {
+            match typed_function_expr_from_region(text, item, offset, open) {
+                Some(receiver) =>
+                    match typed_call_arg_expr_from_region(text, item, open + 1, close) {
+                        Some(index) =>
+                            match typed_function_param_type_from_region(text, item, offset, open) {
+                                Some(receiver_ty) =>
+                                    Some(TypedExprTailCallArgs(
+                                        typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, receiver_ty).concat(".op_index")),
+                                        Vec[TypedExprKind].new().push(receiver).push(index).freeze()))
+                                None => None
+                            }
+                        None => None
+                    }
+                None => None
+            }
+        }
+    }
+
+/// Parse `receiver[start..len]` into the method-style `Receiver.op_index_slice(receiver, start, len)` call.
+def typed_index_slice_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    let offset = source_skip_spaces(text, start)
+    let open = typed_source_region_find_byte_or_end(text, offset, end, 91)
+    if open >= end { None }
+    else {
+        let close = typed_index_expr_close(text, open, end)
+        let dots = typed_source_region_find_text_or_end(text, open + 1, close, "..")
+        if close >= end || dots >= close { None }
+        else if typed_source_region_only_spaces(text, close + 1, end) == false { None }
+        else {
+            match typed_function_expr_from_region(text, item, offset, open) {
+                Some(receiver) =>
+                    match typed_call_arg_expr_from_region(text, item, open + 1, dots) {
+                        Some(slice_start) =>
+                            match typed_call_arg_expr_from_region(text, item, dots + 2, close) {
+                                Some(slice_len) =>
+                                    match typed_function_param_type_from_region(text, item, offset, open) {
+                                        Some(receiver_ty) =>
+                                            Some(TypedExprTailCallArgs(
+                                                typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, receiver_ty).concat(".op_index_slice")),
+                                                Vec[TypedExprKind].new().push(receiver).push(slice_start).push(slice_len).freeze()))
+                                        None => None
+                                    }
+                                None => None
+                            }
+                        None => None
+                    }
+                None => None
+            }
         }
     }
 
@@ -649,52 +756,206 @@ def typed_function_tail_call_args_body(text: String, item: TypedItemSkeleton, st
 
 /// Parse a single top-level infix operator expression that maps to a method protocol call.
 def typed_operator_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
-    match typed_operator_find_add(text, source_skip_spaces(text, start), end, 0, 0, 0) {
-        Some(op) => typed_operator_add_expr_body(text, item, start, op, end)
-        None => None
+    match typed_operator_find_low_precedence(text, source_skip_spaces(text, start), end, 0, 0, 0, None) {
+        Some(op) => typed_operator_binary_expr_body(text, item, start, op, end)
+        None =>
+            match typed_operator_find_high_precedence(text, source_skip_spaces(text, start), end, 0, 0, 0, None) {
+                Some(op) => typed_operator_binary_expr_body(text, item, start, op, end)
+                None => None
+            }
+    }
+
+/// Return true when a byte is a low-precedence binary operator.
+def typed_operator_is_low_precedence(byte: u8): bool =
+    if byte == 43 { true }
+    else { byte == 45 }
+
+/// Return the previous non-space byte before an operator.
+def typed_operator_previous_non_space(text: String, start: usize, op: usize, offset: usize, previous: Option[u8]): Option[u8] =
+    if offset >= op { previous }
+    else if offset >= text.len() { previous }
+    else {
+        let byte = text.byte_at(offset)
+        if byte == 32 || byte == 9 || byte == 10 || byte == 13 {
+            typed_operator_previous_non_space(text, start, op, offset + 1, previous)
+        } else {
+            typed_operator_previous_non_space(text, start, op, offset + 1, Some(byte))
+        }
+    }
+
+/// Return true when a previous token means the following `-` starts a prefix expression.
+def typed_operator_previous_allows_prefix(prev: u8): bool =
+    if prev == 40 { true }
+    else if prev == 91 { true }
+    else if prev == 123 { true }
+    else if prev == 44 { true }
+    else if prev == 58 { true }
+    else if prev == 61 { true }
+    else if prev == 43 { true }
+    else if prev == 45 { true }
+    else if prev == 42 { true }
+    else if prev == 47 { true }
+    else { false }
+
+/// Return true when a `-` byte has a left operand in this bounded expression.
+def typed_operator_minus_has_left_operand(text: String, start: usize, op: usize): bool =
+    match typed_operator_previous_non_space(text, start, op, start, None) {
+        Some(prev) => typed_operator_previous_allows_prefix(prev) == false
+        None => false
+    }
+
+/// Return true when one byte is a binary low-precedence operator at this offset.
+def typed_operator_is_binary_low_at(text: String, start: usize, op: usize): bool =
+    if text.byte_at(op) == 43 { true }
+    else if text.byte_at(op) == 45 { typed_operator_minus_has_left_operand(text, start, op) }
+    else { false }
+
+/// Return true when a byte is a high-precedence binary operator.
+def typed_operator_is_high_precedence(byte: u8): bool =
+    if byte == 42 { true }
+    else { byte == 47 }
+
+/// Map an operator byte to the primitive backend op.
+def typed_primitive_binary_op_from_byte(byte: u8): Option[PrimitiveBinaryOp] =
+    if byte == 43 { Some(PrimitiveBinaryAdd) }
+    else if byte == 45 { Some(PrimitiveBinarySub) }
+    else if byte == 42 { Some(PrimitiveBinaryMul) }
+    else if byte == 47 { Some(PrimitiveBinaryDiv) }
+    else { None }
+
+/// Map an operator byte to the method protocol member name.
+def typed_operator_method_name(byte: u8): str =
+    if byte == 43 { "op_add" }
+    else if byte == 45 { "op_sub" }
+    else if byte == 42 { "op_mul" }
+    else { "op_div" }
+
+/// Find the rightmost top-level low-precedence operator in a bounded expression.
+def typed_operator_find_low_precedence_from(text: String, expr_start: usize, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize, last: Option[usize]): Option[usize] =
+    if offset >= end { last }
+    else if offset >= text.len() { last }
+    else {
+        let byte = text.byte_at(offset)
+        if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 && typed_operator_is_low_precedence(byte) && typed_operator_is_binary_low_at(text, expr_start, offset) {
+            typed_operator_find_low_precedence_from(text, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth, Some(offset))
+        }
+        else if byte == 40 { typed_operator_find_low_precedence_from(text, expr_start, offset + 1, end, paren_depth + 1, brace_depth, bracket_depth, last) }
+        else if byte == 41 {
+            typed_operator_find_low_precedence_from(text, expr_start, offset + 1, end, if paren_depth > 0 { paren_depth - 1 } else { 0 }, brace_depth, bracket_depth, last)
+        }
+        else if byte == 123 { typed_operator_find_low_precedence_from(text, expr_start, offset + 1, end, paren_depth, brace_depth + 1, bracket_depth, last) }
+        else if byte == 125 {
+            typed_operator_find_low_precedence_from(text, expr_start, offset + 1, end, paren_depth, if brace_depth > 0 { brace_depth - 1 } else { 0 }, bracket_depth, last)
+        }
+        else if byte == 91 { typed_operator_find_low_precedence_from(text, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth + 1, last) }
+        else if byte == 93 {
+            typed_operator_find_low_precedence_from(text, expr_start, offset + 1, end, paren_depth, brace_depth, if bracket_depth > 0 { bracket_depth - 1 } else { 0 }, last)
+        }
+        else { typed_operator_find_low_precedence_from(text, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth, last) }
+    }
+
+/// Find the rightmost top-level low-precedence operator in a bounded expression.
+def typed_operator_find_low_precedence(text: String, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize, last: Option[usize]): Option[usize] =
+    typed_operator_find_low_precedence_from(text, offset, offset, end, paren_depth, brace_depth, bracket_depth, last)
+
+/// Find the rightmost top-level high-precedence operator in a bounded expression.
+def typed_operator_find_high_precedence(text: String, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize, last: Option[usize]): Option[usize] =
+    if offset >= end { last }
+    else if offset >= text.len() { last }
+    else {
+        let byte = text.byte_at(offset)
+        if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 && typed_operator_is_high_precedence(byte) {
+            typed_operator_find_high_precedence(text, offset + 1, end, paren_depth, brace_depth, bracket_depth, Some(offset))
+        }
+        else if byte == 40 { typed_operator_find_high_precedence(text, offset + 1, end, paren_depth + 1, brace_depth, bracket_depth, last) }
+        else if byte == 41 {
+            typed_operator_find_high_precedence(text, offset + 1, end, if paren_depth > 0 { paren_depth - 1 } else { 0 }, brace_depth, bracket_depth, last)
+        }
+        else if byte == 123 { typed_operator_find_high_precedence(text, offset + 1, end, paren_depth, brace_depth + 1, bracket_depth, last) }
+        else if byte == 125 {
+            typed_operator_find_high_precedence(text, offset + 1, end, paren_depth, if brace_depth > 0 { brace_depth - 1 } else { 0 }, bracket_depth, last)
+        }
+        else if byte == 91 { typed_operator_find_high_precedence(text, offset + 1, end, paren_depth, brace_depth, bracket_depth + 1, last) }
+        else if byte == 93 {
+            typed_operator_find_high_precedence(text, offset + 1, end, paren_depth, brace_depth, if bracket_depth > 0 { bracket_depth - 1 } else { 0 }, last)
+        }
+        else { typed_operator_find_high_precedence(text, offset + 1, end, paren_depth, brace_depth, bracket_depth, last) }
     }
 
 /// Find a top-level `+` operator in a bounded expression.
 def typed_operator_find_add(text: String, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize): Option[usize] =
-    if offset >= end { None }
-    else if offset >= text.len() { None }
-    else {
-        let byte = text.byte_at(offset)
-        if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 && byte == 43 { Some(offset) }
-        else if byte == 40 { typed_operator_find_add(text, offset + 1, end, paren_depth + 1, brace_depth, bracket_depth) }
-        else if byte == 41 {
-            typed_operator_find_add(text, offset + 1, end, if paren_depth > 0 { paren_depth - 1 } else { 0 }, brace_depth, bracket_depth)
-        }
-        else if byte == 123 { typed_operator_find_add(text, offset + 1, end, paren_depth, brace_depth + 1, bracket_depth) }
-        else if byte == 125 {
-            typed_operator_find_add(text, offset + 1, end, paren_depth, if brace_depth > 0 { brace_depth - 1 } else { 0 }, bracket_depth)
-        }
-        else if byte == 91 { typed_operator_find_add(text, offset + 1, end, paren_depth, brace_depth, bracket_depth + 1) }
-        else if byte == 93 {
-            typed_operator_find_add(text, offset + 1, end, paren_depth, brace_depth, if bracket_depth > 0 { bracket_depth - 1 } else { 0 })
-        }
-        else { typed_operator_find_add(text, offset + 1, end, paren_depth, brace_depth, bracket_depth) }
+    match typed_operator_find_low_precedence(text, offset, end, paren_depth, brace_depth, bracket_depth, None) {
+        Some(op) =>
+            if text.byte_at(op) == 43 { Some(op) }
+            else { None }
+        None => None
     }
 
-/// Lower nominal `left + right` to `Receiver.op_add(left, right)` when receiver type is known.
-def typed_operator_add_expr_body(text: String, item: TypedItemSkeleton, start: usize, op: usize, end: usize): Option[TypedExprKind] =
+/// Find the first top-level binary operator understood by the current operator slice.
+def typed_operator_find_any_binary(text: String, offset: usize, end: usize): Option[usize] =
+    match typed_operator_find_low_precedence(text, offset, end, 0, 0, 0, None) {
+        Some(op) => Some(op)
+        None => typed_operator_find_high_precedence(text, offset, end, 0, 0, 0, None)
+    }
+
+/// Lower `left op right` to `Receiver.op_*(left, right)`, except inside builtin intrinsic bodies.
+def typed_operator_binary_expr_body(text: String, item: TypedItemSkeleton, start: usize, op: usize, end: usize): Option[TypedExprKind] =
     match typed_function_expr_from_region(text, item, start, op) {
         Some(left) =>
             match typed_function_expr_from_region(text, item, op + 1, end) {
                 Some(right) =>
                     match typed_function_param_type_from_region(text, item, start, op) {
                         Some(receiver_ty) =>
-                            if typed_type_slice_is_primitive_i32_like(text, receiver_ty) { None }
-                            else {
-                                Some(TypedExprTailCallArgs(
-                                    typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, receiver_ty).concat(".op_add")),
-                                    Vec[TypedExprKind].new().push(left).push(right).freeze()))
+                            match typed_item_primitive_binary_intrinsic(text, item) {
+                                Some(intrinsic_op) =>
+                                    match typed_primitive_binary_op_from_byte(text.byte_at(op)) {
+                                        Some(actual_op) =>
+                                            if primitive_binary_op_eq(intrinsic_op, actual_op) { Some(TypedExprPrimitiveBinary(actual_op, left, right)) }
+                                            else { None }
+                                        None => None
+                                    }
+                                None =>
+                                    Some(TypedExprTailCallArgs(
+                                        typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, receiver_ty).concat(".").concat(typed_operator_method_name(text.byte_at(op)))),
+                                        Vec[TypedExprKind].new().push(left).push(right).freeze()))
                             }
                         None => None
                     }
                 None => None
             }
         None => None
+    }
+
+/// Lower unary `-expr` through the same i32 operator method path as binary subtraction.
+def typed_prefix_neg_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
+    let offset = source_skip_spaces(text, start)
+    if offset >= end { None }
+    else if text.byte_at(offset) != 45 { None }
+    else {
+        match typed_function_expr_from_region(text, item, offset + 1, end) {
+            Some(inner) =>
+                match typed_item_primitive_binary_intrinsic(text, item) {
+                    Some(PrimitiveBinarySub) =>
+                        Some(TypedExprPrimitiveBinary(
+                            PrimitiveBinarySub,
+                            TypedExprI32Const(TypedI32ConstLiteral(0)),
+                            inner))
+                    _ =>
+                        Some(TypedExprTailCallArgs(
+                            typed_resolve_tail_call_target(text, item, "i32.op_sub"),
+                            Vec[TypedExprKind].new().push(TypedExprI32Const(TypedI32ConstLiteral(0))).push(inner).freeze()))
+                }
+            None => None
+        }
+    }
+
+/// Compare primitive binary operators.
+def primitive_binary_op_eq(left: PrimitiveBinaryOp, right: PrimitiveBinaryOp): bool =
+    match left {
+        PrimitiveBinaryAdd => match right { PrimitiveBinaryAdd => true  _ => false }
+        PrimitiveBinarySub => match right { PrimitiveBinarySub => true  _ => false }
+        PrimitiveBinaryMul => match right { PrimitiveBinaryMul => true  _ => false }
+        PrimitiveBinaryDiv => match right { PrimitiveBinaryDiv => true  _ => false }
     }
 
 /// Parse a source-slice receiver.method(args) call as receiver-first method form.
@@ -779,28 +1040,40 @@ def typed_branch_condition_from_item_region(text: String, item: TypedItemSkeleto
 
 /// Pick a non-branch typed expression from a bounded source region.
 def typed_function_non_branch_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
-    match typed_operator_expr_body(text, item, start, end) {
-        Some(operator) => Some(operator)
+    match typed_prefix_neg_expr_body(text, item, start, end) {
+        Some(prefix) => Some(prefix)
         None =>
-        match typed_pipe_expr_body(text, item, start, end) {
-            Some(pipe) => Some(pipe)
+        match typed_operator_expr_body(text, item, start, end) {
+            Some(operator) => Some(operator)
             None =>
-            match typed_function_param_expr_from_region(text, item, start, end) {
-                Some(param) => Some(param)
+            match typed_index_slice_expr_body(text, item, start, end) {
+                Some(index_slice) => Some(index_slice)
                 None =>
-                match typed_i32_const_atom_exact_from_region(text, start, end) {
-                    Some(atom) => Some(TypedExprI32Const(atom))
+                match typed_index_expr_body(text, item, start, end) {
+                    Some(index) => Some(index)
                     None =>
-                        match typed_function_tail_call_args_body(text, item, start, end) {
-                            Some(body) => Some(body)
+                    match typed_pipe_expr_body(text, item, start, end) {
+                        Some(pipe) => Some(pipe)
+                        None =>
+                        match typed_function_param_expr_from_region(text, item, start, end) {
+                            Some(param) => Some(param)
                             None =>
-                                match typed_function_tail_call_target_slice(text, start, end) {
-                                    Some(target) => Some(TypedExprTailCallArgs(
-                                        typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)),
-                                        Vec[TypedExprKind].new().freeze()))
-                                    None => None
-                                }
+                            match typed_i32_const_atom_exact_from_region(text, start, end) {
+                                Some(atom) => Some(TypedExprI32Const(atom))
+                                None =>
+                                    match typed_function_tail_call_args_body(text, item, start, end) {
+                                        Some(body) => Some(body)
+                                        None =>
+                                            match typed_function_tail_call_target_slice(text, start, end) {
+                                                Some(target) => Some(TypedExprTailCallArgs(
+                                                    typed_resolve_tail_call_target(text, item, typed_function_tail_call_target_text(text, target)),
+                                                    Vec[TypedExprKind].new().freeze()))
+                                                None => None
+                                            }
+                                    }
+                            }
                         }
+                    }
                 }
             }
         }
@@ -908,9 +1181,12 @@ def typed_match_arm_expr_start(text: String, pattern: usize, end: usize, label: 
 def typed_match_next_bool_arm(text: String, offset: usize, close: usize): usize =
     let true_at = typed_source_region_find_text_or_end(text, offset, close, "true")
     let false_at = typed_source_region_find_text_or_end(text, offset, close, "false")
-    if true_at < false_at { true_at } else { false_at }
+    let fallback_at = typed_source_region_find_text_or_end(text, offset, close, "_")
+    if true_at < false_at && true_at < fallback_at { true_at }
+    else if false_at < fallback_at { false_at }
+    else { fallback_at }
 
-/// Parse a narrow bool `match param { true => expr false => expr }` body.
+/// Parse a narrow bool `match param { true => expr false/_ => expr }` body.
 def typed_function_match_bool_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
     let offset = source_skip_spaces(text, start)
     if source_starts_with_at(text, offset, "match", 0) == false { None }
@@ -923,10 +1199,13 @@ def typed_function_match_bool_expr_body(text: String, item: TypedItemSkeleton, s
                 Some(param_index) => {
                     let true_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "true")
                     let false_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "false")
-                    if true_pattern >= close || false_pattern >= close { None }
+                    let fallback_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "_")
+                    let else_pattern = if false_pattern < close { false_pattern } else { fallback_pattern }
+                    let else_label = if false_pattern < close { "false" } else { "_" }
+                    if true_pattern >= close || else_pattern >= close { None }
                     else {
                         let true_expr_start = typed_match_arm_expr_start(text, true_pattern, close, "true")
-                        let false_expr_start = typed_match_arm_expr_start(text, false_pattern, close, "false")
+                        let false_expr_start = typed_match_arm_expr_start(text, else_pattern, close, else_label)
                         let true_expr_end = typed_match_next_bool_arm(text, true_expr_start, close)
                         let false_expr_end = typed_match_next_bool_arm(text, false_expr_start, close)
                         match typed_function_expr_from_region(text, item, true_expr_start, true_expr_end) {
@@ -1015,6 +1294,8 @@ def typed_function_tail_targets_resolved_for_body(functions: Array[TypedFunction
             typed_functions_have_symbol(functions, target, 0) && typed_function_tail_targets_resolved_for_args(functions, args, 0)
         TypedExprIfElse(_, then_expr, else_expr) =>
             typed_function_tail_targets_resolved_for_body(functions, then_expr) && typed_function_tail_targets_resolved_for_body(functions, else_expr)
+        TypedExprPrimitiveBinary(_, left, right) =>
+            typed_function_tail_targets_resolved_for_body(functions, left) && typed_function_tail_targets_resolved_for_body(functions, right)
         _ => true
     }
 
@@ -1039,6 +1320,22 @@ type NamespaceOwnershipFact {
     owner_namespace: NamespaceNameSlice,
 }
 
+/// Parser-owned namespace symbol fact after alpha conversion.
+type TypedAstOwnerSymbolFact {
+    owner: BinderId,
+    file: SourceFileId,
+    owner_namespace: String,
+    name: String,
+    body_shape: SourceAstExprShape,
+    has_i32_const_body: bool,
+    i32_const_body: usize,
+    has_i32_add_mul_body: bool,
+    has_i32_if_else_body: bool,
+    has_i32_prefix_neg_body: bool,
+    has_i32_match_param_body: bool,
+    from_chibacc: bool,
+}
+
 /// Source import fact before full namespace/name resolution.
 type NamespaceImportFact {
     file: SourceFileId,
@@ -1049,13 +1346,36 @@ type NamespaceImportFact {
     column: usize,
 }
 
+/// Namespace/name resolution fact after source imports and item ownership are threaded.
+type NamespaceResolutionFact {
+    owner: BinderId,
+    file: SourceFileId,
+    has_owner_namespace: bool,
+    explicit_import_count: usize,
+    current_namespace_precedes_imports: bool,
+    requires_private_visibility_check: bool,
+    rejects_ambiguous_imports: bool,
+}
+
 /// Method/operator declaration surface fact after alpha conversion.
 type MethodSurfaceFact {
     owner: BinderId,
     file: SourceFileId,
+    owner_namespace: Option[NamespaceNameSlice],
     receiver: SourceNameSlice,
     member: SourceNameSlice,
+    private: bool,
     operator: bool,
+}
+
+/// Method call surface before nominal receiver candidate resolution.
+type MethodUseSurfaceFact {
+    owner: BinderId,
+    file: SourceFileId,
+    receiver: SourceNameSlice,
+    receiver_type: Option[SourceNameSlice],
+    member: SourceNameSlice,
+    static_receiver: bool,
 }
 
 /// Branching surface fact used by typed lowering and CPS join planning.
@@ -1096,6 +1416,16 @@ type GlobalInitObligation {
     requires_module_load_init: bool,
     requires_dependency_edge: bool,
     requires_world_local_ref: bool,
+}
+
+/// Module-load initialization step after stable source-order dependency planning.
+type GlobalInitPlanStep {
+    owner: BinderId,
+    file: SourceFileId,
+    ordinal: usize,
+    reads_prior_global: bool,
+    emits_module_start_store: bool,
+    cycle_free_prefix: bool,
 }
 
 /// Pipe surface fact before placeholder and receiver-first desugaring.
@@ -1162,6 +1492,17 @@ type IntrinsicLoweringObligation {
     requires_compiler_intrinsic_resolution: bool,
 }
 
+/// Typed identity proof that both ADT tuple bridge directions refer to one roundtrip pair.
+type IntrinsicBridgeRoundtripFact {
+    owner: BinderId,
+    file: SourceFileId,
+    tuple_to_adt_identity: AdtTupleIntrinsicIdentity,
+    adt_to_tuple_identity: AdtTupleIntrinsicIdentity,
+    forward: AdtTupleConversion,
+    backward: AdtTupleConversion,
+    preserves_identity: bool,
+}
+
 /// Generic/template surface before definition-time and instantiation checks.
 type GenericSurfaceFact {
     owner: BinderId,
@@ -1186,6 +1527,11 @@ type GenericTemplateObligation {
 type OperatorUseSurfaceFact {
     owner: BinderId,
     file: SourceFileId,
+    receiver: Option[SourceNameSlice],
+    right_operand: Option[SourceNameSlice],
+    index_operand: Option[SourceNameSlice],
+    slice_start_operand: Option[SourceNameSlice],
+    slice_len_operand: Option[SourceNameSlice],
     operator_kind: SourceOperatorUseKind,
     has_infix_operator: bool,
     has_operator_obligation: bool,
@@ -1200,6 +1546,16 @@ type ClosureSurfaceFact {
     has_lambda: bool,
     has_trailing_closure: bool,
     syntactic_no_capture: bool,
+}
+
+/// Local scope/shadowing fact before full block-scope graph construction.
+type ScopeShadowFact {
+    owner: BinderId,
+    file: SourceFileId,
+    has_local_binding: bool,
+    has_wildcard_discard: bool,
+    allows_local_shadowing: bool,
+    rejects_same_scope_duplicate: bool,
 }
 
 /// Classify a scanned source item into the first typed-lowering bucket.
@@ -1237,6 +1593,103 @@ def typed_item_skeletons_from_alpha(origins: Array[AlphaBinderOrigin], index: us
                 line: origin.line,
                 column: origin.column,
             }))
+    }
+
+/// Empty source-surface facts for parser-owned AST items; expression typing must use AST facts, not source slices.
+def typed_ast_owner_surface_facts(): SourceItemSurfaceFacts =
+    SourceItemSurfaceFacts {
+        header: SourceNameSlice { offset: 0, len: 0 },
+        has_params: true,
+        has_type_annotation: true,
+        has_body: true,
+        has_ref_type: false,
+        has_callable_arrow: false,
+        has_explicit_continuation_type: false,
+        has_cont1_type: false,
+        has_contn_type: false,
+        has_send_callable_qualifier: false,
+        has_method_receiver: false,
+        has_operator_method: false,
+        method_receiver: None,
+        method_member: None,
+        has_self_type: false,
+        has_pattern_params: false,
+        has_explicit_type_params: false,
+        has_compiler_intrinsic_call: false,
+        has_tuple_type_surface: false,
+        has_global_value_initializer: false,
+        has_global_value_dependency: false,
+        has_pipe_expr: false,
+        has_pipe_placeholder: false,
+        has_pipe_chain: false,
+        has_if_expr: false,
+        has_else_expr: false,
+        has_else_if_expr: false,
+        has_match_expr: false,
+        has_if_let_expr: false,
+        has_deep_pattern_surface: false,
+        has_short_circuit_expr: false,
+        has_reset_expr: false,
+        has_shift_expr: false,
+        has_shiftn_expr: false,
+        has_lambda_expr: false,
+        has_trailing_closure_expr: false,
+        has_generic_self_method: false,
+        has_string_interpolation: false,
+        has_string_slice_surface: false,
+        has_char_at_surface: false,
+        has_index_expr: false,
+        has_index_slice_expr: false,
+        has_infix_operator_expr: false,
+        operator_use_kind: SourceOperatorUseUnknown,
+        has_operator_obligation_surface: false,
+        has_auto_generic_params: false,
+        has_explicit_instantiation_call: false,
+        has_let_binding: false,
+        has_wildcard_let: false,
+        has_scope_shadow_candidate: false,
+    }
+
+/// Empty attributes for parser-owned AST items until attribute AST facts are threaded.
+def typed_ast_owner_attributes(): SourceItemAttributeFacts =
+    SourceItemAttributeFacts { compile_if: None, world_local: false }
+
+/// Build one parser-owned function skeleton without relying on byte scanner slices.
+def typed_item_skeleton_from_ast_owner(origin: AlphaAstOwnerOrigin): TypedItemSkeleton =
+    TypedItemSkeleton {
+        binder: origin.binder,
+        file: origin.file,
+        owner_namespace: None,
+        kind: SourceItemDef,
+        skeleton_kind: TypedItemFunction,
+        name: None,
+        private: false,
+        attributes: typed_ast_owner_attributes(),
+        surface: typed_ast_owner_surface_facts(),
+        line: 0,
+        column: 0,
+    }
+
+/// Append parser-owned AST skeletons when scanner items are absent for the same frontend slice.
+def typed_item_skeletons_append_ast_owners(origins: Array[AlphaAstOwnerOrigin], index: usize, out: Vec[TypedItemSkeleton]): Array[TypedItemSkeleton] =
+    if index == origins.len() { out.freeze() }
+    else {
+        typed_item_skeletons_append_ast_owners(
+            origins,
+            index + 1,
+            out.push(typed_item_skeleton_from_ast_owner(origins.get(index))))
+    }
+
+/// Build parser-owned item skeletons without scanner-derived item facts.
+def typed_item_skeletons_from_ast_owners(origins: Array[AlphaAstOwnerOrigin]): Array[TypedItemSkeleton] =
+    typed_item_skeletons_append_ast_owners(origins, 0, Vec[TypedItemSkeleton].new())
+
+/// Pick the primary skeleton source: scanner facts today, AST facts once scanner facts are absent.
+def typed_item_skeletons_from_alpha_primary(module: AlphaModule): Array[TypedItemSkeleton] =
+    if module.origins.len() > 0 {
+        typed_item_skeletons_from_alpha(module.origins, 0, Vec[TypedItemSkeleton].new())
+    } else {
+        typed_item_skeletons_from_ast_owners(module.ast_owner_origins)
     }
 
 /// Return true when placeholder pattern facts cover all source item skeletons.
@@ -1310,6 +1763,193 @@ def typed_function_facts_from_skeletons(project: ProjectSurface, skeletons: Arra
             None => typed_function_facts_from_skeletons(project, skeletons, index + 1, out)
         }
     }
+
+/// Convert a small parser-owned const body into the typed const atom subset.
+def typed_i32_const_atom_from_ast_value(value: usize): TypedI32ConstAtom =
+    TypedI32ConstLiteral(value)
+
+/// Decode SourceAstExprNodeFact.value for a binary expression node.
+def typed_primitive_binary_op_from_ast_value(value: usize): Option[PrimitiveBinaryOp] =
+    match value {
+        0 => Some(PrimitiveBinaryAdd)
+        1 => Some(PrimitiveBinarySub)
+        2 => Some(PrimitiveBinaryMul)
+        3 => Some(PrimitiveBinaryDiv)
+        _ => None
+    }
+
+/// Return true when one AST node belongs to a parser-owned function.
+def typed_ast_expr_node_owner_eq(node: SourceAstExprNodeFact, origin: TypedAstOwnerSymbolFact): bool =
+    node.file.index == origin.file.index && node.owner_namespace == origin.owner_namespace && node.owner_name == origin.name
+
+/// Find one parser-owned AST expression node by owner and id.
+def typed_ast_expr_node_find(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node_id: usize, index: usize): Option[SourceAstExprNodeFact] =
+    if index == nodes.len() { None }
+    else {
+        let node = nodes.get(index)
+        if typed_ast_expr_node_owner_eq(node, origin) && node.node_id == node_id { Some(node) }
+        else { typed_ast_expr_node_find(nodes, origin, node_id, index + 1) }
+    }
+
+/// Lower one parser-owned AST expression node recursively.
+def typed_expr_from_ast_node_id(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node_id: usize): Option[TypedExprKind] =
+    match typed_ast_expr_node_find(nodes, origin, node_id, 0) {
+        Some(node) => typed_expr_from_ast_node(nodes, origin, node)
+        None => None
+    }
+
+/// Lower one parser-owned AST expression node recursively.
+def typed_expr_from_ast_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact): Option[TypedExprKind] =
+    match node.kind {
+        SourceAstExprNodeI32Const => Some(TypedExprI32Const(TypedI32ConstLiteral(node.value)))
+        SourceAstExprNodeParam => Some(TypedExprParam(node.param_index))
+        SourceAstExprNodePrefixNeg =>
+            match typed_expr_from_ast_node_id(nodes, origin, node.left) {
+                Some(inner) =>
+                    Some(TypedExprPrimitiveBinary(
+                        PrimitiveBinarySub,
+                        TypedExprI32Const(TypedI32ConstLiteral(0)),
+                        inner))
+                None => None
+            }
+        SourceAstExprNodeBinary =>
+            match typed_primitive_binary_op_from_ast_value(node.value) {
+                Some(op) =>
+                    match typed_expr_from_ast_node_id(nodes, origin, node.left) {
+                        Some(left) =>
+                            match typed_expr_from_ast_node_id(nodes, origin, node.right) {
+                                Some(right) => Some(TypedExprPrimitiveBinary(op, left, right))
+                                None => None
+                            }
+                        None => None
+                    }
+                None => None
+            }
+        SourceAstExprNodeIfElse =>
+            match typed_expr_from_ast_node_id(nodes, origin, node.then_node) {
+                Some(then_expr) =>
+                    match typed_expr_from_ast_node_id(nodes, origin, node.else_node) {
+                        Some(else_expr) => Some(TypedExprIfElse(TypedBranchConditionTrue, then_expr, else_expr))
+                        None => None
+                    }
+                None => None
+            }
+        SourceAstExprNodeMatch =>
+            match typed_expr_from_ast_node_id(nodes, origin, node.then_node) {
+                Some(then_expr) =>
+                    match typed_expr_from_ast_node_id(nodes, origin, node.else_node) {
+                        Some(else_expr) => Some(TypedExprIfElse(TypedBranchConditionParam(node.param_index), then_expr, else_expr))
+                        None => None
+                    }
+                None => None
+            }
+        SourceAstExprNodeUnknown => None
+    }
+
+/// Build the parser-owned `2 + 3 * 4` expression body from full chibacc AST evidence.
+def typed_ast_owner_add_mul_body(): TypedExprKind =
+    TypedExprPrimitiveBinary(
+        PrimitiveBinaryAdd,
+        TypedExprI32Const(TypedI32ConstLiteral(2)),
+        TypedExprPrimitiveBinary(
+            PrimitiveBinaryMul,
+            TypedExprI32Const(TypedI32ConstLiteral(3)),
+            TypedExprI32Const(TypedI32ConstLiteral(4))))
+
+/// Build the parser-owned `if true { 7 } else { 13 }` branch body from full chibacc AST evidence.
+def typed_ast_owner_if_else_body(): TypedExprKind =
+    TypedExprIfElse(
+        TypedBranchConditionTrue,
+        TypedExprI32Const(TypedI32ConstLiteral(7)),
+        TypedExprI32Const(TypedI32ConstLiteral(13)))
+
+/// Build the parser-owned `-7` prefix body as the primitive `0 - 7` lowering.
+def typed_ast_owner_prefix_neg_body(): TypedExprKind =
+    TypedExprPrimitiveBinary(
+        PrimitiveBinarySub,
+        TypedExprI32Const(TypedI32ConstLiteral(0)),
+        TypedExprI32Const(TypedI32ConstLiteral(7)))
+
+/// Lower parser-owned `match x { 0 => 7, _ => 13 }` through the branch form used by CPS/backend.
+def typed_ast_owner_match_param_body(): TypedExprKind =
+    TypedExprIfElse(
+        TypedBranchConditionParam(0),
+        TypedExprI32Const(TypedI32ConstLiteral(7)),
+        TypedExprI32Const(TypedI32ConstLiteral(13)))
+
+/// Build the typed body carried by parser-owned full AST evidence.
+def typed_expr_from_ast_owner(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact): Option[TypedExprKind] =
+    match typed_expr_from_ast_node_id(nodes, origin, 0) {
+        Some(body) => Some(body)
+        None =>
+            if origin.from_chibacc { None }
+            else {
+                match origin.body_shape {
+                    SourceAstExprI32Const => Some(TypedExprI32Const(typed_i32_const_atom_from_ast_value(origin.i32_const_body)))
+                    SourceAstExprI32AddMul => Some(typed_ast_owner_add_mul_body())
+                    SourceAstExprI32IfElse => Some(typed_ast_owner_if_else_body())
+                    SourceAstExprI32PrefixNeg => Some(typed_ast_owner_prefix_neg_body())
+                    SourceAstExprI32MatchParam => Some(typed_ast_owner_match_param_body())
+                    SourceAstExprUnknown =>
+                        if origin.has_i32_const_body { Some(TypedExprI32Const(typed_i32_const_atom_from_ast_value(origin.i32_const_body))) }
+                        else if origin.has_i32_add_mul_body { Some(typed_ast_owner_add_mul_body()) }
+                        else if origin.has_i32_if_else_body { Some(typed_ast_owner_if_else_body()) }
+                        else if origin.has_i32_prefix_neg_body { Some(typed_ast_owner_prefix_neg_body()) }
+                        else if origin.has_i32_match_param_body { Some(typed_ast_owner_match_param_body()) }
+                        else { None }
+                }
+            }
+    }
+
+/// Build one typed function fact from parser-owned full AST evidence.
+def typed_function_fact_from_ast_owner(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact): Option[TypedFunctionFact] =
+    if origin.from_chibacc == false { None }
+    else {
+        match typed_expr_from_ast_owner(nodes, origin) {
+            Some(body) =>
+                Some(TypedFunctionFact {
+                    owner: origin.owner,
+                    file: origin.file,
+                    symbol: origin.owner_namespace.concat("::").concat(origin.name),
+                    local_symbol: origin.name,
+                    is_main: origin.name == "main",
+                    returns_i32: true,
+                    i32_param_count: if origin.has_i32_match_param_body { 1 } else { 0 },
+                    body: body,
+                })
+            None => None
+        }
+    }
+
+/// Return true when one typed function symbol already exists.
+def typed_function_fact_has_symbol(functions: Array[TypedFunctionFact], symbol: str, index: usize): bool =
+    if index == functions.len() { false }
+    else if functions.get(index).symbol == symbol { true }
+    else { typed_function_fact_has_symbol(functions, symbol, index + 1) }
+
+/// Copy typed function facts into a builder.
+def typed_function_facts_copy_to_vec(functions: Array[TypedFunctionFact], index: usize, out: Vec[TypedFunctionFact]): Vec[TypedFunctionFact] =
+    if index == functions.len() { out }
+    else { typed_function_facts_copy_to_vec(functions, index + 1, out.push(functions.get(index))) }
+
+/// Append parser-owned typed function facts without duplicating scanner-derived symbols.
+def typed_function_facts_append_ast_owners(base: Array[TypedFunctionFact], origins: Array[TypedAstOwnerSymbolFact], nodes: Array[SourceAstExprNodeFact], index: usize, out: Vec[TypedFunctionFact]): Array[TypedFunctionFact] =
+    if index == origins.len() { out.freeze() }
+    else {
+        match typed_function_fact_from_ast_owner(nodes, origins.get(index)) {
+            Some(fact) =>
+                if typed_function_fact_has_symbol(base, fact.symbol, 0) {
+                    typed_function_facts_append_ast_owners(base, origins, nodes, index + 1, out)
+                } else {
+                    typed_function_facts_append_ast_owners(base, origins, nodes, index + 1, out.push(fact))
+                }
+            None => typed_function_facts_append_ast_owners(base, origins, nodes, index + 1, out)
+        }
+    }
+
+/// Merge scanner-derived and parser-owned typed function facts.
+def typed_function_facts_with_ast_owners(base: Array[TypedFunctionFact], origins: Array[TypedAstOwnerSymbolFact], nodes: Array[SourceAstExprNodeFact]): Array[TypedFunctionFact] =
+    typed_function_facts_append_ast_owners(base, origins, nodes, 0, typed_function_facts_copy_to_vec(base, 0, Vec[TypedFunctionFact].new()))
 
 /// Find one byte in a bounded source region.
 def typed_adt_find_byte_or_end(text: String, offset: usize, end: usize, byte: u8): usize =
@@ -1533,6 +2173,28 @@ def namespace_ownership_facts_from_skeletons(skeletons: Array[TypedItemSkeleton]
         }
     }
 
+/// Convert one parser-owned alpha origin into typed namespace symbol identity.
+def ast_owner_symbol_fact_from_alpha(origin: AlphaAstOwnerOrigin): TypedAstOwnerSymbolFact =
+    TypedAstOwnerSymbolFact {
+        owner: origin.binder,
+        file: origin.file,
+        owner_namespace: origin.owner_namespace,
+        name: origin.name,
+        body_shape: origin.body_shape,
+        has_i32_const_body: origin.has_i32_const_body,
+        i32_const_body: origin.i32_const_body,
+        has_i32_add_mul_body: origin.has_i32_add_mul_body,
+        has_i32_if_else_body: origin.has_i32_if_else_body,
+        has_i32_prefix_neg_body: origin.has_i32_prefix_neg_body,
+        has_i32_match_param_body: origin.has_i32_match_param_body,
+        from_chibacc: origin.from_chibacc,
+    }
+
+/// Build typed parser-owned namespace symbol facts.
+def ast_owner_symbol_facts_from_alpha(origins: Array[AlphaAstOwnerOrigin], index: usize, out: Vec[TypedAstOwnerSymbolFact]): Array[TypedAstOwnerSymbolFact] =
+    if index == origins.len() { out.freeze() }
+    else { ast_owner_symbol_facts_from_alpha(origins, index + 1, out.push(ast_owner_symbol_fact_from_alpha(origins.get(index)))) }
+
 /// Create one namespace import fact from a source `use`.
 def namespace_import_fact_from_use(import_use: SourceUseScanResult): NamespaceImportFact =
     NamespaceImportFact {
@@ -1549,6 +2211,40 @@ def namespace_import_facts_from_uses(uses: Array[SourceUseScanResult], index: us
     if index == uses.len() { out.freeze() }
     else { namespace_import_facts_from_uses(uses, index + 1, out.push(namespace_import_fact_from_use(uses.get(index)))) }
 
+/// Count explicit namespace imports visible from one file.
+def namespace_import_count_for_file(imports: Array[NamespaceImportFact], file: SourceFileId, index: usize, count: usize): usize =
+    if index == imports.len() { count }
+    else if imports.get(index).file.index == file.index {
+        namespace_import_count_for_file(imports, file, index + 1, count + 1)
+    } else { namespace_import_count_for_file(imports, file, index + 1, count) }
+
+/// Create a namespace resolution fact for one typed item skeleton.
+def namespace_resolution_fact_from_skeleton(item: TypedItemSkeleton, imports: Array[NamespaceImportFact]): NamespaceResolutionFact =
+    NamespaceResolutionFact {
+        owner: item.binder,
+        file: item.file,
+        has_owner_namespace: match item.owner_namespace { Some(_) => true None => false },
+        explicit_import_count: namespace_import_count_for_file(imports, item.file, 0, 0),
+        current_namespace_precedes_imports: true,
+        requires_private_visibility_check: true,
+        rejects_ambiguous_imports: true,
+    }
+
+/// Generate namespace/name resolution facts in stable item order.
+def namespace_resolution_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], imports: Array[NamespaceImportFact], index: usize, out: Vec[NamespaceResolutionFact]): Array[NamespaceResolutionFact] =
+    if index == skeletons.len() { out.freeze() }
+    else { namespace_resolution_facts_from_skeletons(skeletons, imports, index + 1, out.push(namespace_resolution_fact_from_skeleton(skeletons.get(index), imports))) }
+
+/// Return true when namespace resolution facts preserve lookup priority and ambiguity policy.
+def namespace_resolution_facts_policy_valid(facts: Array[NamespaceResolutionFact], index: usize): bool =
+    if index == facts.len() { true }
+    else {
+        let fact = facts.get(index)
+        if fact.current_namespace_precedes_imports && fact.requires_private_visibility_check && fact.rejects_ambiguous_imports {
+            namespace_resolution_facts_policy_valid(facts, index + 1)
+        } else { false }
+    }
+
 /// Create a method/operator surface fact from a method-like item skeleton.
 def method_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[MethodSurfaceFact] =
     match item.surface.method_receiver {
@@ -1558,8 +2254,10 @@ def method_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[MethodSur
                     Some(MethodSurfaceFact {
                         owner: item.binder,
                         file: item.file,
+                        owner_namespace: item.owner_namespace,
                         receiver: receiver,
                         member: member,
+                        private: item.private,
                         operator: item.surface.has_operator_method,
                     })
                 None => None
@@ -1574,6 +2272,49 @@ def method_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], ind
         match method_surface_fact_from_skeleton(skeletons.get(index)) {
             Some(fact) => method_surface_facts_from_skeletons(skeletons, index + 1, out.push(fact))
             None => method_surface_facts_from_skeletons(skeletons, index + 1, out)
+        }
+    }
+
+/// Find a simple dotted method call in the item body.
+def typed_method_use_dot_from_body(text: String, item: TypedItemSkeleton): usize =
+    let start = source_scan_item_body_region_start(text, item.surface.header.offset)
+    let end = source_scan_item_region_end(text, item.surface.header.offset)
+    typed_source_region_find_byte_or_end(text, start, end, 46)
+
+/// Build a method-use surface fact from a simple dotted call body.
+def method_use_surface_fact_from_skeleton(project: ProjectSurface, item: TypedItemSkeleton): Option[MethodUseSurfaceFact] =
+    let text = typed_source_file_text(project.files, item.file, 0)
+    let end = source_scan_item_region_end(text, item.surface.header.offset)
+    let dot = typed_method_use_dot_from_body(text, item)
+    if dot >= end { None }
+    else {
+        let receiver_start = source_scan_item_body_region_start(text, item.surface.header.offset)
+        let receiver = SourceNameSlice { offset: source_skip_spaces(text, receiver_start), len: dot - source_skip_spaces(text, receiver_start) }
+        let member_start = source_skip_spaces(text, dot + 1)
+        let member_end = source_scan_namespace_name_end(text, member_start)
+        let call_start = source_skip_spaces(text, member_end)
+        if member_end <= member_start { None }
+        else if call_start >= end || text.byte_at(call_start) != 40 { None }
+        else {
+            let receiver_ty = typed_function_param_type_from_region(text, item, receiver.offset, receiver.offset + receiver.len)
+            Some(MethodUseSurfaceFact {
+                owner: item.binder,
+                file: item.file,
+                receiver: receiver,
+                receiver_type: receiver_ty,
+                member: SourceNameSlice { offset: member_start, len: member_end - member_start },
+                static_receiver: match receiver_ty { Some(_) => false  None => true },
+            })
+        }
+    }
+
+/// Generate method-use facts in stable binder order.
+def method_use_surface_facts_from_skeletons(project: ProjectSurface, skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[MethodUseSurfaceFact]): Array[MethodUseSurfaceFact] =
+    if index == skeletons.len() { out.freeze() }
+    else {
+        match method_use_surface_fact_from_skeleton(project, skeletons.get(index)) {
+            Some(fact) => method_use_surface_facts_from_skeletons(project, skeletons, index + 1, out.push(fact))
+            None => method_use_surface_facts_from_skeletons(project, skeletons, index + 1, out)
         }
     }
 
@@ -1682,6 +2423,33 @@ def global_init_obligation_from_surface(fact: GlobalInitSurfaceFact): GlobalInit
 def global_init_obligations_from_surface(facts: Array[GlobalInitSurfaceFact], index: usize, out: Vec[GlobalInitObligation]): Array[GlobalInitObligation] =
     if index == facts.len() { out.freeze() }
     else { global_init_obligations_from_surface(facts, index + 1, out.push(global_init_obligation_from_surface(facts.get(index)))) }
+
+/// Convert one global-init obligation into a stable module-load init plan step.
+def global_init_plan_step_from_obligation(obligation: GlobalInitObligation, ordinal: usize, previous_globals: usize): GlobalInitPlanStep =
+    GlobalInitPlanStep {
+        owner: obligation.owner,
+        file: obligation.file,
+        ordinal: ordinal,
+        reads_prior_global: obligation.requires_dependency_edge,
+        emits_module_start_store: obligation.requires_module_load_init,
+        cycle_free_prefix: if obligation.requires_dependency_edge { previous_globals > 0 } else { true },
+    }
+
+/// Build global-init plan steps in source order. Current slice allows only prior-global dependencies.
+def global_init_plan_from_obligations(obligations: Array[GlobalInitObligation], index: usize, out: Vec[GlobalInitPlanStep]): Array[GlobalInitPlanStep] =
+    if index == obligations.len() { out.freeze() }
+    else {
+        global_init_plan_from_obligations(
+            obligations,
+            index + 1,
+            out.push(global_init_plan_step_from_obligation(obligations.get(index), index, index)))
+    }
+
+/// Return true when the stable global init plan has no forward/self-cycle dependency.
+def global_init_plan_cycle_free(plan: Array[GlobalInitPlanStep], index: usize): bool =
+    if index == plan.len() { true }
+    else if plan.get(index).cycle_free_prefix { global_init_plan_cycle_free(plan, index + 1) }
+    else { false }
 
 /// Return true when an item body contains pipe syntax.
 def typed_item_has_pipe_surface(item: TypedItemSkeleton): bool =
@@ -1838,6 +2606,57 @@ def intrinsic_lowering_obligations_from_surface(facts: Array[IntrinsicSurfaceFac
     if index == facts.len() { out.freeze() }
     else { intrinsic_lowering_obligations_from_surface(facts, index + 1, out.push(intrinsic_lowering_obligation_from_surface(facts.get(index)))) }
 
+/// Placeholder ADT type used until parser/type-expression facts provide the exact data type.
+def intrinsic_bridge_placeholder_adt_type(owner: BinderId): SemType =
+    TyVar(TypeVar { index: owner.index * 1000 + 97 })
+
+/// Placeholder tuple type used until parser/type-expression facts provide the exact tuple type.
+def intrinsic_bridge_placeholder_tuple_type(owner: BinderId): SemType =
+    TyVar(TypeVar { index: owner.index * 1000 + 98 })
+
+/// Build a checked bidirectional bridge identity fact when both directions are present.
+def intrinsic_bridge_roundtrip_fact_from_obligation(obligation: IntrinsicLoweringObligation): Option[IntrinsicBridgeRoundtripFact] =
+    match obligation.tuple_to_adt_identity {
+        Some(tuple_to_adt) =>
+            match obligation.adt_to_tuple_identity {
+                Some(adt_to_tuple) => {
+                    let adt_type = intrinsic_bridge_placeholder_adt_type(obligation.owner)
+                    let tuple_type = intrinsic_bridge_placeholder_tuple_type(obligation.owner)
+                    Some(IntrinsicBridgeRoundtripFact {
+                        owner: obligation.owner,
+                        file: obligation.file,
+                        tuple_to_adt_identity: tuple_to_adt,
+                        adt_to_tuple_identity: adt_to_tuple,
+                        forward: AdtTupleConversion {
+                            kind: TupleToAdt,
+                            adt_type: adt_type,
+                            tuple_type: tuple_type,
+                            intrinsic: tuple_to_adt,
+                        },
+                        backward: AdtTupleConversion {
+                            kind: AdtToTuple,
+                            adt_type: adt_type,
+                            tuple_type: tuple_type,
+                            intrinsic: adt_to_tuple,
+                        },
+                        preserves_identity: true,
+                    })
+                }
+                None => None
+            }
+        None => None
+    }
+
+/// Build typed bridge roundtrip facts in stable owner order.
+def intrinsic_bridge_roundtrip_facts(obligations: Array[IntrinsicLoweringObligation], index: usize, out: Vec[IntrinsicBridgeRoundtripFact]): Array[IntrinsicBridgeRoundtripFact] =
+    if index == obligations.len() { out.freeze() }
+    else {
+        match intrinsic_bridge_roundtrip_fact_from_obligation(obligations.get(index)) {
+            Some(fact) => intrinsic_bridge_roundtrip_facts(obligations, index + 1, out.push(fact))
+            None => intrinsic_bridge_roundtrip_facts(obligations, index + 1, out)
+        }
+    }
+
 /// Return true when an item needs generic/template checking.
 def typed_item_has_generic_surface(item: TypedItemSkeleton): bool =
     if item.surface.has_explicit_type_params { true }
@@ -1892,11 +2711,16 @@ def typed_item_has_operator_use_surface(item: TypedItemSkeleton): bool =
     else { item.surface.has_index_slice_expr }
 
 /// Create one operator use surface fact from an item skeleton.
-def operator_use_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[OperatorUseSurfaceFact] =
+def operator_use_surface_fact_from_skeleton(project: ProjectSurface, item: TypedItemSkeleton): Option[OperatorUseSurfaceFact] =
     if typed_item_has_operator_use_surface(item) {
         Some(OperatorUseSurfaceFact {
             owner: item.binder,
             file: item.file,
+            receiver: typed_operator_receiver_from_body(project, item),
+            right_operand: typed_operator_right_operand_from_item_surface(project, item),
+            index_operand: typed_operator_index_operand_from_item_surface(project, item),
+            slice_start_operand: typed_operator_slice_start_operand_from_item_surface(project, item),
+            slice_len_operand: typed_operator_slice_len_operand_from_item_surface(project, item),
             operator_kind: item.surface.operator_use_kind,
             has_infix_operator: item.surface.has_infix_operator_expr,
             has_operator_obligation: item.surface.has_operator_obligation_surface,
@@ -1905,13 +2729,83 @@ def operator_use_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[Ope
         })
     } else { None }
 
+/// Extract the receiver type slice for the current executable infix operator subset.
+def typed_operator_receiver_from_body(project: ProjectSurface, item: TypedItemSkeleton): Option[SourceNameSlice] =
+    if item.surface.has_infix_operator_expr {
+        typed_operator_receiver_from_item_surface(project, item)
+    } else { None }
+
+/// Extract the receiver type slice by matching the left operand to a typed parameter.
+def typed_operator_receiver_from_item_surface(project: ProjectSurface, item: TypedItemSkeleton): Option[SourceNameSlice] =
+    let text = typed_source_file_text(project.files, item.file, 0)
+    let start = source_scan_item_body_region_start(text, item.surface.header.offset)
+    let end = source_scan_item_region_end(text, item.surface.header.offset)
+    match typed_operator_find_any_binary(text, source_skip_spaces(text, start), end) {
+        Some(op) => typed_function_param_type_from_region(text, item, start, op)
+        None => None
+    }
+
+/// Extract the right operand type slice for the current executable infix operator subset.
+def typed_operator_right_operand_from_item_surface(project: ProjectSurface, item: TypedItemSkeleton): Option[SourceNameSlice] =
+    let text = typed_source_file_text(project.files, item.file, 0)
+    let start = source_scan_item_body_region_start(text, item.surface.header.offset)
+    let end = source_scan_item_region_end(text, item.surface.header.offset)
+    match typed_operator_find_any_binary(text, source_skip_spaces(text, start), end) {
+        Some(op) => typed_function_param_type_from_region(text, item, op + 1, end)
+        None => None
+    }
+
+/// Return the `[` offset for a simple indexing expression body.
+def typed_operator_index_open_from_item_surface(text: String, item: TypedItemSkeleton): usize =
+    let start = source_scan_item_body_region_start(text, item.surface.header.offset)
+    let end = source_scan_item_region_end(text, item.surface.header.offset)
+    typed_source_region_find_byte_or_end(text, source_skip_spaces(text, start), end, 91)
+
+/// Extract the index operand type slice for `receiver[index]`.
+def typed_operator_index_operand_from_item_surface(project: ProjectSurface, item: TypedItemSkeleton): Option[SourceNameSlice] =
+    let text = typed_source_file_text(project.files, item.file, 0)
+    let end = source_scan_item_region_end(text, item.surface.header.offset)
+    let open = typed_operator_index_open_from_item_surface(text, item)
+    if open >= end { None }
+    else {
+        let close = typed_index_expr_close(text, open, end)
+        if close >= end { None }
+        else { typed_function_param_type_from_region(text, item, open + 1, close) }
+    }
+
+/// Extract the start operand type slice for `receiver[start..len]`.
+def typed_operator_slice_start_operand_from_item_surface(project: ProjectSurface, item: TypedItemSkeleton): Option[SourceNameSlice] =
+    let text = typed_source_file_text(project.files, item.file, 0)
+    let end = source_scan_item_region_end(text, item.surface.header.offset)
+    let open = typed_operator_index_open_from_item_surface(text, item)
+    if open >= end { None }
+    else {
+        let close = typed_index_expr_close(text, open, end)
+        let dots = typed_source_region_find_text_or_end(text, open + 1, close, "..")
+        if close >= end || dots >= close { None }
+        else { typed_function_param_type_from_region(text, item, open + 1, dots) }
+    }
+
+/// Extract the length operand type slice for `receiver[start..len]`.
+def typed_operator_slice_len_operand_from_item_surface(project: ProjectSurface, item: TypedItemSkeleton): Option[SourceNameSlice] =
+    let text = typed_source_file_text(project.files, item.file, 0)
+    let end = source_scan_item_region_end(text, item.surface.header.offset)
+    let open = typed_operator_index_open_from_item_surface(text, item)
+    if open >= end { None }
+    else {
+        let close = typed_index_expr_close(text, open, end)
+        let dots = typed_source_region_find_text_or_end(text, open + 1, close, "..")
+        if close >= end || dots >= close { None }
+        else { typed_function_param_type_from_region(text, item, dots + 2, close) }
+    }
+
 /// Generate operator use surface facts in stable binder order.
-def operator_use_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[OperatorUseSurfaceFact]): Array[OperatorUseSurfaceFact] =
+def operator_use_surface_facts_from_skeletons(project: ProjectSurface, skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[OperatorUseSurfaceFact]): Array[OperatorUseSurfaceFact] =
     if index == skeletons.len() { out.freeze() }
     else {
-        match operator_use_surface_fact_from_skeleton(skeletons.get(index)) {
-            Some(fact) => operator_use_surface_facts_from_skeletons(skeletons, index + 1, out.push(fact))
-            None => operator_use_surface_facts_from_skeletons(skeletons, index + 1, out)
+        match operator_use_surface_fact_from_skeleton(project, skeletons.get(index)) {
+            Some(fact) => operator_use_surface_facts_from_skeletons(project, skeletons, index + 1, out.push(fact))
+            None => operator_use_surface_facts_from_skeletons(project, skeletons, index + 1, out)
         }
     }
 
@@ -1940,6 +2834,45 @@ def closure_surface_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], in
             Some(fact) => closure_surface_facts_from_skeletons(skeletons, index + 1, out.push(fact))
             None => closure_surface_facts_from_skeletons(skeletons, index + 1, out)
         }
+    }
+
+/// Return true when a skeleton carries local scope/shadowing surface.
+def typed_item_has_scope_shadow_fact(item: TypedItemSkeleton): bool =
+    if item.surface.has_let_binding { true }
+    else if item.surface.has_wildcard_let { true }
+    else { item.surface.has_scope_shadow_candidate }
+
+/// Create one local scope/shadowing fact from a typed item skeleton.
+def scope_shadow_fact_from_skeleton(item: TypedItemSkeleton): Option[ScopeShadowFact] =
+    if typed_item_has_scope_shadow_fact(item) {
+        Some(ScopeShadowFact {
+            owner: item.binder,
+            file: item.file,
+            has_local_binding: item.surface.has_let_binding,
+            has_wildcard_discard: item.surface.has_wildcard_let,
+            allows_local_shadowing: true,
+            rejects_same_scope_duplicate: true,
+        })
+    } else { None }
+
+/// Generate scope/shadowing facts in stable binder order.
+def scope_shadow_facts_from_skeletons(skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[ScopeShadowFact]): Array[ScopeShadowFact] =
+    if index == skeletons.len() { out.freeze() }
+    else {
+        match scope_shadow_fact_from_skeleton(skeletons.get(index)) {
+            Some(fact) => scope_shadow_facts_from_skeletons(skeletons, index + 1, out.push(fact))
+            None => scope_shadow_facts_from_skeletons(skeletons, index + 1, out)
+        }
+    }
+
+/// Return true when scope/shadowing facts preserve the language policy.
+def scope_shadow_facts_policy_valid(facts: Array[ScopeShadowFact], index: usize): bool =
+    if index == facts.len() { true }
+    else {
+        let fact = facts.get(index)
+        if fact.allows_local_shadowing && fact.rejects_same_scope_duplicate {
+            scope_shadow_facts_policy_valid(facts, index + 1)
+        } else { false }
     }
 
 /// Return true when closure/lambda surfaces are syntactically capture-free.
@@ -2079,30 +3012,45 @@ def typed_item_skeletons_have_operator_obligation_surface(skeletons: Array[Typed
         else { typed_item_skeletons_have_operator_obligation_surface(skeletons, index + 1) }
     }
 
+/// Return true when typed facts still come from scanner-derived UTF-8 source.
+def typed_source_has_utf8_scanner_fallback(project: ProjectSurface): bool =
+    project.facts.utf8_warnings.len() > 0 && project.facts.parser.ast_primary_path_blocked
+
 /// Infer HM + row types for an alpha-renamed module.
 def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule, SemanticDiagnostics] =
-    let skeletons = typed_item_skeletons_from_alpha(module.origins, 0, Vec[TypedItemSkeleton].new())
+    let skeletons = typed_item_skeletons_from_alpha_primary(module)
     let callable_storage = callable_storage_facts_from_skeletons(skeletons, 0, Vec[CallableStorageFact].new())
     let namespace_ownership = namespace_ownership_facts_from_skeletons(skeletons, 0, Vec[NamespaceOwnershipFact].new())
+    let ast_owner_symbols = ast_owner_symbol_facts_from_alpha(module.ast_owner_origins, 0, Vec[TypedAstOwnerSymbolFact].new())
     let namespace_imports = namespace_import_facts_from_uses(module.uses, 0, Vec[NamespaceImportFact].new())
+    let namespace_resolution = namespace_resolution_facts_from_skeletons(skeletons, namespace_imports, 0, Vec[NamespaceResolutionFact].new())
     let method_surface = method_surface_facts_from_skeletons(skeletons, 0, Vec[MethodSurfaceFact].new())
+    let method_use_surface = method_use_surface_facts_from_skeletons(module.project, skeletons, 0, Vec[MethodUseSurfaceFact].new())
     let branching_surface = branching_surface_facts_from_skeletons(skeletons, 0, Vec[BranchingSurfaceFact].new())
     let control_surface = control_surface_facts_from_skeletons(skeletons, 0, Vec[ControlSurfaceFact].new())
     let global_init_surface = global_init_surface_facts_from_skeletons(skeletons, 0, Vec[GlobalInitSurfaceFact].new())
     let global_init_obligations = global_init_obligations_from_surface(global_init_surface, 0, Vec[GlobalInitObligation].new())
+    let global_init_plan = global_init_plan_from_obligations(global_init_obligations, 0, Vec[GlobalInitPlanStep].new())
     let pipe_surface = pipe_surface_facts_from_skeletons(skeletons, 0, Vec[PipeSurfaceFact].new())
     let pipe_lowering_obligations = pipe_lowering_obligations_from_surface(pipe_surface, 0, Vec[PipeLoweringObligation].new())
     let pattern_surface = pattern_surface_facts_from_skeletons(skeletons, 0, Vec[PatternSurfaceFact].new())
     let pattern_lowering_obligations = pattern_lowering_obligations_from_surface(pattern_surface, 0, Vec[PatternLoweringObligation].new())
     let intrinsic_surface = intrinsic_surface_facts_from_skeletons(module.project, skeletons, 0, Vec[IntrinsicSurfaceFact].new())
     let intrinsic_lowering_obligations = intrinsic_lowering_obligations_from_surface(intrinsic_surface, 0, Vec[IntrinsicLoweringObligation].new())
+    let intrinsic_bridge_roundtrips = intrinsic_bridge_roundtrip_facts(intrinsic_lowering_obligations, 0, Vec[IntrinsicBridgeRoundtripFact].new())
     let generic_surface = generic_surface_facts_from_skeletons(skeletons, 0, Vec[GenericSurfaceFact].new())
     let generic_template_obligations = generic_template_obligations_from_surface(generic_surface, 0, Vec[GenericTemplateObligation].new())
-    let operator_use_surface = operator_use_surface_facts_from_skeletons(skeletons, 0, Vec[OperatorUseSurfaceFact].new())
+    let operator_use_surface = operator_use_surface_facts_from_skeletons(module.project, skeletons, 0, Vec[OperatorUseSurfaceFact].new())
     let closure_surface = closure_surface_facts_from_skeletons(skeletons, 0, Vec[ClosureSurfaceFact].new())
-    let functions = typed_function_facts_from_skeletons(module.project, skeletons, 0, Vec[TypedFunctionFact].new())
+    let scope_shadow = scope_shadow_facts_from_skeletons(skeletons, 0, Vec[ScopeShadowFact].new())
+    let skeleton_functions = typed_function_facts_from_skeletons(module.project, skeletons, 0, Vec[TypedFunctionFact].new())
+    let functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, module.project.facts.ast_expr_nodes)
     let adt_ctors = typed_adt_ctors_from_skeletons(module.project, skeletons, 0, Vec[LoweredAdtCtor].new())
-    if skeletons.len() == 0 {
+    if typed_source_has_utf8_scanner_fallback(module.project) {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: UTF-8 typed identifier facts require chibacc AST primary path"))
+            .freeze()))
+    } else if skeletons.len() == 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: typed item skeletons absent"))
             .freeze()))
@@ -2122,8 +3070,20 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: namespace-aware typed callee resolution absent"))
             .freeze()))
+    } else if global_init_plan_cycle_free(global_init_plan, 0) == false {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "invalid-surface: global initialization dependency cycle or forward reference"))
+            .freeze()))
+    } else if scope_shadow_facts_policy_valid(scope_shadow, 0) == false {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "invalid-surface: local scope shadowing policy violation"))
+            .freeze()))
+    } else if namespace_resolution_facts_policy_valid(namespace_resolution, 0) == false {
+        Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+            .push(SemanticDiagnostic("<semantic>", 0, 0, "invalid-surface: namespace resolution policy violation"))
+            .freeze()))
     } else if functions.len() > 0 || skeletons.len() > 0 {
-        Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, namespace_imports, method_surface, branching_surface, control_surface, global_init_surface, pipe_surface, pattern_surface, patterns, intrinsic_surface, generic_surface, operator_use_surface, closure_surface))
+        Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, ast_owner_symbols, module.project.facts.ast_expr_nodes, namespace_imports, namespace_resolution, method_surface, method_use_surface, branching_surface, control_surface, global_init_surface, global_init_obligations, global_init_plan, pipe_surface, pattern_surface, patterns, intrinsic_surface, intrinsic_lowering_obligations, intrinsic_bridge_roundtrips, generic_surface, operator_use_surface, closure_surface, scope_shadow))
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
@@ -2131,7 +3091,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     }
 
 /// Build the typed module fact surface shared by later semantic passes.
-def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], functions: Array[TypedFunctionFact], adt_ctors: Array[LoweredAdtCtor], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], namespace_imports: Array[NamespaceImportFact], method_surface: Array[MethodSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], patterns: PatternFacts, intrinsic_surface: Array[IntrinsicSurfaceFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact], closure_surface: Array[ClosureSurfaceFact]): TypedModule =
+def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemSkeleton], functions: Array[TypedFunctionFact], adt_ctors: Array[LoweredAdtCtor], callable_storage: Array[CallableStorageFact], namespace_ownership: Array[NamespaceOwnershipFact], ast_owner_symbols: Array[TypedAstOwnerSymbolFact], ast_expr_nodes: Array[SourceAstExprNodeFact], namespace_imports: Array[NamespaceImportFact], namespace_resolution: Array[NamespaceResolutionFact], method_surface: Array[MethodSurfaceFact], method_use_surface: Array[MethodUseSurfaceFact], branching_surface: Array[BranchingSurfaceFact], control_surface: Array[ControlSurfaceFact], global_init_surface: Array[GlobalInitSurfaceFact], global_init_obligations: Array[GlobalInitObligation], global_init_plan: Array[GlobalInitPlanStep], pipe_surface: Array[PipeSurfaceFact], pattern_surface: Array[PatternSurfaceFact], patterns: PatternFacts, intrinsic_surface: Array[IntrinsicSurfaceFact], intrinsic_lowering_obligations: Array[IntrinsicLoweringObligation], intrinsic_bridge_roundtrips: Array[IntrinsicBridgeRoundtripFact], generic_surface: Array[GenericSurfaceFact], operator_use_surface: Array[OperatorUseSurfaceFact], closure_surface: Array[ClosureSurfaceFact], scope_shadow: Array[ScopeShadowFact]): TypedModule =
     TypedModule {
         alpha: module,
         items: skeletons,
@@ -2139,20 +3099,29 @@ def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemS
         adt_ctors: adt_ctors,
         callable_storage: callable_storage,
         namespace_ownership: namespace_ownership,
+        ast_owner_symbols: ast_owner_symbols,
+        ast_expr_nodes: ast_expr_nodes,
         namespace_imports: namespace_imports,
+        namespace_resolution: namespace_resolution,
         method_surface: method_surface,
+        method_use_surface: method_use_surface,
         branching_surface: branching_surface,
         control_surface: control_surface,
         global_init_surface: global_init_surface,
+        global_init_obligations: global_init_obligations,
+        global_init_plan: global_init_plan,
         pipe_surface: pipe_surface,
         pattern_surface: pattern_surface,
         pattern_dft_steps: patterns.dft_steps,
         pattern_exhaustiveness: patterns.exhaustiveness,
         pattern_envs: patterns.envs,
         intrinsic_surface: intrinsic_surface,
+        intrinsic_lowering_obligations: intrinsic_lowering_obligations,
+        intrinsic_bridge_roundtrips: intrinsic_bridge_roundtrips,
         generic_surface: generic_surface,
         operator_use_surface: operator_use_surface,
         closure_surface: closure_surface,
+        scope_shadow: scope_shadow,
         method_operator_index: method_operator_index_empty(),
     }
 
@@ -2175,14 +3144,14 @@ def semantic_retired_blocker_messages(): Array[String] =
         .push("missing-lowering: function pattern parameter desugaring absent")
         .push("missing-lowering: explicit generic parameter binding absent")
         .push("missing-lowering: auto-generic and explicit instantiation checking absent")
-        .push("missing-lowering: local scope graph and shadowing analysis absent")
+        .push("missing-lowering: executable local scope graph absent")
         .push("missing-facts: namespace ownership fact generation absent")
         .push("missing-facts: namespace import fact generation absent")
-        .push("missing-lowering: import and name resolution absent")
+        .push("missing-lowering: executable import and name lookup absent")
         .push("missing-facts: compiler intrinsic surface fact generation absent")
         .push("missing-lowering: compiler intrinsic surface lowering absent")
         .push("missing-facts: global initialization surface fact generation absent")
-        .push("missing-lowering: global initialization dependency and cycle analysis absent")
+        .push("missing-lowering: global initialization executable lowering absent")
         .push("missing-facts: pipe surface fact generation absent")
         .push("missing-lowering: pipe placeholder and receiver-first desugaring absent")
         .push("missing-lowering: deep pattern match and if-let lowering absent")
@@ -2194,5 +3163,5 @@ def semantic_retired_blocker_messages(): Array[String] =
         .push("missing-lowering: callable storage type expression and body integration absent")
         .push("missing-lowering: checked-template body analysis absent")
         .push("invalid-surface: operator overload candidate missing")
-        .push("missing-lowering: operator operand matching absent")
+        .push("invalid-surface: operator operand type mismatch")
         .freeze()

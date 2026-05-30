@@ -58,6 +58,14 @@ def source_project_has_namespace(project: ProjectSurface): bool =
 def source_project_has_item(project: ProjectSurface): bool =
     project.facts.items.len() > 0
 
+/// Return true when parser-owned AST facts contain namespace evidence.
+def source_project_has_ast_namespace(project: ProjectSurface): bool =
+    project.facts.ast_owner_symbols.len() > 0
+
+/// Return true when parser-owned AST facts contain item evidence.
+def source_project_has_ast_item(project: ProjectSurface): bool =
+    project.facts.ast_owner_symbols.len() > 0
+
 /// Return true when byte-level scanner saw non-ASCII source before UTF-8 scanner support exists.
 def source_project_has_utf8_warning(project: ProjectSurface): bool =
     project.facts.utf8_warnings.len() > 0
@@ -261,6 +269,12 @@ def source_items_have_duplicate_item(project: ProjectSurface, items: Array[Sourc
 def source_project_has_duplicate_item(project: ProjectSurface): bool =
     source_items_have_duplicate_item(project, project.facts.items, 0)
 
+/// Return the first source import/name resolution diagnostic.
+def source_project_import_resolution_message(project: ProjectSurface): String =
+    let resolution = resolve_source_imports(project)
+    if resolution.blockers.len() == 0 { "" }
+    else { resolution.blockers.get(0).message }
+
 /// Build fail-closed source gate diagnostics from source scan facts.
 def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
     if source_project_parser_primary_blocked(project) {
@@ -291,14 +305,14 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceGateInlineNamespaceUnsupported,
                 "missing-lowering: inline namespace block assembly absent"))
             .freeze()
-    } else if source_project_has_namespace(project) == false {
+    } else if source_project_has_namespace(project) == false && source_project_has_ast_namespace(project) == false {
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },
                 SourceGateMissingNamespace,
                 "missing-facts: namespace scan found no namespace"))
             .freeze()
-    } else if source_project_has_item(project) == false {
+    } else if source_project_has_item(project) == false && source_project_has_ast_item(project) == false {
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },
@@ -352,7 +366,7 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
             .push(SourceGateError(
                 SourceFileId { index: 0 },
                 SourceGateImportResolutionAbsent,
-                "missing-lowering: source import/name resolution absent"))
+                source_project_import_resolution_message(project)))
             .freeze()
     } else { Vec[SourceGateError].new().freeze() }
 

@@ -56,6 +56,9 @@ const REQUIRED_TEXT = [
   "requires_send_boundary_check: bool",
   "def continuation_boundary_obligation_from_usage",
   "def continuation_boundary_obligations",
+  "def callable_storage_crosses_send_boundary",
+  "def callable_storages_cross_send_boundary",
+  "module.answer.typed.callable_storage",
   "def check_continuation_boundary",
   "data ControlBoundaryError",
   "ControlCrossWorld",
@@ -73,8 +76,6 @@ const REQUIRED_TEXT = [
   "ReplayCaptureSharedRefCell",
   "def ReplayCaptureKind.safe_for_contn_replay",
   "def ReplayCaptureKind.uses_shared_reference_semantics",
-  "missing-lowering: ContN replay-safety capture classification absent",
-  "missing-lowering: continuation world/thread/send boundary scan absent",
   "def one_pass_cps",
   "data CpsAtom",
   "data CpsTermKind",
@@ -83,6 +84,7 @@ const REQUIRED_TEXT = [
   "CpsTermTailCall",
   "CpsTermTailCallExprs",
   "CpsTermBranch",
+  "CpsTermPrimitiveBinary",
   "CpsTermApplyContinuation",
   "CpsTermPendingJoin",
   "terms: Array[CpsTermFact]",
@@ -93,6 +95,7 @@ const REQUIRED_TEXT = [
   "def cps_terms_from_typed_args",
   "def cps_term_fact_from_function",
   "def cps_term_facts_from_functions",
+  "cps_term_facts_from_functions(module.usage.answer.typed.functions",
   "type CpsTailFormFact",
   "data CpsTailFormKind",
   "CpsTailReturn",
@@ -104,7 +107,12 @@ const REQUIRED_TEXT = [
   "branch_joins: Array[CpsBranchJoinFact]",
   "pattern_decisions: Array[CpsPatternDecisionFact]",
   "adt_ctors: Array[CpsAdtCtorLoweringFact]",
+  "intrinsic_bridges: Array[CpsIntrinsicBridgeFact]",
+  "intrinsic_bridge_roundtrips: Array[IntrinsicBridgeRoundtripFact]",
   "type CpsAdtCtorLoweringFact",
+  "type CpsIntrinsicBridgeFact",
+  "def cps_intrinsic_bridge_fact_from_obligation",
+  "def cps_intrinsic_bridge_facts",
   "requires_tail_tuple_return: bool",
   "requires_utf8_identifier_lowering: bool",
   "def cps_adt_ctor_lowering_fact_from_ctor",
@@ -238,6 +246,22 @@ function checkSource(file, source) {
   return errors;
 }
 
+function checkAstPrimaryTypedFunctionSource() {
+  const source = read("level-1b/compiler/semantic/type_infer.chiba");
+  const required = [
+    "def typed_function_fact_from_ast_owner",
+    "def typed_function_facts_with_ast_owners",
+    "def typed_expr_from_ast_node",
+    "def typed_item_skeletons_from_ast_owners",
+    "def typed_item_skeletons_from_alpha_primary",
+    "let skeleton_functions = typed_function_facts_from_skeletons",
+    "let functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, module.project.facts.ast_expr_nodes)",
+  ];
+  for (const needle of required) {
+    if (!source.includes(needle)) fail(`semantic AST primary typed function path missing ${needle}`);
+  }
+}
+
 function main() {
   const files = listChiba(ROOT);
   const seen = new Set(files.map((file) => path.basename(file)));
@@ -247,6 +271,7 @@ function main() {
   const joined = files.concat(CONTRACT_FILES).map(read).join("\n");
   const missingText = REQUIRED_TEXT.filter((needle) => !joined.includes(needle));
   if (missingText.length !== 0) fail(`missing C09 contract text:\n${missingText.join("\n")}`);
+  checkAstPrimaryTypedFunctionSource();
 
   const errors = files.flatMap((file) => checkSource(file, read(file)));
   if (errors.length !== 0) fail(errors.join("\n"));

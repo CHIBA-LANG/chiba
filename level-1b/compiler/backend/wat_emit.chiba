@@ -4,6 +4,7 @@ namespace compiler.backend.wat_emit
 use compiler.backend.validate_core.*
 use compiler.backend.layout.*
 use compiler.semantic.driver.*
+use compiler.semantic.adt_tuple_lowering.*
 use std.diagnostic.*
 
 /// Textual WAT module.
@@ -123,6 +124,7 @@ def CoreOpKind.wat_label(self): String =
     match self {
         CoreOpFunction => "function"
         CoreOpStacklessFunction => "stackless.function"
+        CoreOpAdtTupleCtor => "adt.tuple_ctor"
         CoreOpStructNew => "struct.new"
         CoreOpArrayNew => "array.new"
         CoreOpClosureCall => "closure.call"
@@ -156,12 +158,78 @@ def emit_core_small_usize(value: usize): String =
     if value < 10 { emit_core_decimal_digit(value) }
     else { emit_core_small_usize(value / 10).concat(emit_core_decimal_digit(value % 10)) }
 
+/// Return true when a semantic tuple-key byte can appear directly in a WAT id.
+def emit_wat_id_byte_is_safe(byte: u8): bool =
+    (byte >= 48 && byte <= 57) ||
+    (byte >= 65 && byte <= 90) ||
+    (byte >= 97 && byte <= 122)
+
+/// Return one ASCII byte as source text for WAT id generation.
+def emit_wat_ascii_byte_text(byte: u8): String =
+    if byte == 48 { "0" }
+    else if byte == 49 { "1" }
+    else if byte == 50 { "2" }
+    else if byte == 51 { "3" }
+    else if byte == 52 { "4" }
+    else if byte == 53 { "5" }
+    else if byte == 54 { "6" }
+    else if byte == 55 { "7" }
+    else if byte == 56 { "8" }
+    else if byte == 57 { "9" }
+    else if byte == 65 || byte == 97 { "a" }
+    else if byte == 66 || byte == 98 { "b" }
+    else if byte == 67 || byte == 99 { "c" }
+    else if byte == 68 || byte == 100 { "d" }
+    else if byte == 69 || byte == 101 { "e" }
+    else if byte == 70 || byte == 102 { "f" }
+    else if byte == 71 || byte == 103 { "g" }
+    else if byte == 72 || byte == 104 { "h" }
+    else if byte == 73 || byte == 105 { "i" }
+    else if byte == 74 || byte == 106 { "j" }
+    else if byte == 75 || byte == 107 { "k" }
+    else if byte == 76 || byte == 108 { "l" }
+    else if byte == 77 || byte == 109 { "m" }
+    else if byte == 78 || byte == 110 { "n" }
+    else if byte == 79 || byte == 111 { "o" }
+    else if byte == 80 || byte == 112 { "p" }
+    else if byte == 81 || byte == 113 { "q" }
+    else if byte == 82 || byte == 114 { "r" }
+    else if byte == 83 || byte == 115 { "s" }
+    else if byte == 84 || byte == 116 { "t" }
+    else if byte == 85 || byte == 117 { "u" }
+    else if byte == 86 || byte == 118 { "v" }
+    else if byte == 87 || byte == 119 { "w" }
+    else if byte == 88 || byte == 120 { "x" }
+    else if byte == 89 || byte == 121 { "y" }
+    else { "z" }
+
+/// Encode one tuple-key byte into a deterministic WAT id fragment.
+def emit_wat_id_byte(byte: u8): String =
+    if emit_wat_id_byte_is_safe(byte) { emit_wat_ascii_byte_text(byte) }
+    else { "_".concat(emit_core_small_usize(byte)).concat("_") }
+
+/// Sanitize a canonical tuple key into a stable WAT id suffix.
+def emit_wat_id_suffix(text: str, index: usize, out: String): String =
+    if index == text.len() { out }
+    else { emit_wat_id_suffix(text, index + 1, out.concat(emit_wat_id_byte(text.byte_at(index)))) }
+
+/// WAT type label for a canonical anonymous tuple nominal.
+def emit_tuple_nominal_type_label(identity: TupleNominalIdentity): String =
+    "$chiba.adt_tuple.".concat(emit_wat_id_suffix(identity.tuple_key, 0, ""))
+
 /// Emit the body instructions for one lowered Core function.
 def emit_core_i32_const_atom(atom: CoreI32ConstAtom): String =
     match atom {
-        CoreI32ConstZero => "i32.const 0"
-        CoreI32ConstFortyTwo => "i32.const 42"
-        CoreI32ConstSmall(value) => "i32.const ".concat(emit_core_small_usize(value))
+        CoreI32ConstLiteral(value) => "i32.const ".concat(emit_core_small_usize(value))
+    }
+
+/// Emit a Wasm numeric instruction for a builtin primitive method body.
+def emit_core_primitive_binary_op(op: PrimitiveBinaryOp): str =
+    match op {
+        PrimitiveBinaryAdd => "i32.add"
+        PrimitiveBinarySub => "i32.sub"
+        PrimitiveBinaryMul => "i32.mul"
+        PrimitiveBinaryDiv => "i32.div_s"
     }
 
 /// Emit the literal condition for the first executable branch slice.
@@ -180,7 +248,7 @@ def emit_core_param(index: usize): String =
 def emit_core_tail_call_args(args: Array[CoreExprKind], index: usize): String =
     if index == args.len() { "" }
     else {
-        let current = emit_core_expr_instruction(args.get(index))
+        let current = emit_core_expr_value_instruction(args.get(index))
         if index + 1 == args.len() { current }
         else { current.concat(" ").concat(emit_core_tail_call_args(args, index + 1)) }
     }
@@ -196,6 +264,22 @@ def emit_core_expr_instruction(body: CoreExprKind): String =
         CoreExprParam(index) => emit_core_param(index)
         CoreExprTailCall(target) => "return_call $chiba.".concat(target)
         CoreExprTailCallArgs(target, args) => emit_core_tail_call_args_expr(target, args)
+        CoreExprPrimitiveBinary(op, left, right) =>
+            emit_core_expr_value_instruction(left).concat(" ").concat(emit_core_expr_value_instruction(right)).concat(" ").concat(emit_core_primitive_binary_op(op))
+        CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_expr(condition, then_expr, else_expr)
+        CoreExprBranchJoinPending => "unreachable"
+        CoreExprUnit => ""
+    }
+
+/// Emit one Core expression in value position. Nested calls must not return from the enclosing function.
+def emit_core_expr_value_instruction(body: CoreExprKind): String =
+    match body {
+        CoreExprI32Const(atom) => emit_core_i32_const_atom(atom)
+        CoreExprParam(index) => emit_core_param(index)
+        CoreExprTailCall(target) => "call $chiba.".concat(target)
+        CoreExprTailCallArgs(target, args) => emit_core_tail_call_args(args, 0).concat(" call $chiba.").concat(target)
+        CoreExprPrimitiveBinary(op, left, right) =>
+            emit_core_expr_value_instruction(left).concat(" ").concat(emit_core_expr_value_instruction(right)).concat(" ").concat(emit_core_primitive_binary_op(op))
         CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_expr(condition, then_expr, else_expr)
         CoreExprBranchJoinPending => "unreachable"
         CoreExprUnit => ""
@@ -224,6 +308,8 @@ def emit_core_function_body(body: Option[CoreExprKind]): String =
         Some(CoreExprTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
         Some(CoreExprTailCallArgs(target, args)) =>
             "(result i32) ".concat(emit_core_tail_call_args_expr(target, args))
+        Some(CoreExprPrimitiveBinary(op, left, right)) =>
+            "(result i32) ".concat(emit_core_expr_instruction(left)).concat(" ").concat(emit_core_expr_instruction(right)).concat(" ").concat(emit_core_primitive_binary_op(op))
         Some(CoreExprIfElse(condition, then_expr, else_expr)) => emit_core_if_else_expr(condition, then_expr, else_expr)
         Some(CoreExprBranchJoinPending) => "(result i32) unreachable"
         Some(CoreExprUnit) => ""
@@ -237,6 +323,161 @@ def emit_core_function_symbol(symbol: Option[CoreFunctionSymbol]): String =
         None => ""
     }
 
+/// Emit ADT tuple helper parameters in the canonical payload order.
+def emit_adt_tuple_ctor_params(count: usize): String =
+    if count == 0 { "" }
+    else { "(param i32) ".concat(emit_adt_tuple_ctor_params(count - 1)) }
+
+/// Emit an i32 field for a tuple struct smoke layout.
+def emit_adt_tuple_struct_fields(fields: Array[AdtTupleField], index: usize): String =
+    if index == fields.len() { "" }
+    else { "(field i32) ".concat(emit_adt_tuple_struct_fields(fields, index + 1)) }
+
+/// Emit constructor tuple values: stable tag code first, then payload params.
+def emit_adt_tuple_ctor_values(obligation: CoreAdtCtorLoweringObligation, index: usize): String =
+    if index == obligation.tuple_fields.len() { "" }
+    else if index == 0 { "i32.const 0 ".concat(emit_adt_tuple_ctor_values(obligation, index + 1)) }
+    else { "local.get ".concat(emit_core_small_usize(index - 1)).concat(" ").concat(emit_adt_tuple_ctor_values(obligation, index + 1)) }
+
+/// Emit one executable ADT constructor helper that returns the canonical tuple object.
+def emit_adt_tuple_ctor_function(obligation: CoreAdtCtorLoweringObligation): String =
+    let tuple_label = emit_tuple_nominal_type_label(obligation.tuple_nominal)
+    "(func $chiba."
+        .concat(obligation.helper_name)
+        .concat(" ")
+        .concat(emit_adt_tuple_ctor_params(obligation.helper_arity))
+        .concat("(result (ref ")
+        .concat(tuple_label)
+        .concat(")) ")
+        .concat(emit_adt_tuple_ctor_values(obligation, 0))
+        .concat("struct.new ")
+        .concat(tuple_label)
+        .concat(")\n")
+
+/// Emit boxed Cont1 runtime resume with one-shot consumed-state enforcement.
+def emit_boxed_cont1_resume_function(): String =
+    "(func (param (ref null $chiba.layout.boxed_cont1)) (result i32)\n"
+        .concat("  (local $box (ref $chiba.layout.boxed_cont1))\n")
+        .concat("  local.get 0\n")
+        .concat("  ref.cast (ref $chiba.layout.boxed_cont1)\n")
+        .concat("  local.tee $box\n")
+        .concat("  struct.get $chiba.layout.boxed_cont1 1\n")
+        .concat("  if\n")
+        .concat("    unreachable\n")
+        .concat("  end\n")
+        .concat("  local.get $box\n")
+        .concat("  i32.const 1\n")
+        .concat("  struct.set $chiba.layout.boxed_cont1 1\n")
+        .concat("  i32.const 0)\n")
+
+/// Emit a materialized ContN frame-chain allocation shape.
+def emit_contn_frame_chain_function(): String =
+    "(func (result (ref $chiba.layout.continuation_frame_chain))\n"
+        .concat("  ref.null $chiba.layout.continuation_frame\n")
+        .concat("  ref.null $chiba.layout.continuation_frame_chain\n")
+        .concat("  struct.new $chiba.layout.continuation_frame_chain)\n")
+
+/// Emit a repeatable ContN package allocation shape.
+def emit_contn_package_function(): String =
+    "(func (result (ref $chiba.layout.contN_package))\n"
+        .concat("  ref.null $chiba.layout.continuation_frame_chain\n")
+        .concat("  i32.const 1\n")
+        .concat("  struct.new $chiba.layout.contN_package)\n")
+
+/// Emit an erased callable continuation package allocation shape.
+def emit_erased_continuation_package_function(): String =
+    "(func (result (ref $chiba.layout.continuation_package))\n"
+        .concat("  i32.const 0\n")
+        .concat("  ref.null any\n")
+        .concat("  struct.new $chiba.layout.continuation_package)\n")
+
+/// Emit an erased closure call through a typed funcref value.
+def emit_closure_call_function(): String =
+    "(type $chiba.closure.i32_to_i32 (func (param i32) (result i32)))\n"
+        .concat("(func (param funcref) (param eqref) (param i32) (result i32)\n")
+        .concat("  local.get 2\n")
+        .concat("  local.get 0\n")
+        .concat("  ref.cast (ref $chiba.closure.i32_to_i32)\n")
+        .concat("  call_ref $chiba.closure.i32_to_i32)\n")
+
+/// Emit a concrete heap struct allocation smoke op.
+def emit_struct_new_function(): String =
+    "(func (result eqref)\n"
+        .concat("  struct.new $chiba.layout.struct)\n")
+
+/// Emit a concrete heap array allocation smoke op.
+def emit_array_new_function(): String =
+    "(func (result eqref)\n"
+        .concat("  i32.const 0\n")
+        .concat("  i32.const 0\n")
+        .concat("  array.new $chiba.layout.array)\n")
+
+/// Emit one representation-preserving tuple bridge identity helper.
+def emit_intrinsic_bridge_identity_function(name: str): String =
+    "(func $chiba.compiler.intrinsic."
+        .concat(name)
+        .concat(" (param eqref) (result eqref) local.get 0)\n")
+
+/// Emit executable identity conversion helpers for compiler tuple bridge intrinsics.
+def emit_intrinsic_bridge_functions(obligation: CoreIntrinsicBridgeLoweringObligation): String =
+    if obligation.emits_identity_conversion_helpers == false { "" }
+    else {
+        let tuple_to_adt = match obligation.tuple_to_adt_identity {
+            Some(identity) => emit_intrinsic_bridge_identity_function(identity.source_name)
+            None => ""
+        }
+        let adt_to_tuple = match obligation.adt_to_tuple_identity {
+            Some(identity) => emit_intrinsic_bridge_identity_function(identity.source_name)
+            None => ""
+        }
+        tuple_to_adt.concat(adt_to_tuple)
+    }
+
+/// Append executable compiler intrinsic bridge helpers once per Core obligation.
+def append_intrinsic_bridge_helpers(obligations: Array[CoreIntrinsicBridgeLoweringObligation], index: usize, builder: DiagnosticBuilder): DiagnosticBuilder =
+    if index == obligations.len() { builder }
+    else {
+        append_intrinsic_bridge_helpers(
+            obligations,
+            index + 1,
+            builder.push_str(emit_intrinsic_bridge_functions(obligations.get(index))))
+    }
+
+/// Return true when one Core op carries a tuple constructor with the same canonical tuple key.
+def core_op_has_tuple_nominal_key(op: CoreOp, key: str): bool =
+    match op.adt_tuple_ctor {
+        Some(obligation) => obligation.tuple_nominal.tuple_key == key
+        None => false
+    }
+
+/// Return true when the same canonical tuple type has already been emitted.
+def prior_tuple_nominal_type_emitted(ops: Array[CoreOp], index: usize, key: str): bool =
+    if index == 0 { false }
+    else if core_op_has_tuple_nominal_key(ops.get(index - 1), key) { true }
+    else { prior_tuple_nominal_type_emitted(ops, index - 1, key) }
+
+/// Emit one canonical tuple type declaration.
+def emit_tuple_nominal_type(obligation: CoreAdtCtorLoweringObligation): String =
+    "(type ".concat(emit_tuple_nominal_type_label(obligation.tuple_nominal))
+        .concat(" (struct ")
+        .concat(emit_adt_tuple_struct_fields(obligation.tuple_fields, 0))
+        .concat("))\n")
+
+/// Append each canonical tuple nominal struct type exactly once.
+def append_tuple_nominal_types(ops: Array[CoreOp], index: usize, builder: DiagnosticBuilder): DiagnosticBuilder =
+    if index == ops.len() { builder }
+    else {
+        match ops.get(index).adt_tuple_ctor {
+            Some(obligation) =>
+                if prior_tuple_nominal_type_emitted(ops, index, obligation.tuple_nominal.tuple_key) {
+                    append_tuple_nominal_types(ops, index + 1, builder)
+                } else {
+                    append_tuple_nominal_types(ops, index + 1, builder.push_str(emit_tuple_nominal_type(obligation)))
+                }
+            None => append_tuple_nominal_types(ops, index + 1, builder)
+        }
+    }
+
 /// Emit a function, exporting the first typed `main` slice as WebAssembly main.
 def emit_core_function(op: CoreOp): String =
     let head = if op.export_main { "(func ".concat(emit_core_function_symbol(op.function_symbol)).concat("(export \"main\") ") }
@@ -247,18 +488,23 @@ def emit_core_function(op: CoreOp): String =
 def emit_core_op(op: CoreOp): Result[String, SemanticDiagnostics] =
     match op.kind {
         CoreOpFunction => Ok(emit_core_function(op))
+        CoreOpAdtTupleCtor =>
+            match op.adt_tuple_ctor {
+                Some(obligation) => Ok(emit_adt_tuple_ctor_function(obligation))
+                None => Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new().push(SemanticDiagnostic("<backend>", 0, 0, "ADT tuple constructor op missing lowering payload")).freeze()))
+            }
         /// source-contract: CoreOpStacklessFunction => Ok("(func ".concat(emit_core_function_body(op.function_body))
         CoreOpStacklessFunction =>
             if op.i32_param_count == 0 { Ok("(func ".concat(emit_core_function_body(op.function_body)).concat(")\n")) }
             else { Ok("(func ".concat(emit_core_function_params(op.i32_param_count)).concat(emit_core_function_body(op.function_body)).concat(")\n")) }
-        CoreOpStructNew => Ok("(func (result eqref) ref.null eq)\n")
-        CoreOpArrayNew => Ok("(func (result eqref) ref.null eq)\n")
-        CoreOpClosureCall => Ok("(func (param funcref) (param eqref))\n")
-        CoreOpBoxedCont1 => Ok("(func (param (ref null $chiba.layout.boxed_cont1)) (result i32) i32.const 0)\n")
-        CoreOpContinuationFrameChain => Ok("(func (param (ref null $chiba.layout.continuation_frame_chain)))\n")
-        CoreOpContNPackage => Ok("(func (param (ref null $chiba.layout.contN_package)))\n")
-        CoreOpContinuationPackage => Ok("(func (param (ref null $chiba.layout.continuation_package)))\n")
-        CoreOpTailCall => Ok("(func (result i32) i32.const 0 return)\n")
+        CoreOpStructNew => Ok(emit_struct_new_function())
+        CoreOpArrayNew => Ok(emit_array_new_function())
+        CoreOpClosureCall => Ok(emit_closure_call_function())
+        CoreOpBoxedCont1 => Ok(emit_boxed_cont1_resume_function())
+        CoreOpContinuationFrameChain => Ok(emit_contn_frame_chain_function())
+        CoreOpContNPackage => Ok(emit_contn_package_function())
+        CoreOpContinuationPackage => Ok(emit_erased_continuation_package_function())
+        CoreOpTailCall => Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new().push(SemanticDiagnostic("<backend>", 0, 0, "standalone CoreOpTailCall emission absent; tail calls must lower through CoreOpFunction body")).freeze()))
         CoreOpImportCall(module) =>
             match module {
                 CoreImportWasi => Ok("(import \"wasi_snapshot_preview1\" \"proc_exit\" (func))\n")
@@ -338,7 +584,9 @@ def emit_wat(module: ValidatedCoreModule): Result[WatModule, SemanticDiagnostics
     } else {
         let builder = DiagnosticBuilder.new().push_str("(module\n")
         let with_layouts = append_layout_types(module.core.layouts.entries, 0, builder)
-        match append_import_core_ops_wat(module.core.ops, 0, with_layouts) {
+        let with_tuple_types = append_tuple_nominal_types(module.core.ops, 0, with_layouts)
+        let with_intrinsic_helpers = append_intrinsic_bridge_helpers(module.core.intrinsic_bridge_obligations, 0, with_tuple_types)
+        match append_import_core_ops_wat(module.core.ops, 0, with_intrinsic_helpers) {
             Ok(with_imports) =>
                 match append_runtime_core_ops_wat(module.core.ops, 0, with_imports) {
                     Ok(done) => Ok(WatModule { text: done.push_str(")\n").finish() })

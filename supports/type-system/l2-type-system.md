@@ -182,6 +182,31 @@ Rules:
 - Source field order must not affect the row key.
 - Field ids are stable across deterministic project scans.
 - Tuple fields are generated as `_1`, `_2`, ...
+- Tuple row identity is positional, not sorted. Its canonical key is the
+  ordered element type-key sequence. Therefore `Tuple[A, B]` and `Tuple[B, A]`
+  are different, while every occurrence of `Tuple[A, B]` in the same type
+  universe must resolve to the same tuple row key.
+- Tuple backend nominal identity is derived from that same ordered element
+  type-key sequence. Every tuple with the same arity, element order, and element
+  types must reuse the same anonymous backend struct nominal name; source
+  location, local binding name, pattern shape, and constructor site must not
+  participate in the name.
+- The tuple backend nominal id is canonical, not allocated per occurrence:
+  `namespace = compiler.tuple` and `name = tuple(<ordered semantic type keys>)`.
+  A compiler pass may intern that id, but interning is an implementation cache;
+  the observable identity is the canonical key. Therefore `(A, B)` and another
+  `(A, B)` share one struct nominal name, while `(B, A)` and `(A, A)` do not.
+- This is a hard nominal-name contract: two tuple types with identical arity,
+  identical element order, and identical substituted semantic element types
+  must lower to the exact same backend struct nominal name. This holds across
+  source files, functions, generic instantiation sites, ADT constructor bridge
+  helpers, pattern lowerings, and temporary values.
+- Generic tuple forms are canonicalized only after substitution of their
+  semantic type keys. For example, `Tuple[T, i64]` instantiated with `T = Str`
+  must resolve to exactly the same tuple row key and backend nominal struct name
+  as a direct `Tuple[Str, i64]`. A pass must not allocate a fresh anonymous
+  struct for each generic instantiation site, pattern site, constructor helper,
+  or temporary value.
 - A nominal type may expose a row shape, but the nominal id remains separate.
 - A row bound is a shape obligation, not nominal erasure.
 

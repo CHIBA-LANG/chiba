@@ -1,3 +1,7 @@
 namespace bootstrap.wat.tupleheap
 
 def tuple_heap(): i64 = (41, 1)._1
+
+def tuple_heap_second(): i64 = (40, 2)._2
+
+def tuple_heap_third(): i64 = (38, 2, 1)._3

@@ -44,6 +44,22 @@ Tuple values lower as anonymous positional rows:
 - `()` is unit and has no tuple layout.
 - Tuple literals, destructuring, and tuple patterns must share the same
   anonymous layout key derived from element type sequence.
+- The anonymous layout is still emitted as a backend nominal struct. Its nominal
+  name is deterministic from the ordered element type-key sequence, so all
+  tuples with the same arity, element order, and element types reuse the same
+  backend struct name. Source location and local variable names must not
+  participate in that name.
+- The bootstrap layout id for tuple structs must use the same canonical tuple
+  nominal identity as L2: `compiler.tuple::tuple(<ordered semantic type keys>)`.
+  Layout allocation may cache this id, but it must not allocate a distinct
+  struct nominal for repeated tuple occurrences with the same ordered element
+  types.
+- Generic tuple layouts are selected after type substitution. `Tuple[T, i64]`
+  instantiated with `T = Str`, a direct `Tuple[Str, i64]`, an ADT constructor
+  tuple bridge with fields `(Symbol, Str, i64)`, and a pattern temporary with
+  that same ordered type sequence must all route through the same canonical
+  tuple layout id for that sequence. The emitter must not include source span,
+  helper name, local binding name, or occurrence id in the struct nominal name.
 
 ## Data
 

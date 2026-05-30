@@ -30,6 +30,7 @@ const ALLOWED_EMPTY_FACT_HELPERS = new Set([
   "replay_safety_facts_none",
   "cps_continuation_facts_none",
   "cps_usage_facts_none",
+  "method_self_bindings_none",
 ]);
 
 const ALLOWED_NUMERIC_DOMAIN_HELPERS = new Set([

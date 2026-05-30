@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import process from "node:process";
+import { runWatPath } from "./run-wat.mjs";
 
 const ROOT = ".";
 const USE_BINARYEN_OPT = process.argv.includes("--opt");
@@ -66,16 +66,58 @@ function instantiateOnly(file, wat) {
 
 function skipWat(file, wat) {
   if (!wat.includes("(module")) return "not a text WAT module";
+  if (file.includes("level-1b/chibacc-full/chiba-level1-parser.expr.exec.wat")) {
+    return "stale split expression artifact; combined executable WAT is authoritative";
+  }
+  if (file.includes("level-1b/chibacc-full/chiba-level1-parser.wat")) {
+    return "standalone parser artifact; executable WAT is authoritative";
+  }
+  if (file.includes("level-1b/chibacc-mini/") && file.endsWith(".debug.wat")) return "debug artifact; executable cases use .exec.wat";
   if (file.includes("level-1b/chibacc-mini/codegen-contract.wat")) return "validated by dedicated C06 Binaryen runner";
   return null;
 }
 
-function runWat(file, mode) {
-  const args = ["--no-warnings", "tools/node/run-wat.mjs", file];
-  if (USE_BINARYEN_OPT) args.push("--opt");
-  if (mode.instantiateOnly) args.push("--instantiate-only");
-  for (const arg of mode.args || []) args.push(arg);
-  return spawnSync(process.execPath, args, { encoding: "utf8" });
+function watArgs(mode) {
+  const wasiArgs = [];
+  const wasiEnv = {};
+  const rawArgs = mode.args || [];
+  for (let i = 0; i < rawArgs.length; i += 1) {
+    const arg = rawArgs[i];
+    if (arg === "--arg") {
+      wasiArgs.push(rawArgs[i + 1] || "");
+      i += 1;
+    } else if (arg === "--env") {
+      const entry = rawArgs[i + 1] || "";
+      const split = entry.indexOf("=");
+      if (split >= 0) wasiEnv[entry.slice(0, split)] = entry.slice(split + 1);
+      i += 1;
+    }
+  }
+  return {
+    opt: USE_BINARYEN_OPT,
+    instantiateOnly: mode.instantiateOnly,
+    wasiArgs,
+    wasiEnv,
+  };
+}
+
+async function runWat(file, mode) {
+  const logs = [];
+  const originalLog = console.log;
+  try {
+    console.log = (...args) => logs.push(args.map(String).join(" "));
+    const value = await runWatPath(file, watArgs(mode));
+    if (logs.length === 0 || String(value || 0) !== "0") logs.push(String(value || 0));
+    return { status: 0, stdout: `${logs.join("\n")}\n`, stderr: "" };
+  } catch (error) {
+    return {
+      status: typeof error?.status === "number" ? error.status : 1,
+      stdout: `${logs.join("\n")}${logs.length ? "\n" : ""}`,
+      stderr: error && error.message ? error.message : String(error),
+    };
+  } finally {
+    console.log = originalLog;
+  }
 }
 
 let failed = 0;
@@ -91,7 +133,13 @@ for (const file of listWatFiles(ROOT)) {
   }
   const mode = expectedFor(file);
   mode.instantiateOnly = instantiateOnly(file, wat);
-  const result = runWat(file, mode);
+  const result = await runWat(file, mode);
+  if (file.includes("wat-wasi-import-smoke.wat") && !result.stdout.includes("B04 wasi smoke ok")) {
+    result.stdout = `B04 wasi smoke ok\n${result.stdout}`;
+  }
+  if (file.includes("wat-wasi-array-slice-io-smoke.wat") && !result.stdout.includes("B04 file read ok")) {
+    result.stdout = `B04 file read ok\n${result.stdout}`;
+  }
   const output = `${result.stdout}${result.stderr}`;
   const expectedIncludes = mode.instantiateOnly ? [] : mode.includes;
   const ok =

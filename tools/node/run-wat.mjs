@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
 import { compileWat, extractModule } from "./wat-compile.mjs";
 
@@ -101,6 +102,9 @@ async function makeImports(wat, args) {
       "std.vec_len"(vec) {
         return BigInt(asArray(vec).length);
       },
+      "std.vec_get"(vec, index) {
+        return asArray(vec)[Number(index)] ?? null;
+      },
       "std.vec_push"(vec, item) {
         const array = asArray(vec);
         array.push(item);
@@ -108,6 +112,24 @@ async function makeImports(wat, args) {
       },
       "std.vec_freeze"(vec) {
         return asArray(vec);
+      },
+      "std.array_len"(array) {
+        return BigInt(asArray(array).length);
+      },
+      "std.array_get"(array, index) {
+        return asArray(array)[Number(index)] ?? null;
+      },
+      "std.array_slice"(array, start, len) {
+        return asArray(array).slice(Number(start), Number(start) + Number(len));
+      },
+      "std.slice_len"(slice) {
+        return BigInt(asArray(slice).length);
+      },
+      "std.slice_get"(slice, index) {
+        return asArray(slice)[Number(index)] ?? null;
+      },
+      "std.slice_slice"(slice, start, len) {
+        return asArray(slice).slice(Number(start), Number(start) + Number(len));
       },
       "Array.len"(array) {
         return BigInt(asArray(array).length);
@@ -133,11 +155,14 @@ async function makeImports(wat, args) {
       "std.str_char_at"(text, index) {
         return BigInt(byteArray(text)[Number(index)] ?? 0);
       },
-      "std.string_slice"(text, start, end) {
-        return byteArray(text).slice(Number(start), Number(end));
+      "std.string_slice"(text, start, len) {
+        return byteArray(text).slice(Number(start), Number(start) + Number(len));
       },
-      "std.str_slice"(text, start, end) {
-        return byteArray(text).slice(Number(start), Number(end));
+      "std.str_slice"(text, start, len) {
+        return byteArray(text).slice(Number(start), Number(start) + Number(len));
+      },
+      "std.str_to_string"(text) {
+        return byteArray(text).slice();
       },
       "std.string_concat"(leftText, rightText) {
         const left = byteArray(leftText);
@@ -195,10 +220,8 @@ function selectExport(exports, invoke) {
   return "_start";
 }
 
-try {
-  const args = parseArgs();
-  const { invoke } = args;
-  const raw = await readInput(args);
+export async function runWatText(raw, args = {}) {
+  const invoke = args.invoke || null;
   const wat = extractModule(raw);
   const buffer = compileWat(wat, { opt: args.opt });
   const { imports, wasi } = await makeImports(wat, args);
@@ -206,15 +229,20 @@ try {
   const exports = instance.instance.exports;
 
   if (args.instantiateOnly) {
-    console.log("instantiate ok");
-    process.exit(0);
+    return "instantiate ok";
   }
 
   const exportName = selectExport(exports, invoke);
 
   if (wasi && exportName === "_start") {
     const status = wasi.start(instance.instance);
-    process.exit(Number(status || 0));
+    const code = Number(status || 0);
+    if (code !== 0) {
+      const error = new Error(`wasi exited ${code}`);
+      error.status = code;
+      throw error;
+    }
+    return "0";
   }
 
   if (wasi && typeof exports._initialize === "function") {
@@ -229,9 +257,26 @@ try {
 
   const defaultArgs = Array.from({ length: countExportParams(wat, exportName) }, () => 0n);
   const result = main(...defaultArgs);
-  console.log(String(result || 0));
-} catch (error) {
-  const message = error && error.message ? error.message : String(error);
-  console.error(message.split("\n").slice(0, 12).join("\n"));
-  process.exit(1);
+  return String(result || 0);
+}
+
+export async function runWatPath(path, args = {}) {
+  const raw = await fs.readFile(path, "utf8");
+  return runWatText(raw, args);
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  try {
+    const args = parseArgs();
+    const raw = await readInput(args);
+    const result = await runWatText(raw, args);
+    console.log(result);
+  } catch (error) {
+    if (typeof error?.status === "number") {
+      process.exit(error.status);
+    }
+    const message = error && error.message ? error.message : String(error);
+    console.error(message.split("\n").slice(0, 12).join("\n"));
+    process.exit(1);
+  }
 }

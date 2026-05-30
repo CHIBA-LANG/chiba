@@ -14,3 +14,19 @@ def Slice[T].get(self, index: usize): T = __compiler_builtin("std.slice_get")
 
 /// Produce a narrower managed view over a slice range.
 def Slice[T].slice(self, offset: usize, len: usize): Slice[T] = __compiler_builtin("std.slice_slice")
+
+/// Return this managed view.
+def Slice[T].to_slice(self): Slice[T] = self
+
+/// Copy a managed slice into a growable builder.
+def Slice[T].to_vec_loop(self, index: usize, out: Vec[T]): Vec[T] =
+    if index == self.len() { out }
+    else { self.to_vec_loop(index + 1, out.push(self.get(index))) }
+
+/// Copy a managed slice into a growable builder.
+def Slice[T].to_vec(self): Vec[T] =
+    self.to_vec_loop(0, Vec[T].new())
+
+/// Copy a managed slice into an immutable array.
+def Slice[T].to_array(self): Array[T] =
+    self.to_vec().freeze()

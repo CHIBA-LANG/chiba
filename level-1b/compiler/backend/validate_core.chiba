@@ -14,8 +14,9 @@ data CoreValidationError {
     CoreNonTailCps(str),
     CoreMissingBranchBody(str),
     CoreMissingPatternDecision(str),
-    CoreMissingAdtCtorLowering(str),
     CoreMissingUtf8IdentifierLowering(str),
+    CoreInvalidTupleNominalIdentity(str),
+    CoreInvalidIntrinsicBridge(str),
     CoreIllegalRuntimeState(str),
     CoreIllegalContinuationPackage(str),
 }
@@ -97,6 +98,9 @@ def core_function_body_reads_param(body: CoreExprKind): bool =
     match body {
         CoreExprParam(_) => true
         CoreExprTailCallArgs(_, args) => core_function_body_args_read_param(args, 0)
+        CoreExprPrimitiveBinary(_, left, right) =>
+            if core_function_body_reads_param(left) { true }
+            else { core_function_body_reads_param(right) }
         CoreExprIfElse(condition, then_expr, else_expr) =>
             if core_branch_condition_reads_param(condition) { true }
             else if core_function_body_reads_param(then_expr) { true }
@@ -126,6 +130,8 @@ def core_function_body_max_param_index(body: CoreExprKind, current: usize): usiz
     match body {
         CoreExprParam(index) => if index > current { index } else { current }
         CoreExprTailCallArgs(_, args) => core_function_body_args_max_param_index(args, 0, current)
+        CoreExprPrimitiveBinary(_, left, right) =>
+            core_function_body_max_param_index(right, core_function_body_max_param_index(left, current))
         CoreExprIfElse(condition, then_expr, else_expr) =>
             core_function_body_max_param_index(else_expr, core_function_body_max_param_index(then_expr, core_branch_condition_max_param_index(condition, current)))
         _ => current
@@ -199,6 +205,11 @@ def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
         Some(CoreExprTailCallArgs(target, args)) =>
             if core_module_contains_symbol(module, target, 0) == false { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
             else { validate_core_expr_arg_symbols(module, args, 0) }
+        Some(CoreExprPrimitiveBinary(_, left, right)) =>
+            match validate_core_expr_symbol(module, left) {
+                Some(error) => Some(error)
+                None => validate_core_expr_symbol(module, right)
+            }
         Some(CoreExprIfElse(_, then_expr, else_expr)) =>
             match validate_core_expr_symbol(module, then_expr) {
                 Some(error) => Some(error)
@@ -216,6 +227,11 @@ def validate_core_expr_symbol(module: WasmGcCoreModule, body: CoreExprKind): Opt
         CoreExprTailCallArgs(target, args) =>
             if core_module_contains_symbol(module, target, 0) == false { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
             else { validate_core_expr_arg_symbols(module, args, 0) }
+        CoreExprPrimitiveBinary(_, left, right) =>
+            match validate_core_expr_symbol(module, left) {
+                Some(error) => Some(error)
+                None => validate_core_expr_symbol(module, right)
+            }
         CoreExprIfElse(_, then_expr, else_expr) =>
             match validate_core_expr_symbol(module, then_expr) {
                 Some(error) => Some(error)
@@ -408,10 +424,26 @@ def validate_core_pattern_decisions(module: WasmGcCoreModule, out: Vec[CoreValid
     if module.pattern_decision_obligations.len() == 0 { out }
     else { out.push(CoreMissingPatternDecision("pattern decision tree lowering absent")) }
 
-/// Validate that ADT constructor helper obligations are not silently dropped before executable lowering.
-def validate_core_adt_ctor_lowering(module: WasmGcCoreModule, out: Vec[CoreValidationError]): Vec[CoreValidationError] =
-    if module.adt_ctor_obligations.len() == 0 { out }
-    else { out.push(CoreMissingAdtCtorLowering("ADT constructor tuple helper lowering absent")) }
+/// Return true when a tuple nominal identity is canonical and non-empty.
+def core_tuple_nominal_identity_valid(identity: TupleNominalIdentity): bool =
+    identity.tuple_key.len() > 0 &&
+    identity.nominal.namespace_name == "compiler.tuple" &&
+    identity.nominal.name == identity.tuple_key
+
+/// Validate tuple nominal identity carried by an ADT constructor obligation.
+def validate_core_adt_ctor_tuple_nominal(obligation: CoreAdtCtorLoweringObligation): Option[CoreValidationError] =
+    if core_tuple_nominal_identity_valid(obligation.tuple_nominal) { None }
+    else { Some(CoreInvalidTupleNominalIdentity("ADT tuple bridge has non-canonical tuple nominal identity")) }
+
+/// Validate tuple nominal identities before executable ADT ctor lowering lands.
+def validate_core_adt_ctor_tuple_nominals(obligations: Array[CoreAdtCtorLoweringObligation], index: usize, out: Vec[CoreValidationError]): Vec[CoreValidationError] =
+    if index == obligations.len() { out }
+    else {
+        validate_core_adt_ctor_tuple_nominals(
+            obligations,
+            index + 1,
+            out |> push_validation_error(validate_core_adt_ctor_tuple_nominal(obligations.get(index))))
+    }
 
 /// Return true when ADT ctor obligations need UTF-8 identifier lowering.
 def core_adt_ctor_obligations_need_utf8_lowering(obligations: Array[CoreAdtCtorLoweringObligation], index: usize): bool =
@@ -425,9 +457,29 @@ def validate_core_utf8_identifier_lowering(module: WasmGcCoreModule, out: Vec[Co
         out.push(CoreMissingUtf8IdentifierLowering("UTF-8 ADT constructor identifier lowering absent"))
     } else { out }
 
+/// Validate one compiler intrinsic tuple bridge obligation.
+def validate_core_intrinsic_bridge_obligation(obligation: CoreIntrinsicBridgeLoweringObligation): Option[CoreValidationError] =
+    if obligation.intrinsic_namespace != "compiler.intrinsic" {
+        Some(CoreInvalidIntrinsicBridge("compiler intrinsic bridge has non-canonical namespace"))
+    } else if obligation.tuple_to_adt_identity.is_some() && obligation.adt_to_tuple_identity.is_some() && obligation.has_typed_roundtrip == false {
+        Some(CoreInvalidIntrinsicBridge("compiler intrinsic bridge missing typed roundtrip identity"))
+    } else if obligation.tuple_to_adt_identity.is_some() && obligation.adt_to_tuple_identity.is_some() && obligation.emits_identity_conversion_helpers == false {
+        Some(CoreInvalidIntrinsicBridge("compiler intrinsic bridge missing executable identity conversion helpers"))
+    } else { None }
+
+/// Validate compiler intrinsic tuple bridge obligations before executable roundtrip lowering.
+def validate_core_intrinsic_bridges(obligations: Array[CoreIntrinsicBridgeLoweringObligation], index: usize, out: Vec[CoreValidationError]): Vec[CoreValidationError] =
+    if index == obligations.len() { out }
+    else {
+        validate_core_intrinsic_bridges(
+            obligations,
+            index + 1,
+            out |> push_validation_error(validate_core_intrinsic_bridge_obligation(obligations.get(index))))
+    }
+
 /// Validate symbols, layouts, tailcall facts, and continuation packages.
 def validate_wasm_gc_core(module: WasmGcCoreModule): Result[ValidatedCoreModule, Array[CoreValidationError]] =
-    match validate_core_utf8_identifier_lowering(module, validate_core_adt_ctor_lowering(module, validate_core_pattern_decisions(module, validate_core_ops(module, 0, Vec[CoreValidationError].new())))).freeze() {
+    match validate_core_intrinsic_bridges(module.intrinsic_bridge_obligations, 0, validate_core_utf8_identifier_lowering(module, validate_core_pattern_decisions(module, validate_core_adt_ctor_tuple_nominals(module.adt_ctor_obligations, 0, validate_core_ops(module, 0, Vec[CoreValidationError].new()))))).freeze() {
         errors =>
             if errors.len() == 0 { Ok(ValidatedCoreModule { core: module }) }
             else { Err(errors) }

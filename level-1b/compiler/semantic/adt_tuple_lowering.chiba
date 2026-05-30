@@ -43,6 +43,7 @@ type AdtCtorHelperBody {
     tag_literal: AdtVariantTag,
     parameter_count: usize,
     tuple_fields: Array[AdtTupleField],
+    tuple_nominal: TupleNominalIdentity,
     returns_canonical_tuple: bool,
 }
 
@@ -53,6 +54,7 @@ type LoweredAdtCtor {
     helper_name: str,
     helper_arity: usize,
     tuple_fields: Array[AdtTupleField],
+    tuple_nominal: TupleNominalIdentity,
     tuple_record_shape: AggregateShape,
     body: AdtCtorHelperBody,
     requires_utf8_identifier_lowering: bool,
@@ -236,6 +238,15 @@ def adt_tuple_fields_to_aggregate_fields(fields: Array[AdtTupleField], index: us
         adt_tuple_fields_to_aggregate_fields(fields, index + 1, out.push(AggregateField { name: field.name, ty: field.ty }))
     }
 
+/// Convert ADT tuple fields to the ordered tuple type sequence.
+def adt_tuple_field_types(fields: Array[AdtTupleField], index: usize, out: Vec[SemType]): Array[SemType] =
+    if index == fields.len() { out.freeze() }
+    else { adt_tuple_field_types(fields, index + 1, out.push(fields.get(index).ty)) }
+
+/// Canonical tuple nominal identity shared with ordinary tuple lowering.
+def adt_tuple_nominal_identity(fields: Array[AdtTupleField]): TupleNominalIdentity =
+    tuple_nominal_identity_from_types(adt_tuple_field_types(fields, 0, Vec[SemType].new()))
+
 /// Build row-backed tuple shape; `_1` is the canonical symbol tag field.
 def adt_tuple_record_shape(fields: Array[AdtTupleField]): AggregateShape =
     build_aggregate_shape(AggregateTuple, adt_tuple_fields_to_aggregate_fields(fields, 0, Vec[AggregateField].new()))
@@ -244,17 +255,20 @@ def adt_tuple_record_shape(fields: Array[AdtTupleField]): AggregateShape =
 def lower_adt_ctor(variant: AdtVariantDecl): LoweredAdtCtor =
     let tuple_fields = adt_tuple_fields_for_variant(variant)
     let tuple_shape = variant.tuple_shape()
+    let tuple_nominal = adt_tuple_nominal_identity(tuple_fields)
     LoweredAdtCtor {
         source: variant,
         tuple_shape: tuple_shape,
         helper_name: variant.helper_name(),
         helper_arity: variant.payload.len(),
         tuple_fields: tuple_fields,
+        tuple_nominal: tuple_nominal,
         tuple_record_shape: adt_tuple_record_shape(tuple_fields),
         body: AdtCtorHelperBody {
             tag_literal: tuple_shape.tag,
             parameter_count: variant.payload.len(),
             tuple_fields: tuple_fields,
+            tuple_nominal: tuple_nominal,
             returns_canonical_tuple: true,
         },
         requires_utf8_identifier_lowering: adt_ctor_name_requires_utf8_identifier_lowering(variant.ctor_name, 0),

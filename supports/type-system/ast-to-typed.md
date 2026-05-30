@@ -507,6 +507,51 @@ row fields:
 result: TyTuple([type(a), type(b)]) backed by anonymous positional row
 ```
 
+Tuple identity is structural and ordered. The tuple key is the element type-key
+sequence, so every occurrence of `(T1, T2, ... Tn)` maps to the same anonymous
+tuple row key, and changing order changes the key. This key is the source for
+the backend tuple layout name; source location must not affect tuple identity.
+The backend nominal struct name must also be canonical over the same key:
+same arity, same element order, and same element types mean the same anonymous
+tuple struct nominal name everywhere in the program.
+
+The canonical backend tuple nominal identity is:
+
+```text
+namespace = compiler.tuple
+name      = tuple(<ordered semantic type keys>)
+```
+
+Examples:
+
+```text
+(A, B) in function f
+(A, B) in function g
+Tuple[T, B] after substituting T := A
+ADT ctor tuple bridge fields [Symbol, A, B] if the ordinary tuple is [Symbol, A, B]
+```
+
+All of the same ordered semantic type sequence cases above must reuse the same
+backend struct nominal name. Reuse is not optional and must not depend on which
+pass first observed the tuple.
+
+This name is a semantic identity, not a fresh gensym. The typed pass may intern
+or memoize it, but it must not include source span, local binder, pattern id,
+temporary lowering id, or constructor site.
+
+Generic tuple occurrences are canonicalized after substitution. For example,
+`Tuple[T, i64]` instantiated at `T = Str` must share the same anonymous tuple
+row key and backend struct nominal name as any direct `Tuple[Str, i64]`
+occurrence. Constructor sites, pattern sites, temporary lowering artifacts, and
+local binding names must not create fresh tuple struct identities.
+
+This is a nominal-name contract, not just a row-shape contract. After semantic
+type substitution, the ordered element type-key sequence is the only input to
+the tuple nominal name. Two tuple values with the same arity, element order, and
+element types must therefore use the same backend struct nominal identity even
+when they come from different source files, functions, generic instantiations,
+ADT constructor bridges, or pattern lowerings.
+
 One-tuples must stay distinguishable from grouped expressions.
 
 ## Data Constructor / Union Payload
@@ -519,6 +564,12 @@ L2 checks:
 - payload row/union shape is canonical
 
 The backend layout is not chosen here. L2 only emits typed constructor facts.
+When a data constructor is lowered through the ADT tuple bridge, its canonical
+tuple representation must reuse the same tuple key and anonymous tuple struct
+nominal name as an ordinary tuple with the same ordered field types. The ctor
+tag field participates as the first tuple element, so `Ctor(A, B)` lowers to the
+same tuple identity as `Tuple[Symbol, A, B]`, not to a constructor-site-local
+struct.
 
 ## Assignment
 

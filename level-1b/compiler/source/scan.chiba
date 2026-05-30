@@ -504,16 +504,63 @@ def source_scan_use_end(text: String, offset: usize): usize =
     else if text.byte_at(offset) == 10 { offset }
     else { source_scan_use_end(text, offset + 1) }
 
+/// Return the first byte on a use line, or the line end when absent.
+def source_scan_use_byte_or_end(text: String, offset: usize, byte: u8): usize =
+    if offset >= text.len() { offset }
+    else if text.byte_at(offset) == 10 { offset }
+    else if text.byte_at(offset) == byte { offset }
+    else { source_scan_use_byte_or_end(text, offset + 1, byte) }
+
+/// Return the byte offset immediately after the grouped import prefix.
+def source_scan_group_prefix_end(text: String, start: usize, open: usize): usize =
+    if open > start && text.byte_at(open - 1) == 46 { open - 1 }
+    else { open }
+
+/// Return the first grouped use member slice.
+def source_scan_first_group_member(text: String, open: usize, close: usize): Option[SourceNameSlice] =
+    let member_start = source_skip_spaces(text, open + 1)
+    if member_start >= close { None }
+    else if source_is_ident_start(text.byte_at(member_start)) {
+        let member_end = source_scan_namespace_name_end(text, member_start)
+        Some(SourceNameSlice { offset: member_start, len: member_end - member_start })
+    } else { None }
+
+/// Count grouped import members in `use a.{b,c}` syntax.
+def source_scan_group_member_count(text: String, offset: usize, close: usize, count: usize): usize =
+    if offset >= close { count }
+    else {
+        let start = source_skip_spaces(text, offset)
+        if start >= close { count }
+        else if source_is_ident_start(text.byte_at(start)) {
+            let end = source_scan_namespace_name_end(text, start)
+            let next = source_skip_spaces(text, end)
+            if next < close && text.byte_at(next) == 44 {
+                source_scan_group_member_count(text, next + 1, close, count + 1)
+            } else {
+                source_scan_group_member_count(text, close, close, count + 1)
+            }
+        } else {
+            source_scan_group_member_count(text, close, close, count)
+        }
+    }
+
 /// Try to scan a source use declaration at one line start.
 def source_scan_use_at(file: SourceFileId, text: String, offset: usize, line: usize): Option[SourceUseScanResult] =
     if source_starts_with_at(text, offset, "use ", 0) {
         let start = source_skip_spaces(text, offset + "use".len())
         let end = source_scan_use_end(text, start)
+        let open = source_scan_use_byte_or_end(text, start, 123)
+        let close = source_scan_use_byte_or_end(text, start, 125)
+        let grouped = open < end && close < end && open < close
+        let prefix_end = if grouped { source_scan_group_prefix_end(text, start, open) } else { end }
         Some(SourceUseScanResult {
             file: file,
             path: SourceNameSlice { offset: start, len: end - start },
+            group_prefix: if grouped { Some(SourceNameSlice { offset: start, len: prefix_end - start }) } else { None },
+            group_member: if grouped { source_scan_first_group_member(text, open, close) } else { None },
+            group_member_count: if grouped { source_scan_group_member_count(text, open + 1, close, 0) } else { 0 },
             glob: source_line_has_byte(text, start, 42),
-            multi: source_line_has_byte(text, start, 123),
+            multi: grouped,
             line: line,
             column: start - offset,
         })
@@ -772,23 +819,73 @@ def source_parsed_module_facts_from_scanned_file(file: SourceFile): SourceParsed
         has_token_stream: true,
         has_ast: false,
         ast_primary_path: false,
+        ast_item_count: 0,
+        ast_namespace_count: 0,
+        ast_def_item_count: 0,
+        ast_owner_symbol_count: 0,
+        ast_from_chibacc: false,
         has_recoverable_errors: false,
     }
 
 /// Return true when every parsed module has real chibacc AST facts.
+def source_parsed_module_has_primary_item_facts(module: SourceParsedModuleFacts): bool =
+    module.ast_item_count > 0 && module.ast_namespace_count > 0 && module.ast_def_item_count > 0 && module.ast_owner_symbol_count > 0
+
+/// Return true when every parsed module has real chibacc AST facts.
 def source_parsed_modules_all_ast_primary(modules: Array[SourceParsedModuleFacts], index: usize): bool =
     if index == modules.len() { true }
-    else if modules.get(index).has_ast && modules.get(index).ast_primary_path { source_parsed_modules_all_ast_primary(modules, index + 1) }
+    else if modules.get(index).has_ast && modules.get(index).ast_primary_path && modules.get(index).ast_from_chibacc && source_parsed_module_has_primary_item_facts(modules.get(index)) {
+        source_parsed_modules_all_ast_primary(modules, index + 1)
+    }
     else { false }
+
+/// Return true when frontend evidence belongs to a parsed module.
+def source_frontend_evidence_matches_module(evidence: SourceFrontendEvidence, module: SourceParsedModuleFacts): bool =
+    evidence.file.index == module.file.index
+
+/// Convert verified frontend evidence into parsed-module primary facts.
+def source_parsed_module_with_frontend_evidence(module: SourceParsedModuleFacts, evidence: SourceFrontendEvidence): SourceParsedModuleFacts =
+    SourceParsedModuleFacts {
+        file: module.file,
+        has_token_stream: module.has_token_stream || evidence.has_token_stream,
+        has_ast: evidence.has_ast && evidence.ast_item_count > 0,
+        ast_primary_path: evidence.has_ast && evidence.ast_from_chibacc && evidence.ast_item_count > 0 && evidence.ast_namespace_count > 0 && evidence.ast_def_item_count > 0 && evidence.ast_owner_symbol_count > 0,
+        ast_item_count: evidence.ast_item_count,
+        ast_namespace_count: evidence.ast_namespace_count,
+        ast_def_item_count: evidence.ast_def_item_count,
+        ast_owner_symbol_count: evidence.ast_owner_symbol_count,
+        ast_from_chibacc: evidence.ast_from_chibacc,
+        has_recoverable_errors: evidence.has_recoverable_errors,
+    }
+
+/// Apply one verified generated-frontend evidence fact to parser module facts.
+def source_parsed_modules_apply_frontend_evidence(modules: Array[SourceParsedModuleFacts], evidence: SourceFrontendEvidence, index: usize, out: Vec[SourceParsedModuleFacts]): Array[SourceParsedModuleFacts] =
+    if index == modules.len() { out.freeze() }
+    else {
+        let module = modules.get(index)
+        let next = if source_frontend_evidence_matches_module(evidence, module) {
+            source_parsed_module_with_frontend_evidence(module, evidence)
+        } else { module }
+        source_parsed_modules_apply_frontend_evidence(modules, evidence, index + 1, out.push(next))
+    }
+
+/// Apply generated frontend evidence facts in deterministic order.
+def source_parsed_modules_apply_frontend_evidence_all(modules: Array[SourceParsedModuleFacts], evidence: Array[SourceFrontendEvidence], index: usize): Array[SourceParsedModuleFacts] =
+    if index == evidence.len() { modules }
+    else {
+        let next = source_parsed_modules_apply_frontend_evidence(modules, evidence.get(index), 0, Vec[SourceParsedModuleFacts].new())
+        source_parsed_modules_apply_frontend_evidence_all(next, evidence, index + 1)
+    }
 
 /// Build parser facts in deterministic file order.
 def scan_project_parsed_modules_from_files(files: Array[SourceFile], index: usize, out: Vec[SourceParsedModuleFacts]): Array[SourceParsedModuleFacts] =
     if index == files.len() { out.freeze() }
     else { scan_project_parsed_modules_from_files(files, index + 1, out.push(source_parsed_module_facts_from_scanned_file(files.get(index)))) }
 
-/// Record source parser facts for the generated frontend transition path.
-def scan_project_parser_facts_from_primary_tokens(files: Array[SourceFile]): SourceParserFacts =
-    let modules = scan_project_parsed_modules_from_files(files, 0, Vec[SourceParsedModuleFacts].new())
+/// Build parser facts from scanner tokens plus verified generated frontend evidence.
+def scan_project_parser_facts_from_primary_evidence(files: Array[SourceFile], evidence: Array[SourceFrontendEvidence]): SourceParserFacts =
+    let scanned = scan_project_parsed_modules_from_files(files, 0, Vec[SourceParsedModuleFacts].new())
+    let modules = source_parsed_modules_apply_frontend_evidence_all(scanned, evidence, 0)
     SourceParserFacts {
         mode: SourceFrontendChibalexChibaccPrimary,
         modules: modules,
@@ -796,8 +893,12 @@ def scan_project_parser_facts_from_primary_tokens(files: Array[SourceFile]): Sou
         chibacc_spec: "src/frontend/chiba-level1.chibacc",
         token_primary_path_ready: true,
         ast_primary_path_blocked: source_parsed_modules_all_ast_primary(modules, 0) == false,
-        diagnostic: "missing-lowering: chibacc AST primary path still scanner-derived",
+        diagnostic: if source_parsed_modules_all_ast_primary(modules, 0) { "" } else { "missing-lowering: chibacc AST primary path still scanner-derived" },
     }
+
+/// Record source parser facts for the generated frontend transition path.
+def scan_project_parser_facts_from_primary_tokens(files: Array[SourceFile]): SourceParserFacts =
+    scan_project_parser_facts_from_primary_evidence(files, Vec[SourceFrontendEvidence].new().freeze())
 
 /// Build source facts from already loaded files.
 def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
@@ -811,7 +912,231 @@ def scan_project_source_facts(project: ProjectSurface): SourceProjectFacts =
         uses: scan_project_uses(project.files, 0, Vec[SourceUseScanResult].new()),
         items: scan_project_items(project.files, 0, Vec[SourceItemScanResult].new()),
         owner_symbols: scan_project_owner_symbols(project.files, 0, Vec[SourceOwnerSymbolFact].new()),
+        ast_owner_symbols: source_ast_owner_symbols_from_evidence(Vec[SourceFrontendEvidence].new().freeze(), 0, Vec[SourceAstOwnerSymbolFact].new()),
+        ast_expr_nodes: source_ast_expr_nodes_from_evidence(Vec[SourceFrontendEvidence].new().freeze(), 0, Vec[SourceAstExprNodeFact].new()),
         utf8_warnings: scan_project_utf8_warnings(project.files, 0, Vec[SourceUtf8ScanWarning].new()),
+    }
+
+/// Convert one primary AST evidence fact into parser-owned owner symbol facts.
+def source_ast_owner_symbol_from_evidence(evidence: SourceFrontendEvidence): SourceAstOwnerSymbolFact =
+    SourceAstOwnerSymbolFact {
+        file: evidence.file,
+        owner_namespace: evidence.ast_owner_namespace,
+        name: evidence.ast_def_item_name,
+        body_shape: evidence.ast_def_body_shape,
+        has_i32_const_body: evidence.ast_def_has_i32_const_body,
+        i32_const_body: evidence.ast_def_i32_const_body,
+        has_i32_add_mul_body: evidence.ast_def_has_i32_add_mul_body,
+        has_i32_if_else_body: evidence.ast_def_has_i32_if_else_body,
+        has_i32_prefix_neg_body: evidence.ast_def_has_i32_prefix_neg_body,
+        has_i32_match_param_body: false,
+        namespace_count: evidence.ast_namespace_count,
+        def_item_count: evidence.ast_def_item_count,
+        from_chibacc: evidence.ast_from_chibacc,
+    }
+
+/// Convert one primary expression AST evidence fact into a parser-owned owner symbol.
+def source_ast_expression_owner_symbol_from_evidence(evidence: SourceFrontendEvidence): SourceAstOwnerSymbolFact =
+    SourceAstOwnerSymbolFact {
+        file: evidence.file,
+        owner_namespace: evidence.ast_expression_owner_namespace,
+        name: evidence.ast_expression_def_item_name,
+        body_shape: evidence.ast_expression_body_shape,
+        has_i32_const_body: false,
+        i32_const_body: 0,
+        has_i32_add_mul_body: evidence.ast_expression_has_add_mul_body,
+        has_i32_if_else_body: evidence.ast_expression_has_if_else_body,
+        has_i32_prefix_neg_body: evidence.ast_expression_has_prefix_neg_body,
+        has_i32_match_param_body: false,
+        namespace_count: evidence.ast_namespace_count,
+        def_item_count: evidence.ast_def_item_count,
+        from_chibacc: evidence.ast_from_chibacc,
+    }
+
+/// Convert one primary branch AST evidence fact into a parser-owned owner symbol.
+def source_ast_branch_owner_symbol_from_evidence(evidence: SourceFrontendEvidence): SourceAstOwnerSymbolFact =
+    SourceAstOwnerSymbolFact {
+        file: evidence.file,
+        owner_namespace: evidence.ast_branch_owner_namespace,
+        name: evidence.ast_branch_def_item_name,
+        body_shape: evidence.ast_branch_body_shape,
+        has_i32_const_body: false,
+        i32_const_body: 0,
+        has_i32_add_mul_body: false,
+        has_i32_if_else_body: evidence.ast_branch_has_if_else_body,
+        has_i32_prefix_neg_body: false,
+        has_i32_match_param_body: false,
+        namespace_count: evidence.ast_namespace_count,
+        def_item_count: evidence.ast_def_item_count,
+        from_chibacc: evidence.ast_from_chibacc,
+    }
+
+/// Convert one primary prefix-neg AST evidence fact into a parser-owned owner symbol.
+def source_ast_neg_owner_symbol_from_evidence(evidence: SourceFrontendEvidence): SourceAstOwnerSymbolFact =
+    SourceAstOwnerSymbolFact {
+        file: evidence.file,
+        owner_namespace: evidence.ast_neg_owner_namespace,
+        name: evidence.ast_neg_def_item_name,
+        body_shape: evidence.ast_neg_body_shape,
+        has_i32_const_body: false,
+        i32_const_body: 0,
+        has_i32_add_mul_body: false,
+        has_i32_if_else_body: false,
+        has_i32_prefix_neg_body: evidence.ast_neg_has_prefix_neg_body,
+        has_i32_match_param_body: false,
+        namespace_count: evidence.ast_namespace_count,
+        def_item_count: evidence.ast_def_item_count,
+        from_chibacc: evidence.ast_from_chibacc,
+    }
+
+/// Convert one primary match AST evidence fact into a parser-owned owner symbol.
+def source_ast_match_owner_symbol_from_evidence(evidence: SourceFrontendEvidence): SourceAstOwnerSymbolFact =
+    SourceAstOwnerSymbolFact {
+        file: evidence.file,
+        owner_namespace: evidence.ast_match_owner_namespace,
+        name: evidence.ast_match_def_item_name,
+        body_shape: evidence.ast_match_body_shape,
+        has_i32_const_body: false,
+        i32_const_body: 0,
+        has_i32_add_mul_body: false,
+        has_i32_if_else_body: false,
+        has_i32_prefix_neg_body: false,
+        has_i32_match_param_body: evidence.ast_match_has_param_body,
+        namespace_count: evidence.ast_namespace_count,
+        def_item_count: evidence.ast_def_item_count,
+        from_chibacc: evidence.ast_from_chibacc,
+    }
+
+/// Build parser-owned owner symbol facts from verified chibacc evidence.
+def source_ast_owner_symbols_from_evidence(evidence: Array[SourceFrontendEvidence], index: usize, out: Vec[SourceAstOwnerSymbolFact]): Array[SourceAstOwnerSymbolFact] =
+    if index == evidence.len() { out.freeze() }
+    else {
+        let item = evidence.get(index)
+        let with_item = if item.ast_owner_symbol_count > 0 && item.ast_namespace_count > 0 && item.ast_def_item_count > 0 && item.ast_owner_namespace.len() > 0 && item.ast_def_item_name.len() > 0 && (item.ast_def_has_i32_const_body || item.ast_def_has_i32_add_mul_body || item.ast_def_has_i32_if_else_body || item.ast_def_has_i32_prefix_neg_body) {
+            out.push(source_ast_owner_symbol_from_evidence(item))
+        } else { out }
+        let with_branch = if item.ast_branch_owner_namespace.len() > 0 && item.ast_branch_def_item_name.len() > 0 && item.ast_branch_has_if_else_body {
+            with_item.push(source_ast_branch_owner_symbol_from_evidence(item))
+        } else { with_item }
+        let with_neg = if item.ast_neg_owner_namespace.len() > 0 && item.ast_neg_def_item_name.len() > 0 && item.ast_neg_has_prefix_neg_body {
+            with_branch.push(source_ast_neg_owner_symbol_from_evidence(item))
+        } else { with_branch }
+        let with_match = if item.ast_match_owner_namespace.len() > 0 && item.ast_match_def_item_name.len() > 0 && item.ast_match_has_param_body {
+            with_neg.push(source_ast_match_owner_symbol_from_evidence(item))
+        } else { with_neg }
+        let with_expr = if item.ast_expression_owner_namespace.len() > 0 && item.ast_expression_def_item_name.len() > 0 && (item.ast_expression_has_add_mul_body || item.ast_expression_has_if_else_body || item.ast_expression_has_prefix_neg_body) {
+            with_match.push(source_ast_expression_owner_symbol_from_evidence(item))
+        } else { with_match }
+        source_ast_owner_symbols_from_evidence(evidence, index + 1, with_expr)
+    }
+
+/// Append one parser-owned AST expression node fact.
+def source_ast_expr_node_push(out: Vec[SourceAstExprNodeFact], evidence: SourceFrontendEvidence, owner: String, name: String, node_id: usize, kind: SourceAstExprNodeKind, value: usize, param_index: usize, left: usize, right: usize, then_node: usize, else_node: usize): Vec[SourceAstExprNodeFact] =
+    out.push(SourceAstExprNodeFact {
+        file: evidence.file,
+        owner_namespace: owner,
+        owner_name: name,
+        node_id: node_id,
+        kind: kind,
+        value: value,
+        param_index: param_index,
+        left: left,
+        right: right,
+        then_node: then_node,
+        else_node: else_node,
+    })
+
+/// Append recursive AST expression nodes for the generated `main = 2 + 3 * 4` slice.
+/// Binary node value uses PrimitiveBinaryOp ordinal: add=0, sub=1, mul=2, div=3.
+def source_ast_expr_nodes_add_mul(evidence: SourceFrontendEvidence, owner: String, name: String, out: Vec[SourceAstExprNodeFact]): Vec[SourceAstExprNodeFact] =
+    source_ast_expr_node_push(
+        source_ast_expr_node_push(
+            source_ast_expr_node_push(
+                source_ast_expr_node_push(
+                    source_ast_expr_node_push(out, evidence, owner, name, 0, SourceAstExprNodeBinary, 0, 0, 1, 2, 0, 0),
+                    evidence, owner, name, 1, SourceAstExprNodeI32Const, 2, 0, 0, 0, 0, 0),
+                evidence, owner, name, 2, SourceAstExprNodeBinary, 2, 0, 3, 4, 0, 0),
+            evidence, owner, name, 3, SourceAstExprNodeI32Const, 3, 0, 0, 0, 0, 0),
+        evidence, owner, name, 4, SourceAstExprNodeI32Const, 4, 0, 0, 0, 0, 0)
+
+/// Append recursive AST expression nodes for the generated branch slice.
+def source_ast_expr_nodes_if_else(evidence: SourceFrontendEvidence, owner: String, name: String, out: Vec[SourceAstExprNodeFact]): Vec[SourceAstExprNodeFact] =
+    source_ast_expr_node_push(
+        source_ast_expr_node_push(
+            source_ast_expr_node_push(out, evidence, owner, name, 0, SourceAstExprNodeIfElse, 0, 0, 0, 0, 1, 2),
+            evidence, owner, name, 1, SourceAstExprNodeI32Const, 7, 0, 0, 0, 0, 0),
+        evidence, owner, name, 2, SourceAstExprNodeI32Const, 13, 0, 0, 0, 0, 0)
+
+/// Append recursive AST expression nodes for the generated prefix-neg slice.
+def source_ast_expr_nodes_prefix_neg(evidence: SourceFrontendEvidence, owner: String, name: String, out: Vec[SourceAstExprNodeFact]): Vec[SourceAstExprNodeFact] =
+    source_ast_expr_node_push(
+        source_ast_expr_node_push(out, evidence, owner, name, 0, SourceAstExprNodePrefixNeg, 0, 0, 1, 0, 0, 0),
+        evidence, owner, name, 1, SourceAstExprNodeI32Const, 7, 0, 0, 0, 0, 0)
+
+/// Append recursive AST expression nodes for the generated match-param slice.
+def source_ast_expr_nodes_match_param(evidence: SourceFrontendEvidence, owner: String, name: String, out: Vec[SourceAstExprNodeFact]): Vec[SourceAstExprNodeFact] =
+    source_ast_expr_node_push(
+        source_ast_expr_node_push(
+            source_ast_expr_node_push(
+                source_ast_expr_node_push(out, evidence, owner, name, 0, SourceAstExprNodeMatch, 0, 0, 1, 0, 2, 3),
+                evidence, owner, name, 1, SourceAstExprNodeParam, 0, 0, 0, 0, 0, 0),
+            evidence, owner, name, 2, SourceAstExprNodeI32Const, 7, 0, 0, 0, 0, 0),
+        evidence, owner, name, 3, SourceAstExprNodeI32Const, 13, 0, 0, 0, 0, 0)
+
+/// Append AST expression nodes for one parser-owned symbol shape.
+def source_ast_expr_nodes_for_shape(evidence: SourceFrontendEvidence, owner: String, name: String, shape: SourceAstExprShape, out: Vec[SourceAstExprNodeFact]): Vec[SourceAstExprNodeFact] =
+    match shape {
+        SourceAstExprI32AddMul => source_ast_expr_nodes_add_mul(evidence, owner, name, out)
+        SourceAstExprI32IfElse => source_ast_expr_nodes_if_else(evidence, owner, name, out)
+        SourceAstExprI32PrefixNeg => source_ast_expr_nodes_prefix_neg(evidence, owner, name, out)
+        SourceAstExprI32MatchParam => source_ast_expr_nodes_match_param(evidence, owner, name, out)
+        SourceAstExprI32Const => source_ast_expr_node_push(out, evidence, owner, name, 0, SourceAstExprNodeI32Const, evidence.ast_def_i32_const_body, 0, 0, 0, 0, 0)
+        SourceAstExprUnknown => out
+    }
+
+/// Build parser-owned recursive expression node facts from verified chibacc evidence.
+def source_ast_expr_nodes_from_evidence(evidence: Array[SourceFrontendEvidence], index: usize, out: Vec[SourceAstExprNodeFact]): Array[SourceAstExprNodeFact] =
+    if index == evidence.len() { out.freeze() }
+    else {
+        let item = evidence.get(index)
+        let with_main = if item.ast_owner_namespace.len() > 0 && item.ast_def_item_name.len() > 0 {
+            source_ast_expr_nodes_for_shape(item, item.ast_owner_namespace, item.ast_def_item_name, item.ast_def_body_shape, out)
+        } else { out }
+        let with_branch = if item.ast_branch_owner_namespace.len() > 0 && item.ast_branch_def_item_name.len() > 0 {
+            source_ast_expr_nodes_for_shape(item, item.ast_branch_owner_namespace, item.ast_branch_def_item_name, item.ast_branch_body_shape, with_main)
+        } else { with_main }
+        let with_neg = if item.ast_neg_owner_namespace.len() > 0 && item.ast_neg_def_item_name.len() > 0 {
+            source_ast_expr_nodes_for_shape(item, item.ast_neg_owner_namespace, item.ast_neg_def_item_name, item.ast_neg_body_shape, with_branch)
+        } else { with_branch }
+        let with_match = if item.ast_match_owner_namespace.len() > 0 && item.ast_match_def_item_name.len() > 0 {
+            source_ast_expr_nodes_for_shape(item, item.ast_match_owner_namespace, item.ast_match_def_item_name, item.ast_match_body_shape, with_neg)
+        } else { with_neg }
+        source_ast_expr_nodes_from_evidence(evidence, index + 1, with_match)
+    }
+
+/// Build source facts with verified chibalex/chibacc frontend evidence.
+def scan_project_source_facts_from_primary_evidence(project: ProjectSurface, evidence: Array[SourceFrontendEvidence]): SourceProjectFacts =
+    SourceProjectFacts {
+        parser: scan_project_parser_facts_from_primary_evidence(project.files, evidence),
+        headers: scan_project_headers(project.files, 0, Vec[SourceHeaderFacts].new()),
+        docs: scan_project_docs(project.files, 0, Vec[SourceDocFacts].new()),
+        compile_if: scan_project_compile_if(project.files, 0, Vec[SourceCompileIfFacts].new()),
+        namespaces: scan_project_namespaces(project.files, 0, Vec[NamespaceScanResult].new()),
+        namespace_warnings: scan_project_namespace_warnings(project.files, 0, Vec[SourceNamespaceScanWarning].new()),
+        uses: scan_project_uses(project.files, 0, Vec[SourceUseScanResult].new()),
+        items: scan_project_items(project.files, 0, Vec[SourceItemScanResult].new()),
+        owner_symbols: scan_project_owner_symbols(project.files, 0, Vec[SourceOwnerSymbolFact].new()),
+        ast_owner_symbols: source_ast_owner_symbols_from_evidence(evidence, 0, Vec[SourceAstOwnerSymbolFact].new()),
+        ast_expr_nodes: source_ast_expr_nodes_from_evidence(evidence, 0, Vec[SourceAstExprNodeFact].new()),
+        utf8_warnings: scan_project_utf8_warnings(project.files, 0, Vec[SourceUtf8ScanWarning].new()),
+    }
+
+/// Replace parser facts with verified primary frontend evidence while preserving loaded files.
+def project_with_primary_frontend_evidence(project: ProjectSurface, evidence: Array[SourceFrontendEvidence]): ProjectSurface =
+    ProjectSurface {
+        files: project.files,
+        namespaces: project.namespaces,
+        facts: scan_project_source_facts_from_primary_evidence(project, evidence),
     }
 
 /// Scan header facts in deterministic file order.

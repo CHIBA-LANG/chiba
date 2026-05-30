@@ -315,33 +315,68 @@ def continuation_env_field_from_capture(field: CaptureField): EnvField =
         class: continuation_capture_class(field.kind),
     }
 
-/// Build conservative capture fields for a materialized continuation frame.
-def continuation_capture_fields_for_owner(owner: BinderId): Array[CaptureField] =
-    Vec[CaptureField].new()
-        .push(CaptureField { binder: owner, kind: CaptureReplaySafeContinuation })
-        .freeze()
+/// Convert replay-safety capture classification into closure-conversion capture kind.
+def continuation_capture_kind_from_replay(kind: ReplayCaptureKind): CaptureKind =
+    match kind {
+        ReplayCapturePureValue => CaptureValue
+        ReplayCaptureSharedRefCell => CaptureSharedRefCell
+        ReplayCaptureNonReplayState => CaptureUnsafeRejected
+    }
+
+/// Find replay-safety classification for one continuation owner.
+def continuation_replay_capture_for_owner(facts: Array[ReplaySafetyFact], owner: BinderId, index: usize): Option[ReplayCaptureClassification] =
+    if index == facts.len() { None }
+    else {
+        let fact = facts.get(index)
+        if closure_binder_id_eq(fact.binder, owner) { Some(fact.capture) }
+        else { continuation_replay_capture_for_owner(facts, owner, index + 1) }
+    }
+
+/// Build capture fields for a materialized continuation from replay facts.
+def continuation_capture_fields_for_owner(module: SimplifiedContinuationModule, owner: BinderId): Array[CaptureField] =
+    match continuation_replay_capture_for_owner(module.source.source.replay, owner, 0) {
+        Some(capture) =>
+            Vec[CaptureField].new()
+                .push(CaptureField { binder: capture.binder, kind: continuation_capture_kind_from_replay(capture.kind) })
+                .freeze()
+        None =>
+            Vec[CaptureField].new()
+                .push(CaptureField { binder: owner, kind: CaptureReplaySafeContinuation })
+                .freeze()
+    }
 
 /// Convert continuation capture fields to EnvFields.
 def continuation_env_fields_from_captures(fields: Array[CaptureField], index: usize, out: Vec[EnvField]): Array[EnvField] =
     if index == fields.len() { out.freeze() }
     else { continuation_env_fields_from_captures(fields, index + 1, out.push(continuation_env_field_from_capture(fields.get(index)))) }
 
-/// Build conservative EnvFields for a materialized continuation frame.
-def continuation_env_fields_for_owner(owner: BinderId): Array[EnvField] =
-    continuation_env_fields_from_captures(continuation_capture_fields_for_owner(owner), 0, Vec[EnvField].new())
+/// Build EnvFields for a materialized continuation package from replay classification.
+def continuation_env_fields_for_owner(module: SimplifiedContinuationModule, owner: BinderId): Array[EnvField] =
+    continuation_env_fields_from_captures(continuation_capture_fields_for_owner(module, owner), 0, Vec[EnvField].new())
+
+/// Build a boxed Cont1 one-shot frame record used by backend state-machine lowering.
+def boxed_cont1_frame_for_owner(module: SimplifiedContinuationModule, owner: BinderId): ContinuationFrame =
+    ContinuationFrame {
+        owner: owner,
+        resume: stackless_resume_function_for_owner(module, owner),
+        captures: continuation_env_fields_for_owner(module, owner),
+        parent: None,
+    }
 
 /// Build a repeatable ContN frame with the CPS control body attached.
 def continuation_frame_for_owner(module: SimplifiedContinuationModule, owner: BinderId): ContinuationFrame =
     ContinuationFrame {
         owner: owner,
         resume: stackless_resume_function_for_owner(module, owner),
-        captures: continuation_env_fields_for_owner(owner),
+        captures: continuation_env_fields_for_owner(module, owner),
         parent: None,
     }
 
 /// Build frame chain facts for continuation kinds that require materialized frames.
 def continuation_lowering_frames(module: SimplifiedContinuationModule, decision: ContinuationSimplification): Array[ContinuationFrame] =
     match decision {
+        ContinuationBoxedOneShot(owner) =>
+            Vec[ContinuationFrame].new().push(boxed_cont1_frame_for_owner(module, owner)).freeze()
         ContinuationPackaged(owner) =>
             Vec[ContinuationFrame].new().push(continuation_frame_for_owner(module, owner)).freeze()
         _ => Vec[ContinuationFrame].new().freeze()
@@ -378,17 +413,12 @@ def continuation_lowering_facts_from_module(module: SimplifiedContinuationModule
 
 /// Return true when a continuation decision needs real capture extraction.
 def continuation_decision_requires_capture_extraction(decision: ContinuationSimplification): bool =
-    match decision {
-        ContinuationBoxedOneShot(_) => true
-        ContinuationPackaged(_) => true
-        _ => false
-    }
+    continuation_capture_extraction_blocker(decision).is_some()
 
 /// Return the precise capture extraction blocker for a materialized continuation.
 def continuation_capture_extraction_blocker(decision: ContinuationSimplification): Option[SemanticDiagnostic] =
     match decision {
-        ContinuationBoxedOneShot(_) =>
-            Some(SemanticDiagnostic("<closure>", 0, 0, "missing-facts: boxed Cont1 capture extraction absent"))
+        ContinuationBoxedOneShot(_) => None
         ContinuationPackaged(_) => None
         _ => None
     }
@@ -396,6 +426,7 @@ def continuation_capture_extraction_blocker(decision: ContinuationSimplification
 /// Historical blocker diagnostics kept stable after ContN frame-chain extraction became primary.
 def closure_retired_blocker_messages(): Array[String] =
     Vec[String].new()
+        .push("missing-facts: boxed Cont1 capture extraction absent")
         .push("missing-facts: ContN frame-chain capture extraction absent")
         .push("missing-facts: lambda capture extraction absent")
         .push("missing-facts: closure env field extraction absent")

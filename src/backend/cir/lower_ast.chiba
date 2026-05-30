@@ -250,11 +250,36 @@ def cir_lower_pattern_let(pat: AST, value: CirExpr): CirStmt =
         _ => L0StmtLetPattern(pat, value)
     }
 
+def cir_lower_pattern_let_typed(pat: AST, ty: AST, value: CirExpr): CirStmt =
+    match ty {
+        Type_Path(name, _) =>
+            if name.len == 0 { cir_lower_pattern_let(pat, value) }
+            else {
+                match pat {
+                    Pattern_Wildcard => L0StmtExpr(value)
+                    Pattern_IdentStart(name2, PatternAfterIdent_Atom(PatternIdent_Name)) =>
+                        L0StmtLet(name2, L0OpCast(value, ty))
+                    Pattern_IdentStart(name2, PatternAfterIdent_Bind(PatternIdent_Name)) =>
+                        L0StmtLet(name2, L0OpCast(value, ty))
+                    _ => L0StmtLetPattern(pat, L0OpCast(value, ty))
+                }
+            }
+        _ =>
+            match pat {
+                Pattern_Wildcard => L0StmtExpr(value)
+                Pattern_IdentStart(name, PatternAfterIdent_Atom(PatternIdent_Name)) =>
+                    L0StmtLet(name, L0OpCast(value, ty))
+                Pattern_IdentStart(name, PatternAfterIdent_Bind(PatternIdent_Name)) =>
+                    L0StmtLet(name, L0OpCast(value, ty))
+                _ => L0StmtLetPattern(pat, L0OpCast(value, ty))
+            }
+    }
+
 def cir_lower_stmt(type_names: CirTypeNameList, ast: AST): CirStmt =
     match ast {
         Stmt_Let(name, value) => L0StmtLet(name, cir_lower_expr(type_names, value))
         Stmt_LetPattern(pat, value) => cir_lower_pattern_let(pat, cir_lower_expr(type_names, value))
-        Stmt_LetPatternTyped(pat, _, value) => cir_lower_pattern_let(pat, cir_lower_expr(type_names, value))
+        Stmt_LetPatternTyped(pat, ty, value) => cir_lower_pattern_let_typed(pat, ty, cir_lower_expr(type_names, value))
         Stmt_Assign(lhs, rhs) => L0StmtAssign(cir_lower_expr(type_names, lhs), cir_lower_expr(type_names, rhs))
         Stmt_Return(value) => L0StmtReturn(cir_lower_expr(type_names, value))
         Stmt_Expr(value) => L0StmtExpr(cir_lower_expr(type_names, value))

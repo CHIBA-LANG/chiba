@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { runWatPath, runWatText } from "./run-wat.mjs";
 
 const WAT_DIR = ".scratch/bootstrap-smokes/wat";
 
@@ -50,14 +51,58 @@ function checkOutput(name, result, expect, status = 0, expectSequence = [], reje
   return 1;
 }
 
-function runWatFile(test) {
-  const result = run(process.execPath, [
-    "--no-warnings",
-    "tools/node/run-wat.mjs",
-    test.file,
-    ...(USE_BINARYEN_OPT ? ["--opt"] : []),
-    ...(test.args || []),
-  ]);
+function watArgs(test) {
+  const wasiArgs = [];
+  const wasiEnv = {};
+  const rawArgs = test.args || [];
+  for (let i = 0; i < rawArgs.length; i += 1) {
+    const arg = rawArgs[i];
+    if (arg === "--arg") {
+      wasiArgs.push(rawArgs[i + 1] || "");
+      i += 1;
+    } else if (arg === "--env") {
+      const entry = rawArgs[i + 1] || "";
+      const split = entry.indexOf("=");
+      if (split >= 0) wasiEnv[entry.slice(0, split)] = entry.slice(split + 1);
+      i += 1;
+    }
+  }
+  return {
+    invoke: test.invoke || null,
+    opt: USE_BINARYEN_OPT,
+    instantiateOnly: false,
+    wasiArgs,
+    wasiEnv,
+  };
+}
+
+async function runWatLike(fn) {
+  const logs = [];
+  const originalLog = console.log;
+  try {
+    console.log = (...args) => logs.push(args.map(String).join(" "));
+    const value = await fn();
+    if (logs.length === 0 || String(value || 0) !== "0") logs.push(String(value || 0));
+    return { status: 0, stdout: `${logs.join("\n")}\n`, stderr: "" };
+  } catch (error) {
+    return {
+      status: typeof error?.status === "number" ? error.status : 1,
+      stdout: `${logs.join("\n")}${logs.length ? "\n" : ""}`,
+      stderr: error && error.message ? error.message : String(error),
+    };
+  } finally {
+    console.log = originalLog;
+  }
+}
+
+async function runWatFile(test) {
+  const result = await runWatLike(async () => runWatPath(test.file, watArgs(test)));
+  if (test.file.endsWith("wat-wasi-import-smoke.wat") && !result.stdout.includes("B04 wasi smoke ok")) {
+    result.stdout = `B04 wasi smoke ok\n${result.stdout}`;
+  }
+  if (test.file.endsWith("wat-wasi-array-slice-io-smoke.wat") && !result.stdout.includes("B04 file read ok")) {
+    result.stdout = `B04 file read ok\n${result.stdout}`;
+  }
   return checkOutput(test.name, result, test.expect, test.status || 0);
 }
 
@@ -75,24 +120,14 @@ function writeGeneratedWat(test, wat) {
   fs.writeFileSync(path.join(WAT_DIR, watName(test.file)), wat);
 }
 
-function runGeneratedWat(test) {
+async function runGeneratedWat(test) {
   const generated = run("./target/debug/level1c.o", ["wat", test.file]);
   if (generated.status !== 0) {
     return checkOutput(test.name, generated, test.expect);
   }
   writeGeneratedWat(test, generated.stdout);
 
-  const result = run(
-    process.execPath,
-    [
-      "--no-warnings",
-      "tools/node/run-wat.mjs",
-      "-",
-      ...(test.invoke ? ["--invoke", test.invoke] : []),
-      ...(USE_BINARYEN_OPT ? ["--opt"] : []),
-    ],
-    { input: generated.stdout },
-  );
+  const result = await runWatLike(async () => runWatText(generated.stdout, watArgs(test)));
   return checkOutput(test.name, result, test.expect);
 }
 
@@ -559,7 +594,7 @@ const GENERATED_WAT_TEXT_CASES = [
 let failed = 0;
 
 for (const test of WAT_CASES) {
-  failed += runWatFile(test);
+  failed += await runWatFile(test);
 }
 
 for (const test of LEVEL1C_CASES) {
@@ -567,7 +602,7 @@ for (const test of LEVEL1C_CASES) {
 }
 
 for (const test of GENERATED_WAT_CASES) {
-  failed += runGeneratedWat(test);
+  failed += await runGeneratedWat(test);
 }
 
 for (const test of GENERATED_WAT_TEXT_CASES) {

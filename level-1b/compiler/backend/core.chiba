@@ -37,9 +37,7 @@ data CoreRuntimeState {
 
 /// Core expression form after CPS/closure lowering.
 data CoreI32ConstAtom {
-    CoreI32ConstZero,
-    CoreI32ConstFortyTwo,
-    CoreI32ConstSmall(usize),
+    CoreI32ConstLiteral(usize),
 }
 
 /// Core branch condition carried by expression lowering.
@@ -56,6 +54,7 @@ data CoreExprKind {
     CoreExprParam(usize),
     CoreExprTailCall(str),
     CoreExprTailCallArgs(str, Array[CoreExprKind]),
+    CoreExprPrimitiveBinary(PrimitiveBinaryOp, CoreExprKind, CoreExprKind),
     CoreExprIfElse(CoreBranchCondition, CoreExprKind, CoreExprKind),
     CoreExprBranchJoinPending,
 }
@@ -64,6 +63,7 @@ data CoreExprKind {
 data CoreOpKind {
     CoreOpFunction,
     CoreOpStacklessFunction,
+    CoreOpAdtTupleCtor,
     CoreOpStructNew,
     CoreOpArrayNew,
     CoreOpClosureCall,
@@ -88,6 +88,7 @@ type CoreOp {
     function_symbol: Option[CoreFunctionSymbol],
     i32_param_count: usize,
     function_body: Option[CoreExprKind],
+    adt_tuple_ctor: Option[CoreAdtCtorLoweringObligation],
     layout: Option[WasmGcLayout],
     tail: CoreTailPosition,
     runtime_state: CoreRuntimeState,
@@ -103,6 +104,8 @@ type WasmGcCoreModule {
     branch_join_obligations: Array[CoreBranchJoinLoweringObligation],
     pattern_decision_obligations: Array[CorePatternDecisionLoweringObligation],
     adt_ctor_obligations: Array[CoreAdtCtorLoweringObligation],
+    intrinsic_bridge_obligations: Array[CoreIntrinsicBridgeLoweringObligation],
+    intrinsic_bridge_roundtrips: Array[IntrinsicBridgeRoundtripFact],
 }
 
 /// Core-to-block lowering obligation before executable WAT emission.
@@ -137,9 +140,23 @@ type CoreAdtCtorLoweringObligation {
     helper_name: str,
     helper_arity: usize,
     tuple_fields: Array[AdtTupleField],
+    tuple_nominal: TupleNominalIdentity,
     requires_symbol_tag_field: bool,
     requires_tuple_record_return: bool,
     requires_utf8_identifier_lowering: bool,
+}
+
+/// Core obligation for compiler intrinsic tuple bridge lowering.
+type CoreIntrinsicBridgeLoweringObligation {
+    owner: BinderId,
+    file: SourceFileId,
+    intrinsic_namespace: String,
+    tuple_to_adt_identity: Option[AdtTupleIntrinsicIdentity],
+    adt_to_tuple_identity: Option[AdtTupleIntrinsicIdentity],
+    requires_tuple_bridge: bool,
+    unsafe_cast_is_compiler_only: bool,
+    has_typed_roundtrip: bool,
+    emits_identity_conversion_helpers: bool,
 }
 
 /// Return the closure environment layout used by escaping closures.
@@ -156,9 +173,7 @@ def optimized_closure_cps_module(module: OptimizedClosureModule): CpsModule =
 /// Convert a typed i32 const atom to Core.
 def core_i32_const_atom_from_typed(atom: TypedI32ConstAtom): CoreI32ConstAtom =
     match atom {
-        TypedI32ConstZero => CoreI32ConstZero
-        TypedI32ConstFortyTwo => CoreI32ConstFortyTwo
-        TypedI32ConstSmall(value) => CoreI32ConstSmall(value)
+        TypedI32ConstLiteral(value) => CoreI32ConstLiteral(value)
     }
 
 /// Convert a typed branch condition to Core.
@@ -179,9 +194,7 @@ def core_expr_from_cps_atom(atom: CpsAtom): CoreExprKind =
 
 /// Convert a small resume result into an executable Core atom.
 def core_expr_from_usize(value: usize): CoreExprKind =
-    if value == 0 { CoreExprI32Const(CoreI32ConstZero) }
-    else if value == 42 { CoreExprI32Const(CoreI32ConstFortyTwo) }
-    else { CoreExprI32Const(CoreI32ConstSmall(value)) }
+    CoreExprI32Const(CoreI32ConstLiteral(value))
 
 /// Convert CPS tail-call arguments to Core atoms.
 def core_expr_args_from_cps_atoms(args: Array[CpsAtom], index: usize, out: Vec[CoreExprKind]): Array[CoreExprKind] =
@@ -211,6 +224,7 @@ def core_expr_from_cps_term(term: CpsTermKind): CoreExprKind =
         CpsTermReturn(atom) => core_expr_from_cps_atom(atom)
         CpsTermTailCall(target, args) => core_expr_from_cps_tail_call_arg(target, args)
         CpsTermTailCallExprs(target, args) => CoreExprTailCallArgs(target, core_expr_args_from_cps_terms(args, 0, Vec[CoreExprKind].new()))
+        CpsTermPrimitiveBinary(op, left, right) => CoreExprPrimitiveBinary(op, core_expr_from_cps_term(left), core_expr_from_cps_term(right))
         CpsTermBranch(condition, then_term, else_term) =>
             CoreExprIfElse(
                 core_branch_condition_from_typed(condition),
@@ -223,9 +237,9 @@ def core_expr_from_cps_term(term: CpsTermKind): CoreExprKind =
 /// Convert an extracted stackless resume body into backend Core expression form.
 def core_expr_from_stackless_resume_body(body: StacklessResumeBodyKind): CoreExprKind =
     match body {
-        StacklessResumeBodyShiftN => CoreExprI32Const(CoreI32ConstZero)
-        StacklessResumeBodyShift => CoreExprI32Const(CoreI32ConstZero)
-        StacklessResumeBodyReset => CoreExprI32Const(CoreI32ConstZero)
+        StacklessResumeBodyShiftN => CoreExprBranchJoinPending
+        StacklessResumeBodyShift => CoreExprBranchJoinPending
+        StacklessResumeBodyReset => CoreExprBranchJoinPending
         StacklessResumeBodyConst(value) => core_expr_from_usize(value)
         StacklessResumeBodyParam(index) => CoreExprParam(index)
         StacklessResumeBodyMultiResume(_, last) => core_expr_from_usize(last)
@@ -257,6 +271,7 @@ def lower_cps_term_fact(term: CpsTermFact, function: TypedFunctionFact): CoreOp 
         function_symbol: Some(CoreFunctionSymbol { name: function.symbol }),
         i32_param_count: function.i32_param_count,
         function_body: Some(core_expr_from_cps_term(term.term)),
+        adt_tuple_ctor: None,
         layout: None,
         tail: CorePlainCall,
         runtime_state: CoreNoRuntimeState,
@@ -288,6 +303,7 @@ def lower_closure_fact(fact: ClosureLoweringFact): Option[CoreOp] =
                 function_symbol: None,
                 i32_param_count: 0,
                 function_body: None,
+                adt_tuple_ctor: None,
                 layout: Some(closure_env_layout()),
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
@@ -333,6 +349,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 function_symbol: None,
                 i32_param_count: 0,
                 function_body: None,
+                adt_tuple_ctor: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
                 runtime_state: CoreConsumedStateMachine,
@@ -346,6 +363,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 function_symbol: None,
                 i32_param_count: 0,
                 function_body: None,
+                adt_tuple_ctor: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
@@ -359,6 +377,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 function_symbol: None,
                 i32_param_count: 0,
                 function_body: None,
+                adt_tuple_ctor: None,
                 layout: continuation_core_layout(fact.kind),
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
@@ -379,6 +398,7 @@ def push_continuation_frame_core_ops(out: Vec[CoreOp], frames: Array[Continuatio
                 function_symbol: None,
                 i32_param_count: core_stackless_resume_param_count(frame.resume.body),
                 function_body: Some(core_expr_from_stackless_resume_body(frame.resume.body)),
+                adt_tuple_ctor: None,
                 layout: None,
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
@@ -400,6 +420,7 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     function_symbol: None,
                     i32_param_count: 0,
                     function_body: None,
+                    adt_tuple_ctor: None,
                     layout: continuation_frame_chain_layout(fact.kind),
                     tail: CorePlainCall,
                     runtime_state: CoreNoRuntimeState,
@@ -412,6 +433,7 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     function_symbol: None,
                     i32_param_count: 0,
                     function_body: None,
+                    adt_tuple_ctor: None,
                     layout: continuation_core_layout(fact.kind),
                     tail: CorePlainCall,
                     runtime_state: CoreNoRuntimeState,
@@ -434,6 +456,7 @@ def core_function_body_terminator(body: Option[CoreExprKind]): CoreBlockTerminat
     match body {
         Some(CoreExprTailCall(_)) => CoreBlockTailCall
         Some(CoreExprTailCallArgs(_, _)) => CoreBlockTailCall
+        Some(CoreExprPrimitiveBinary(_, _, _)) => CoreBlockReturn
         Some(CoreExprBranchJoinPending) => CoreBlockContinue
         None => CoreBlockContinue
         _ => CoreBlockReturn
@@ -506,6 +529,7 @@ def core_adt_ctor_lowering_obligation_from_fact(fact: CpsAdtCtorLoweringFact): C
         helper_name: fact.helper_name,
         helper_arity: fact.helper_arity,
         tuple_fields: fact.source.tuple_fields,
+        tuple_nominal: fact.tuple_nominal,
         requires_symbol_tag_field: fact.returns_canonical_tuple,
         requires_tuple_record_return: fact.requires_tail_tuple_return,
         requires_utf8_identifier_lowering: fact.requires_utf8_identifier_lowering,
@@ -515,6 +539,66 @@ def core_adt_ctor_lowering_obligation_from_fact(fact: CpsAdtCtorLoweringFact): C
 def core_adt_ctor_lowering_obligations(facts: Array[CpsAdtCtorLoweringFact], index: usize, out: Vec[CoreAdtCtorLoweringObligation]): Array[CoreAdtCtorLoweringObligation] =
     if index == facts.len() { out.freeze() }
     else { core_adt_ctor_lowering_obligations(facts, index + 1, out.push(core_adt_ctor_lowering_obligation_from_fact(facts.get(index)))) }
+
+/// Lower one ADT constructor tuple helper into an executable Core helper function.
+def lower_adt_ctor_helper_op(obligation: CoreAdtCtorLoweringObligation): CoreOp =
+    CoreOp {
+        owner: None,
+        kind: CoreOpAdtTupleCtor,
+        export_main: false,
+        function_symbol: Some(CoreFunctionSymbol { name: obligation.helper_name }),
+        i32_param_count: obligation.helper_arity,
+        function_body: None,
+        adt_tuple_ctor: Some(obligation),
+        layout: None,
+        tail: CorePlainCall,
+        runtime_state: CoreNoRuntimeState,
+        frame_count: 0,
+    }
+
+/// Lower ADT constructor tuple obligations into executable Core helper ops.
+def lower_adt_ctor_helper_ops(obligations: Array[CoreAdtCtorLoweringObligation], index: usize, out: Vec[CoreOp]): Array[CoreOp] =
+    if index == obligations.len() { out.freeze() }
+    else { lower_adt_ctor_helper_ops(obligations, index + 1, out.push(lower_adt_ctor_helper_op(obligations.get(index)))) }
+
+/// Convert one CPS intrinsic bridge fact into a Core lowering obligation.
+def core_intrinsic_bridge_lowering_obligation_from_fact(fact: CpsIntrinsicBridgeFact): CoreIntrinsicBridgeLoweringObligation =
+    CoreIntrinsicBridgeLoweringObligation {
+        owner: fact.owner,
+        file: fact.file,
+        intrinsic_namespace: fact.intrinsic_namespace,
+        tuple_to_adt_identity: fact.tuple_to_adt_identity,
+        adt_to_tuple_identity: fact.adt_to_tuple_identity,
+        requires_tuple_bridge: fact.requires_tuple_bridge,
+        unsafe_cast_is_compiler_only: fact.unsafe_cast_is_compiler_only,
+        has_typed_roundtrip: false,
+        emits_identity_conversion_helpers: false,
+    }
+
+/// Return true when a typed roundtrip fact exists for the same owner.
+def core_intrinsic_bridge_has_roundtrip(roundtrips: Array[IntrinsicBridgeRoundtripFact], owner: BinderId, index: usize): bool =
+    if index == roundtrips.len() { false }
+    else if roundtrips.get(index).owner.index == owner.index && roundtrips.get(index).preserves_identity { true }
+    else { core_intrinsic_bridge_has_roundtrip(roundtrips, owner, index + 1) }
+
+/// Attach typed roundtrip evidence to one Core intrinsic bridge obligation.
+def core_intrinsic_bridge_mark_roundtrip(obligation: CoreIntrinsicBridgeLoweringObligation, roundtrips: Array[IntrinsicBridgeRoundtripFact]): CoreIntrinsicBridgeLoweringObligation =
+    CoreIntrinsicBridgeLoweringObligation {
+        owner: obligation.owner,
+        file: obligation.file,
+        intrinsic_namespace: obligation.intrinsic_namespace,
+        tuple_to_adt_identity: obligation.tuple_to_adt_identity,
+        adt_to_tuple_identity: obligation.adt_to_tuple_identity,
+        requires_tuple_bridge: obligation.requires_tuple_bridge,
+        unsafe_cast_is_compiler_only: obligation.unsafe_cast_is_compiler_only,
+        has_typed_roundtrip: core_intrinsic_bridge_has_roundtrip(roundtrips, obligation.owner, 0),
+        emits_identity_conversion_helpers: core_intrinsic_bridge_has_roundtrip(roundtrips, obligation.owner, 0),
+    }
+
+/// Convert CPS intrinsic bridge facts into Core lowering obligations.
+def core_intrinsic_bridge_lowering_obligations(facts: Array[CpsIntrinsicBridgeFact], roundtrips: Array[IntrinsicBridgeRoundtripFact], index: usize, out: Vec[CoreIntrinsicBridgeLoweringObligation]): Array[CoreIntrinsicBridgeLoweringObligation] =
+    if index == facts.len() { out.freeze() }
+    else { core_intrinsic_bridge_lowering_obligations(facts, roundtrips, index + 1, out.push(core_intrinsic_bridge_mark_roundtrip(core_intrinsic_bridge_lowering_obligation_from_fact(facts.get(index)), roundtrips))) }
 
 /// Append one Core op array to another builder.
 def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[CoreOp] =
@@ -530,9 +614,12 @@ def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
     let branch_join_obligations = core_branch_join_lowering_obligations(cps_module.branch_joins, 0, Vec[CoreBranchJoinLoweringObligation].new())
     let pattern_decision_obligations = core_pattern_decision_lowering_obligations(cps_module.pattern_decisions, 0, Vec[CorePatternDecisionLoweringObligation].new())
     let adt_ctor_obligations = core_adt_ctor_lowering_obligations(cps_module.adt_ctors, 0, Vec[CoreAdtCtorLoweringObligation].new())
+    let intrinsic_bridge_obligations = core_intrinsic_bridge_lowering_obligations(cps_module.intrinsic_bridges, cps_module.intrinsic_bridge_roundtrips, 0, Vec[CoreIntrinsicBridgeLoweringObligation].new())
+    let adt_ctor_ops = lower_adt_ctor_helper_ops(adt_ctor_obligations, 0, Vec[CoreOp].new())
     let ops = append_core_ops(Vec[CoreOp].new(), function_ops, 0)
         |> append_core_ops(closure_ops, 0)
         |> append_core_ops(continuation_ops, 0)
+        |> append_core_ops(adt_ctor_ops, 0)
     WasmGcCoreModule {
         source: module,
         layouts: build_wasm_gc_layouts(module),
@@ -540,7 +627,9 @@ def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
         block_obligations: core_block_lowering_obligations(ops, 0, Vec[CoreBlockLoweringObligation].new()),
         branch_join_obligations: branch_join_obligations,
         pattern_decision_obligations: pattern_decision_obligations,
-        adt_ctor_obligations: adt_ctor_obligations,
+        adt_ctor_obligations: Vec[CoreAdtCtorLoweringObligation].new().freeze(),
+        intrinsic_bridge_obligations: intrinsic_bridge_obligations,
+        intrinsic_bridge_roundtrips: cps_module.intrinsic_bridge_roundtrips,
     }
 
 /// Return true when a Core op requires a layout reference.
@@ -562,6 +651,7 @@ def CoreOpKind.requires_owner(self): bool =
     else {
         match self {
             CoreOpStacklessFunction => true
+            CoreOpAdtTupleCtor => true
             _ => false
         }
     }

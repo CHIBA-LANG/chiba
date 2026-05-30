@@ -12,70 +12,95 @@
 ## P0
 - [ ] P0 快速补实现策略：先补 primary lowering 行为，再后补完整 gate；每个补实现 slice 必须在本文件留下 gate TODO，不能用 contract smoke 冒充真实验收。
 	- [x] gate TODO：为 C11 backend 增加 synthetic Core/WAT fixture，验证 `return_call` target 不再使用固定 `$chiba.tail_target`；这不是 level-1b source generated-path。
-	- [ ] gate TODO：等 level-1b parser/driver primary path 可执行后，把 synthetic C11 tailcall fixture 升级成 source `callee()` -> typed/CPS/Core/WAT end-to-end fixture。
-- [ ] chibalex/chibacc frontend：chibalex token primary path 已开始替换 scanner fallback；chibacc source AST 还没进 primary path。
+	- [x] source tailcall fixture：`level-1b/supports/pre-c11-smokes/source_primary_backend.chiba` 已覆盖 `callee()` -> `main_noarg_tail()`，C11 runner 生成 `.scratch/level-1b/c11-backend/source-primary-backend.wat` 并用 wasmtime 验证 `return_call $chiba.callee` 与返回 42。
+- [ ] chibalex/chibacc frontend：chibalex token primary path 已开始替换 scanner fallback；chibacc mini AST evidence 已进入 C07 fact shape，完整 chiba-level1 source AST 仍未接管 primary path。
 	- [x] source parser facts blocker：`SourceProjectFacts.parser` 已拆分 `token_primary_path_ready` 与 `ast_primary_path_blocked`，不再让 scanner fallback 冒充 parsed AST。
-	- [x] chibalex/chibacc lowering/codegen status：C05/C06 已移除 `ContractOnly`/`missing-lowering` codegen 状态，lowering 从 AST 生成 typed IR，codegen 产出可检查入口文本；完整 generated parser execution 仍未完成。
+	- [x] chibalex/chibacc lowering/codegen status：C05/C06 已移除 `ContractOnly`/`missing-lowering` codegen 状态，lowering 从 AST 生成 typed IR，codegen 产出可检查入口文本；mini generated lexer/parser 已经经 `level1c.o wat` 生成可查看 WAT 并实际执行，C07 已新增 `SourceFrontendEvidence` 合并入口并校验 chibacc-mini AST primary evidence；完整 chiba-level1 source facts AST primary path 仍未接管。
 	- [x] chibalex parser builtin removal slice：`std.chibalex.parser` 的 top-level namespace / `@regex =` / token rule action+transition 解析已从 `std.chibalex_parse*` compiler builtin 迁到 source-level parser helper；完整 `.chibalex` rule list assembly 与 regex AST parse 仍 blocked。
-	- [x] chibacc parser builtin removal slice：`std.chibacc.parser` 的 namespace / `start` / `rule` name / `pratt` body detection 已从 `std.chibacc_parse*` compiler builtin 迁到 source-level parser helper；完整 atom/action/pratt arm AST assembly 与 generated parser execution 仍 blocked。
-	- [x] chibacc Pratt engine builtin removal slice：`parse_pratt_at` 不再调用 `std.chibacc_parse_pratt_at` compiler builtin；当前返回 structured failure until full prefix/infix loop lands。
+	- [x] chibacc parser builtin removal slice：`std.chibacc.parser` 的 namespace / `start` / `rule` name / `pratt` body detection 已从 `std.chibacc_parse*` compiler builtin 迁到 source-level parser helper；mini generated parser execution 已覆盖 simple/pratt/list/continuation/attribute/calculator AST slices，完整 chiba-level1 grammar AST primary 仍 blocked。
+	- [x] chibacc Pratt engine builtin removal slice：`parse_pratt_at` 不再调用 `std.chibacc_parse_pratt_at` compiler builtin；mini Pratt parser generated WAT 已执行通过，C07 runner 已消费 `.scratch/level-1b/chibacc-mini/ast-primary-evidence.json`，完整 parser recovery/source-driver AST primary 接入仍未完成。
+	- [x] calculator grammar AST evidence：`level1b:chibacc-mini` 已生成并运行 `calculator.exec.exec.wat`，C07 source driver 现在强制要求 `calculator.chibacc` 出现在 AST primary evidence 中，避免 calculator parser slice 回退时假绿；完整 chiba-level1 source facts 仍未由 generated AST 替换 scanner facts。
+	- [x] calculator grammar executable AST slice：`calculator.exec.exec.wat` 现在不只做 AST shape check，而是把 `var x := 2 + 3 * 4; x` 的 generated parser AST 驱动到 harness 执行结果 14；C07 要求 evidence 中 `expectedMainResult/mainResult == "14"`，避免 Pratt precedence/parser AST 只靠结构存在假通过。
+	- [x] full chiba-level1 generated parser executable slice：`level1b:chibacc-mini` 现在为 `src/frontend/chiba-level1.chibacc` 生成 standalone parser WAT，并额外生成 `.scratch/level-1b/chibacc-full/chiba-level1-parser.exec.wat`，用 token stream `namespace demo def main() = 2 + 3 * 4` 实际调用 full `parse_tokens`，WAT `main -> 14`；C07 消费该 evidence，`run:all-wat` 也运行该 artifact。完整 source-driver AST item facts 接管 scanner 仍未完成。
+	- [x] full chiba-level1 namespace action slice：`namespace_decl` action 已从 `Namespace(path as Str)` 改成 `Namespace(path)`，AST data 从 `Namespace(Str)` 改成 `Namespace(AST)`，避免 `Path_Cons` 被 runtime cast 成 `Str`；full parser executable WAT 已覆盖 namespace path + def item，不再 illegal cast。
+	- [x] AST primary evidence 非空项数：chibacc-mini evidence 现在记录 `astItemCount`，C07 要求所有 AST-checked cases 都有非零 item count，`source_parsed_modules_all_ast_primary` 也拒绝 `has_ast=true` 但 `ast_item_count=0` 的假 primary；完整 AST item facts 接管 scanner item facts 仍未完成。
+	- [x] full parser AST item evidence threading：`SourceFrontendEvidence` / `SourceParsedModuleFacts` 已新增 `ast_namespace_count` 与 `ast_def_item_count`，`source_parsed_modules_all_ast_primary` 要求 item/namespace/def 三类 primary facts 都非空；full grammar JSON evidence 记录 `astItemCount=1`、`astNamespaceCount=1`、`astDefItemCount=1`，C07 强制校验这些字段。真实 `SourceItemScanResult`/owner symbol 仍未由 AST 构造，scanner 仍未删除。
+	- [x] full parser AST-owned symbol evidence：full grammar executable evidence 现在记录 parser-owned `demo::main`，`SourceFrontendEvidence` 线程 `ast_owner_namespace` / `ast_def_item_name` 到 `SourceAstOwnerSymbolFact`，C07 强制校验该 symbol 来自可运行 full parser WAT；真实 `SourceItemScanResult` replacement 与 scanner 删除仍未完成。
+	- [x] AST evidence source-gate presence slice：C07 source semantic gate 现在允许 parser-owned `SourceAstOwnerSymbolFact` 证明 namespace/item presence，不再必须由 byte scanner 提供 namespace/item 才能越过 presence gate；scanner 仍负责 use/attributes/surface/body coarse facts，完整 `SourceItemScanResult` replacement 仍未完成。
+	- [x] AST-owned symbol reaches alpha/typed：`AlphaModule` 现在保留 `AlphaAstOwnerOrigin`，C08 typed module 线程 `TypedAstOwnerSymbolFact`，把 chibacc parser-owned `demo::main` 从 C07 source facts 推到 C08 typed fact surface；完整 typed item skeleton/body traversal 仍未由 AST 替换。
+	- [x] AST-owned add/mul function typed fact：full parser executable evidence 现在把 `demo::main = 2 + 3 * 4` 的 body fact 线程到 `SourceAstOwnerSymbolFact` / `AlphaAstOwnerOrigin` / `TypedAstOwnerSymbolFact`，C08 生成 parser-owned `TypedFunctionFact`，不再只能从 scanner body slice 得到 `main=42`。
+	- [x] AST-owned typed main C11 artifact：C09/C11 contract 已锁住 parser-owned typed function facts 进入 CPS/Core 的路径；C11 读取 full parser evidence 生成 `.scratch/level-1b/c11-backend/ast-primary-typed-main.wat`，并用 wasmtime 验证 parser-owned `demo::main -> 14`。完整任意 AST expression/body lowering 仍未完成。
+	- [x] full grammar expression execution blocker cleared：full generated parser 现在为 `2 + 3 * 4` expr-rule harness 生成/compile/run WAT，C07 记录 `expressionExecutableWat` 且要求 `expressionMainResult == 14`；`run:all-wat` 跳过旧 split debug artifacts，只运行 combined executable WAT。完整 full AST expression primary replacement 仍未完成，因为 C07/C08 source facts 还没有从 parser AST item/body 全量构造。
+	- [x] full grammar expression entry truthfulness slice：`level1b:chibacc-mini` 不再把 source-file `main` 结果复用成 expression evidence；full parser executable WAT 现在额外 export `expr_main`，直接调用 generated pratt entry `parse_rule_176` 并验证表达式 AST `2 + 3 * 4 -> 14`。C07 继续消费该独立 `expressionMainResult`。完整 source-driver AST item facts 接管 scanner 仍未完成。
 - [ ] UTF8, `level-1b/compiler/semantic/adt_tuple_lowering.chiba`, ADT ctor tag canonicalization 当前按 ASCII byte 做 BigCamel -> snake_case，UTF-8 ctor 名会逐 byte 变成 `_` 或错误分词；fix：ctor tag 由 chibacc AST 的 UTF-8/XID identifier token 派生，使用 Unicode-aware case fold / word-boundary 规则，或在该规则落地前对非-ASCII ctor fail-closed。
 	- [x] C08-C11 已线程 `requires_utf8_identifier_lowering`，UTF-8 ADT ctor identifier 不能被当作普通 ASCII tag lowering 静默通过；真实 Unicode-aware case fold / word-boundary 仍未完成。
 - [ ] UTF8, `level-1b/compiler/source/scan.chiba`, C07 transition scanner 仍用 ASCII `source_is_ident_start/continue`、uppercase ctor scan、byte-level item/name scan；day0 UTF-8 identifier 会被漏扫或误分类；fix：让 chibalex/chibacc 成为 source facts primary path，scanner fallback 遇到非-ASCII identifier/source semantic region 必须 fail-closed，不得产完整 facts。
 	- [x] C07 已新增 UTF-8 identifier fixture（namespace / data ctor / function name），当前明确 blocked 于 chibalex/chibacc primary parser execution，避免 scanner fallback 被误当 day0 UTF-8 支持。
 - [ ] UTF8, `level-1b/compiler/semantic/type_infer.chiba`, C08 minimal body/callee/data-ctor scanner 复用 ASCII source scanner 和 `byte_at` identifier 判断，tail-call target、namespace-qualified symbol、data ctor arity/name 在 UTF-8 下不可靠；fix：改为消费 parser AST/typed identifier facts，临时路径遇到非-ASCII owner/name/callee/ctor 时 fail-closed。
+	- [x] C08 UTF-8 scanner fallback fail-closed：`type_infer` 现在遇到 source UTF-8 warning 且 chibacc AST primary 仍 blocked 时返回 `missing-facts: UTF-8 typed identifier facts require chibacc AST primary path`，避免 ASCII scanner-derived typed facts 静默进入 C08。
 - [ ] UTF8, `tools/node/run-level1b-chibalex-mini.mjs`, mini lexer runner 只用 UTF-8 lead-byte 宽度推进，XID 表与 invalid sequence validation 仍是近似；fix：接入真实 `std.regex.utf8` / Unicode XID table 生成物，并补 invalid UTF-8 / combining mark / non-ASCII keyword-boundary fixtures。
+	- [x] chibalex mini XID table-backed slice：mini runner 已停止使用 `cp == 233/955/769` 手写 codepoint 特例，改为读取 `level-1b/std/regex/xiddata.chiba` 并要求相关 Unicode 15.1 XID ranges 存在后生成 standalone predicate；fixtures 覆盖 `café`、`λ`、combining mark、invalid continuation，生成 lexer WAT 已执行通过。完整 primary lexer 仍需直接调用共享 `std.regex.utf8`/`xiddata`，不能长期靠 runner 展开 subset。
 - [ ] UTF8, `level-1b/std/regex/utf8.chiba`, regex UTF-8 helper 已有 codepoint boundary，但 Unicode property / XID / invalid-sequence policy 仍未成为 parser+lexer 共享真源；fix：把 UTF-8 decode、XID_Start/XID_Continue、boundary、invalid sequence diagnostics 提升为 std/frontend 共享模块。
+	- [x] shared UTF-8 validation/decode/XID wrapper slice：`std.regex.utf8` 现在提供 `str.utf8_valid_at`、`str.utf8_codepoint_at`、`str.is_xid_start_at`、`str.is_xid_continue_at`，统一处理 overlong/surrogate/out-of-range/invalid continuation 后再查 Unicode 15.1 XID 表；XID-at-offset 不再依赖 `str.char_at` builtin。C04 regex 与 chibalex UTF-8 mini WAT 已通过。完整 chibalex/chibacc primary 仍需直接调用该共享 helper，不能长期保留 runner 内联 decode。
 - [ ] attribute grammar：#[attr(...)] nested/named/list args 没 spec/golden/AST/parser。
 	- [x] attribute spec/golden：spec 已定义 AttrArg AST 与 nested/named/list/object grammar，并新增复杂 attribute fixture/gate。
-	- [x] chibalex attribute token fixture：lexer golden 覆盖 `#`/bracket/delimiter/literal/ident token 流，不折叠 legacy attribute token；真实 generated lexer execution 仍未完成。
-	- [x] chibacc attribute AST/fixture：`std.chibacc.ast.AttrArg` 与 mini grammar 已覆盖 bare/named/call/list/object；真实 parser 执行仍未完成。
-	- [x] chibacc attribute native oracle：`attribute-args.chibacc` 已纳入 chibacc-mini native oracle；generated parser execution 仍 blocked。
+	- [x] chibalex attribute token fixture：lexer golden 覆盖 `#`/bracket/delimiter/literal/ident token 流，不折叠 legacy attribute token；generated lexer WAT execution 已覆盖 complex attribute token stream。
+	- [x] chibacc attribute AST/fixture：`std.chibacc.ast.AttrArg` 与 mini grammar 已覆盖 bare/named/call/list/object；generated parser WAT execution 已覆盖 attribute args AST slice。
+	- [x] chibacc attribute native oracle：`attribute-args.chibacc` 已纳入 chibacc-mini native oracle，generated parser WAT execution 已通过；完整 chiba-level1 source parser AST primary path 仍未接管。
 - [ ] namespace resolution：只有扫描和 owner slice；真实 import/name resolution、owner namespace symbol、visibility/private、冲突规则没做。
 	- [x] namespace ownership facts：alpha/typed skeleton 已把 item owner namespace 线程化进 `TypedModule.namespace_ownership`；import/name resolution 仍未完成。
 	- [x] namespace import facts：source `use` 已经穿过 alpha 进入 `TypedModule.namespace_imports`；真实 visibility/private/conflict/name lookup 仍 fail-closed。
 	- [x] namespace resolution obligations：source import scopes 已生成 visibility/conflict/prelude obligations；真实 symbol lookup/private check 仍未完成。
 	- [x] function symbol uniqueness：C08 已拒绝重复 owner-qualified function symbol；完整 import/name lookup conflict matrix 仍未完成。
+	- [x] namespace resolution fact slice：C08 已生成 `NamespaceResolutionFact`，把 item owner、file import count、current-namespace-priority、private visibility check、ambiguous import reject policy 串进 typed module；真实 symbol table lookup、private 跨 namespace 拒绝、use/prelude conflict matrix 仍未完成。
 - [ ] method resolution：没做。method index、receiver binding、qualified callee、Self with generics 都缺。
 	- [x] method surface facts：source scan 已抽取 `def Receiver.member` 的 receiver/member slices，后续 method index 不再只靠 boolean。
 	- [x] typed method/operator facts：typed module 已聚合 `MethodSurfaceFact`，保留 owner、receiver、member、operator 标记。
 	- [x] method/operator index surface entries：index builder 已把 `MethodSurfaceFact` 转成稳定 `MethodOperatorSurfaceEntry`；nominal receiver binding/candidate lookup 仍未完成。
 	- [x] method/operator nominal keys：index builder 已从 receiver/member source slice 生成 `MethodKey` / `OperatorKey`，并按 qualified receiver 拆 namespace/name；真实 `Self` binding、generic receiver、candidate lookup、visibility 仍 fail-closed。
 	- [x] no-method index baseline：无 method/operator declarations 的 module 现在得到空 MethodOperatorIndex；有 method surface 仍 fail-closed。
-- [ ] operator overloading：没做。candidate collection、operand matching、ambiguity、op_index/op_index_slice lowering 都缺。
+	- [x] method `Self` binding fact slice：method/operator index 已生成 `MethodSelfBindingFact`，把 receiver nominal、member、`Self := receiver`、generic receiver surface 串到 index；完整 generic receiver substitution、visibility、namespace-aware candidate lookup 仍未完成。
+	- [x] method candidate visibility slice：`MethodKey` / `OperatorKey` 现在保留 declaration file / owner namespace / private，method candidate lookup 会过滤 private 跨 namespace candidate，并对不可见 private method 产出 hard diagnostic；完整 import/prelude resolution matrix、generic receiver substitution、method body instantiation 仍未完成。
+- [ ] operator overloading：已进入 method-protocol candidate path；完整 overload resolution 仍未完成。
 	- [x] operator method surface facts：`.op_*` 现在和普通 method 共用 receiver/member slices；真实 overload resolution 仍未完成。
 	- [x] operator use surface facts：typed module 已记录 infix/operator/index/slice use surface；真实 candidate collection、operand matching、ambiguity 仍 fail-closed。
 	- [x] operator resolution obligations：`OperatorUseSurfaceFact` 已转成稳定 overload-resolution obligation；candidate collection / operand matching / ambiguity 仍未完成。
 	- [x] operator candidate-set facts：method/operator index 已为每个 operator use 绑定当前 operator declaration candidate set，并显式要求 operand matching / ambiguity check；真实按 receiver/operand 过滤、missing/ambiguous/wrong-operand 报错仍 fail-closed。
-	- [x] operator kind threading：source/typed/operator obligation 已线程 `+ - * / [] [..]` 到 `op_add/op_sub/op_mul/op_div/op_index/op_index_slice` method-style member key；真实 receiver/operand type filtering 仍 fail-closed。
-	- [x] operator candidate diagnostics：candidate set 已产出 missing / ambiguity-pending / operand-matching-pending / unknown-operator-pending 诊断事实；真实 receiver/operand 过滤后的 hard diagnostic 仍 fail-closed。
-	- [x] operator single-candidate resolution：当前 operator use 若按固定 operator name 只找到一个 declaration candidate，不再报 operand-matching pending；多候选 ambiguity 与缺失候选仍 fail-closed。真实 receiver/operand type filtering 仍未完成。
+	- [x] operator kind threading：source/typed/operator obligation 已线程 `+ - * / [] [..]` 到 `op_add/op_sub/op_mul/op_div/op_index/op_index_slice` method-style member key。
+	- [x] operator candidate diagnostics：candidate set 已产出 missing / ambiguity / operand arity / operand type / unknown-operator 诊断事实。
+	- [x] operator single-candidate resolution：当前 operator use 若按固定 operator name 只找到一个 declaration candidate，不再报 operand-matching pending；多候选 ambiguity 与缺失候选仍 fail-closed。
+	- [x] operator receiver/operand filtering slice：infix operator 会从 typed param slice 抽 receiver/right operand 类型并要求同型；`[]`/`[..]` 会校验 index/start/len 是整数索引族；完整多候选 trait/interface 约束、generic operand unify、namespace visibility 仍未完成。
+	- [x] builtin intrinsic receiver whitelist：C08 method/operator index 明确只有 `u8/u16/u32/u64/i8/i16/i32/i64/f32/f64/Vec/Array/Slice/String/str` 的 operator key 可以走 compiler-provided intrinsic body；其他用户 nominal type 必须通过普通 method/operator declaration candidate，不得被 builtin key 吃掉。
 - [ ] typed AST elaboration：现在很多是 skeleton/facts；真实 expression/type/item traversal 不完整。
 	- [x] typed item skeleton threading：`TypedModule.items` 保留 alpha 后的 item skeleton，后续 method/operator/branch/control pass 不再只能重扫 source。
 	- [x] typed elaboration obligations：`TypedElaboration` 现在携带 item/type/body traversal obligations；真实 typed AST expression lowering 仍未完成。
 	- [x] minimal codegen typed function fact：C08 现在为无复杂 surface 的简单 `def` 生成 `TypedFunctionBodyFact`，能保留 `main` 与 `i32.const 42` 竖切；完整 type expression / expression AST traversal 仍未完成。
 		- [x] minimal tail-call body fact：C08 现在能把极窄 `callee()` body 标成 `TypedFunctionTailCall(target)`，用于验证 CPS tail-call lowering；完整 typed call graph / namespace-aware callee resolution 仍未完成。
 		- [x] minimal i32 param/tail-call fact：C08 现在能保留 `id(x: i32)=x` 与 `main=id(42)` 这类一参 i32 tail-call 竖切；完整 param AST / call argument lowering 仍未完成。
-		- [x] minimal param0 tail-call fact：C08/C11 现在能保留 `forward(x: i32)=id(x)` 并 emit `local.get 0 return_call $target`；多参/非 param0 argument lowering 仍未完成。
+		- [x] minimal param0 tail-call fact：C08/C11 现在能保留 `forward(x: i32)=id(x)` 并 emit `local.get 0 return_call $target`；source-primary WAT 已覆盖多参 tailcall 与混合 param/const 参数，复杂表达式参数仍未完成。
 		- [x] minimal callee symbol check：极窄尾调用 target 必须能在当前 typed function set 中解析到同名函数；同 namespace 裸调用会解析成 owner-qualified symbol，完整 import/mangle-aware call graph 仍未完成。
 		- [x] minimal i32 const call exactness：`f(42)` 窄 tail-call slice 现在要求 const arg 精确闭合且处于尾位置，避免把 `f(42 + x)` / `f(42, y)` / `f(42) + 1` 误编译成 `f(42)`。
-		- [x] minimal small i32 const call exactness：`f(7)` 这类非 0/42 small const tail-call arg 现在保留为 `TypedI32ConstSmall` 并可穿到 runnable WAT，避免 source-slice backend 把 small const 漏掉或降成 0。
+		- [x] minimal small i32 const call exactness：`f(7)` 这类非 0/42 small const tail-call arg 现在保留为统一 `TypedI32ConstLiteral` 并可穿到 runnable WAT，避免 source-slice backend 把 small const 漏掉或降成 0。
 		- [x] minimal no-arg call exactness：`f()` 窄 tail-call slice 现在要求空参数精确闭合且处于尾位置，避免把 `f() + 1` 误编译成 `f()`。
 		- [x] minimal param return exactness：`id(x)=x` 窄 return-param slice 现在要求参数名处于尾位置，避免把 `x + 1` 误编译成 `x`。
 		- [x] minimal const return exactness：`42` / `0` 常量返回与 branch const arm 现在要求 atom 占满 tail region，避免把 `42 + x` 误编译成 `42`。
-		- [x] typed expression extensibility slice：TypedExpr/CPS/Core 已支持 generic small i32 const atom、tail-call param0 arg、nested branch tail-call target validation；仍未替代 chibacc AST 级 expression traversal。
-		- [x] typed expression traversal API：C08 现在有 `TypedExprVisit` / `typed_expr_traverse` / `typed_function_expr_visits_all`，C09 `CpsModule.expr_visits` 消费该 DFS traversal；真实输入仍是 source-slice typed expr，等待 chibacc AST primary 替换。
+			- [x] typed expression extensibility slice：TypedExpr/CPS/Core 已支持 generic small i32 const atom、tail-call param0 arg、nested branch tail-call target validation；source-primary WAT 已覆盖 nested branch / match fallback；仍未替代 chibacc AST 级 expression traversal。
+			- [x] typed expression traversal API：C08 现在有 `TypedExprVisit` / `typed_expr_traverse` / `typed_function_expr_visits_all`，C09 `CpsModule.expr_visits` 消费该 DFS traversal；真实输入仍是 source-slice typed expr，等待 chibacc AST primary 替换。
+			- [x] AST binary op recursive lowering：`SourceAstExprNodeFact` 的 binary node 现在携带 primitive op ordinal，C08 `typed_expr_from_ast_node` 直接按节点 op 生成 `TypedExprPrimitiveBinary(op, left, right)`；`2 + 3 * 4` 不再依赖 add/mul hardcoded fallback 才保持 `*`。
+			- [x] chibacc AST owner no-shape-fallback：C08 对 `from_chibacc` owner 缺少 AST node root 时不再回退到旧 `SourceAstExprShape` hardcode，避免 full parser evidence 丢 node graph 仍假装 typed AST primary 成功。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 	- [x] generic surface facts：typed module 已记录 explicit params、auto-generic、explicit instantiation、generic Self method surface；真实 template body checking 与 instantiation discharge 仍 fail-closed。
 	- [x] generic template obligations：typed pass 已把 generic surface 转成 `GenericTemplateObligation`，区分显式参数、auto-generic、实例化 discharge、generic Self receiver binding。
 - [ ] globals/init：module-load init order、dependency/cycle、side-effect init lowering 没完整。
 	- [x] global init surface facts：typed module 已记录静态值 initializer/dependency/world_local/ref surface；真实 init order、cycle、module-load lowering 仍 fail-closed。
 	- [x] global init obligations：typed pass 已把 init surface 转成 `GlobalInitObligation`；依赖排序、cycle 检测、module-load lowering 仍未完成。
+	- [x] global init runtime slice：C08 已生成稳定 `GlobalInitPlanStep`（source-order、prior-global dependency、cycle-free prefix），C11 source-primary WAT 已 emit mutable global + start init，并用 wasmtime 验证 `def ONE: i32 = 7`、`def TWO: i32 = ONE + 35`、`TWO + ONE == 49`；完整任意表达式 init、forward-reference 诊断、side-effect init 仍未完成。
 - [ ] pattern/match：deep pattern lowering、exhaustiveness、if let env 规则没完整 primary 实现。
 	- [x] pattern surface facts：typed module 已记录 match/if-let/deep-pattern/function-pattern/wildcard-let surface；真实 DFT lowering、exhaustiveness、if-let 失败分支 env 仍 fail-closed。
 	- [x] pattern lowering obligations：typed pass 已把 pattern surface 转成 `PatternLoweringObligation`，显式区分 match exhaustiveness、if-let 双分支 env、deep DFT、函数参数 desugar。
 	- [x] pattern DFT/exhaustiveness fact stream：pattern pass 现在从 alpha origins 生成 `PatternDftStep` / `PatternExhaustivenessFact` / `PatternEnvFact`，明确 match 缺失静态 case 是 error、`if let` 失败分支不引入 binding；真实 decision-tree/body lowering 仍未完成。
 	- [x] typed pattern fact threading：C08 `TypedModule` 现在保留 DFT steps、exhaustiveness facts 与 pattern env facts，后续 CPS/Core 不再只能重扫 source surface。
+	- [x] source-primary i32 match runtime slice：C11 source-primary WAT 已把 `match value { 0 => ... 1 => ... _ => ... }` lower 成 `i32.eq` test-chain，并用 wasmtime 验证 0/1/fallback 三路；深 ADT/record/tuple pattern field extract 仍未完成。
 - [ ] pipe lowering：placeholder、receiver-first method pipe、operator/method interaction 还没完整 primary lowering。
 	- [x] pipe surface facts：typed module 已记录 pipe/placeholder/chain surface；真实 placeholder expansion、receiver-first desugar、operator/method interaction 仍 fail-closed。
 	- [x] pipe repeated-placeholder gate：spec 与 checkpoint fixture 已锁定 `a |> f(b,_,_) == f(b,a,a)`；真实 lowering 仍未完成。
@@ -83,10 +108,14 @@
 - [ ] ADT tuple bridge：Ctor <-> (:ctor, ...)、tuple_to_adt/adt_to_tuple intrinsic lowering 没完整。
 	- [x] C08 data skeleton ctor scan：从 `data` item 粗扫 constructor 名与 arity，生成 canonical `LoweredAdtCtor`；payload type 暂用稳定 type-var 占位，完整 type expr lowering 仍未完成。
 	- [x] C09/C11 ctor obligation threading：`LoweredAdtCtor` 已进入 CPS/Core obligation；C11 validator 对未 executable 的 ADT ctor tuple helper fail-closed，不再静默丢弃。
+	- [x] C11 executable ctor helper slice：ADT ctor lowering obligation 现在会生成 `CoreOpAdtTupleCtor` helper op，WAT emitter 产出 typed tuple struct + `struct.new` helper；`level1b:c11-backend` 已生成 `.scratch/level-1b/c11-backend/adt-tuple-ctor.wat` 并用 wasmtime 验证 tag/payload field read。
 - [ ] compiler intrinsic namespace：有部分 contract；真实 intrinsic resolution/lowering 没完整。
 	- [x] compiler intrinsic surface facts：typed module 已记录 compiler intrinsic call 与 tuple type surface；真实 intrinsic namespace resolution/lowering 仍 fail-closed。
 	- [x] intrinsic lowering obligations：typed pass 已把 compiler intrinsic/tuple bridge surface 转成 `IntrinsicLoweringObligation`，固定 `compiler.intrinsic` namespace；真实 resolution/lowering 仍未完成。
 	- [x] intrinsic identity split：C08 已区分 `tuple_to_adt` / `adt_to_tuple` / `unsafe_cast`，tuple bridge 绑定 `AdtTupleIntrinsicIdentity`，`unsafe_cast` 标记 compiler-only；真实 namespace lookup 与 executable lowering 仍未完成。
+	- [x] intrinsic bridge C09/C11 threading：`IntrinsicLoweringObligation` 现在保存在 `TypedModule`，并进入 `CpsIntrinsicBridgeFact` / `CoreIntrinsicBridgeLoweringObligation`；C11 validator 校验 `compiler.intrinsic` namespace，避免 tuple bridge identity 停在 C08 surface 后丢失。真实 typed identity roundtrip / executable conversion lowering 仍未完成。
+	- [x] intrinsic bridge typed roundtrip fact：C08 现在对同一 owner 内同时出现 `tuple_to_adt` 与 `adt_to_tuple` 的 bridge 生成 `IntrinsicBridgeRoundtripFact`，记录双向 `AdtTupleConversion` 与 `preserves_identity`；C09/C11 已线程到 `CoreIntrinsicBridgeLoweringObligation.has_typed_roundtrip`，C11 validator 会拒绝双向 bridge 丢失 typed roundtrip evidence。
+	- [x] intrinsic bridge executable identity helper slice：C11 会把有 typed roundtrip evidence 的 tuple bridge 降成 `compiler.intrinsic.tuple_to_adt` / `adt_to_tuple` eqref identity conversion helpers，并要求 `emits_identity_conversion_helpers`；`adt-tuple-intrinsic-roundtrip.wat` 已验证 tuple -> ADT -> tuple roundtrip 后 payload 保持 41。真实 namespace lookup 与非 identity representation conversion 仍未完成。
 - [ ] answer/control scan：reset/shift/shiftn answer facts 没做。
 	- [x] control surface detection：source/typed surface 已标记 reset/shift/shiftn；无 delimited-control syntax 的 module 可越过 answer_control，出现 control syntax 仍 fail-closed。
 	- [x] control surface facts：`TypedModule.control_surface` 聚合 reset/shift/shiftn owner facts，answer_control 以后消费该事实流。
@@ -115,14 +144,18 @@
 	- [x] closure capture blocker：lambda/closure CPS usage subjects 不再空 layout 假通过；无可用 capture facts 时必须经 conservative capture/env extraction path 或后续 primary free-var extraction。
 	- [x] syntactic no-capture direct path：无明显 capture surface 的 lambda/closure 会生成 empty env layout，并在 env simplify 降成 `ClosureNoCaptureDirect`；capturing env field extraction 与 call-site rewrite 仍未完成。
 	- [x] conservative capture/env extraction path：C10 现在为非 no-capture lambda/closure 生成非空 `ClosureEnvLayout`，ContN frame 生成非空 replay-safe capture EnvField；真实 free-var set、field projection、call-site rewrite 仍未完成。
+	- [x] closure call_ref executable slice：C11 `CoreOpClosureCall` 不再 emit 空 `(param funcref) (param eqref)` stub，WAT emitter 生成 typed `call_ref` dispatch shape；`.scratch/level-1b/c11-backend/closure-call-ref.wat` 已用 wasmtime 验证 funcref 调用返回 42。真实 env field projection / call-site direct rewrite 仍未完成。
 - [ ] Cont1 lowering：direct resume / boxed one-shot consumed state machine 没完整。
 	- [x] Cont1 one-shot obligations：Cont1 simplification 已生成 direct resume vs boxed state-machine obligation，并显式要求 consumed state。
 	- [x] Cont1/ContN capture plans：C10 现在为 materialized continuation 生成 `ContinuationCapturePlan`，区分 boxed Cont1 consumed-state、ContN frame body extraction，并固定 Ref capture shared-reference semantics；真实 capture scan/body extraction 仍未完成。
+	- [x] boxed Cont1 WAT consumed-state slice：C11 `CoreOpBoxedCont1` 不再 emit `i32.const 0` fake resume，WAT emitter 会读取 consumed field、重复 resume 时 `unreachable` trap、首次 resume 后写 consumed；`.scratch/level-1b/c11-backend/boxed-cont1-state-machine.wat` 已验证首次 resume 返回 41、第二次 resume trap。真实 frame body resume/capture projection 仍未完成。
 - [ ] ContN lowering：stackless resume frame、frame chain、repeatable package 没完整 primary。
 	- [x] ContN frame-chain obligations：packaged ContN simplification 已生成 stackless resume function / frame chain / repeatable package obligation；真实 frame extraction 仍未完成。
 	- [x] ContN non-zero frame fact：`ContinuationPackaged` lowering fact 现在会携带至少一个 stackless resume frame shell，避免 C11 收到 zero-frame repeatable package；真实 capture/frame body extraction 仍 fail-closed。
 	- [x] ContN frame-chain primary shell：C10 不再因 materialized continuation capture blocker 提前停止，packaged ContN 会生成空 capture frame shell、frame chain、repeatable package 进入 C11；真实 capture set / frame body extraction 仍未完成。
 	- [x] ContN stackless resume body threading slice：C10 现在从 `CpsControlTermFact` 为 frame resume 标记 `StacklessResumeBodyShiftN` 等 body kind，C11 `CoreOpStacklessFunction` 不再 emit 空 `(func)` shell；真实 resume body expression lowering / capture projection 仍未完成。
+	- [x] ContN replay capture classification threading：C10 continuation frame capture 不再硬编码为 replay-safe continuation，已消费 C09 replay-safety facts，把 shared `Ref` capture 线程成 `CaptureSharedRefCell` / EnvField；真实 free-var capture scan、field projection、non-replay state reject 仍未完成。
+	- [x] ContN package allocation slice：C11 `CoreOpContinuationFrameChain` / `CoreOpContNPackage` 不再 emit 空 param stub，WAT emitter materialize frame-chain/package layouts；现有 `contn-package.wat` 与 `continuation-frame-body.wat` 已验证 repeatable resume smoke。真实 captured frame body / projection / replay legality 仍未完成。
 - [ ] Core/block lowering：CPS/CIR 到 backend-neutral block/core 还没真实 executable path。
 	- [x] Core block obligations：Core lowering 现在产出 block terminator / return / tailcall obligations；真实 executable block emission 仍未完成。
 	- [x] Core pattern decision obligations：C11 现在从 `CpsPatternDecisionFact` 生成 backend-neutral `CorePatternDecisionLoweringObligation`，保留 test-chain / if-else / field-extract / exhaustiveness-error 需求；真实 executable decision tree emission 仍未完成。
@@ -132,6 +165,8 @@
 	- [x] function-body terminator selection：C11 block obligation 现在按 `CoreFunctionBody` 区分 return / tail-call / pending fallthrough，不再用 `CoreOpFunction.tail = CoreTailCall` 假装全函数 tail-safe。
 	- [x] param0 body validation：C11 validator 会拒绝读取 `local.get 0` 但没有 i32 param 的 function body，包括 return-param 和变量条件 branch/tailcall。
 - [ ] Wasm-GC backend layout：layout 有一部分；真实 lowering 到 Wasm-GC object/funcref/eqref 不完整。
+	- [x] heap allocation WAT slice：C11 `CoreOpStructNew` / `CoreOpArrayNew` 不再返回 `ref.null eq`，改为 `struct.new` / `array.new` materialization；`.scratch/level-1b/c11-backend/heap-allocation.wat` 已验证 struct non-null 与 array length。真实 typed struct/array field layout integration 仍未完成。
+	- [x] erased continuation package WAT slice：C11 `CoreOpContinuationPackage` 不再 emit 空 param stub，改为 tag + payload `LayoutContinuationPackage` allocation；`.scratch/level-1b/c11-backend/erased-continuation-package.wat` 已验证 tag/payload field read。真实 erased callable ADT dispatch 与 storage/call-site lowering 仍未完成。
 - [ ] WAT emit：没有 executable WAT；现在 fail-closed。
 	- [x] empty Core WAT baseline：空 validated Core module 现在 emits 最小 `(module)`；真实 Core op WAT lowering 仍 fail-closed。
 	- [x] WAT emission obligations：非空 Core ops 现在生成 executable instruction/layout serialization obligations，不再只靠笼统非空判断。
@@ -140,14 +175,16 @@
 	- [x] minimal function WAT parse smoke：C11 gate 现在用 Binaryen parse/validate canonical layout + exported `main` 常量返回 WAT，避免 WAT skeleton 语法回归。
 	- [x] tailcall WAT parse smoke：C11 gate 现在用 Binaryen parse/validate `return_call` WAT；真实 typed call graph / tail-position lowering 仍 blocked。
 	- [x] minimal tail-call WAT emission：`CoreFunctionTailCall(target)` 现在 emit `return_call $chiba.<target>`，用于锁住尾调用代码生成形状；完整 namespace/mangle resolution 仍未完成。
-	- [x] minimal param tail-call WAT emission：C11 可 emit 一参 i32 function、`local.get 0` 与 `i32.const 42 return_call $target`；多参/非 const arg/普通 call 仍未完成。
-	- [x] param0 tail-call Core/WAT threading：CPS/Core/WAT 已区分 `return_call f(x)` 的 param0 arg，不再把 param arg 误当 `i32.const 0`；多参/复杂 arg lowering 仍未完成。
+	- [x] minimal param tail-call WAT emission：C11 可 emit 一参/多参 i32 function、`local.get n` 与 `i32.const` mixed args 的 `return_call $target`；复杂表达式参数与普通 non-tail call 仍未完成。
+	- [x] param tail-call Core/WAT threading：CPS/Core/WAT 已区分 `return_call f(x)` 与 `return_call f(x, y, const)`，不再把 param arg 误当 `i32.const 0`；复杂 arg lowering 仍未完成。
 	- [x] Core tail-call symbol validation：C11 validator 已拒绝未定义的 `CoreFunctionTailCall(target)`，避免悬空 `return_call` 进入 WAT emission。
 	- [x] Core duplicate symbol validation：C11 validator 已拒绝重复 function symbol，避免 namespace/callee lowering 生成 ambiguous WAT labels。
+	- [x] standalone tail-call fake path removed：`CoreOpTailCall` 不再 emit `i32.const 0 return` fake function；真实 tail-call 只能通过 `CoreOpFunction` body 的 `CoreExprTailCall*` 进入 `return_call $target` emission，孤立 op 现在返回 backend diagnostic。
 	- [x] ContN package WAT parse smoke：C11 gate 现在 parse/validate stackless resume + frame-chain/package layout WAT，明确 multi-shot continuation 是 materialized 例外；真实 capture/frame body extraction 仍 blocked。
 	- [x] C11 runnable WAT artifact gate：`level1b:c11-backend` 现在写出 `.scratch/level-1b/c11-backend/*.wat` 与 `.wasm`，并用 wasmtime invoke 覆盖 const、small const、param、branch、tailcall、branch-tailcall、ContN/closure shell；真实 source AST primary path 与 ContN frame body extraction 仍 blocked。
 	- [x] C11 source-slice artifact gate：`level-1b/supports/pre-c11-smokes/source_primary_backend.chiba` 现在经窄 source-slice lowering 生成可查看/可运行 WAT，覆盖 `id(x)=x`、small const、`main=id(7)`、literal branch、param branch tailcall；完整 chibacc AST primary path 仍 blocked。
 	- [x] stackless resume WAT body threading：C11 stackless resume op 会消费 `StacklessResumeBodyKind` 生成函数 body，不再输出空函数壳；真实 ContN replay frame body 仍是下一层 blocker。
+	- [x] backend fake-stub cleanup slice：C11 source contract 已拒绝 boxed Cont1 常量返回、ContN 空 param stub、erased continuation package 空 stub、closure 空 call stub、heap allocation null stub、standalone tailcall `i32.const 0` fake success；`level1b:c11-backend` 现产出 25 个可查看 WAT/wasm artifacts，并包含 boxed Cont1 trap、closure call_ref、heap allocation、erased package、ContN smoke。
 
 - [ ] `level-1b/compiler/source/scan.chiba` 只是 truthfulness scaffold，不是语言设计或未来 frontend；第一优先级是让 chibalex token stream + chibacc AST 成为 C07 source facts 的 primary path，然后删除或降级 `scan.chiba`，不能让 byte-level scanner 长期承担 namespace/item/attribute 语义。
 - [ ] attribute grammar 必须先补齐 spec/golden，再实现：
@@ -161,8 +198,8 @@
 	- 首发必须支持：literal、char class/range、concat、alternation、group/capture bookkeeping、`* + ? {m,n}` greedy/lazy 基础、anchors、UTF-8/codepoint boundary、leftmost/longest tie-break for chibalex。
 	- 首发必须拒绝：backref、conditional、recursive pattern、atomic group、possessive、variable-length lookbehind、复杂 lookaround/capture 组合等 PCRE2 VM-only 特性；parse-time hard error，不能半支持。
 	- [x] regex unsupported feature policy：std.regex parser 已记录 PCRE-only unsupported matrix 与 parse-time hard-error policy；真实 parser reject 执行仍未完成。
-	- [x] regex typed program lowering：`compile_regex` 已从 builtin contract 改成 typed instruction builder，覆盖 literal/any/class/sequence/alternative/capture/non-capture/repeat/assertion，并为 alternation/repeat 生成真实 `RegexSplit` / `RegexJump` labels；capture numbering 仍未完成。
-	- [x] regex source matcher slice：`RegexProgram.match_at` 已从 builtin contract 改成 source-level backtracking VM，覆盖 literal/any/class/assert/accept/Split/Jump/repeat 的 longest endpoint；capture rollback/numbering 仍未完成。
+	- [x] regex typed program lowering：`compile_regex` 已从 builtin contract 改成 typed instruction builder，覆盖 literal/any/class/sequence/alternative/capture/non-capture/repeat/assertion，并为 alternation/repeat 生成真实 `RegexSplit` / `RegexJump` labels；capture numbering 已由 state-based compiler 分配。
+	- [x] regex source matcher slice：`RegexProgram.match_at` 已从 builtin contract 改成 source-level backtracking VM，覆盖 literal/any/class/assert/accept/Split/Jump/repeat 的 longest endpoint；VM state 现在携带 capture array，Split 分支复制 capture 状态，Enter/Exit 更新 range 并在 Accept 返回 captures。完整 capture rollback/PCRE 级捕获语义仍未完成。
 	- [x] UTF-8 XID real table：`std.regex.xiddata` 已从 level0 Unicode 15.1.0 range 表移植为 level-1b method 风格，`Char.is_xid_start/continue` 不再使用 compiler builtin；invalid UTF-8 policy 与 frontend shared decode 仍需 primary parser 接入。
 	- PCRE2/Perl 兼容目标保留为 std.regex 后续阶段：单独建 feature matrix、oracle corpus、VM bytecode/backtracking stack/capture rollback 设计后再做。
 - [ ] level-1b 最小可执行链必须先复刻 level0 的正确流程，而不是继续扩大 contract gates：
@@ -176,13 +213,15 @@
 	- [x] branch tail-call CPS fact：两臂都是 tail-call 的 if/else 会保留为 `CpsTailBranchCall`，不再在 C09 退化成普通 return fact。
 	- [x] branching Core obligation：C11 已把 `CpsBranchJoinFact` 转成 backend-neutral `CoreBranchJoinLoweringObligation`；真实 executable branch block emission 仍未完成。
 	- [x] branching miscompile guard：C08 遇到 branching body 会标记 `TypedFunctionBranchJoinPending`，C11 validator 拒绝 fake body emission，避免 `if/else` 被常量竖切误编译。
-	- [x] minimal executable branch slice：`if true/false { 42/0 } else { 42/0 }` 已能保留 typed branch body 并 emit executable WAT；变量条件、effect arms、nested branch、match/if-let 仍走 join obligation / pending blocker。
+	- [x] minimal executable branch slice：`if true/false { 42/0 } else { 42/0 }` 已能保留 typed branch body 并 emit executable WAT；变量条件和 nested branch 已覆盖，effect arms 与 if-let 仍走 join obligation / pending blocker。
 	- [x] branch literal condition exactness：`if true/false` 窄条件现在要求完整 token，避免 `if truex` / `if falsey` 误进 literal branch lowering。
 	- [x] minimal param-condition branch slice：`if flag { ... } else { ... }` 中第一 bool 参数可作为 Wasm i32 条件进入窄 branch lowering；复杂条件仍 pending。
 	- [x] minimal branch tail-call slice：`if true/false { f(42/0) } else { g(42/0) }` 已能保留两臂 tail-call 并 emit `return_call` WAT，保证该窄分支 slice 不退化成非尾调用。
 	- [x] minimal branch no-arg tail-call slice：`if true/false/flag { f() } else { g() }` 已能保留两臂 no-arg tail-call 并 emit `return_call` WAT，保证普通非 multi-shot 分支调用保持尾位置。
 	- [x] minimal branch param0 tail-call slice：`if flag { f(x) } else { g(x) }` 已能保留两臂 param0 tail-call 并 emit `local.get 0 return_call` WAT；复杂表达式参数仍 pending。
 	- [x] branch tail-call symbol validation：C08/C11 都会校验 `if/else` 两臂 tail-call target，不让悬空 `return_call` 混进 backend。
+	- [x] minimal match fallback slice：`match flag { true => ... _ => ... }` 已能 lower 成 bool branch 并在 WAT 中跑通 true/fallback 两臂；ADT/deep pattern/default exhaustiveness 仍未进入 executable decision tree。
+	- [x] minimal nested branch slice：nested `if` 作为 branch arm 已经保留到 executable WAT，并覆盖 outer/inner true/false 组合；复杂 effect/binder join 仍未完成。
 	- 不能只看 `if` then/happy path；必须同时覆盖 `else`、`else if`、`if let` 成功/失败分支、`match` 每个 arm、default/fallback、短路逻辑和 nested branch。
 	- typed env、pattern binding scope、exhaustiveness/warning、CPS join continuation、branch result type unify 必须一起验收。
 	- 所有 branching lowering gate 必须包含 “then/else 都有副作用或不同 binder” 的 fixture，避免再出现看了 if 不看 else、match branching 一坨但漏分支的情况。
@@ -298,6 +337,7 @@
 	- **目标**:
 		- `+ - * /` 等常规 operator；
 		- `[x]` / `[x..y]` 对应 `op_index` / `op_index_slice`；
+		- long-term：表达式语法支持 `a..b` range value，作为 slice/index、pattern/range match、iterator range 的共享 AST 节点；当前 mini lexer 里使用 `.slice(start, len)` 只是 parser 未支持 `a..b` 前的过渡写法。
 		- invalid / ambiguous / wrong-operand case 进入统一 gate。
 	- **已确认**:
 		- 当前按方法式收口；
@@ -376,10 +416,13 @@
 		- C08 ADT ctor contract 已记录 canonical tag：`BigCamel` -> `:big_camel`；
 		- ctor helper body fact 已记录 `Ctor(args)` 返回 canonical tuple，`_1` 为 tag，payload 从 `_2` 起；
 		- tuple field fact 已接入 row/record shape，供后续 C09/C11 消费。
+		- C11 已把 ctor helper obligation 降成 executable Core/WAT helper，生成 tuple struct 并通过 `adt-tuple-ctor.wat` 的 tag/payload wasmtime 验证。
+		- C11 WAT tuple struct type label 已改为从 `TupleNominalIdentity.tuple_key` 派生并按 canonical tuple key 去重；`adt-tuple-ctor-shared-nominal.wat` 验证两个同形 ctor helper 共享同一个 tuple struct type，而不是按 helper/source occurrence 生成新匿名 struct。
+		- C08/C11 已锁定 tuple nominal identity 由有序 semantic type key 序列生成：同顺序同类型复用同一 `compiler.tuple::tuple(...)` nominal，不同顺序生成不同 nominal；`adt-tuple-ctor-order-distinct-nominal.wat` 已验证不同顺序 tuple struct 可查看且可运行。
+		- C11 已新增普通 tuple heap field access artifact：`tuple-heap-field-access.wat` 用 Wasm-GC struct 验证 `(A, B)._1/_2` 与三元 tuple field access 的可运行布局；`source-primary-backend.wat` 也已从 source fixture 覆盖 `(41, 1)._1`、`(40, 2)._2`、`(38, 2, 1)._3` 并用 wasmtime 执行。完整 chibacc AST primary tuple literal / field access 仍需接入真实 typed lowering。
 	- **仍是 blocker**:
 		- source/data parser 尚未真正产出完整 `AdtVariantDecl`；
 		- ctor callable symbol / overload resolution / namespace 消歧尚未接到 typed 函数表；
-		- C09/C11 尚未把 ctor helper body 降成可执行 runtime 值；
 		- `tuple_to_adt` / `adt_to_tuple` intrinsic 仍缺真实 typed identity roundtrip validation。
 
 - [ ] compiler-internal intrinsic surface
@@ -390,6 +433,11 @@
 	- **备注**:
 		- 这些能力可以有用户可见 surface，但语义来源必须是 compiler intrinsic / builtin contract；
 		- 不能靠普通库层“模拟”替代真正的 type/lowering 支持。
+	- **已落地切片**:
+		- C08 intrinsic obligations 已保存进 `TypedModule`；
+		- C09/C11 已线程 tuple bridge identity 到 CPS/Core obligation，并校验 canonical `compiler.intrinsic` namespace。
+		- C08-C11 已线程双向 bridge typed roundtrip fact，validator 会拒绝双向 bridge 缺失 `preserves_identity` evidence。
+		- C11 已 emit 可执行 eqref identity conversion helpers，并用 `adt-tuple-intrinsic-roundtrip.wat` 验证双向 roundtrip 保持 payload。
 
 - [ ] pattern args for funcs
 	- **目标**:
@@ -406,6 +454,9 @@
 		- local / pattern / param shadowing 允许；
 		- 同层（同 namespace）duplicate 报错；
 		- local 可以 shadow `use` 导入名。
+	- **已落地切片**:
+		- C08 typed module 已生成 `ScopeShadowFact`，显式记录 local binding / wildcard discard surface，并固定策略：local shadowing allowed、same-scope duplicate rejected；
+		- 真实 block scope graph、pattern binder scope、import shadow matrix runtime/diagnostic 仍未完成。
 
 - [ ] 不再出现 `i64` 和 `1` `0` 还有 `if x != 0` 这种历史遗留代码
 	- **进展**:
@@ -520,12 +571,12 @@
 		- C08 typed skeleton 现在会从 callable/continuation surface 生成粗粒度 `CallableStorageFact`：普通 storage 包含 function / closure / boxed `Cont1` / `ContN`，`send` callable storage 排除 continuation variants，显式 `cont1` storage 只保留 boxed one-shot `Cont1`，显式 `contN` storage 只保留 repeatable `ContN`；真实 type-expression / body / call-site integration 仍 fail-closed。
 		- C08 capability rules 现在有 `check_sendable_callable_storage`，sendable callable storage 若包含 continuation variant 会返回 capability error；下一步是把 C08 callable facts 接入真实 type-expression / call-site / storage lowering，而不是只停在 surface fact。
 		- frontend grammar source 已补 `cont1 (A) -> B`、`contN (A) -> B`、`shiftn` contract 与 chibalex/chibacc mini fixtures；生成版 lexer/parser 已刷新，`shift :tag` / `shiftn :tag` label parse 已对齐 lexer 的 `Colon Ident` tokenization，且 AST 保留 tag 名；native chibalex oracle 尚未覆盖 continuation surface keywords。
-		- C06 chibacc alternative retry/recovery source 现在使用 `shiftn retry`，与 multi-shot parser retry 语义一致；generated parser runner 仍未成为 C07 AST primary path。
+		- C06 chibacc alternative retry/recovery source 现在使用 `shiftn retry`，与 multi-shot parser retry 语义一致；generated parser runner 的 mini AST evidence 已被 C07 消费，完整 chiba-level1 parser recovery / source-driver AST primary path 仍未接管。
 		- C06 chibacc source gate 现在检测 `engine.chiba` 中的 `shift retry` 回归，parser retry 必须保持 multi-shot `shiftn retry`。
 		- chibalex 真实实现必须支持 UTF-8 source/identifier scanning；当前 C07 `scan.chiba` 是 ASCII byte-level 过渡 scanner，只能安全识别 ASCII header/keyword facts。若 namespace/item identifier 允许 UTF-8，scanner 必须补 UTF-8 aware path，或在遇到非 ASCII 相关事实时 fail-closed，不能静默漏扫后冒充 source facts 完整。
 		- C05 chibalex contract 已固定 UTF-8/XID identifier policy，engine state advance 改为 codepoint offset (`next_char_offset`)；`utf8-ident.chibalex` mini fixture 覆盖 `$XID_START/$XID_CONTINUE`。native `chibalex.o` oracle 现在会实际生成 continuation surface 与 UTF-8 mini fixtures；level-1b chibalex lowering/codegen 已不再返回 contract-only status，真实 generated lexer runner 仍未接管完整 C07 source facts。
 		- C05 chibalex mini generator 现在用 UTF-8 lead-byte 长度推进 identifier scan，不再在 UTF-8 identifier 内按单字节推进；真实 XID 表/invalid sequence validation 仍待 primary lexer 接管。
-		- C05/C06 generated lexer/parser codegen artifacts 已移除 `ContractOnly` status 与 `missing-lowering` diagnostic；gate 现在拒绝 codegen 再报告 contract-only success。剩余 blocker 是 chibacc AST primary execution 尚未替换 C07 scanner-derived facts。
+		- C05/C06 generated lexer/parser codegen artifacts 已移除 `ContractOnly` status 与 `missing-lowering` diagnostic；gate 现在拒绝 codegen 再报告 contract-only success。C07 已有 `SourceFrontendEvidence` 合并入口并校验 chibacc-mini AST evidence；剩余 blocker 是完整 chiba-level1 AST primary execution 尚未替换 C07 scanner-derived item/body facts。
 		- spec 要求 `((A) -> B) send` 排除 continuation 与 `!send` closure；当前 send/capability 与 callable storage / continuation 没有真实集成。
 		- spec 要求 no-capture closure 不分配 env，capturing closure 只有需要时 materialize env；当前 closure env layout 由 continuation packaging decision 壳生成，capture extraction 仍缺。
 		- spec 要求 CIR 承载 type / usage / send / arena / answer-type 语义，BIR materialize frame/prompt/control；当前 backend WAT emitter 已不再 comment-only 成功，但真实 Wasm-GC / continuation frame / closure env 发射仍是 missing-backend-layout blocker。

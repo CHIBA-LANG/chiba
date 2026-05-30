@@ -58,6 +58,76 @@ def wat_emit_string_array(out: Str, depth: i64, bytes: Str): i64 = {
     str_push(out, 10)
 }
 
+def wat_type_list_len(items: CirTypeList): i64 =
+    match items {
+        CirTypeEnd => 0
+        CirTypeCons(_, tail) => 1 + wat_type_list_len(tail)
+    }
+
+def wat_type_storage_code(ty: CirType): Str =
+    if wat_type_is_i64_storage(ty) != 0 { mk_str("i64", 3) } else { mk_str("ref", 3) }
+
+def wat_tuple2_layout_name(a: CirType, b: CirType): Str = {
+    let ac = wat_type_storage_code(a)
+    let bc = wat_type_storage_code(b)
+    if streq(ac, mk_str("i64", 3)) != 0 && streq(bc, mk_str("i64", 3)) != 0 { mk_str("tuple2_i64_i64", 14) }
+    else if streq(ac, mk_str("ref", 3)) != 0 && streq(bc, mk_str("i64", 3)) != 0 { mk_str("tuple2_ref_i64", 14) }
+    else if streq(ac, mk_str("i64", 3)) != 0 && streq(bc, mk_str("ref", 3)) != 0 { mk_str("tuple2_i64_ref", 14) }
+    else { mk_str("tuple2_ref_ref", 14) }
+}
+
+def wat_tuple3_layout_name(a: CirType, b: CirType, c: CirType): Str = {
+    let ac = wat_type_storage_code(a)
+    let bc = wat_type_storage_code(b)
+    let cc = wat_type_storage_code(c)
+    if streq(ac, mk_str("i64", 3)) != 0 && streq(bc, mk_str("i64", 3)) != 0 && streq(cc, mk_str("i64", 3)) != 0 { mk_str("tuple3_i64_i64_i64", 18) }
+    else { mk_str("", 0) }
+}
+
+def wat_tuple_layout_name_from_list(items: CirTypeList): Str =
+    match items {
+        CirTypeCons(a, CirTypeCons(b, CirTypeEnd)) => wat_tuple2_layout_name(a, b)
+        CirTypeCons(a, CirTypeCons(b, CirTypeCons(c, CirTypeEnd))) => wat_tuple3_layout_name(a, b, c)
+        _ => mk_str("", 0)
+    }
+
+def wat_tuple_layout_name_from_type(ty: CirType): Str =
+    match ty {
+        CirTyTuple(items) => wat_tuple_layout_name_from_list(items)
+        _ => mk_str("", 0)
+    }
+
+def wat_nonempty_or_tuple_expr_name(name: Str, value: CirExpr): Str =
+    if streq(name, mk_str("", 0)) == 0 { name } else { wat_tuple_layout_name_from_expr(value) }
+
+def wat_tuple_layout_name_from_expr(expr: CirExpr): Str =
+    match expr {
+        L8ValidatedCoreOp(value, _) => wat_tuple_layout_name_from_expr(value)
+        L7CoreOp(value, _) => wat_tuple_layout_name_from_expr(value)
+        L6OpClosureEnv(value, _) => wat_tuple_layout_name_from_expr(value)
+        L5OpContinuationPackage(_, _, value) => wat_tuple_layout_name_from_expr(value)
+        L5OpCps(value, _) => wat_tuple_layout_name_from_expr(value)
+        L4OpUsage(value, _) => wat_tuple_layout_name_from_expr(value)
+        L3OpAnswerControl(value, ty, _) => {
+            let name = wat_tuple_layout_name_from_type(ty)
+            wat_nonempty_or_tuple_expr_name(name, value)
+        }
+        L2OpTyped(value, ty) => {
+            let name = wat_tuple_layout_name_from_type(ty)
+            wat_nonempty_or_tuple_expr_name(name, value)
+        }
+        L1OpCall(callee, args) =>
+            if wat_expr_is_tuple_constructor(callee) != 0 { wat_tuple_layout_name_from_list(wat_expr_list_types(args)) }
+            else { mk_str("", 0) }
+        _ => mk_str("", 0)
+    }
+
+def wat_expr_is_tuple_constructor(expr: CirExpr): i64 =
+    match wat_unwrap_pass_expr(expr) {
+        L1OpRef(ref) => wat_is_ref_name(ref, mk_str("__tuple", 7))
+        _ => 0
+    }
+
 def wat_emit_string_interp_expr(out: Str, depth: i64, value: CirExpr): i64 = {
     let _ = wat_emit_expr(out, depth, value)
     0
@@ -164,7 +234,7 @@ def wat_is_scalar_type_name(name: Str): i64 =
 def wat_valtype_from_ast_in(items: AST, ty: AST): i64 =
     match ty {
         Type_Path(name, _) =>
-            if name.len == 0 { "i64" }
+            if streq(name, mk_str("", 0)) != 0 { "i64" }
             else if wat_is_scalar_type_name(name) != 0 { "i64" }
             else if streq(name, mk_str("String", 6)) != 0 { "(ref $array_u8)" }
             else if streq(name, mk_str("Str", 3)) != 0 { "(ref $array_u8)" }
@@ -181,6 +251,7 @@ def wat_valtype_from_cir(ty: CirType): i64 =
         CirTyString => "(ref $array_u8)"
         CirTyStr => "(ref $array_u8)"
         CirTySliceU8 => "(ref $slice_u8)"
+        CirTyTuple(_) => "eqref"
         CirTyApp(_, _) => "eqref"
         CirTyConst(_) => "eqref"
         CirTyNominal(_, _) => "eqref"
@@ -200,6 +271,46 @@ def wat_type_is_i64_storage(ty: CirType): i64 =
             else if wat_is_scalar_type_name(name) != 0 { 1 }
             else { 0 }
         _ => 0
+    }
+
+def wat_tuple_field_index_loop(field: Str, i: i64, acc: i64): i64 =
+    if i >= field.len { acc - 1 }
+    else {
+        let ch = load8(field.ptr, i)
+        if ch < 48 || ch > 57 { -1 }
+        else { wat_tuple_field_index_loop(field, i + 1, acc * 10 + (ch - 48)) }
+    }
+
+def wat_tuple_field_index(field: Str): i64 =
+    if field.len == 0 { -1 }
+    else if field.len < 2 { -1 }
+    else if load8(field.ptr, 0) != 95 { -1 }
+    else if load8(field.ptr, 1) < 49 || load8(field.ptr, 1) > 57 { -1 }
+    else { wat_tuple_field_index_loop(field, 1, 0) }
+
+def wat_emit_tuple_struct_new(out: Str, depth: i64, args: CirExprList): i64 = {
+    let layout = wat_tuple_layout_name_from_list(wat_expr_list_types(args))
+    if streq(layout, mk_str("", 0)) != 0 {
+        wat_line(out, depth, "unreachable ;; tuple arity/layout unsupported")
+    } else {
+        let _ = wat_indent(out, depth)
+        let _ = str_push_cstr(out, "struct.new $")
+        let _ = str_append(out, layout)
+        str_push(out, 10)
+    }
+}
+
+def wat_expr_list_all_i64_storage(args: CirExprList): i64 =
+    match args {
+        CirExprEnd => 1
+        CirExprCons(head, tail) =>
+            if streq(mk_str(wat_valtype_from_expr(head), strlen(wat_valtype_from_expr(head))), mk_str("i64", 3)) != 0 { wat_expr_list_all_i64_storage(tail) } else { 0 }
+    }
+
+def wat_expr_list_types(args: CirExprList): CirTypeList =
+    match args {
+        CirExprEnd => CirTypeEnd
+        CirExprCons(head, tail) => CirTypeCons(wat_expr_type(head), wat_expr_list_types(tail))
     }
 
 def wat_valtype_from_ast(ty: AST): i64 =
@@ -615,10 +726,14 @@ def wat_valtype_from_expr(expr: CirExpr): i64 =
         L1OpCast(_, ty) => wat_valtype_from_ast(ty)
         L1OpNominalCtor(_, _) => "eqref"
         L1OpCall(callee, _) => {
-            let owner = wat_known_call_result_owner(wat_expr_call_name(callee))
-            if streq(owner, mk_str("String", 6)) != 0 { "(ref $array_u8)" }
-            else if owner.len != 0 { "eqref" }
-            else { "eqref" }
+            let call_name = wat_expr_call_name(callee)
+            if streq(call_name, mk_str("mk_str", 6)) != 0 { "(ref $array_u8)" }
+            else {
+                let owner = wat_known_call_result_owner(call_name)
+                if streq(owner, mk_str("String", 6)) != 0 { "(ref $array_u8)" }
+                else if streq(owner, mk_str("", 0)) == 0 { "eqref" }
+                else { "eqref" }
+            }
         }
         L1OpTypeApply(_, _) => "eqref"
         L1OpStringBytes(_) => "(ref $array_u8)"
@@ -645,6 +760,13 @@ def wat_emit_local_decl_with_type(out: Str, id: i64, value_type: i64): i64 = {
 
 def wat_emit_local_decl(out: Str, id: i64): i64 =
     wat_emit_local_decl_with_type(out, id, "i64")
+
+def wat_merge_valtype(primary: i64, fallback: i64): i64 =
+    if wat_text_nonempty(primary) == 0 { fallback }
+    else if streq(mk_str(primary, strlen(primary)), mk_str("i64", 3)) != 0 {
+        if wat_text_nonempty(fallback) != 0 && streq(mk_str(fallback, strlen(fallback)), mk_str("i64", 3)) == 0 { fallback }
+        else { primary }
+    } else { primary }
 
 def wat_emit_params(out: Str, items: AST, params: CirParamList): i64 =
     match params {
@@ -1227,73 +1349,73 @@ def wat_emit_env_hole_imports(out: Str, items: CirItemList): i64 = {
     wat_emit_env_hole_import(out, items, mk_str("Vec.freeze", 10))
 }
 
-def wat_collect_expr_locals(out: Str, expr: CirExpr): i64 =
+def wat_collect_expr_locals(out: Str, items: AST, expr: CirExpr): i64 =
     match expr {
-        L8ValidatedCoreOp(value, _) => wat_collect_expr_locals(out, value)
-        L7CoreOp(value, _) => wat_collect_expr_locals(out, value)
-        L6OpClosureEnv(value, _) => wat_collect_expr_locals(out, value)
+        L8ValidatedCoreOp(value, _) => wat_collect_expr_locals(out, items, value)
+        L7CoreOp(value, _) => wat_collect_expr_locals(out, items, value)
+        L6OpClosureEnv(value, _) => wat_collect_expr_locals(out, items, value)
         L5OpContinuationPackage(binder, _, value) => {
             let _ = wat_emit_local_decl(out, binder.id)
-            wat_collect_expr_locals(out, value)
+            wat_collect_expr_locals(out, items, value)
         }
-        L5OpCps(value, _) => wat_collect_expr_locals(out, value)
-        L4OpUsage(value, _) => wat_collect_expr_locals(out, value)
-        L3OpAnswerControl(value, _, _) => wat_collect_expr_locals(out, value)
-        L2OpTyped(value, _) => wat_collect_expr_locals(out, value)
+        L5OpCps(value, _) => wat_collect_expr_locals(out, items, value)
+        L4OpUsage(value, _) => wat_collect_expr_locals(out, items, value)
+        L3OpAnswerControl(value, _, _) => wat_collect_expr_locals(out, items, value)
+        L2OpTyped(value, _) => wat_collect_expr_locals(out, items, value)
         L1OpBlock(stmts, tail) => {
-            let _ = wat_collect_stmt_locals(out, stmts)
-            wat_collect_expr_locals(out, tail)
+            let _ = wat_collect_stmt_locals(out, items, stmts)
+            wat_collect_expr_locals(out, items, tail)
         }
         L1OpIf(cond, then_expr, else_expr) => {
-            let _ = wat_collect_expr_locals(out, cond)
-            let _ = wat_collect_expr_locals(out, then_expr)
-            wat_collect_expr_locals(out, else_expr)
+            let _ = wat_collect_expr_locals(out, items, cond)
+            let _ = wat_collect_expr_locals(out, items, then_expr)
+            wat_collect_expr_locals(out, items, else_expr)
         }
         L1OpMatch(value, arms) => {
-            let _ = wat_collect_expr_locals(out, value)
-            wat_collect_match_arm_locals(out, arms)
+            let _ = wat_collect_expr_locals(out, items, value)
+            wat_collect_match_arm_locals(out, items, arms)
         }
         L1OpClosure(params, body) => {
             let _ = wat_emit_params(out, Item_End, params)
-            wat_collect_expr_locals(out, body)
+            wat_collect_expr_locals(out, items, body)
         }
-        L1OpReset(_, body) => wat_collect_expr_locals(out, body)
+        L1OpReset(_, body) => wat_collect_expr_locals(out, items, body)
         L1OpShift(_, binder, body) => {
             let _ = wat_emit_local_decl(out, binder.id)
-            wat_collect_expr_locals(out, body)
+            wat_collect_expr_locals(out, items, body)
         }
         L1OpCall(callee, args) => {
-            let _ = wat_collect_expr_locals(out, callee)
-            wat_collect_expr_list_locals(out, args)
+            let _ = wat_collect_expr_locals(out, items, callee)
+            wat_collect_expr_list_locals(out, items, args)
         }
-        L1OpField(value, _) => wat_collect_expr_locals(out, value)
+        L1OpField(value, _) => wat_collect_expr_locals(out, items, value)
         L1OpIndex(value, args) => {
-            let _ = wat_collect_expr_locals(out, value)
-            wat_collect_expr_list_locals(out, args)
+            let _ = wat_collect_expr_locals(out, items, value)
+            wat_collect_expr_list_locals(out, items, args)
         }
         L1OpTypeApply(_, _) => 0
         L1OpAssign(lhs, rhs) => {
-            let _ = wat_collect_expr_locals(out, lhs)
-            wat_collect_expr_locals(out, rhs)
+            let _ = wat_collect_expr_locals(out, items, lhs)
+            wat_collect_expr_locals(out, items, rhs)
         }
-        L1OpUnsafe(value) => wat_collect_expr_locals(out, value)
-        L1OpCast(value, _) => wat_collect_expr_locals(out, value)
-        L1OpPrefix(_, value) => wat_collect_expr_locals(out, value)
+        L1OpUnsafe(value) => wat_collect_expr_locals(out, items, value)
+        L1OpCast(value, _) => wat_collect_expr_locals(out, items, value)
+        L1OpPrefix(_, value) => wat_collect_expr_locals(out, items, value)
         L1OpBinary(_, lhs, rhs) => {
-            let _ = wat_collect_expr_locals(out, lhs)
-            wat_collect_expr_locals(out, rhs)
+            let _ = wat_collect_expr_locals(out, items, lhs)
+            wat_collect_expr_locals(out, items, rhs)
         }
         _ => 0
     }
 
-def wat_collect_match_pattern_locals(out: Str, pattern: AST, body: CirExpr): i64 =
+def wat_collect_match_pattern_locals(out: Str, items: AST, pattern: AST, body: CirExpr): i64 =
     match pattern {
         Pattern_IdentStart(variant, PatternAfterIdent_Atom(PatternIdent_Call(args))) =>
-            wat_collect_match_pattern_arg_locals(out, variant, args, body, 0)
+            wat_collect_match_pattern_arg_locals(out, items, variant, args, body, 0)
         _ => 0
     }
 
-def wat_collect_match_pattern_arg_locals(out: Str, variant: Str, args: AST, body: CirExpr, index: i64): i64 =
+def wat_collect_match_pattern_arg_locals(out: Str, items: AST, variant: Str, args: AST, body: CirExpr, index: i64): i64 =
     match args {
         PatternList_Cons(head, tail) => {
             let _ = match head {
@@ -1301,85 +1423,85 @@ def wat_collect_match_pattern_arg_locals(out: Str, variant: Str, args: AST, body
                     if name.len == 0 { 0 }
                     else {
                         let id = wat_expr_local_id_by_name_in_expr(body, name)
-                        let _ = if id >= 0 { wat_emit_local_decl_with_type(out, id, wat_match_pattern_binder_valtype(variant, index, name)) } else { 0 }
+                        let _ = if id >= 0 { wat_emit_local_decl_with_type(out, id, wat_match_pattern_binder_valtype(items, variant, index, name)) } else { 0 }
                         0
                     }
                 Pattern_IdentStart(name, _) =>
                     if name.len == 0 { 0 }
                     else {
                         let id = wat_expr_local_id_by_name_in_expr(body, name)
-                        let _ = if id >= 0 { wat_emit_local_decl_with_type(out, id, wat_match_pattern_binder_valtype(variant, index, name)) } else { 0 }
+                        let _ = if id >= 0 { wat_emit_local_decl_with_type(out, id, wat_match_pattern_binder_valtype(items, variant, index, name)) } else { 0 }
                         0
                     }
-                _ => wat_collect_match_pattern_locals(out, head, body)
+                _ => wat_collect_match_pattern_locals(out, items, head, body)
             }
-            wat_collect_match_pattern_arg_locals(out, variant, tail, body, index + 1)
+            wat_collect_match_pattern_arg_locals(out, items, variant, tail, body, index + 1)
         }
         _ => 0
     }
 
-def wat_collect_match_arm_locals(out: Str, arms: CirMatchArmList): i64 =
+def wat_collect_match_arm_locals(out: Str, items: AST, arms: CirMatchArmList): i64 =
     match arms {
         CirMatchArmEnd => 0
         CirMatchArmCons(arm, rest) => {
             let _ = match arm {
                 L1MatchArm(pattern, _, body) => {
-                    let _ = wat_collect_match_pattern_locals(out, pattern, body)
-                    wat_collect_expr_locals(out, body)
+                    let _ = wat_collect_match_pattern_locals(out, items, pattern, body)
+                    wat_collect_expr_locals(out, items, body)
                 }
                 _ => 0
             }
-            wat_collect_match_arm_locals(out, rest)
+            wat_collect_match_arm_locals(out, items, rest)
         }
     }
 
-def wat_collect_expr_list_locals(out: Str, args: CirExprList): i64 =
+def wat_collect_expr_list_locals(out: Str, items: AST, args: CirExprList): i64 =
     match args {
         CirExprEnd => 0
         CirExprCons(head, tail) => {
-            let _ = wat_collect_expr_locals(out, head)
-            wat_collect_expr_list_locals(out, tail)
+            let _ = wat_collect_expr_locals(out, items, head)
+            wat_collect_expr_list_locals(out, items, tail)
         }
     }
 
-def wat_collect_stmt_locals(out: Str, stmts: CirStmtList): i64 =
+def wat_collect_stmt_locals(out: Str, items: AST, stmts: CirStmtList): i64 =
     match stmts {
         CirStmtEnd => 0
         CirStmtCons(stmt, rest) => {
             let _ = match stmt {
                 L1StmtLet(binder, value) => {
                     let _ = wat_emit_local_decl_with_type(out, binder.id, wat_valtype_from_expr(value))
-                    wat_collect_expr_locals(out, value)
+                    wat_collect_expr_locals(out, items, value)
                 }
-                L1StmtLetPattern(_, value) => wat_collect_expr_locals(out, value)
+                L1StmtLetPattern(_, value) => wat_collect_expr_locals(out, items, value)
                 L1StmtAssign(lhs, rhs) => {
-                    let _ = wat_collect_expr_locals(out, lhs)
-                    wat_collect_expr_locals(out, rhs)
+                    let _ = wat_collect_expr_locals(out, items, lhs)
+                    wat_collect_expr_locals(out, items, rhs)
                 }
-                L1StmtExpr(value) => wat_collect_expr_locals(out, value)
-                L1StmtReturn(value) => wat_collect_expr_locals(out, value)
+                L1StmtExpr(value) => wat_collect_expr_locals(out, items, value)
+                L1StmtReturn(value) => wat_collect_expr_locals(out, items, value)
                 L1StmtFor(_, cond, body) => {
-                    let _ = wat_collect_expr_locals(out, cond)
-                    wat_collect_expr_locals(out, body)
+                    let _ = wat_collect_expr_locals(out, items, cond)
+                    wat_collect_expr_locals(out, items, body)
                 }
                 L2StmtLet(binder, ty, value) => {
-                    let _ = wat_emit_local_decl_with_type(out, binder.id, wat_valtype_from_cir(ty))
-                    wat_collect_expr_locals(out, value)
+                    let _ = wat_emit_local_decl_with_type(out, binder.id, wat_merge_valtype(wat_valtype_from_cir(ty), wat_valtype_from_expr(value)))
+                    wat_collect_expr_locals(out, items, value)
                 }
-                L2StmtLetPattern(_, value) => wat_collect_expr_locals(out, value)
+                L2StmtLetPattern(_, value) => wat_collect_expr_locals(out, items, value)
                 L2StmtAssign(lhs, rhs) => {
-                    let _ = wat_collect_expr_locals(out, lhs)
-                    wat_collect_expr_locals(out, rhs)
+                    let _ = wat_collect_expr_locals(out, items, lhs)
+                    wat_collect_expr_locals(out, items, rhs)
                 }
-                L2StmtExpr(value) => wat_collect_expr_locals(out, value)
-                L2StmtReturn(value) => wat_collect_expr_locals(out, value)
+                L2StmtExpr(value) => wat_collect_expr_locals(out, items, value)
+                L2StmtReturn(value) => wat_collect_expr_locals(out, items, value)
                 L2StmtFor(_, cond, body) => {
-                    let _ = wat_collect_expr_locals(out, cond)
-                    wat_collect_expr_locals(out, body)
+                    let _ = wat_collect_expr_locals(out, items, cond)
+                    wat_collect_expr_locals(out, items, body)
                 }
                 _ => 0
             }
-            wat_collect_stmt_locals(out, rest)
+            wat_collect_stmt_locals(out, items, rest)
         }
     }
 
@@ -1428,6 +1550,28 @@ def wat_is_array_like_owner(owner: Str): i64 =
     if streq(owner, mk_str("Array", 5)) != 0 { 1 }
     else if streq(owner, mk_str("Vec", 3)) != 0 { 1 }
     else { 0 }
+
+def wat_ref_name_text(ref: CirRef): Str =
+    match ref {
+        L1RefGlobal(name) => name
+        L1RefUnresolved(name) => name
+        _ => mk_str("", 0)
+    }
+
+def wat_is_load8_name(name: Str): i64 =
+    streq(name, mk_str("load8", 5))
+
+def wat_emit_load8_call(out: Str, depth: i64, items: AST, args: CirExprList): i64 =
+    match args {
+        CirExprCons(ptr, CirExprCons(offset, CirExprEnd)) => {
+            let _ = wat_emit_expr_in(out, depth, items, ptr)
+            let _ = wat_emit_expr_in(out, depth, items, offset)
+            let _ = wat_line(out, depth, "i32.wrap_i64")
+            let _ = wat_line(out, depth, "array.get_u $array_u8")
+            wat_line(out, depth, "i64.extend_i32_u")
+        }
+        _ => wat_line(out, depth, "unreachable ;; load8 arity unsupported")
+    }
 
 def wat_is_type_level_expr(expr: CirExpr): i64 =
     match wat_unwrap_pass_expr(expr) {
@@ -1546,7 +1690,6 @@ def wat_unwrap_pass_expr_keep_type(expr: CirExpr): CirExpr =
         L3OpAnswerControl(value, _, _) => wat_unwrap_pass_expr_keep_type(value)
         L2OpTyped(value, ty) => L2OpTyped(wat_unwrap_pass_expr(value), ty)
         L1OpUnsafe(value) => wat_unwrap_pass_expr_keep_type(value)
-        L1OpCast(value, _) => wat_unwrap_pass_expr_keep_type(value)
         _ => expr
     }
 
@@ -1566,6 +1709,7 @@ def wat_expr_is_string_array(expr: CirExpr): i64 =
         L2OpTyped(value, ty) =>
             match ty {
                 CirTyString => 1
+                CirTyStr => 1
                 _ => wat_expr_is_string_array(value)
             }
         L1OpStringBytes(_) => 1
@@ -1742,13 +1886,40 @@ def wat_emit_struct_get(out: Str, depth: i64, owner: Str, index: i64): i64 = {
     str_push(out, 10)
 }
 
-def wat_match_pattern_field_valtype(variant: Str, index: i64): i64 =
-    if streq(variant, mk_str("MatchOK", 7)) != 0 {
-        if index == 0 { "eqref" } else { "i64" }
-    } else if streq(variant, mk_str("MatchFail", 9)) != 0 { "i64" }
-    else { "eqref" }
+def wat_ast_type_is_eqref_storage(ty: AST): i64 =
+    match ty {
+        Type_Path(name, _) =>
+            if streq(name, mk_str("i64", 3)) != 0 { 0 }
+            else if streq(name, mk_str("i32", 3)) != 0 { 0 }
+            else if streq(name, mk_str("usize", 5)) != 0 { 0 }
+            else if streq(name, mk_str("bool", 4)) != 0 { 0 }
+            else if streq(name, mk_str("String", 6)) != 0 { 0 }
+            else if streq(name, mk_str("Str", 3)) != 0 { 0 }
+            else if streq(name, mk_str("str", 3)) != 0 { 0 }
+            else { 1 }
+        Type_Callable(_, _) => 1
+        Type_Cont1(_, _) => 1
+        Type_ContN(_, _) => 1
+        Type_Row(_) => 1
+        Type_Dyn(_) => 1
+        _ => 1
+    }
 
-def wat_match_pattern_binder_valtype(variant: Str, index: i64, name: Str): i64 =
+def wat_expr_is_zero_int(expr: CirExpr): i64 =
+    match expr {
+        L8ValidatedCoreOp(value, _) => wat_expr_is_zero_int(value)
+        L7CoreOp(value, _) => wat_expr_is_zero_int(value)
+        L6OpClosureEnv(value, _) => wat_expr_is_zero_int(value)
+        L5OpContinuationPackage(_, _, value) => wat_expr_is_zero_int(value)
+        L5OpCps(value, _) => wat_expr_is_zero_int(value)
+        L4OpUsage(value, _) => wat_expr_is_zero_int(value)
+        L3OpAnswerControl(value, _, _) => wat_expr_is_zero_int(value)
+        L2OpTyped(value, _) => wat_expr_is_zero_int(value)
+        L1OpInt(n) => streq(n, mk_str("0", 1))
+        _ => 0
+    }
+
+def wat_match_pattern_binder_valtype(items: AST, variant: Str, index: i64, name: Str): i64 =
     if streq(name, mk_str("pos", 3)) != 0 { "i64" }
     else if streq(name, mk_str("pos1", 4)) != 0 { "i64" }
     else if streq(name, mk_str("pos2", 4)) != 0 { "i64" }
@@ -1756,19 +1927,19 @@ def wat_match_pattern_binder_valtype(variant: Str, index: i64, name: Str): i64 =
     else if streq(name, mk_str("recovered1", 10)) != 0 { "i64" }
     else if streq(name, mk_str("recovered2", 10)) != 0 { "i64" }
     else if streq(name, mk_str("fail_pos", 8)) != 0 { "i64" }
-    else { wat_match_pattern_field_valtype(variant, index) }
+    else { wat_ast_variant_field_valtype(items, variant, index) }
 
-def wat_emit_nominal_ctor_fields(out: Str, depth: i64, fields: CirRecordFieldExprList): i64 =
+def wat_emit_nominal_ctor_fields(out: Str, depth: i64, items: AST, fields: CirRecordFieldExprList): i64 =
     match fields {
         CirRecordFieldExprEnd => 0
         CirRecordFieldExprCons(head, tail) => {
-            let _ = wat_emit_expr(out, depth, head.value)
-            wat_emit_nominal_ctor_fields(out, depth, tail)
+            let _ = wat_emit_expr_in(out, depth, items, head.value)
+            wat_emit_nominal_ctor_fields(out, depth, items, tail)
         }
     }
 
-def wat_emit_nominal_ctor(out: Str, depth: i64, name: Str, fields: CirRecordFieldExprList): i64 = {
-    let _ = wat_emit_nominal_ctor_fields(out, depth, fields)
+def wat_emit_nominal_ctor(out: Str, depth: i64, items: AST, name: Str, fields: CirRecordFieldExprList): i64 = {
+    let _ = wat_emit_nominal_ctor_fields(out, depth, items, fields)
     let _ = wat_indent(out, depth)
     let _ = str_push_cstr(out, "struct.new $")
     let _ = str_append(out, name)
@@ -1896,7 +2067,7 @@ def wat_stmt_list_local_id_by_name(stmts: CirStmtList, name: Str): i64 =
         }
     }
 
-def wat_match_pattern_arg_store(out: Str, depth: i64, variant: Str, args: AST, index: i64, value: CirExpr, body: CirExpr): i64 =
+def wat_match_pattern_arg_store(out: Str, depth: i64, items: AST, variant: Str, args: AST, index: i64, value: CirExpr, body: CirExpr): i64 =
     match args {
         PatternList_Cons(head, tail) => {
             let _ = match head {
@@ -1905,7 +2076,7 @@ def wat_match_pattern_arg_store(out: Str, depth: i64, variant: Str, args: AST, i
                     else {
                         let id = wat_expr_local_id_by_name_in_expr(body, name)
                         let _ = if id >= 0 {
-                            let _ = wat_emit_expr(out, depth, value)
+                            let _ = wat_emit_expr_in(out, depth, items, value)
                             let _ = wat_emit_ref_cast(out, depth, variant)
                             let _ = wat_emit_struct_get(out, depth, variant, index)
                             let _ = wat_indent(out, depth)
@@ -1920,7 +2091,7 @@ def wat_match_pattern_arg_store(out: Str, depth: i64, variant: Str, args: AST, i
                     else {
                         let id = wat_expr_local_id_by_name_in_expr(body, name)
                         let _ = if id >= 0 {
-                            let _ = wat_emit_expr(out, depth, value)
+                            let _ = wat_emit_expr_in(out, depth, items, value)
                             let _ = wat_emit_ref_cast(out, depth, variant)
                             let _ = wat_emit_struct_get(out, depth, variant, index)
                             let _ = wat_indent(out, depth)
@@ -1932,15 +2103,15 @@ def wat_match_pattern_arg_store(out: Str, depth: i64, variant: Str, args: AST, i
                     }
                 _ => 0
             }
-            wat_match_pattern_arg_store(out, depth, variant, tail, index + 1, value, body)
+            wat_match_pattern_arg_store(out, depth, items, variant, tail, index + 1, value, body)
         }
         _ => 0
     }
 
-def wat_emit_match_pattern_binders(out: Str, depth: i64, pattern: AST, value: CirExpr, body: CirExpr): i64 =
+def wat_emit_match_pattern_binders(out: Str, depth: i64, items: AST, pattern: AST, value: CirExpr, body: CirExpr): i64 =
     match pattern {
         Pattern_IdentStart(variant, PatternAfterIdent_Atom(PatternIdent_Call(args))) =>
-            wat_match_pattern_arg_store(out, depth, variant, args, 0, value, body)
+            wat_match_pattern_arg_store(out, depth, items, variant, args, 0, value, body)
         _ => 0
     }
 
@@ -1980,12 +2151,12 @@ def wat_match_result_type_from_arms(arms: CirMatchArmList): i64 =
         _ => "i64"
     }
 
-def wat_emit_match_variant_test(out: Str, depth: i64, value: CirExpr, variant: Str): i64 = {
-    let _ = wat_emit_expr(out, depth, value)
+def wat_emit_match_variant_test(out: Str, depth: i64, items: AST, value: CirExpr, variant: Str): i64 = {
+    let _ = wat_emit_expr_in(out, depth, items, value)
     wat_emit_ref_test(out, depth, variant)
 }
 
-def wat_emit_match_expr(out: Str, depth: i64, value: CirExpr, arms: CirMatchArmList, result_ty: i64): i64 =
+def wat_emit_match_expr(out: Str, depth: i64, items: AST, value: CirExpr, arms: CirMatchArmList, result_ty: i64): i64 =
     match arms {
         CirMatchArmEnd => wat_line(out, depth, "unreachable ;; non-exhaustive match unsupported")
         CirMatchArmCons(arm, rest) =>
@@ -1993,14 +2164,14 @@ def wat_emit_match_expr(out: Str, depth: i64, value: CirExpr, arms: CirMatchArmL
                 L1MatchArm(pattern, MatchGuard_None, body) => {
                     let variant = wat_pattern_variant_name(pattern)
                     let _ = if variant.len == 0 { wat_line(out, depth, "i32.const 1") }
-                    else { wat_emit_match_variant_test(out, depth, value, variant) }
+                    else { wat_emit_match_variant_test(out, depth, items, value, variant) }
                     let _ = wat_indent(out, depth)
                     let _ = str_push_cstr(out, "if (result ")
                     let _ = str_push_cstr(out, result_ty)
                     let _ = str_push_cstr(out, ")")
                     let _ = str_push(out, 10)
-                    let _ = wat_emit_match_pattern_binders(out, depth + 1, pattern, value, body)
-                    let _ = wat_emit_expr(out, depth + 1, body)
+                    let _ = wat_emit_match_pattern_binders(out, depth + 1, items, pattern, value, body)
+                    let _ = wat_emit_expr_in(out, depth + 1, items, body)
                     let _ = match rest {
                         CirMatchArmEnd => {
                             let _ = wat_line(out, depth, "else")
@@ -2008,7 +2179,7 @@ def wat_emit_match_expr(out: Str, depth: i64, value: CirExpr, arms: CirMatchArmL
                         }
                         _ => {
                             let _ = wat_line(out, depth, "else")
-                            wat_emit_match_expr(out, depth + 1, value, rest, result_ty)
+                            wat_emit_match_expr(out, depth + 1, items, value, rest, result_ty)
                         }
                     }
                     wat_line(out, depth, "end")
@@ -2024,9 +2195,9 @@ def wat_emit_call_name(out: Str, depth: i64, name: Str): i64 = {
     str_push(out, 10)
 }
 
-def wat_emit_method_call(out: Str, depth: i64, value: CirExpr, field: Str, args: CirExprList): i64 =
+def wat_emit_method_call(out: Str, depth: i64, items: AST, value: CirExpr, field: Str, args: CirExprList): i64 =
     if wat_is_string_char_method(field) != 0 && wat_expr_is_string_array(value) != 0 {
-        wat_emit_string_char_method_call(out, depth, value, args)
+        wat_emit_string_char_method_call(out, depth, items, value, args)
     } else {
         let owner = wat_expr_method_owner(value)
         if owner.len == 0 {
@@ -2034,8 +2205,8 @@ def wat_emit_method_call(out: Str, depth: i64, value: CirExpr, field: Str, args:
         } else if wat_is_string_concat_method(owner, field) != 0 {
             match args {
                 CirExprCons(rhs, CirExprEnd) => {
-                    let _ = wat_emit_expr(out, depth, value)
-                    let _ = wat_emit_expr(out, depth, rhs)
+                    let _ = wat_emit_expr_in(out, depth, items, value)
+                    let _ = wat_emit_expr_in(out, depth, items, rhs)
                     wat_line(out, depth, "call $__chiba_string_concat2")
                 }
                 _ => wat_line(out, depth, "unreachable ;; string concat arity unsupported")
@@ -2047,26 +2218,26 @@ def wat_emit_method_call(out: Str, depth: i64, value: CirExpr, field: Str, args:
                 wat_line(out, depth, "unreachable ;; generic Vec type method unsupported")
             }
         } else if wat_expr_is_scalar_vec_or_array(value) != 0 && wat_is_array_like_owner(owner) != 0 {
-            let _ = wat_emit_expr(out, depth, value)
-            let _ = wat_emit_expr_list(out, depth, args)
+            let _ = wat_emit_expr_in(out, depth, items, value)
+            let _ = wat_emit_expr_list(out, depth, items, args)
             wat_emit_call_name(out, depth, wat_array_like_runtime_name(owner, field, value))
         } else if wat_expr_is_ref_vec_or_array(value) != 0 && wat_is_array_like_owner(owner) != 0 {
-            let _ = wat_emit_expr(out, depth, value)
-            let _ = wat_emit_expr_list(out, depth, args)
+            let _ = wat_emit_expr_in(out, depth, items, value)
+            let _ = wat_emit_expr_list(out, depth, items, args)
             wat_emit_call_name(out, depth, wat_method_name(owner, field))
         } else {
-            let _ = if wat_expr_is_type_application(value) != 0 { 0 } else { wat_emit_expr(out, depth, value) }
-            let _ = wat_emit_expr_list(out, depth, args)
+            let _ = if wat_expr_is_type_application(value) != 0 { 0 } else { wat_emit_expr_in(out, depth, items, value) }
+            let _ = wat_emit_expr_list(out, depth, items, args)
             wat_emit_call_name(out, depth, wat_method_name(owner, field))
         }
     }
 
-def wat_emit_expr_list(out: Str, depth: i64, args: CirExprList): i64 =
+def wat_emit_expr_list(out: Str, depth: i64, items: AST, args: CirExprList): i64 =
     match args {
         CirExprEnd => 0
         CirExprCons(head, tail) => {
-            let _ = wat_emit_expr(out, depth, head)
-            wat_emit_expr_list(out, depth, tail)
+            let _ = wat_emit_expr_in(out, depth, items, head)
+            wat_emit_expr_list(out, depth, items, tail)
         }
     }
 
@@ -2076,84 +2247,95 @@ def wat_expr_list_len(args: CirExprList): i64 =
         CirExprCons(_, tail) => 1 + wat_expr_list_len(tail)
     }
 
-def wat_emit_string_char_method_call(out: Str, depth: i64, value: CirExpr, args: CirExprList): i64 =
+def wat_emit_string_char_method_call(out: Str, depth: i64, items: AST, value: CirExpr, args: CirExprList): i64 =
     match args {
         CirExprCons(index, CirExprEnd) => {
-            let _ = wat_emit_expr(out, depth, value)
-            let _ = wat_emit_expr(out, depth, index)
+            let _ = wat_emit_expr_in(out, depth, items, value)
+            let _ = wat_emit_expr_in(out, depth, items, index)
             wat_line(out, depth, "call $__chiba_string_codepoint_at")
         }
         _ => wat_line(out, depth, "unreachable ;; char_at arity unsupported")
     }
 
-def wat_emit_stmt_list(out: Str, depth: i64, stmts: CirStmtList): i64 =
+def wat_emit_stmt_list(out: Str, depth: i64, items: AST, stmts: CirStmtList): i64 =
     match stmts {
         CirStmtEnd => 0
         CirStmtCons(stmt, rest) => {
-            let _ = wat_emit_stmt(out, depth, stmt)
-            wat_emit_stmt_list(out, depth, rest)
+            let _ = wat_emit_stmt(out, depth, items, stmt)
+            wat_emit_stmt_list(out, depth, items, rest)
         }
     }
 
-def wat_emit_return_expr(out: Str, depth: i64, value: CirExpr): i64 =
+def wat_emit_return_expr(out: Str, depth: i64, items: AST, value: CirExpr): i64 =
     match wat_unwrap_pass_expr(value) {
-        L8ValidatedCoreOp(inner, _) => wat_emit_return_expr(out, depth, inner)
-        L7CoreOp(inner, _) => wat_emit_return_expr(out, depth, inner)
-        L6OpClosureEnv(inner, _) => wat_emit_return_expr(out, depth, inner)
-        L5OpContinuationPackage(_, _, inner) => wat_emit_return_expr(out, depth, inner)
-        L5OpCps(inner, _) => wat_emit_return_expr(out, depth, inner)
-        L4OpUsage(inner, _) => wat_emit_return_expr(out, depth, inner)
-        L3OpAnswerControl(inner, _, _) => wat_emit_return_expr(out, depth, inner)
-        L2OpTyped(inner, _) => wat_emit_return_expr(out, depth, inner)
+        L8ValidatedCoreOp(inner, _) => wat_emit_return_expr(out, depth, items, inner)
+        L7CoreOp(inner, _) => wat_emit_return_expr(out, depth, items, inner)
+        L6OpClosureEnv(inner, _) => wat_emit_return_expr(out, depth, items, inner)
+        L5OpContinuationPackage(_, _, inner) => wat_emit_return_expr(out, depth, items, inner)
+        L5OpCps(inner, _) => wat_emit_return_expr(out, depth, items, inner)
+        L4OpUsage(inner, _) => wat_emit_return_expr(out, depth, items, inner)
+        L3OpAnswerControl(inner, _, _) => wat_emit_return_expr(out, depth, items, inner)
+        L2OpTyped(inner, _) => wat_emit_return_expr(out, depth, items, inner)
         L1OpCall(callee, args) => {
-            let _ = wat_emit_expr_list(out, depth, args)
             match wat_unwrap_pass_expr(callee) {
                 L1OpRef(L1RefGlobal(name)) => {
-                    let _ = wat_indent(out, depth)
-                    let _ = str_push_cstr(out, "return_call ")
-                    let _ = wat_func_name(out, name)
-                    str_push(out, 10)
+                    if wat_is_load8_name(name) != 0 {
+                        let _ = wat_emit_load8_call(out, depth, items, args)
+                        wat_line(out, depth, "return")
+                    } else {
+                        let _ = wat_emit_expr_list(out, depth, items, args)
+                        let _ = wat_indent(out, depth)
+                        let _ = str_push_cstr(out, "return_call ")
+                        let _ = wat_func_name(out, name)
+                        str_push(out, 10)
+                    }
                 }
                 L1OpRef(L1RefUnresolved(name)) => {
-                    let _ = wat_indent(out, depth)
-                    let _ = str_push_cstr(out, "return_call ")
-                    let _ = wat_func_name(out, name)
-                    str_push(out, 10)
+                    if wat_is_load8_name(name) != 0 {
+                        let _ = wat_emit_load8_call(out, depth, items, args)
+                        wat_line(out, depth, "return")
+                    } else {
+                        let _ = wat_emit_expr_list(out, depth, items, args)
+                        let _ = wat_indent(out, depth)
+                        let _ = str_push_cstr(out, "return_call ")
+                        let _ = wat_func_name(out, name)
+                        str_push(out, 10)
+                    }
                 }
                 _ => {
-                    let _ = wat_emit_expr(out, depth, value)
+                    let _ = wat_emit_expr_in(out, depth, items, value)
                     wat_line(out, depth, "return")
                 }
             }
         }
         _ => {
-            let _ = wat_emit_expr(out, depth, value)
+            let _ = wat_emit_expr_in(out, depth, items, value)
             wat_line(out, depth, "return")
         }
     }
 
-def wat_emit_stmt(out: Str, depth: i64, stmt: CirStmt): i64 =
+def wat_emit_stmt(out: Str, depth: i64, items: AST, stmt: CirStmt): i64 =
     match stmt {
         L1StmtLet(binder, value) => {
-            let _ = wat_emit_expr(out, depth, value)
+            let _ = wat_emit_expr_in(out, depth, items, value)
             let _ = wat_indent(out, depth)
             let _ = str_push_cstr(out, "local.set ")
             let _ = wat_local_name(out, binder.id)
             str_push(out, 10)
         }
         L1StmtExpr(value) => {
-            let _ = wat_emit_expr(out, depth, value)
+            let _ = wat_emit_expr_in(out, depth, items, value)
             wat_line(out, depth, "drop")
         }
-        L1StmtReturn(value) => wat_emit_return_expr(out, depth, value)
+        L1StmtReturn(value) => wat_emit_return_expr(out, depth, items, value)
         L1StmtAssign(_, _) => wat_line(out, depth, "unreachable ;; assign unsupported")
         L1StmtFor(_, cond, body) => {
             let _ = wat_line(out, depth, "block")
             let _ = wat_line(out, depth + 1, "loop")
-            let _ = wat_emit_expr(out, depth + 2, cond)
+            let _ = wat_emit_expr_in(out, depth + 2, items, cond)
             let _ = wat_line(out, depth + 2, "i64.eqz")
             let _ = wat_line(out, depth + 2, "br_if 1")
-            let _ = wat_emit_expr(out, depth + 2, body)
+            let _ = wat_emit_expr_in(out, depth + 2, items, body)
             let _ = wat_line(out, depth + 2, "drop")
             let _ = wat_line(out, depth + 2, "br 0")
             let _ = wat_line(out, depth + 1, "end")
@@ -2162,28 +2344,28 @@ def wat_emit_stmt(out: Str, depth: i64, stmt: CirStmt): i64 =
         L1StmtLetPattern(_, _) => wat_line(out, depth, "unreachable ;; let-pattern unsupported")
         L1StmtUnsupported(_, _) => wat_line(out, depth, "unreachable ;; stmt unsupported")
         L2StmtLet(binder, _, value) => {
-            let _ = wat_emit_expr(out, depth, value)
+            let _ = wat_emit_expr_in(out, depth, items, value)
             let _ = wat_indent(out, depth)
             let _ = str_push_cstr(out, "local.set ")
             let _ = wat_local_name(out, binder.id)
             str_push(out, 10)
         }
         L2StmtExpr(value) => {
-            let _ = wat_emit_expr(out, depth, value)
+            let _ = wat_emit_expr_in(out, depth, items, value)
             wat_line(out, depth, "drop")
         }
-        L2StmtReturn(value) => wat_emit_return_expr(out, depth, value)
+        L2StmtReturn(value) => wat_emit_return_expr(out, depth, items, value)
         L2StmtAssign(lhs, rhs) => {
-            let _ = wat_emit_expr(out, depth, L1OpAssign(lhs, rhs))
+            let _ = wat_emit_expr_in(out, depth, items, L1OpAssign(lhs, rhs))
             wat_line(out, depth, "drop")
         }
         L2StmtFor(_, cond, body) => {
             let _ = wat_line(out, depth, "block")
             let _ = wat_line(out, depth + 1, "loop")
-            let _ = wat_emit_expr(out, depth + 2, cond)
+            let _ = wat_emit_expr_in(out, depth + 2, items, cond)
             let _ = wat_line(out, depth + 2, "i64.eqz")
             let _ = wat_line(out, depth + 2, "br_if 1")
-            let _ = wat_emit_expr(out, depth + 2, body)
+            let _ = wat_emit_expr_in(out, depth + 2, items, body)
             let _ = wat_line(out, depth + 2, "drop")
             let _ = wat_line(out, depth + 2, "br 0")
             let _ = wat_line(out, depth + 1, "end")
@@ -2193,17 +2375,17 @@ def wat_emit_stmt(out: Str, depth: i64, stmt: CirStmt): i64 =
         _ => wat_line(out, depth, "unreachable ;; non-l1 stmt")
     }
 
-def wat_emit_assign_expr(out: Str, depth: i64, lhs: CirExpr, rhs: CirExpr): i64 =
+def wat_emit_assign_expr(out: Str, depth: i64, items: AST, lhs: CirExpr, rhs: CirExpr): i64 =
     match lhs {
-        L8ValidatedCoreOp(value, _) => wat_emit_assign_expr(out, depth, value, rhs)
-        L7CoreOp(value, _) => wat_emit_assign_expr(out, depth, value, rhs)
-        L6OpClosureEnv(value, _) => wat_emit_assign_expr(out, depth, value, rhs)
-        L5OpCps(value, _) => wat_emit_assign_expr(out, depth, value, rhs)
-        L4OpUsage(value, _) => wat_emit_assign_expr(out, depth, value, rhs)
-        L3OpAnswerControl(value, _, _) => wat_emit_assign_expr(out, depth, value, rhs)
-        L2OpTyped(value, _) => wat_emit_assign_expr(out, depth, value, rhs)
+        L8ValidatedCoreOp(value, _) => wat_emit_assign_expr(out, depth, items, value, rhs)
+        L7CoreOp(value, _) => wat_emit_assign_expr(out, depth, items, value, rhs)
+        L6OpClosureEnv(value, _) => wat_emit_assign_expr(out, depth, items, value, rhs)
+        L5OpCps(value, _) => wat_emit_assign_expr(out, depth, items, value, rhs)
+        L4OpUsage(value, _) => wat_emit_assign_expr(out, depth, items, value, rhs)
+        L3OpAnswerControl(value, _, _) => wat_emit_assign_expr(out, depth, items, value, rhs)
+        L2OpTyped(value, _) => wat_emit_assign_expr(out, depth, items, value, rhs)
         L1OpRef(L1RefLocal(id, _)) => {
-            let _ = wat_emit_expr(out, depth, rhs)
+            let _ = wat_emit_expr_in(out, depth, items, rhs)
             let _ = wat_indent(out, depth)
             let _ = str_push_cstr(out, "local.tee ")
             let _ = wat_local_name(out, id)
@@ -2213,21 +2395,24 @@ def wat_emit_assign_expr(out: Str, depth: i64, lhs: CirExpr, rhs: CirExpr): i64 
     }
 
 def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
+    wat_emit_expr_in(out, depth, Item_End, expr)
+
+def wat_emit_expr_in(out: Str, depth: i64, items: AST, expr: CirExpr): i64 =
     match expr {
-        L8ValidatedCoreOp(value, _) => wat_emit_expr(out, depth, value)
-        L7CoreOp(value, _) => wat_emit_expr(out, depth, value)
-        L6OpClosureEnv(value, _) => wat_emit_expr(out, depth, value)
-        L5OpContinuationPackage(_, _, value) => wat_emit_expr(out, depth, value)
-        L5OpCps(value, _) => wat_emit_expr(out, depth, value)
-        L4OpUsage(value, _) => wat_emit_expr(out, depth, value)
-        L3OpAnswerControl(value, _, _) => wat_emit_expr(out, depth, value)
-        L2OpTyped(value, _) => wat_emit_expr(out, depth, value)
+        L8ValidatedCoreOp(value, _) => wat_emit_expr_in(out, depth, items, value)
+        L7CoreOp(value, _) => wat_emit_expr_in(out, depth, items, value)
+        L6OpClosureEnv(value, _) => wat_emit_expr_in(out, depth, items, value)
+        L5OpContinuationPackage(_, _, value) => wat_emit_expr_in(out, depth, items, value)
+        L5OpCps(value, _) => wat_emit_expr_in(out, depth, items, value)
+        L4OpUsage(value, _) => wat_emit_expr_in(out, depth, items, value)
+        L3OpAnswerControl(value, _, _) => wat_emit_expr_in(out, depth, items, value)
+        L2OpTyped(value, _) => wat_emit_expr_in(out, depth, items, value)
         L1OpBlock(stmts, tail) => {
-            let _ = wat_emit_stmt_list(out, depth, stmts)
-            wat_emit_expr(out, depth, tail)
+            let _ = wat_emit_stmt_list(out, depth, items, stmts)
+            wat_emit_expr_in(out, depth, items, tail)
         }
         L1OpIf(cond, then_expr, else_expr) => {
-            let _ = wat_emit_expr(out, depth, cond)
+            let _ = wat_emit_expr_in(out, depth, items, cond)
             let _ = wat_line(out, depth, "i64.const 0")
             let _ = wat_line(out, depth, "i64.ne")
             let _ = wat_indent(out, depth)
@@ -2235,26 +2420,28 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
             let _ = str_push_cstr(out, wat_valtype_from_expr(expr))
             let _ = str_push_cstr(out, ")")
             let _ = str_push(out, 10)
-            let _ = wat_emit_expr(out, depth + 1, then_expr)
+            let _ = wat_emit_expr_in(out, depth + 1, items, then_expr)
             let _ = wat_line(out, depth, "else")
-            let _ = wat_emit_expr(out, depth + 1, else_expr)
+            let _ = wat_emit_expr_in(out, depth + 1, items, else_expr)
             wat_line(out, depth, "end")
         }
-        L1OpMatch(value, arms) => wat_emit_match_expr(out, depth, value, arms, wat_match_result_type(expr))
+        L1OpMatch(value, arms) => wat_emit_match_expr(out, depth, items, value, arms, wat_match_result_type(expr))
         L1OpCall(callee, args) => {
             match wat_unwrap_pass_expr_keep_type(callee) {
-                L2OpTyped(L1OpField(value, field), _) => wat_emit_method_call(out, depth, value, field, args)
-                L1OpField(value, field) => wat_emit_method_call(out, depth, value, field, args)
+                L2OpTyped(L1OpField(value, field), _) => wat_emit_method_call(out, depth, items, value, field, args)
+                L1OpField(value, field) => wat_emit_method_call(out, depth, items, value, field, args)
                 L2OpTyped(L1OpRef(ref), _) =>
-                    if wat_is_ref_name(ref, mk_str("__tuple", 7)) != 0 {
+                    if wat_is_load8_name(wat_ref_name_text(ref)) != 0 {
+                        wat_emit_load8_call(out, depth, items, args)
+                    } else if wat_is_ref_name(ref, mk_str("__tuple", 7)) != 0 {
                         if wat_expr_list_len(args) == 0 {
                             wat_line(out, depth, "i64.const 0")
                         } else {
-                            let _ = wat_emit_expr_list(out, depth, args)
-                            wat_line(out, depth, "struct.new $tuple2_i64")
+                            let _ = wat_emit_expr_list(out, depth, items, args)
+                            wat_emit_tuple_struct_new(out, depth, args)
                         }
                     } else {
-                        let _ = wat_emit_expr_list(out, depth, args)
+                        let _ = wat_emit_expr_list(out, depth, items, args)
                         match ref {
                             L1RefGlobal(name) => {
                                 let _ = wat_indent(out, depth)
@@ -2272,15 +2459,17 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
                         }
                     }
                 L1OpRef(ref) =>
-                    if wat_is_ref_name(ref, mk_str("__tuple", 7)) != 0 {
+                    if wat_is_load8_name(wat_ref_name_text(ref)) != 0 {
+                        wat_emit_load8_call(out, depth, items, args)
+                    } else if wat_is_ref_name(ref, mk_str("__tuple", 7)) != 0 {
                         if wat_expr_list_len(args) == 0 {
                             wat_line(out, depth, "i64.const 0")
                         } else {
-                            let _ = wat_emit_expr_list(out, depth, args)
-                            wat_line(out, depth, "struct.new $tuple2_i64")
+                            let _ = wat_emit_expr_list(out, depth, items, args)
+                            wat_emit_tuple_struct_new(out, depth, args)
                         }
                     } else {
-                        let _ = wat_emit_expr_list(out, depth, args)
+                        let _ = wat_emit_expr_list(out, depth, items, args)
                         match ref {
                             L1RefGlobal(name) => {
                                 let _ = wat_indent(out, depth)
@@ -2300,19 +2489,31 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
                 _ => wat_line(out, depth, "unreachable ;; indirect call unsupported")
             }
         }
-        L1OpNominalCtor(name, fields) => wat_emit_nominal_ctor(out, depth, name, fields)
+        L1OpNominalCtor(name, fields) => wat_emit_nominal_ctor(out, depth, items, name, fields)
         L1OpField(value, field) => {
-            let _ = wat_emit_expr(out, depth, value)
-            if streq(field, mk_str("_1", 2)) != 0 { wat_line(out, depth, "struct.get $tuple2_i64 0") }
-            else if streq(field, mk_str("_2", 2)) != 0 { wat_line(out, depth, "struct.get $tuple2_i64 1") }
-            else {
-                let owner = wat_expr_method_owner(value)
-                let index = wat_known_struct_field_index(owner, field)
-                if owner.len != 0 && index >= 0 {
-                    let _ = wat_emit_ref_cast(out, depth, owner)
-                    wat_emit_struct_get(out, depth, owner, index)
+            if streq(field, mk_str("len", 3)) != 0 && wat_expr_is_string_array(value) != 0 {
+                let _ = wat_emit_expr_in(out, depth, items, value)
+                wat_line(out, depth, "call $str.len")
+            } else {
+                let _ = wat_emit_expr_in(out, depth, items, value)
+                let tuple_index = wat_tuple_field_index(field)
+                if tuple_index >= 0 {
+                    let tuple_layout = wat_tuple_layout_name_from_expr(value)
+                    if tuple_layout.len == 0 {
+                        wat_line(out, depth, "unreachable ;; tuple field layout unsupported")
+                    } else {
+                        let _ = wat_emit_ref_cast(out, depth, tuple_layout)
+                        wat_emit_struct_get(out, depth, tuple_layout, tuple_index)
+                    }
                 } else {
-                    wat_line(out, depth, "unreachable ;; field unsupported")
+                    let owner = wat_expr_method_owner(value)
+                    let index = wat_known_struct_field_index(owner, field)
+                    if owner.len != 0 && index >= 0 {
+                        let _ = wat_emit_ref_cast(out, depth, owner)
+                        wat_emit_struct_get(out, depth, owner, index)
+                    } else {
+                        wat_line(out, depth, "unreachable ;; field unsupported")
+                    }
                 }
             }
         }
@@ -2323,14 +2524,14 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
                         match wat_unwrap_pass_expr(index) {
                             L1OpBinary(op, start, end) =>
                                 if streq(op, mk_str("..", 2)) != 0 {
-                                    let _ = wat_emit_expr(out, depth, value)
-                                    let _ = wat_emit_expr(out, depth, start)
-                                    let _ = wat_emit_expr(out, depth, end)
+                                    let _ = wat_emit_expr_in(out, depth, items, value)
+                                    let _ = wat_emit_expr_in(out, depth, items, start)
+                                    let _ = wat_emit_expr_in(out, depth, items, end)
                                     wat_line(out, depth, "call $__chiba_string_slice")
                                 } else { wat_line(out, depth, "unreachable ;; string index unsupported") }
                             _ => {
-                                let _ = wat_emit_expr(out, depth, value)
-                                let _ = wat_emit_expr(out, depth, index)
+                                let _ = wat_emit_expr_in(out, depth, items, value)
+                                let _ = wat_emit_expr_in(out, depth, items, index)
                                 wat_line(out, depth, "call $__chiba_string_byte_at")
                             }
                         }
@@ -2341,8 +2542,8 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
                 if wat_expr_is_scalar_vec_or_array(value) != 0 && wat_is_array_like_owner(owner) != 0 {
                     match args {
                         CirExprCons(index, CirExprEnd) => {
-                            let _ = wat_emit_expr(out, depth, value)
-                            let _ = wat_emit_expr(out, depth, index)
+                            let _ = wat_emit_expr_in(out, depth, items, value)
+                            let _ = wat_emit_expr_in(out, depth, items, index)
                             wat_line(out, depth, "call $Array.i64.get")
                         }
                         _ => wat_line(out, depth, "unreachable ;; array index arity unsupported")
@@ -2350,8 +2551,8 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
                 } else if wat_expr_is_ref_vec_or_array(value) != 0 && wat_is_array_like_owner(owner) != 0 {
                     match args {
                         CirExprCons(index, CirExprEnd) => {
-                            let _ = wat_emit_expr(out, depth, value)
-                            let _ = wat_emit_expr(out, depth, index)
+                            let _ = wat_emit_expr_in(out, depth, items, value)
+                            let _ = wat_emit_expr_in(out, depth, items, index)
                             wat_line(out, depth, "call $Array.get")
                         }
                         _ => wat_line(out, depth, "unreachable ;; array index arity unsupported")
@@ -2365,32 +2566,36 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
         L1OpPrefix(op, value) => {
             if streq(op, mk_str("-", 1)) != 0 {
                 let _ = wat_line(out, depth, "i64.const 0")
-                let _ = wat_emit_expr(out, depth, value)
+                let _ = wat_emit_expr_in(out, depth, items, value)
                 wat_line(out, depth, "i64.sub")
             } else {
-                let _ = wat_emit_expr(out, depth, value)
+                let _ = wat_emit_expr_in(out, depth, items, value)
                 let _ = wat_line(out, depth, "i64.eqz")
                 wat_line(out, depth, "i64.extend_i32_u")
             }
         }
         L1OpBinary(op, lhs, rhs) => {
-            let _ = wat_emit_expr(out, depth, lhs)
-            let _ = wat_emit_expr(out, depth, rhs)
+            let _ = wat_emit_expr_in(out, depth, items, lhs)
+            let _ = wat_emit_expr_in(out, depth, items, rhs)
             let _ = wat_line(out, depth, wat_binary_instr(op))
             if wat_binary_is_compare(op) != 0 { wat_line(out, depth, "i64.extend_i32_u") } else { 0 }
         }
         L1OpAssign(lhs, rhs) => {
-            wat_emit_assign_expr(out, depth, lhs, rhs)
+            wat_emit_assign_expr(out, depth, items, lhs, rhs)
         }
-        L1OpUnsafe(value) => wat_emit_expr(out, depth, value)
+        L1OpUnsafe(value) => wat_emit_expr_in(out, depth, items, value)
         L1OpCast(value, ty) => {
-            let _ = wat_emit_expr(out, depth, value)
-            match ty {
-                Type_Path(name, _) =>
-                    if streq(name, mk_str("Str", 3)) != 0 || streq(name, mk_str("str", 3)) != 0 || streq(name, mk_str("String", 6)) != 0 {
-                        wat_line(out, depth, "ref.cast (ref $array_u8)")
-                    } else { 0 }
-                _ => 0
+            if wat_ast_type_is_eqref_storage(ty) != 0 && wat_expr_is_zero_int(value) != 0 {
+                wat_line(out, depth, "ref.null none")
+            } else {
+                let _ = wat_emit_expr_in(out, depth, items, value)
+                match ty {
+                    Type_Path(name, _) =>
+                        if streq(name, mk_str("Str", 3)) != 0 || streq(name, mk_str("str", 3)) != 0 || streq(name, mk_str("String", 6)) != 0 {
+                            wat_line(out, depth, "ref.cast (ref $array_u8)")
+                        } else { 0 }
+                    _ => 0
+                }
             }
         }
         L1OpRef(L1RefLocal(id, _)) => {
@@ -2422,7 +2627,7 @@ def wat_emit_expr(out: Str, depth: i64, expr: CirExpr): i64 =
         L1OpStringBytes(bytes) => wat_emit_string_array(out, depth, bytes)
         L1OpStringInterp(parts) => wat_emit_string_interp(out, depth, parts)
         L1OpUnit => wat_line(out, depth, "i64.const 0")
-        L1OpReset(_, body) => wat_emit_expr(out, depth, body)
+        L1OpReset(_, body) => wat_emit_expr_in(out, depth, items, body)
         L1OpShift(_, _, _) => wat_line(out, depth, "unreachable ;; shift requires cps lowering")
         L1OpUnsupported(_, _) => wat_line(out, depth, "unreachable ;; expr unsupported")
         _ => wat_line(out, depth, "unreachable ;; wat expr unsupported")
@@ -2439,8 +2644,8 @@ def wat_emit_func(out: Str, items: AST, item: CirItem, export_main: i64): i64 =
             let _ = str_push_cstr(out, wat_result_valtype(items, ret, body))
             let _ = str_push(out, 41)
             let _ = str_push(out, 10)
-            let _ = wat_collect_expr_locals(out, body)
-            let _ = wat_emit_expr(out, 2, body)
+            let _ = wat_collect_expr_locals(out, items, body)
+            let _ = wat_emit_expr_in(out, 2, items, body)
             let _ = str_push_cstr(out, "  )")
             let _ = str_push(out, 10)
             let _ = if wat_params_empty(params) != 0 && streq(binder.name, mk_str("main", 4)) == 0 {
@@ -2467,8 +2672,8 @@ def wat_emit_func(out: Str, items: AST, item: CirItem, export_main: i64): i64 =
             let _ = str_push_cstr(out, wat_result_valtype(items, ret, body))
             let _ = str_push(out, 41)
             let _ = str_push(out, 10)
-            let _ = wat_collect_expr_locals(out, body)
-            let _ = wat_emit_expr(out, 2, body)
+            let _ = wat_collect_expr_locals(out, items, body)
+            let _ = wat_emit_expr_in(out, 2, items, body)
             let _ = str_push_cstr(out, "  )")
             let _ = str_push(out, 10)
             let _ = if wat_params_empty(params) != 0 && streq(binder.name, mk_str("main", 4)) == 0 {
@@ -2643,7 +2848,11 @@ def wat_emit_module(module: CirModule): Str = {
     let _ = wat_debug_mark("module-start")
     let _ = str_push_cstr(out, "(module\n")
     let _ = str_push_cstr(out, "  (rec\n")
-    let _ = str_push_cstr(out, "  (type $tuple2_i64 (struct (field i64) (field i64)))\n")
+    let _ = str_push_cstr(out, "  (type $tuple2_i64_i64 (struct (field i64) (field i64)))\n")
+    let _ = str_push_cstr(out, "  (type $tuple2_i64_ref (struct (field i64) (field eqref)))\n")
+    let _ = str_push_cstr(out, "  (type $tuple2_ref_ref (struct (field eqref) (field eqref)))\n")
+    let _ = str_push_cstr(out, "  (type $tuple3_i64_i64_i64 (struct (field i64) (field i64) (field i64)))\n")
+    let _ = str_push_cstr(out, "  (type $tuple2_ref_i64 (struct (field eqref) (field i64)))\n")
     let _ = str_push_cstr(out, "  (type $array_u8 (array (mut i8)))\n")
     let _ = str_push_cstr(out, "  (type $slice_u8 (struct (field (ref $array_u8)) (field i32) (field i32)))\n")
     let _ = str_push_cstr(out, "  (type $array_eqref (array (mut eqref)))\n")
@@ -2839,20 +3048,22 @@ def wat_emit_module(module: CirModule): Str = {
     let _ = str_push_cstr(out, "    i32.wrap_i64\n")
     let _ = str_push_cstr(out, "    array.get_u $array_u8\n")
     let _ = str_push_cstr(out, "    i64.extend_i32_u)\n")
-    let _ = str_push_cstr(out, "  (func $__chiba_string_slice (param $a (ref $array_u8)) (param $start i64) (param $end i64) (result (ref $slice_u8))\n")
+    let _ = str_push_cstr(out, "  (func $__chiba_string_slice (param $a (ref $array_u8)) (param $start i64) (param $len64 i64) (result (ref $slice_u8))\n")
     let _ = str_push_cstr(out, "    local.get $start\n")
     let _ = str_push_cstr(out, "    i64.const 0\n")
     let _ = str_push_cstr(out, "    i64.lt_s\n")
     let _ = str_push_cstr(out, "    if\n")
     let _ = str_push_cstr(out, "      unreachable\n")
     let _ = str_push_cstr(out, "    end\n")
-    let _ = str_push_cstr(out, "    local.get $end\n")
-    let _ = str_push_cstr(out, "    local.get $start\n")
+    let _ = str_push_cstr(out, "    local.get $len64\n")
+    let _ = str_push_cstr(out, "    i64.const 0\n")
     let _ = str_push_cstr(out, "    i64.lt_s\n")
     let _ = str_push_cstr(out, "    if\n")
     let _ = str_push_cstr(out, "      unreachable\n")
     let _ = str_push_cstr(out, "    end\n")
-    let _ = str_push_cstr(out, "    local.get $end\n")
+    let _ = str_push_cstr(out, "    local.get $start\n")
+    let _ = str_push_cstr(out, "    local.get $len64\n")
+    let _ = str_push_cstr(out, "    i64.add\n")
     let _ = str_push_cstr(out, "    local.get $a\n")
     let _ = str_push_cstr(out, "    array.len\n")
     let _ = str_push_cstr(out, "    i64.extend_i32_u\n")
@@ -2863,9 +3074,7 @@ def wat_emit_module(module: CirModule): Str = {
     let _ = str_push_cstr(out, "    local.get $a\n")
     let _ = str_push_cstr(out, "    local.get $start\n")
     let _ = str_push_cstr(out, "    i32.wrap_i64\n")
-    let _ = str_push_cstr(out, "    local.get $end\n")
-    let _ = str_push_cstr(out, "    local.get $start\n")
-    let _ = str_push_cstr(out, "    i64.sub\n")
+    let _ = str_push_cstr(out, "    local.get $len64\n")
     let _ = str_push_cstr(out, "    i32.wrap_i64\n")
     let _ = str_push_cstr(out, "    struct.new $slice_u8)\n")
     let _ = str_push_cstr(out, "  (func $__chiba_string_concat2 (param $a (ref $array_u8)) (param $b (ref $array_u8)) (result (ref $array_u8))\n")
@@ -2966,18 +3175,36 @@ def wat_emit_module(module: CirModule): Str = {
     let _ = str_push_cstr(out, "    local.get $a\n")
     let _ = str_push_cstr(out, "    local.get $idx\n")
     let _ = str_push_cstr(out, "    call $__chiba_string_codepoint_at)\n")
+    let _ = str_push_cstr(out, "  (func $__chiba_string_slice_copy (param $a (ref $array_u8)) (param $start i64) (param $len64 i64) (result (ref $array_u8))\n")
+    let _ = str_push_cstr(out, "    (local $len i32) (local $out (ref $array_u8))\n")
+    let _ = str_push_cstr(out, "    local.get $a\n")
+    let _ = str_push_cstr(out, "    local.get $start\n")
+    let _ = str_push_cstr(out, "    local.get $len64\n")
+    let _ = str_push_cstr(out, "    call $__chiba_string_slice\n")
+    let _ = str_push_cstr(out, "    drop\n")
+    let _ = str_push_cstr(out, "    local.get $len64\n")
+    let _ = str_push_cstr(out, "    i32.wrap_i64\n")
+    let _ = str_push_cstr(out, "    local.tee $len\n")
+    let _ = str_push_cstr(out, "    array.new_default $array_u8\n")
+    let _ = str_push_cstr(out, "    local.set $out\n")
+    let _ = str_push_cstr(out, "    local.get $out\n")
+    let _ = str_push_cstr(out, "    i32.const 0\n")
+    let _ = str_push_cstr(out, "    local.get $a\n")
+    let _ = str_push_cstr(out, "    local.get $start\n")
+    let _ = str_push_cstr(out, "    i32.wrap_i64\n")
+    let _ = str_push_cstr(out, "    local.get $len\n")
+    let _ = str_push_cstr(out, "    array.copy $array_u8 $array_u8\n")
+    let _ = str_push_cstr(out, "    local.get $out)\n")
     let _ = str_push_cstr(out, "  (func $String.slice (param $a (ref $array_u8)) (param $start i64) (param $end i64) (result (ref $array_u8))\n")
     let _ = str_push_cstr(out, "    local.get $a\n")
     let _ = str_push_cstr(out, "    local.get $start\n")
     let _ = str_push_cstr(out, "    local.get $end\n")
-    let _ = str_push_cstr(out, "    call $__chiba_string_slice\n")
-    let _ = str_push_cstr(out, "    struct.get $slice_u8 0)\n")
+    let _ = str_push_cstr(out, "    call $__chiba_string_slice_copy)\n")
     let _ = str_push_cstr(out, "  (func $str.slice (param $a (ref $array_u8)) (param $start i64) (param $end i64) (result (ref $array_u8))\n")
     let _ = str_push_cstr(out, "    local.get $a\n")
     let _ = str_push_cstr(out, "    local.get $start\n")
     let _ = str_push_cstr(out, "    local.get $end\n")
-    let _ = str_push_cstr(out, "    call $__chiba_string_slice\n")
-    let _ = str_push_cstr(out, "    struct.get $slice_u8 0)\n")
+    let _ = str_push_cstr(out, "    call $__chiba_string_slice_copy)\n")
     let _ = str_push_cstr(out, "  (func $String.concat (param $a (ref $array_u8)) (param $b (ref $array_u8)) (result (ref $array_u8))\n")
     let _ = str_push_cstr(out, "    local.get $a\n")
     let _ = str_push_cstr(out, "    local.get $b\n")
@@ -3080,6 +3307,8 @@ def wat_emit_module(module: CirModule): Str = {
     let _ = str_push_cstr(out, "      local.get $i\n")
     let _ = str_push_cstr(out, "      call $Array.get\n")
     let _ = str_push_cstr(out, "      call $Vec.push\n")
+    let _ = str_push_cstr(out, "      drop\n")
+    let _ = str_push_cstr(out, "      local.get $v\n")
     let _ = str_push_cstr(out, "      local.get $a\n")
     let _ = str_push_cstr(out, "      local.get $i\n")
     let _ = str_push_cstr(out, "      i64.const 1\n")

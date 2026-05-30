@@ -24,6 +24,8 @@ type CpsModule {
     branch_joins: Array[CpsBranchJoinFact],
     pattern_decisions: Array[CpsPatternDecisionFact],
     adt_ctors: Array[CpsAdtCtorLoweringFact],
+    intrinsic_bridges: Array[CpsIntrinsicBridgeFact],
+    intrinsic_bridge_roundtrips: Array[IntrinsicBridgeRoundtripFact],
 }
 
 /// CPS atom that never allocates a continuation.
@@ -38,6 +40,7 @@ data CpsTermKind {
     CpsTermReturn(CpsAtom),
     CpsTermTailCall(str, Array[CpsAtom]),
     CpsTermTailCallExprs(str, Array[CpsTermKind]),
+    CpsTermPrimitiveBinary(PrimitiveBinaryOp, CpsTermKind, CpsTermKind),
     CpsTermBranch(TypedBranchCondition, CpsTermKind, CpsTermKind),
     CpsTermApplyContinuation(CpsContinuation, CpsAtom),
     CpsTermPendingJoin,
@@ -124,9 +127,21 @@ type CpsAdtCtorLoweringFact {
     source: LoweredAdtCtor,
     helper_name: str,
     helper_arity: usize,
+    tuple_nominal: TupleNominalIdentity,
     returns_canonical_tuple: bool,
     requires_tail_tuple_return: bool,
     requires_utf8_identifier_lowering: bool,
+}
+
+/// CPS-level compiler intrinsic bridge fact.
+type CpsIntrinsicBridgeFact {
+    owner: BinderId,
+    file: SourceFileId,
+    intrinsic_namespace: String,
+    tuple_to_adt_identity: Option[AdtTupleIntrinsicIdentity],
+    adt_to_tuple_identity: Option[AdtTupleIntrinsicIdentity],
+    requires_tuple_bridge: bool,
+    unsafe_cast_is_compiler_only: bool,
 }
 
 /// Pick the primary branch-join kind for a coarse branching plan.
@@ -189,7 +204,9 @@ def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostic
         cps_tail_form_facts_from_continuations(continuations, 0, tail_builder),
         cps_branch_join_facts_from_plans(branches, 0, Vec[CpsBranchJoinFact].new()),
         cps_pattern_decision_facts(module.usage.answer.typed),
-        cps_adt_ctor_lowering_facts(module.usage.answer.typed.adt_ctors, 0, Vec[CpsAdtCtorLoweringFact].new())))
+        cps_adt_ctor_lowering_facts(module.usage.answer.typed.adt_ctors, 0, Vec[CpsAdtCtorLoweringFact].new()),
+        cps_intrinsic_bridge_facts(module.usage.answer.typed.intrinsic_lowering_obligations, 0, Vec[CpsIntrinsicBridgeFact].new()),
+        module.usage.answer.typed.intrinsic_bridge_roundtrips))
 
 /// Return true when replay classification allows one-pass CPS to materialize ContN frames.
 def replay_safety_facts_all_safe(facts: Array[ReplaySafetyFact], index: usize): bool =
@@ -200,8 +217,6 @@ def replay_safety_facts_all_safe(facts: Array[ReplaySafetyFact], index: usize): 
 /// Historical blocker diagnostics kept stable after primary CPS lowering learned these facts.
 def control_retired_blocker_messages(): Array[String] =
     Vec[String].new()
-        .push("missing-lowering: ContN replay-safety capture classification absent")
-        .push("missing-lowering: continuation world/thread/send boundary scan absent")
         .push("missing-lowering: one-pass CPS with administrative beta-reduction absent")
         .freeze()
 
@@ -356,6 +371,8 @@ def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
                 Some(atoms) => CpsTermTailCall(target, atoms)
                 None => CpsTermTailCallExprs(target, cps_terms_from_typed_args(args, 0, Vec[CpsTermKind].new()))
             }
+        TypedExprPrimitiveBinary(op, left, right) =>
+            CpsTermPrimitiveBinary(op, cps_term_from_typed_expr(left), cps_term_from_typed_expr(right))
         TypedExprIfElse(condition, then_expr, else_expr) =>
             CpsTermBranch(condition, cps_term_from_typed_expr(then_expr), cps_term_from_typed_expr(else_expr))
         TypedExprBranchJoinPending => CpsTermPendingJoin
@@ -442,6 +459,7 @@ def cps_adt_ctor_lowering_fact_from_ctor(ctor: LoweredAdtCtor): CpsAdtCtorLoweri
         source: ctor,
         helper_name: ctor.helper_name,
         helper_arity: ctor.helper_arity,
+        tuple_nominal: ctor.tuple_nominal,
         returns_canonical_tuple: ctor.body.returns_canonical_tuple,
         requires_tail_tuple_return: true,
         requires_utf8_identifier_lowering: ctor.requires_utf8_identifier_lowering,
@@ -451,3 +469,20 @@ def cps_adt_ctor_lowering_fact_from_ctor(ctor: LoweredAdtCtor): CpsAdtCtorLoweri
 def cps_adt_ctor_lowering_facts(ctors: Array[LoweredAdtCtor], index: usize, out: Vec[CpsAdtCtorLoweringFact]): Array[CpsAdtCtorLoweringFact] =
     if index == ctors.len() { out.freeze() }
     else { cps_adt_ctor_lowering_facts(ctors, index + 1, out.push(cps_adt_ctor_lowering_fact_from_ctor(ctors.get(index)))) }
+
+/// Convert one typed intrinsic lowering obligation into a CPS bridge fact.
+def cps_intrinsic_bridge_fact_from_obligation(obligation: IntrinsicLoweringObligation): CpsIntrinsicBridgeFact =
+    CpsIntrinsicBridgeFact {
+        owner: obligation.owner,
+        file: obligation.file,
+        intrinsic_namespace: obligation.intrinsic_namespace,
+        tuple_to_adt_identity: obligation.tuple_to_adt_identity,
+        adt_to_tuple_identity: obligation.adt_to_tuple_identity,
+        requires_tuple_bridge: obligation.requires_tuple_bridge,
+        unsafe_cast_is_compiler_only: obligation.unsafe_cast_is_compiler_only,
+    }
+
+/// Thread compiler intrinsic bridge obligations into CPS.
+def cps_intrinsic_bridge_facts(obligations: Array[IntrinsicLoweringObligation], index: usize, out: Vec[CpsIntrinsicBridgeFact]): Array[CpsIntrinsicBridgeFact] =
+    if index == obligations.len() { out.freeze() }
+    else { cps_intrinsic_bridge_facts(obligations, index + 1, out.push(cps_intrinsic_bridge_fact_from_obligation(obligations.get(index)))) }

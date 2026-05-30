@@ -6,6 +6,50 @@ use std.regex.xiddata.*
 /// Return true when a byte is a UTF-8 continuation byte.
 def u8.is_utf8_continuation(self): bool = self >= 128 && self < 192
 
+/// Return true when the second byte is valid for a two-byte UTF-8 sequence.
+def str.utf8_valid_2_at(self, offset: usize): bool =
+    offset + 1 < self.len() && self.byte_at(offset + 1).is_utf8_continuation()
+
+/// Return true when the next two bytes are valid for a three-byte UTF-8 sequence.
+def str.utf8_valid_3_at(self, offset: usize): bool =
+    if offset + 2 >= self.len() { false }
+    else {
+        let lead = self.byte_at(offset)
+        let b1 = self.byte_at(offset + 1)
+        if b1.is_utf8_continuation() == false { false }
+        else if self.byte_at(offset + 2).is_utf8_continuation() == false { false }
+        else if lead == 224 && b1 < 160 { false }
+        else if lead == 237 && b1 >= 160 { false }
+        else { true }
+    }
+
+/// Return true when the next three bytes are valid for a four-byte UTF-8 sequence.
+def str.utf8_valid_4_at(self, offset: usize): bool =
+    if offset + 3 >= self.len() { false }
+    else {
+        let lead = self.byte_at(offset)
+        let b1 = self.byte_at(offset + 1)
+        if b1.is_utf8_continuation() == false { false }
+        else if self.byte_at(offset + 2).is_utf8_continuation() == false { false }
+        else if self.byte_at(offset + 3).is_utf8_continuation() == false { false }
+        else if lead == 240 && b1 < 144 { false }
+        else if lead == 244 && b1 > 143 { false }
+        else { true }
+    }
+
+/// Return true when `offset` starts a valid UTF-8 codepoint.
+def str.utf8_valid_at(self, offset: usize): bool =
+    if offset >= self.len() { false }
+    else {
+        let lead = self.byte_at(offset)
+        if lead < 128 { true }
+        else if lead < 194 { false }
+        else if lead < 224 { self.utf8_valid_2_at(offset) }
+        else if lead < 240 { self.utf8_valid_3_at(offset) }
+        else if lead < 245 { self.utf8_valid_4_at(offset) }
+        else { false }
+    }
+
 /// Clamp an offset to a string length.
 def str.clamp_offset(self, offset: usize): usize =
     if offset > self.len() { self.len() } else { offset }
@@ -23,6 +67,34 @@ def utf8_codepoint_width(lead: u8): usize =
     else if lead < 224 { 2 }
     else if lead < 240 { 3 }
     else { 4 }
+
+/// Decode a valid two-byte UTF-8 sequence into a codepoint.
+def str.utf8_codepoint_2_at(self, offset: usize, lead: u8): u32 =
+    ((lead as u32 - 192) * 64) + (self.byte_at(offset + 1) as u32 - 128)
+
+/// Decode a valid three-byte UTF-8 sequence into a codepoint.
+def str.utf8_codepoint_3_at(self, offset: usize, lead: u8): u32 =
+    ((lead as u32 - 224) * 4096) +
+    ((self.byte_at(offset + 1) as u32 - 128) * 64) +
+    (self.byte_at(offset + 2) as u32 - 128)
+
+/// Decode a valid four-byte UTF-8 sequence into a codepoint.
+def str.utf8_codepoint_4_at(self, offset: usize, lead: u8): u32 =
+    ((lead as u32 - 240) * 262144) +
+    ((self.byte_at(offset + 1) as u32 - 128) * 4096) +
+    ((self.byte_at(offset + 2) as u32 - 128) * 64) +
+    (self.byte_at(offset + 3) as u32 - 128)
+
+/// Decode a valid UTF-8 codepoint, or return U+FFFD for invalid input.
+def str.utf8_codepoint_at(self, offset: usize): u32 =
+    if self.utf8_valid_at(offset) == false { 0xFFFD }
+    else {
+        let lead = self.byte_at(offset)
+        if lead < 128 { lead as u32 }
+        else if lead < 224 { self.utf8_codepoint_2_at(offset, lead) }
+        else if lead < 240 { self.utf8_codepoint_3_at(offset, lead) }
+        else { self.utf8_codepoint_4_at(offset, lead) }
+    }
 
 /// Return the next codepoint byte offset.
 def str.next_char_offset(self, offset: usize): usize =
@@ -49,3 +121,13 @@ def Char.is_xid_start(self): bool =
 /// Return true when a character can continue an identifier.
 def Char.is_xid_continue(self): bool =
     codepoint_is_xid_continue(self.codepoint)
+
+/// Return true when a valid UTF-8 codepoint at `offset` starts an identifier.
+def str.is_xid_start_at(self, offset: usize): bool =
+    if self.utf8_valid_at(offset) == false { false }
+    else { codepoint_is_xid_start(self.utf8_codepoint_at(offset)) }
+
+/// Return true when a valid UTF-8 codepoint at `offset` continues an identifier.
+def str.is_xid_continue_at(self, offset: usize): bool =
+    if self.utf8_valid_at(offset) == false { false }
+    else { codepoint_is_xid_continue(self.utf8_codepoint_at(offset)) }

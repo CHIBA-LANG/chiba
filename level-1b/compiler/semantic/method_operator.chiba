@@ -5,25 +5,34 @@ use compiler.source.project.*
 use compiler.semantic.alpha.*
 use compiler.semantic.type_infer.*
 use compiler.semantic.types.*
+use std.option.*
 
 /// Method index key. Receiver identity is nominal and namespace-qualified.
 type MethodKey {
     receiver: NominalId,
     name: String,
+    file: SourceFileId,
+    owner_namespace: Option[NamespaceNameSlice],
+    private: bool,
 }
 
 /// Operator index key.
 type OperatorKey {
     receiver: NominalId,
     operator_name: String,
+    file: SourceFileId,
+    owner_namespace: Option[NamespaceNameSlice],
+    private: bool,
 }
 
 /// Method/operator declaration entry before nominal receiver resolution.
 type MethodOperatorSurfaceEntry {
     owner: BinderId,
     file: SourceFileId,
+    owner_namespace: Option[NamespaceNameSlice],
     receiver: SourceNameSlice,
     member: SourceNameSlice,
+    private: bool,
     operator: bool,
 }
 
@@ -31,6 +40,11 @@ type MethodOperatorSurfaceEntry {
 type OperatorResolutionObligation {
     owner: BinderId,
     file: SourceFileId,
+    receiver: Option[SourceNameSlice],
+    right_operand: Option[SourceNameSlice],
+    index_operand: Option[SourceNameSlice],
+    slice_start_operand: Option[SourceNameSlice],
+    slice_len_operand: Option[SourceNameSlice],
     operator_kind: SourceOperatorUseKind,
     has_infix_operator: bool,
     has_operator_obligation: bool,
@@ -42,12 +56,41 @@ type OperatorResolutionObligation {
 type OperatorCandidateSet {
     owner: BinderId,
     file: SourceFileId,
+    receiver_name: String,
     operator_name: String,
     candidates: Array[OperatorKey],
     candidate_count: usize,
+    expected_operand_count: usize,
+    observed_operand_count: usize,
+    operand_arity_matches: bool,
+    operand_types_match: bool,
     requires_operand_matching: bool,
     requires_ambiguity_check: bool,
     missing_candidate_is_error: bool,
+}
+
+/// Candidate set for one method call after receiver resolution.
+type MethodCandidateSet {
+    owner: BinderId,
+    file: SourceFileId,
+    receiver_name: String,
+    method_name: String,
+    static_receiver: bool,
+    candidates: Array[MethodKey],
+    candidate_count: usize,
+    visibility_filtered_count: usize,
+    private_visibility_ok: bool,
+    missing_candidate_is_error: bool,
+}
+
+/// Method receiver `Self` binding fact after nominal receiver parsing.
+type MethodSelfBindingFact {
+    owner: BinderId,
+    file: SourceFileId,
+    receiver: NominalId,
+    member_name: String,
+    binds_self_to_receiver: bool,
+    receiver_has_generics: bool,
 }
 
 /// Candidate resolver status before operand and receiver filtering.
@@ -56,6 +99,7 @@ data OperatorCandidateStatus {
     OperatorCandidateResolved,
     OperatorCandidateAmbiguityPending,
     OperatorCandidateOperandMatchingPending,
+    OperatorCandidateOperandArityMismatch,
     OperatorCandidateUnknownOperatorPending,
 }
 
@@ -66,6 +110,9 @@ type OperatorCandidateDiagnosticFact {
     operator_name: String,
     status: OperatorCandidateStatus,
     candidate_count: usize,
+    expected_operand_count: usize,
+    observed_operand_count: usize,
+    operand_types_match: bool,
 }
 
 /// Method/operator index for one project.
@@ -73,25 +120,96 @@ type MethodOperatorIndex {
     methods: Array[MethodKey],
     operators: Array[OperatorKey],
     surface_entries: Array[MethodOperatorSurfaceEntry],
+    self_bindings: Array[MethodSelfBindingFact],
+    method_candidates: Array[MethodCandidateSet],
     operator_candidates: Array[OperatorCandidateSet],
 }
+
+/// Empty `Self` binding set for modules that declare no method/operator items.
+def method_self_bindings_none(): Array[MethodSelfBindingFact] =
+    Vec[MethodSelfBindingFact].new().freeze()
 
 /// Empty method/operator index for modules without declarations.
 def method_operator_index_empty(): MethodOperatorIndex =
     MethodOperatorIndex {
         methods: Vec[MethodKey].new().freeze(),
-        operators: Vec[OperatorKey].new().freeze(),
+        operators: builtin_operator_keys(),
         surface_entries: Vec[MethodOperatorSurfaceEntry].new().freeze(),
+        self_bindings: method_self_bindings_none(),
+        method_candidates: Vec[MethodCandidateSet].new().freeze(),
         operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
     }
+
+/// Build one builtin operator key for intrinsic-capable standard receiver methods.
+def builtin_operator_key(receiver: str, operator_name: str): OperatorKey =
+    OperatorKey {
+        receiver: NominalId { namespace_name: "", name: receiver },
+        operator_name: operator_name,
+        file: SourceFileId { index: 0 },
+        owner_namespace: None,
+        private: false,
+    }
+
+/// Return true when a receiver may use compiler-provided intrinsic operator bodies.
+def receiver_has_builtin_operator_intrinsic(receiver: str): bool =
+    if receiver == "u8" { true }
+    else if receiver == "u16" { true }
+    else if receiver == "u32" { true }
+    else if receiver == "u64" { true }
+    else if receiver == "i8" { true }
+    else if receiver == "i16" { true }
+    else if receiver == "i32" { true }
+    else if receiver == "i64" { true }
+    else if receiver == "f32" { true }
+    else if receiver == "f64" { true }
+    else if receiver == "Vec" { true }
+    else if receiver == "Array" { true }
+    else if receiver == "Slice" { true }
+    else if receiver == "String" { true }
+    else { receiver == "str" }
+
+/// Append the standard arithmetic operator set for one builtin receiver.
+def builtin_numeric_operator_keys_for(receiver: str, out: Vec[OperatorKey]): Vec[OperatorKey] =
+    out
+        .push(builtin_operator_key(receiver, "op_add"))
+        .push(builtin_operator_key(receiver, "op_sub"))
+        .push(builtin_operator_key(receiver, "op_mul"))
+        .push(builtin_operator_key(receiver, "op_div"))
+
+/// Append builtin indexing operators for collection-like standard receivers.
+def builtin_index_operator_keys_for(receiver: str, out: Vec[OperatorKey]): Vec[OperatorKey] =
+    out
+        .push(builtin_operator_key(receiver, "op_index"))
+        .push(builtin_operator_key(receiver, "op_index_slice"))
+
+/// Builtin operators are still method protocol entries; only their method bodies lower to primitives.
+def builtin_operator_keys(): Array[OperatorKey] =
+    builtin_index_operator_keys_for("str",
+    builtin_index_operator_keys_for("String",
+    builtin_index_operator_keys_for("Slice",
+    builtin_index_operator_keys_for("Array",
+    builtin_index_operator_keys_for("Vec",
+    builtin_numeric_operator_keys_for("u8",
+    builtin_numeric_operator_keys_for("u16",
+    builtin_numeric_operator_keys_for("u32",
+    builtin_numeric_operator_keys_for("u64",
+    builtin_numeric_operator_keys_for("i8",
+    builtin_numeric_operator_keys_for("i16",
+    builtin_numeric_operator_keys_for("i32",
+    builtin_numeric_operator_keys_for("i64",
+    builtin_numeric_operator_keys_for("f32",
+    builtin_numeric_operator_keys_for("f64",
+        Vec[OperatorKey].new()))))))))))))))).freeze()
 
 /// Convert one typed surface fact into a method/operator index input.
 def method_operator_surface_entry_from_fact(fact: MethodSurfaceFact): MethodOperatorSurfaceEntry =
     MethodOperatorSurfaceEntry {
         owner: fact.owner,
         file: fact.file,
+        owner_namespace: fact.owner_namespace,
         receiver: fact.receiver,
         member: fact.member,
+        private: fact.private,
         operator: fact.operator,
     }
 
@@ -108,6 +226,10 @@ def method_operator_file_text(files: Array[SourceFile], file: SourceFileId, inde
 
 /// Convert a source slice into text.
 def method_operator_slice_text(text: String, slice: SourceNameSlice): String =
+    text.slice(slice.offset, slice.len)
+
+/// Convert a namespace slice into text.
+def method_operator_namespace_text(text: String, slice: NamespaceNameSlice): String =
     text.slice(slice.offset, slice.len)
 
 /// Find last `.` in a method receiver path.
@@ -134,11 +256,42 @@ def method_receiver_nominal_id(project: ProjectSurface, entry: MethodOperatorSur
 def method_member_name(project: ProjectSurface, entry: MethodOperatorSurfaceEntry): String =
     method_operator_slice_text(method_operator_file_text(project.files, entry.file, 0), entry.member)
 
+/// Return true when a receiver surface carries explicit generic arguments.
+def method_receiver_has_generics(project: ProjectSurface, entry: MethodOperatorSurfaceEntry): bool =
+    let text = method_operator_file_text(project.files, entry.file, 0)
+    let receiver = method_operator_slice_text(text, entry.receiver)
+    operator_receiver_base_name(receiver).len() < receiver.len()
+
+/// Convert one method surface entry into its `Self` binding fact.
+def method_self_binding_from_surface_entry(project: ProjectSurface, entry: MethodOperatorSurfaceEntry): MethodSelfBindingFact =
+    MethodSelfBindingFact {
+        owner: entry.owner,
+        file: entry.file,
+        receiver: method_receiver_nominal_id(project, entry),
+        member_name: method_member_name(project, entry),
+        binds_self_to_receiver: true,
+        receiver_has_generics: method_receiver_has_generics(project, entry),
+    }
+
+/// Generate `Self` binding facts for method/operator entries in source order.
+def method_self_bindings_from_surface_entries(project: ProjectSurface, entries: Array[MethodOperatorSurfaceEntry], index: usize, out: Vec[MethodSelfBindingFact]): Array[MethodSelfBindingFact] =
+    if index == entries.len() { out.freeze() }
+    else { method_self_bindings_from_surface_entries(project, entries, index + 1, out.push(method_self_binding_from_surface_entry(project, entries.get(index)))) }
+
+/// Return true when method `Self` binding facts are complete.
+def method_self_bindings_valid(bindings: Array[MethodSelfBindingFact], index: usize): bool =
+    if index == bindings.len() { true }
+    else if bindings.get(index).binds_self_to_receiver { method_self_bindings_valid(bindings, index + 1) }
+    else { false }
+
 /// Convert one method surface entry into a nominal method key.
 def method_key_from_surface_entry(project: ProjectSurface, entry: MethodOperatorSurfaceEntry): MethodKey =
     MethodKey {
         receiver: method_receiver_nominal_id(project, entry),
         name: method_member_name(project, entry),
+        file: entry.file,
+        owner_namespace: entry.owner_namespace,
+        private: entry.private,
     }
 
 /// Convert one operator surface entry into a nominal operator key.
@@ -146,6 +299,9 @@ def operator_key_from_surface_entry(project: ProjectSurface, entry: MethodOperat
     OperatorKey {
         receiver: method_receiver_nominal_id(project, entry),
         operator_name: method_member_name(project, entry),
+        file: entry.file,
+        owner_namespace: entry.owner_namespace,
+        private: entry.private,
     }
 
 /// Build method keys from surface entries.
@@ -157,23 +313,155 @@ def method_keys_from_surface_entries(project: ProjectSurface, entries: Array[Met
         else { method_keys_from_surface_entries(project, entries, index + 1, out.push(method_key_from_surface_entry(project, entry))) }
     }
 
-/// Build operator keys from surface entries.
-def operator_keys_from_surface_entries(project: ProjectSurface, entries: Array[MethodOperatorSurfaceEntry], index: usize, out: Vec[OperatorKey]): Array[OperatorKey] =
+/// Return true when two nominal ids identify the same receiver.
+def nominal_id_eq(left: NominalId, right: NominalId): bool =
+    left.namespace_name == right.namespace_name && left.name == right.name
+
+/// Return true when two operator keys are the same declaration key.
+def operator_key_eq(left: OperatorKey, right: OperatorKey): bool =
+    nominal_id_eq(left.receiver, right.receiver) && left.operator_name == right.operator_name
+
+/// Return true when an array already contains an operator key.
+def operator_key_array_contains(keys: Array[OperatorKey], key: OperatorKey, index: usize): bool =
+    if index == keys.len() { false }
+    else if operator_key_eq(keys.get(index), key) { true }
+    else { operator_key_array_contains(keys, key, index + 1) }
+
+/// Build operator keys from source entries only when they do not duplicate builtin entries.
+def operator_keys_from_surface_entries(project: ProjectSurface, entries: Array[MethodOperatorSurfaceEntry], index: usize, builtins: Array[OperatorKey], out: Vec[OperatorKey]): Array[OperatorKey] =
     if index == entries.len() { out.freeze() }
     else {
         let entry = entries.get(index)
-        if entry.operator { operator_keys_from_surface_entries(project, entries, index + 1, out.push(operator_key_from_surface_entry(project, entry))) }
-        else { operator_keys_from_surface_entries(project, entries, index + 1, out) }
+        if entry.operator {
+            let key = operator_key_from_surface_entry(project, entry)
+            if operator_key_array_contains(builtins, key, 0) {
+                operator_keys_from_surface_entries(project, entries, index + 1, builtins, out)
+            } else {
+                operator_keys_from_surface_entries(project, entries, index + 1, builtins, out.push(key))
+            }
+        }
+        else { operator_keys_from_surface_entries(project, entries, index + 1, builtins, out) }
     }
+
+/// Copy builtin operator keys into a mutable builder.
+def builtin_operator_keys_append(keys: Array[OperatorKey], index: usize, out: Vec[OperatorKey]): Vec[OperatorKey] =
+    if index == keys.len() { out }
+    else { builtin_operator_keys_append(keys, index + 1, out.push(keys.get(index))) }
+
+/// Append builtin operator keys before source declarations, preserving method-call semantics.
+def operator_keys_with_builtins(project: ProjectSurface, entries: Array[MethodOperatorSurfaceEntry]): Array[OperatorKey] =
+    let builtins = builtin_operator_keys()
+    let builder = builtin_operator_keys_append(builtins, 0, Vec[OperatorKey].new())
+    operator_keys_from_surface_entries(project, entries, 0, builtins, builder)
 
 /// Build an index object that preserves resolved method/operator declaration keys.
 def method_operator_index_from_surface(project: ProjectSurface, facts: Array[MethodSurfaceFact]): MethodOperatorIndex =
     let entries = method_operator_surface_entries_from_facts(facts, 0, Vec[MethodOperatorSurfaceEntry].new())
     MethodOperatorIndex {
         methods: method_keys_from_surface_entries(project, entries, 0, Vec[MethodKey].new()),
-        operators: operator_keys_from_surface_entries(project, entries, 0, Vec[OperatorKey].new()),
+        operators: operator_keys_with_builtins(project, entries),
         surface_entries: entries,
+        self_bindings: method_self_bindings_from_surface_entries(project, entries, 0, Vec[MethodSelfBindingFact].new()),
+        method_candidates: Vec[MethodCandidateSet].new().freeze(),
         operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
+    }
+
+/// Convert one method-use receiver to the nominal receiver name used for lookup.
+def method_use_receiver_name(project: ProjectSurface, fact: MethodUseSurfaceFact): String =
+    let text = method_operator_file_text(project.files, fact.file, 0)
+    match fact.receiver_type {
+        Some(receiver_ty) => method_operator_slice_text(text, receiver_ty)
+        None => method_operator_slice_text(text, fact.receiver)
+    }
+
+/// Convert one method-use member slice to source text.
+def method_use_member_name(project: ProjectSurface, fact: MethodUseSurfaceFact): String =
+    method_operator_slice_text(method_operator_file_text(project.files, fact.file, 0), fact.member)
+
+/// Return true when one method key matches a method-use receiver/member pair.
+def method_key_matches_use(key: MethodKey, receiver: String, method: String): bool =
+    key.receiver.name == receiver && key.name == method
+
+/// Return source namespace text for a method key.
+def method_key_namespace_text(project: ProjectSurface, key: MethodKey): String =
+    match key.owner_namespace {
+        Some(namespace) => method_operator_namespace_text(method_operator_file_text(project.files, key.file, 0), namespace)
+        None => ""
+    }
+
+/// Return source namespace text for a method use site.
+def method_use_namespace_text(project: ProjectSurface, fact: MethodUseSurfaceFact): String =
+    match method_use_owner_namespace(project, fact) {
+        Some(namespace) => method_operator_namespace_text(method_operator_file_text(project.files, fact.file, 0), namespace)
+        None => ""
+    }
+
+/// Return the owner namespace for a method use site.
+def method_use_owner_namespace(project: ProjectSurface, fact: MethodUseSurfaceFact): Option[NamespaceNameSlice] =
+    method_use_owner_namespace_from_items(project.facts.items, fact.owner, 0)
+
+/// Find the owner namespace for one binder.
+def method_use_owner_namespace_from_items(items: Array[SourceItemScanResult], owner: BinderId, index: usize): Option[NamespaceNameSlice] =
+    if index == items.len() { None }
+    else if index == owner.index { items.get(index).owner_namespace }
+    else { method_use_owner_namespace_from_items(items, owner, index + 1) }
+
+/// Return true when a method declaration is visible at a use site.
+def method_key_visible_from_use(project: ProjectSurface, key: MethodKey, fact: MethodUseSurfaceFact): bool =
+    if key.private == false { true }
+    else { method_key_namespace_text(project, key) == method_use_namespace_text(project, fact) }
+
+/// Filter method declaration keys by receiver and member name.
+def method_candidates_matching_use(methods: Array[MethodKey], receiver: String, method: String, index: usize, out: Vec[MethodKey]): Array[MethodKey] =
+    if index == methods.len() { out.freeze() }
+    else {
+        let key = methods.get(index)
+        if method_key_matches_use(key, receiver, method) { method_candidates_matching_use(methods, receiver, method, index + 1, out.push(key)) }
+        else { method_candidates_matching_use(methods, receiver, method, index + 1, out) }
+    }
+
+/// Filter method candidates by private namespace visibility.
+def method_candidates_visible_from_use(project: ProjectSurface, candidates: Array[MethodKey], fact: MethodUseSurfaceFact, index: usize, out: Vec[MethodKey]): Array[MethodKey] =
+    if index == candidates.len() { out.freeze() }
+    else {
+        let key = candidates.get(index)
+        if method_key_visible_from_use(project, key, fact) { method_candidates_visible_from_use(project, candidates, fact, index + 1, out.push(key)) }
+        else { method_candidates_visible_from_use(project, candidates, fact, index + 1, out) }
+    }
+
+/// Build candidate set for one method call.
+def method_candidate_set_from_use(project: ProjectSurface, index: MethodOperatorIndex, fact: MethodUseSurfaceFact): MethodCandidateSet =
+    let receiver = method_use_receiver_name(project, fact)
+    let method = method_use_member_name(project, fact)
+    let candidates_all = method_candidates_matching_use(index.methods, receiver, method, 0, Vec[MethodKey].new())
+    let candidates = method_candidates_visible_from_use(project, candidates_all, fact, 0, Vec[MethodKey].new())
+    MethodCandidateSet {
+        owner: fact.owner,
+        file: fact.file,
+        receiver_name: receiver,
+        method_name: method,
+        static_receiver: fact.static_receiver,
+        candidates: candidates,
+        candidate_count: candidates.len(),
+        visibility_filtered_count: candidates_all.len() - candidates.len(),
+        private_visibility_ok: candidates_all.len() == candidates.len(),
+        missing_candidate_is_error: true,
+    }
+
+/// Build method candidate sets in source order.
+def method_candidate_sets(project: ProjectSurface, index: MethodOperatorIndex, facts: Array[MethodUseSurfaceFact], cursor: usize, out: Vec[MethodCandidateSet]): Array[MethodCandidateSet] =
+    if cursor == facts.len() { out.freeze() }
+    else { method_candidate_sets(project, index, facts, cursor + 1, out.push(method_candidate_set_from_use(project, index, facts.get(cursor)))) }
+
+/// Convert unresolved method candidates into semantic diagnostics.
+def method_candidate_diagnostics(sets: Array[MethodCandidateSet], cursor: usize, out: Vec[SemanticDiagnostic]): Array[SemanticDiagnostic] =
+    if cursor == sets.len() { out.freeze() }
+    else {
+        let set = sets.get(cursor)
+        if set.private_visibility_ok == false { method_candidate_diagnostics(sets, cursor + 1, out.push(SemanticDiagnostic("<method>", 0, 0, "invalid-surface: private method candidate not visible"))) }
+        else if set.candidate_count == 0 { method_candidate_diagnostics(sets, cursor + 1, out.push(SemanticDiagnostic("<method>", 0, 0, "invalid-surface: method candidate missing"))) }
+        else if set.candidate_count > 1 { method_candidate_diagnostics(sets, cursor + 1, out.push(SemanticDiagnostic("<method>", 0, 0, "invalid-surface: method candidate ambiguous"))) }
+        else { method_candidate_diagnostics(sets, cursor + 1, out) }
     }
 
 /// Convert one operator-use surface fact into a resolver obligation.
@@ -181,6 +469,11 @@ def operator_resolution_obligation_from_surface(fact: OperatorUseSurfaceFact): O
     OperatorResolutionObligation {
         owner: fact.owner,
         file: fact.file,
+        receiver: fact.receiver,
+        right_operand: fact.right_operand,
+        index_operand: fact.index_operand,
+        slice_start_operand: fact.slice_start_operand,
+        slice_len_operand: fact.slice_len_operand,
         operator_kind: fact.operator_kind,
         has_infix_operator: fact.has_infix_operator,
         has_operator_obligation: fact.has_operator_obligation,
@@ -209,6 +502,16 @@ def operator_member_name_for_use_kind(kind: SourceOperatorUseKind): String =
         SourceOperatorUseUnknown => ""
     }
 
+/// Strip generic argument suffix from a receiver type surface name.
+def operator_receiver_base_name_loop(receiver: String, index: usize): String =
+    if index >= receiver.len() { receiver }
+    else if receiver.byte_at(index) == 91 { receiver.slice(0, index) }
+    else { operator_receiver_base_name_loop(receiver, index + 1) }
+
+/// Canonicalize receiver names before matching builtin method-protocol operators.
+def operator_receiver_base_name(receiver: String): String =
+    operator_receiver_base_name_loop(receiver, 0)
+
 /// Return true when an operator declaration matches the use kind.
 def operator_key_matches_use_kind(key: OperatorKey, kind: SourceOperatorUseKind): bool =
     let name = operator_member_name_for_use_kind(kind)
@@ -227,34 +530,126 @@ def operator_candidates_matching_use_kind(operators: Array[OperatorKey], kind: S
         }
     }
 
+/// Convert an optional receiver type slice into text for candidate filtering.
+def operator_obligation_receiver_name(project: ProjectSurface, obligation: OperatorResolutionObligation): String =
+    match obligation.receiver {
+        Some(receiver) => operator_receiver_base_name(method_operator_slice_text(method_operator_file_text(project.files, obligation.file, 0), receiver))
+        None => ""
+    }
+
+/// Return true when an operator key matches the inferred receiver name.
+def operator_key_matches_receiver(key: OperatorKey, receiver: String): bool =
+    if receiver == "" { true }
+    else if key.file.index == 0 && key.owner_namespace.is_none() {
+        receiver_has_builtin_operator_intrinsic(receiver) && key.receiver.name == receiver
+    } else { key.receiver.name == receiver }
+
+/// Return true when a type slice names a builtin integer index type.
+def operator_operand_index_type_compatible(name: String): bool =
+    if name == "usize" { true }
+    else if name == "u32" { true }
+    else if name == "u64" { true }
+    else if name == "i32" { true }
+    else { name == "i64" }
+
+/// Return the optional type-slice text for an operand.
+def operator_operand_name(project: ProjectSurface, file: SourceFileId, operand: Option[SourceNameSlice]): String =
+    match operand {
+        Some(slice) => operator_receiver_base_name(method_operator_slice_text(method_operator_file_text(project.files, file, 0), slice))
+        None => ""
+    }
+
+/// Check builtin numeric binary operator operand types.
+def operator_binary_operand_types_match(project: ProjectSurface, obligation: OperatorResolutionObligation, receiver: String): bool =
+    let right = operator_operand_name(project, obligation.file, obligation.right_operand)
+    if receiver == "" { false }
+    else if right == "" { false }
+    else { receiver == right }
+
+/// Check index operator operand types.
+def operator_index_operand_types_match(project: ProjectSurface, obligation: OperatorResolutionObligation): bool =
+    let index = operator_operand_name(project, obligation.file, obligation.index_operand)
+    if index == "" { false }
+    else { operator_operand_index_type_compatible(index) }
+
+/// Check slice index operator operand types.
+def operator_index_slice_operand_types_match(project: ProjectSurface, obligation: OperatorResolutionObligation): bool =
+    let start = operator_operand_name(project, obligation.file, obligation.slice_start_operand)
+    let len = operator_operand_name(project, obligation.file, obligation.slice_len_operand)
+    if start == "" { false }
+    else if len == "" { false }
+    else { operator_operand_index_type_compatible(start) && operator_operand_index_type_compatible(len) }
+
+/// Check the operand type subset currently available from typed source facts.
+def operator_operand_types_match(project: ProjectSurface, obligation: OperatorResolutionObligation, receiver: String): bool =
+    if obligation.has_index_slice { operator_index_slice_operand_types_match(project, obligation) }
+    else if obligation.has_index { operator_index_operand_types_match(project, obligation) }
+    else if obligation.has_infix_operator { operator_binary_operand_types_match(project, obligation, receiver) }
+    else { true }
+
+/// Filter operator declarations by receiver type and operator spelling.
+def operator_candidates_matching_receiver_and_kind(operators: Array[OperatorKey], receiver: String, kind: SourceOperatorUseKind, cursor: usize, out: Vec[OperatorKey]): Array[OperatorKey] =
+    if cursor == operators.len() { out.freeze() }
+    else {
+        let key = operators.get(cursor)
+        if operator_key_matches_use_kind(key, kind) && operator_key_matches_receiver(key, receiver) {
+            operator_candidates_matching_receiver_and_kind(operators, receiver, kind, cursor + 1, out.push(key))
+        } else {
+            operator_candidates_matching_receiver_and_kind(operators, receiver, kind, cursor + 1, out)
+        }
+    }
+
 /// Any parsed operator use requires typed operand matching.
 def operator_obligation_requires_operand_matching(obligation: OperatorResolutionObligation): bool =
     obligation.has_infix_operator || obligation.has_operator_obligation || obligation.has_index || obligation.has_index_slice
 
-/// Collect declaration candidates for one operator use; operand filtering is later.
-def operator_candidate_set_from_obligation(index: MethodOperatorIndex, obligation: OperatorResolutionObligation): OperatorCandidateSet =
-    let candidates = operator_candidates_matching_use_kind(index.operators, obligation.operator_kind, 0, Vec[OperatorKey].new())
+/// Return the method-protocol operand count for one parsed operator use.
+def operator_obligation_observed_operand_count(obligation: OperatorResolutionObligation): usize =
+    if obligation.has_index_slice { 3 }
+    else if obligation.has_index { 2 }
+    else { 2 }
+
+/// Return the method-protocol operand count expected by an operator member.
+def operator_expected_operand_count(operator_name: String): usize =
+    if operator_name == "op_index_slice" { 3 }
+    else { 2 }
+
+/// Collect declaration candidates for one operator use after receiver/type filtering.
+def operator_candidate_set_from_obligation(project: ProjectSurface, index: MethodOperatorIndex, obligation: OperatorResolutionObligation): OperatorCandidateSet =
+    let receiver = operator_obligation_receiver_name(project, obligation)
+    let operator_name = operator_member_name_for_use_kind(obligation.operator_kind)
+    let candidates = operator_candidates_matching_receiver_and_kind(index.operators, receiver, obligation.operator_kind, 0, Vec[OperatorKey].new())
+    let expected = operator_expected_operand_count(operator_name)
+    let observed = operator_obligation_observed_operand_count(obligation)
+    let operand_types = operator_operand_types_match(project, obligation, receiver)
     OperatorCandidateSet {
         owner: obligation.owner,
         file: obligation.file,
-        operator_name: operator_member_name_for_use_kind(obligation.operator_kind),
+        receiver_name: receiver,
+        operator_name: operator_name,
         candidates: candidates,
         candidate_count: candidates.len(),
-        requires_operand_matching: operator_obligation_requires_operand_matching(obligation),
+        expected_operand_count: expected,
+        observed_operand_count: observed,
+        operand_arity_matches: expected == observed,
+        operand_types_match: operand_types,
+        requires_operand_matching: operand_types == false,
         requires_ambiguity_check: true,
         missing_candidate_is_error: true,
     }
 
 /// Convert operator obligations into candidate sets in source order.
-def operator_candidate_sets(index: MethodOperatorIndex, obligations: Array[OperatorResolutionObligation], cursor: usize, out: Vec[OperatorCandidateSet]): Array[OperatorCandidateSet] =
+def operator_candidate_sets(project: ProjectSurface, index: MethodOperatorIndex, obligations: Array[OperatorResolutionObligation], cursor: usize, out: Vec[OperatorCandidateSet]): Array[OperatorCandidateSet] =
     if cursor == obligations.len() { out.freeze() }
-    else { operator_candidate_sets(index, obligations, cursor + 1, out.push(operator_candidate_set_from_obligation(index, obligations.get(cursor)))) }
+    else { operator_candidate_sets(project, index, obligations, cursor + 1, out.push(operator_candidate_set_from_obligation(project, index, obligations.get(cursor)))) }
 
 /// Classify a candidate set without pretending operand matching is complete.
 def operator_candidate_status(set: OperatorCandidateSet): OperatorCandidateStatus =
     if set.operator_name == "" { OperatorCandidateUnknownOperatorPending }
     else if set.candidate_count == 0 { OperatorCandidateMissing }
     else if set.candidate_count > 1 { OperatorCandidateAmbiguityPending }
+    else if set.operand_arity_matches == false { OperatorCandidateOperandArityMismatch }
+    else if set.operand_types_match == false { OperatorCandidateOperandMatchingPending }
     else { OperatorCandidateResolved }
 
 /// Build one diagnostic-ready candidate fact.
@@ -265,6 +660,9 @@ def operator_candidate_diagnostic_fact(set: OperatorCandidateSet): OperatorCandi
         operator_name: set.operator_name,
         status: operator_candidate_status(set),
         candidate_count: set.candidate_count,
+        expected_operand_count: set.expected_operand_count,
+        observed_operand_count: set.observed_operand_count,
+        operand_types_match: set.operand_types_match,
     }
 
 /// Convert candidate sets into diagnostic facts.
@@ -280,7 +678,10 @@ def operator_candidate_diagnostic(fact: OperatorCandidateDiagnosticFact): Option
         OperatorCandidateResolved => None
         OperatorCandidateAmbiguityPending =>
             Some(SemanticDiagnostic("<operator>", 0, 0, "invalid-surface: operator overload candidate ambiguous"))
-        OperatorCandidateOperandMatchingPending => None
+        OperatorCandidateOperandMatchingPending =>
+            Some(SemanticDiagnostic("<operator>", 0, 0, "invalid-surface: operator operand type mismatch"))
+        OperatorCandidateOperandArityMismatch =>
+            Some(SemanticDiagnostic("<operator>", 0, 0, "invalid-surface: operator operand arity mismatch"))
         OperatorCandidateUnknownOperatorPending =>
             Some(SemanticDiagnostic("<operator>", 0, 0, "missing-lowering: operator obligation resolution absent"))
     }
@@ -300,27 +701,45 @@ def method_operator_index_with_candidates(project: ProjectSurface, facts: Array[
     let entries = method_operator_surface_entries_from_facts(facts, 0, Vec[MethodOperatorSurfaceEntry].new())
     let base = MethodOperatorIndex {
         methods: method_keys_from_surface_entries(project, entries, 0, Vec[MethodKey].new()),
-        operators: operator_keys_from_surface_entries(project, entries, 0, Vec[OperatorKey].new()),
+        operators: operator_keys_with_builtins(project, entries),
         surface_entries: entries,
+        self_bindings: method_self_bindings_from_surface_entries(project, entries, 0, Vec[MethodSelfBindingFact].new()),
+        method_candidates: Vec[MethodCandidateSet].new().freeze(),
         operator_candidates: Vec[OperatorCandidateSet].new().freeze(),
     }
-    let candidate_sets = operator_candidate_sets(base, obligations, 0, Vec[OperatorCandidateSet].new())
+    let candidate_sets = operator_candidate_sets(project, base, obligations, 0, Vec[OperatorCandidateSet].new())
     MethodOperatorIndex {
         methods: base.methods,
         operators: base.operators,
         surface_entries: base.surface_entries,
+        self_bindings: base.self_bindings,
+        method_candidates: Vec[MethodCandidateSet].new().freeze(),
         operator_candidates: candidate_sets,
     }
 
 /// Build the nominal method/operator index.
 def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex, SemanticDiagnostics] =
-    if module.method_surface.len() == 0 && module.operator_use_surface.len() == 0 {
+    if module.method_surface.len() == 0 && module.method_use_surface.len() == 0 && module.operator_use_surface.len() == 0 {
         Ok(method_operator_index_empty())
     } else {
         let obligations = build_operator_resolution_obligations(module)
         let index = method_operator_index_with_candidates(module.alpha.project, module.method_surface, obligations)
-        let diagnostics = operator_candidate_diagnostics(operator_candidate_diagnostic_facts(index.operator_candidates, 0, Vec[OperatorCandidateDiagnosticFact].new()), 0, Vec[SemanticDiagnostic].new())
-        if diagnostics.len() == 0 { Ok(index) }
+        let method_candidates = method_candidate_sets(module.alpha.project, index, module.method_use_surface, 0, Vec[MethodCandidateSet].new())
+        let index_with_methods = MethodOperatorIndex {
+            methods: index.methods,
+            operators: index.operators,
+            surface_entries: index.surface_entries,
+            self_bindings: index.self_bindings,
+            method_candidates: method_candidates,
+            operator_candidates: index.operator_candidates,
+        }
+        let diagnostics = operator_candidate_diagnostics(operator_candidate_diagnostic_facts(index_with_methods.operator_candidates, 0, Vec[OperatorCandidateDiagnosticFact].new()), 0, method_candidate_diagnostics(method_candidates, 0, Vec[SemanticDiagnostic].new()))
+        if method_self_bindings_valid(index_with_methods.self_bindings, 0) == false {
+            Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
+                .push(SemanticDiagnostic("<method>", 0, 0, "invalid-surface: method Self binding absent"))
+                .freeze()))
+        }
+        else if diagnostics.len() == 0 { Ok(index_with_methods) }
         else { Err(SemanticDiagnostics(diagnostics)) }
     }
 
@@ -333,19 +752,28 @@ def typed_module_with_method_operator_index(module: TypedModule, index: MethodOp
         adt_ctors: module.adt_ctors,
         callable_storage: module.callable_storage,
         namespace_ownership: module.namespace_ownership,
+        ast_owner_symbols: module.ast_owner_symbols,
+        ast_expr_nodes: module.ast_expr_nodes,
         namespace_imports: module.namespace_imports,
+        namespace_resolution: module.namespace_resolution,
         method_surface: module.method_surface,
+        method_use_surface: module.method_use_surface,
         branching_surface: module.branching_surface,
         control_surface: module.control_surface,
         global_init_surface: module.global_init_surface,
+        global_init_obligations: module.global_init_obligations,
+        global_init_plan: module.global_init_plan,
         pipe_surface: module.pipe_surface,
         pattern_surface: module.pattern_surface,
         pattern_dft_steps: module.pattern_dft_steps,
         pattern_exhaustiveness: module.pattern_exhaustiveness,
         pattern_envs: module.pattern_envs,
         intrinsic_surface: module.intrinsic_surface,
+        intrinsic_lowering_obligations: module.intrinsic_lowering_obligations,
+        intrinsic_bridge_roundtrips: module.intrinsic_bridge_roundtrips,
         generic_surface: module.generic_surface,
         operator_use_surface: module.operator_use_surface,
         closure_surface: module.closure_surface,
+        scope_shadow: module.scope_shadow,
         method_operator_index: index,
     }

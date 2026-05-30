@@ -22,11 +22,28 @@ type AlphaBinderOrigin {
     column: usize,
 }
 
+/// Parser-owned source origin retained before scanner item replacement.
+type AlphaAstOwnerOrigin {
+    binder: BinderId,
+    file: SourceFileId,
+    owner_namespace: String,
+    name: String,
+    body_shape: SourceAstExprShape,
+    has_i32_const_body: bool,
+    i32_const_body: usize,
+    has_i32_add_mul_body: bool,
+    has_i32_if_else_body: bool,
+    has_i32_prefix_neg_body: bool,
+    has_i32_match_param_body: bool,
+    from_chibacc: bool,
+}
+
 /// Alpha-renamed module.
 type AlphaModule {
     project: ProjectSurface,
     binders: Array[BinderId],
     origins: Array[AlphaBinderOrigin],
+    ast_owner_origins: Array[AlphaAstOwnerOrigin],
     uses: Array[SourceUseScanResult],
 }
 
@@ -34,14 +51,29 @@ type AlphaModule {
 def alpha_convert(project: ProjectSurface): AlphaModule =
     AlphaModule(
         project,
-        alpha_binders_from_source_items(project.facts.items, 0, Vec[BinderId].new()),
+        alpha_binders_from_source_items_and_ast_owners(project.facts.items, project.facts.ast_owner_symbols),
         alpha_origins_from_source_items(project.facts.items, 0, Vec[AlphaBinderOrigin].new()),
+        alpha_ast_owner_origins_from_source_facts(project.facts.ast_owner_symbols, project.facts.items.len(), 0, Vec[AlphaAstOwnerOrigin].new()),
         project.facts.uses)
 
 /// Build deterministic binder ids from source item scan facts.
 def alpha_binders_from_source_items(items: Array[SourceItemScanResult], index: usize, out: Vec[BinderId]): Array[BinderId] =
     if index == items.len() { out.freeze() }
     else { alpha_binders_from_source_items(items, index + 1, out.push(BinderId { index: index })) }
+
+/// Append scanner item binders into an existing builder.
+def alpha_binders_source_items_to_vec(items: Array[SourceItemScanResult], index: usize, out: Vec[BinderId]): Vec[BinderId] =
+    if index == items.len() { out }
+    else { alpha_binders_source_items_to_vec(items, index + 1, out.push(BinderId { index: index })) }
+
+/// Append parser-owned binders after scanner-derived binders so ids never alias.
+def alpha_binders_append_ast_owners(items: Array[SourceAstOwnerSymbolFact], base: usize, index: usize, out: Vec[BinderId]): Array[BinderId] =
+    if index == items.len() { out.freeze() }
+    else { alpha_binders_append_ast_owners(items, base, index + 1, out.push(BinderId { index: base + index })) }
+
+/// Build deterministic binder ids for scanner items plus parser-owned AST items.
+def alpha_binders_from_source_items_and_ast_owners(items: Array[SourceItemScanResult], ast_items: Array[SourceAstOwnerSymbolFact]): Array[BinderId] =
+    alpha_binders_append_ast_owners(ast_items, items.len(), 0, alpha_binders_source_items_to_vec(items, 0, Vec[BinderId].new()))
 
 /// Build source origins for alpha binders from item scan facts.
 def alpha_origins_from_source_items(items: Array[SourceItemScanResult], index: usize, out: Vec[AlphaBinderOrigin]): Array[AlphaBinderOrigin] =
@@ -62,5 +94,30 @@ def alpha_origins_from_source_items(items: Array[SourceItemScanResult], index: u
                 surface: item.surface,
                 line: item.line,
                 column: item.column,
+            }))
+    }
+
+/// Build alpha origins from parser-owned owner symbol facts.
+def alpha_ast_owner_origins_from_source_facts(items: Array[SourceAstOwnerSymbolFact], base: usize, index: usize, out: Vec[AlphaAstOwnerOrigin]): Array[AlphaAstOwnerOrigin] =
+    if index == items.len() { out.freeze() }
+    else {
+        let item = items.get(index)
+        alpha_ast_owner_origins_from_source_facts(
+            items,
+            base,
+            index + 1,
+            out.push(AlphaAstOwnerOrigin {
+                binder: BinderId { index: base + index },
+                file: item.file,
+                owner_namespace: item.owner_namespace,
+                name: item.name,
+                body_shape: item.body_shape,
+                has_i32_const_body: item.has_i32_const_body,
+                i32_const_body: item.i32_const_body,
+                has_i32_add_mul_body: item.has_i32_add_mul_body,
+                has_i32_if_else_body: item.has_i32_if_else_body,
+                has_i32_prefix_neg_body: item.has_i32_prefix_neg_body,
+                has_i32_match_param_body: item.has_i32_match_param_body,
+                from_chibacc: item.from_chibacc,
             }))
     }

@@ -14,3 +14,13 @@ def Array[T].get(self, index: usize): T = __compiler_builtin("std.array_get")
 
 /// Produce a managed view over an array range.
 def Array[T].slice(self, offset: usize, len: usize): Slice[T] = __compiler_builtin("std.array_slice")
+
+/// Produce a full managed view over an immutable array.
+def Array[T].to_slice(self): Slice[T] = self.slice(0, self.len())
+
+/// Convert an immutable array into a growable builder.
+def Array[T].to_vec(self): Vec[T] =
+    Vec[T].new().extend(self)
+
+/// Return this immutable array.
+def Array[T].to_array(self): Array[T] = self
