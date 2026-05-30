@@ -559,6 +559,65 @@ function emitCoreFixtureModule(input) {
   return `(module\n${globals.map(emitCoreFixtureGlobal).join("\n")}\n${emitCoreFixtureStart(globals)}\n${functions.map(emitCoreFixtureFunction).join("\n")}\n)`;
 }
 
+function astExprNodes(full) {
+  const nodes = Array.isArray(full.astExprNodes) ? full.astExprNodes : [];
+  if (nodes.length === 0) fail("AST primary typed WAT requires direct AST expression nodes");
+  return nodes;
+}
+
+function astExprNode(nodes, ownerName, nodeId) {
+  const node = nodes.find((item) => item.ownerNamespace === "demo" && item.ownerName === ownerName && item.nodeId === nodeId);
+  if (node == null) fail(`missing AST expression node ${ownerName}#${nodeId}`);
+  return node;
+}
+
+function astBinaryInstruction(value) {
+  if (value === 0) return "i32.add";
+  if (value === 1) return "i32.sub";
+  if (value === 2) return "i32.mul";
+  if (value === 3) return "i32.div_s";
+  fail(`unsupported AST primitive binary ordinal ${value}`);
+}
+
+function coreExprFromAstNode(nodes, ownerName, nodeId) {
+  const node = astExprNode(nodes, ownerName, nodeId);
+  if (node.kind === "SourceAstExprNodeI32Const") return { kind: "const", value: node.value };
+  if (node.kind === "SourceAstExprNodeParam") return { kind: "param", index: node.paramIndex };
+  if (node.kind === "SourceAstExprNodePrefixNeg") {
+    return {
+      kind: "binary",
+      instruction: "i32.sub",
+      left: { kind: "const", value: 0 },
+      right: coreExprFromAstNode(nodes, ownerName, node.left),
+    };
+  }
+  if (node.kind === "SourceAstExprNodeBinary") {
+    return {
+      kind: "binary",
+      instruction: astBinaryInstruction(node.value),
+      left: coreExprFromAstNode(nodes, ownerName, node.left),
+      right: coreExprFromAstNode(nodes, ownerName, node.right),
+    };
+  }
+  if (node.kind === "SourceAstExprNodeIfElse") {
+    return {
+      kind: "if",
+      condition: { kind: "const", value: 1 },
+      thenExpr: coreExprFromAstNode(nodes, ownerName, node.thenNode),
+      elseExpr: coreExprFromAstNode(nodes, ownerName, node.elseNode),
+    };
+  }
+  if (node.kind === "SourceAstExprNodeMatch") {
+    return {
+      kind: "if",
+      condition: coreExprFromAstNode(nodes, ownerName, node.left),
+      thenExpr: coreExprFromAstNode(nodes, ownerName, node.thenNode),
+      elseExpr: coreExprFromAstNode(nodes, ownerName, node.elseNode),
+    };
+  }
+  fail(`unsupported AST expression node kind ${node.kind}`);
+}
+
 function normalizeSourceExpr(expr) {
   return expr
     .replace(/\breturn\s+/g, "")
@@ -1553,52 +1612,28 @@ function checkAstPrimaryTypedMainWat() {
   if (full.astExpressionOwnerNamespace !== "demo" || full.astExpressionDefItemName !== "main" || full.astExpressionHasAddMulBody !== true || full.astExpressionHasIfElseBody !== false || full.astExpressionHasPrefixNegBody !== false) {
     fail("AST primary expression evidence must expose demo::main add/mul body");
   }
+  const nodes = astExprNodes(full);
   const wat = emitCoreFixtureModule([
     {
       symbol: `${full.astOwnerNamespace}::${full.astDefItemName}`,
       exportName: "main",
-      body: {
-        kind: "binary",
-        instruction: "i32.add",
-        left: { kind: "const", value: 2 },
-        right: {
-          kind: "binary",
-          instruction: "i32.mul",
-          left: { kind: "const", value: 3 },
-          right: { kind: "const", value: 4 },
-        },
-      },
+      body: coreExprFromAstNode(nodes, full.astDefItemName, 0),
     },
     {
       symbol: `${full.astBranchOwnerNamespace}::${full.astBranchDefItemName}`,
       exportName: "branch",
-      body: {
-        kind: "if",
-        condition: { kind: "const", value: 1 },
-        thenExpr: { kind: "const", value: 7 },
-        elseExpr: { kind: "const", value: 13 },
-      },
+      body: coreExprFromAstNode(nodes, full.astBranchDefItemName, 0),
     },
     {
       symbol: `${full.astNegOwnerNamespace}::${full.astNegDefItemName}`,
       exportName: "neg",
-      body: {
-        kind: "binary",
-        instruction: "i32.sub",
-        left: { kind: "const", value: 0 },
-        right: { kind: "const", value: 7 },
-      },
+      body: coreExprFromAstNode(nodes, full.astNegDefItemName, 0),
     },
     {
       symbol: `${full.astMatchOwnerNamespace}::${full.astMatchDefItemName}`,
       exportName: "choose",
       params: 1,
-      body: {
-        kind: "if",
-        condition: { kind: "param0" },
-        thenExpr: { kind: "const", value: 7 },
-        elseExpr: { kind: "const", value: 13 },
-      },
+      body: coreExprFromAstNode(nodes, full.astMatchDefItemName, 0),
     },
   ]);
   checkWatArtifactRunnable("ast-primary-typed-main", wat, [
