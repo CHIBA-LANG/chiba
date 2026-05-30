@@ -74,6 +74,10 @@ def source_project_has_utf8_warning(project: ProjectSurface): bool =
 def source_project_parser_primary_blocked(project: ProjectSurface): bool =
     project.facts.parser.ast_primary_path_blocked
 
+/// Return true when parser-owned AST item facts are the source primary path.
+def source_project_has_ast_primary_items(project: ProjectSurface): bool =
+    source_project_parser_primary_blocked(project) == false && project.facts.ast_owner_symbols.len() > 0
+
 /// Return true when project source facts contain namespace forms needing full parser assembly.
 def source_project_has_namespace_warning(project: ProjectSurface): bool =
     project.facts.namespace_warnings.len() > 0
@@ -105,7 +109,8 @@ def source_items_have_compile_if(items: Array[SourceItemScanResult], index: usiz
 
 /// Return true when project items still need compile_if filtering.
 def source_project_has_unfiltered_compile_if_items(project: ProjectSurface): bool =
-    source_items_have_compile_if(project.facts.items, 0)
+    if source_project_has_ast_primary_items(project) { false }
+    else { source_items_have_compile_if(project.facts.items, 0) }
 
 /// Return true when an extern item lacks any scanned ABI type annotation.
 def source_items_have_extern_without_type_annotation(items: Array[SourceItemScanResult], index: usize): bool =
@@ -123,7 +128,8 @@ def source_items_have_extern_without_type_annotation(items: Array[SourceItemScan
 
 /// Return true when project source facts contain an extern requiring ABI signature parsing.
 def source_project_has_extern_without_type_annotation(project: ProjectSurface): bool =
-    source_items_have_extern_without_type_annotation(project.facts.items, 0)
+    if source_project_has_ast_primary_items(project) { false }
+    else { source_items_have_extern_without_type_annotation(project.facts.items, 0) }
 
 /// Return true when a top-level static Ref lacks the required world-local marker.
 def source_items_have_static_ref_without_world_local(items: Array[SourceItemScanResult], index: usize): bool =
@@ -146,7 +152,8 @@ def source_items_have_static_ref_without_world_local(items: Array[SourceItemScan
 
 /// Return true when project source facts contain a static Ref missing world-local.
 def source_project_has_static_ref_without_world_local(project: ProjectSurface): bool =
-    source_items_have_static_ref_without_world_local(project.facts.items, 0)
+    if source_project_has_ast_primary_items(project) { false }
+    else { source_items_have_static_ref_without_world_local(project.facts.items, 0) }
 
 /// Return true when a source def lacks a scanned body or initializer marker.
 def source_items_have_def_without_body(items: Array[SourceItemScanResult], index: usize): bool =
@@ -164,7 +171,8 @@ def source_items_have_def_without_body(items: Array[SourceItemScanResult], index
 
 /// Return true when project source facts contain a def needing body parsing.
 def source_project_has_def_without_body(project: ProjectSurface): bool =
-    source_items_have_def_without_body(project.facts.items, 0)
+    if source_project_has_ast_primary_items(project) { false }
+    else { source_items_have_def_without_body(project.facts.items, 0) }
 
 /// Return true when a source item mentions `Self` outside method receiver scope.
 def source_items_have_self_outside_method(items: Array[SourceItemScanResult], index: usize): bool =
@@ -177,7 +185,8 @@ def source_items_have_self_outside_method(items: Array[SourceItemScanResult], in
 
 /// Return true when project source facts contain illegal `Self` use.
 def source_project_has_self_outside_method(project: ProjectSurface): bool =
-    source_items_have_self_outside_method(project.facts.items, 0)
+    if source_project_has_ast_primary_items(project) { false }
+    else { source_items_have_self_outside_method(project.facts.items, 0) }
 
 /// Return the source text for a scanned file id.
 def source_project_file_text(files: Array[SourceFile], file: SourceFileId, index: usize): String =
@@ -267,7 +276,8 @@ def source_items_have_duplicate_item(project: ProjectSurface, items: Array[Sourc
 
 /// Return true when project source facts contain duplicate item names.
 def source_project_has_duplicate_item(project: ProjectSurface): bool =
-    source_items_have_duplicate_item(project, project.facts.items, 0)
+    if source_project_has_ast_primary_items(project) { false }
+    else { source_items_have_duplicate_item(project, project.facts.items, 0) }
 
 /// Return the first source import/name resolution diagnostic.
 def source_project_import_resolution_message(project: ProjectSurface): String =

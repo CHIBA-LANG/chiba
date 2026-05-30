@@ -258,6 +258,8 @@ const REQUIRED_TEXT = [
   "def check_source_semantic_gates",
   "def source_project_has_ast_namespace",
   "def source_project_has_ast_item",
+  "def source_project_has_ast_primary_items",
+  "if source_project_has_ast_primary_items(project) { false }",
   "source_project_has_namespace(project) == false && source_project_has_ast_namespace(project) == false",
   "source_project_has_item(project) == false && source_project_has_ast_item(project) == false",
   "SourceGateRefArrayDirectAssignment",
