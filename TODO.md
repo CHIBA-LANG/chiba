@@ -88,6 +88,7 @@
 			- [x] typed expression traversal API：C08 现在有 `TypedExprVisit` / `typed_expr_traverse` / `typed_function_expr_visits_all`，C09 `CpsModule.expr_visits` 消费该 DFS traversal；真实输入仍是 source-slice typed expr，等待 chibacc AST primary 替换。
 			- [x] AST binary op recursive lowering：`SourceAstExprNodeFact` 的 binary node 现在携带 primitive op ordinal，C08 `typed_expr_from_ast_node` 直接按节点 op 生成 `TypedExprPrimitiveBinary(op, left, right)`；`2 + 3 * 4` 不再依赖 add/mul hardcoded fallback 才保持 `*`。
 			- [x] chibacc AST owner no-shape-fallback：C08 对 `from_chibacc` owner 缺少 AST node root 时不再回退到旧 `SourceAstExprShape` hardcode，避免 full parser evidence 丢 node graph 仍假装 typed AST primary 成功。
+			- [x] AST primary skeleton priority：C08 在 parser `ast_primary_path_blocked == false` 且有 chibacc AST owner 时优先构造 parser-owned skeleton，scanner item skeleton 只作 fallback，避免 full parser evidence 进入 typed pass 后仍被 byte scanner 主导。
 - [ ] generics/template：auto-generic、explicit instantiation、generic body full check 还没完整 primary 实现。
 	- [x] generic surface facts：typed module 已记录 explicit params、auto-generic、explicit instantiation、generic Self method surface；真实 template body checking 与 instantiation discharge 仍 fail-closed。
 	- [x] generic template obligations：typed pass 已把 generic surface 转成 `GenericTemplateObligation`，区分显式参数、auto-generic、实例化 discharge、generic Self receiver binding。

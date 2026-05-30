@@ -1684,12 +1684,16 @@ def typed_item_skeletons_append_ast_owners(origins: Array[AlphaAstOwnerOrigin], 
 def typed_item_skeletons_from_ast_owners(origins: Array[AlphaAstOwnerOrigin]): Array[TypedItemSkeleton] =
     typed_item_skeletons_append_ast_owners(origins, 0, Vec[TypedItemSkeleton].new())
 
-/// Pick the primary skeleton source: scanner facts today, AST facts once scanner facts are absent.
+/// Return true when parser-owned AST item facts can replace scanner item skeletons.
+def alpha_module_has_ast_primary_items(module: AlphaModule): bool =
+    module.project.facts.parser.ast_primary_path_blocked == false && module.ast_owner_origins.len() > 0
+
+/// Pick the primary skeleton source: chibacc AST facts first, scanner facts as fallback.
 def typed_item_skeletons_from_alpha_primary(module: AlphaModule): Array[TypedItemSkeleton] =
-    if module.origins.len() > 0 {
-        typed_item_skeletons_from_alpha(module.origins, 0, Vec[TypedItemSkeleton].new())
-    } else {
+    if alpha_module_has_ast_primary_items(module) {
         typed_item_skeletons_from_ast_owners(module.ast_owner_origins)
+    } else {
+        typed_item_skeletons_from_alpha(module.origins, 0, Vec[TypedItemSkeleton].new())
     }
 
 /// Return true when placeholder pattern facts cover all source item skeletons.
