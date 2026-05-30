@@ -602,6 +602,7 @@ function main() {
     "ast_owner_symbols: source_ast_owner_symbols_from_evidence(evidence, 0, Vec[SourceAstOwnerSymbolFact].new())",
     "ast_expr_nodes: source_ast_expr_nodes_from_evidence(evidence, 0, Vec[SourceAstExprNodeFact].new())",
     "def source_ast_expr_nodes_from_evidence",
+    "let has_direct_nodes = if item.ast_from_chibacc { item.ast_expr_nodes.len() > 0 } else { true }",
     "def source_ast_expr_nodes_append_direct",
     "def source_ast_expr_nodes_for_shape",
     "Binary node value uses PrimitiveBinaryOp ordinal",

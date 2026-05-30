@@ -1012,19 +1012,20 @@ def source_ast_owner_symbols_from_evidence(evidence: Array[SourceFrontendEvidenc
     if index == evidence.len() { out.freeze() }
     else {
         let item = evidence.get(index)
-        let with_item = if item.ast_owner_symbol_count > 0 && item.ast_namespace_count > 0 && item.ast_def_item_count > 0 && item.ast_owner_namespace.len() > 0 && item.ast_def_item_name.len() > 0 && (item.ast_def_has_i32_const_body || item.ast_def_has_i32_add_mul_body || item.ast_def_has_i32_if_else_body || item.ast_def_has_i32_prefix_neg_body) {
+        let has_direct_nodes = if item.ast_from_chibacc { item.ast_expr_nodes.len() > 0 } else { true }
+        let with_item = if has_direct_nodes && item.ast_owner_symbol_count > 0 && item.ast_namespace_count > 0 && item.ast_def_item_count > 0 && item.ast_owner_namespace.len() > 0 && item.ast_def_item_name.len() > 0 && (item.ast_def_has_i32_const_body || item.ast_def_has_i32_add_mul_body || item.ast_def_has_i32_if_else_body || item.ast_def_has_i32_prefix_neg_body) {
             out.push(source_ast_owner_symbol_from_evidence(item))
         } else { out }
-        let with_branch = if item.ast_branch_owner_namespace.len() > 0 && item.ast_branch_def_item_name.len() > 0 && item.ast_branch_has_if_else_body {
+        let with_branch = if has_direct_nodes && item.ast_branch_owner_namespace.len() > 0 && item.ast_branch_def_item_name.len() > 0 && item.ast_branch_has_if_else_body {
             with_item.push(source_ast_branch_owner_symbol_from_evidence(item))
         } else { with_item }
-        let with_neg = if item.ast_neg_owner_namespace.len() > 0 && item.ast_neg_def_item_name.len() > 0 && item.ast_neg_has_prefix_neg_body {
+        let with_neg = if has_direct_nodes && item.ast_neg_owner_namespace.len() > 0 && item.ast_neg_def_item_name.len() > 0 && item.ast_neg_has_prefix_neg_body {
             with_branch.push(source_ast_neg_owner_symbol_from_evidence(item))
         } else { with_branch }
-        let with_match = if item.ast_match_owner_namespace.len() > 0 && item.ast_match_def_item_name.len() > 0 && item.ast_match_has_param_body {
+        let with_match = if has_direct_nodes && item.ast_match_owner_namespace.len() > 0 && item.ast_match_def_item_name.len() > 0 && item.ast_match_has_param_body {
             with_neg.push(source_ast_match_owner_symbol_from_evidence(item))
         } else { with_neg }
-        let with_expr = if item.ast_expression_owner_namespace.len() > 0 && item.ast_expression_def_item_name.len() > 0 && (item.ast_expression_has_add_mul_body || item.ast_expression_has_if_else_body || item.ast_expression_has_prefix_neg_body) {
+        let with_expr = if has_direct_nodes && item.ast_expression_owner_namespace.len() > 0 && item.ast_expression_def_item_name.len() > 0 && (item.ast_expression_has_add_mul_body || item.ast_expression_has_if_else_body || item.ast_expression_has_prefix_neg_body) {
             with_match.push(source_ast_expression_owner_symbol_from_evidence(item))
         } else { with_match }
         source_ast_owner_symbols_from_evidence(evidence, index + 1, with_expr)
