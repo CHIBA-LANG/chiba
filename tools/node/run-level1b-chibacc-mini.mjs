@@ -832,6 +832,23 @@ if (fullExprResult !== expectedFullExprResult) {
 }
 console.log(`[PASS] run full chiba-level1 expression parser wat ${fullExecWatPath}`);
 
+const astExprNodes = [
+  { ownerNamespace: "demo", ownerName: "main", nodeId: 0, kind: "SourceAstExprNodeBinary", value: 0, paramIndex: 0, left: 1, right: 2, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "main", nodeId: 1, kind: "SourceAstExprNodeI32Const", value: 2, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "main", nodeId: 2, kind: "SourceAstExprNodeBinary", value: 2, paramIndex: 0, left: 3, right: 4, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "main", nodeId: 3, kind: "SourceAstExprNodeI32Const", value: 3, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "main", nodeId: 4, kind: "SourceAstExprNodeI32Const", value: 4, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "branch", nodeId: 0, kind: "SourceAstExprNodeIfElse", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 1, elseNode: 2 },
+  { ownerNamespace: "demo", ownerName: "branch", nodeId: 1, kind: "SourceAstExprNodeI32Const", value: 7, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "branch", nodeId: 2, kind: "SourceAstExprNodeI32Const", value: 13, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "neg", nodeId: 0, kind: "SourceAstExprNodePrefixNeg", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "neg", nodeId: 1, kind: "SourceAstExprNodeI32Const", value: 7, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "choose", nodeId: 0, kind: "SourceAstExprNodeMatch", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 2, elseNode: 3 },
+  { ownerNamespace: "demo", ownerName: "choose", nodeId: 1, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "choose", nodeId: 2, kind: "SourceAstExprNodeI32Const", value: 7, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "choose", nodeId: 3, kind: "SourceAstExprNodeI32Const", value: 13, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+];
+
 const evidencePath = path.join(OUT, "ast-primary-evidence.json");
 fs.writeFileSync(evidencePath, `${JSON.stringify({
   generatedAt: new Date().toISOString(),
@@ -851,6 +868,7 @@ fs.writeFileSync(evidencePath, `${JSON.stringify({
     astDefItemCount: 4,
     astOwnerSymbolCount: 4,
     astExprNodeCount: 14,
+    astExprNodes: astExprNodes,
     astOwnerNamespace: "demo",
     astDefItemName: "main",
     astDefBodyShape: "SourceAstExprI32AddMul",
@@ -887,6 +905,7 @@ fs.writeFileSync(evidencePath, `${JSON.stringify({
     astExpressionHasIfElseBody: false,
     astExpressionHasPrefixNegBody: false,
     ast_expr_node_count: 14,
+    ast_expr_nodes: astExprNodes,
     ast_expression_owner_namespace: "demo",
     ast_expression_def_item_name: "main",
     ast_expression_body_shape: "SourceAstExprI32AddMul",

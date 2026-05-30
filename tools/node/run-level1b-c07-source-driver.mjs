@@ -551,6 +551,14 @@ function main() {
   if (fullGrammar.astExprNodeCount !== 14 || fullGrammar.ast_expr_node_count !== 14) {
     fail("full chiba-level1 executable parser evidence must expose recursive AST expression node facts");
   }
+  const astExprNodes = Array.isArray(fullGrammar.astExprNodes) ? fullGrammar.astExprNodes : [];
+  if (astExprNodes.length !== 14 || !Array.isArray(fullGrammar.ast_expr_nodes) || fullGrammar.ast_expr_nodes.length !== 14) {
+    fail("full chiba-level1 executable parser evidence must expose direct AST expression node list");
+  }
+  const hasNode = (ownerName, nodeId, kind) => astExprNodes.some((node) => node.ownerNamespace === "demo" && node.ownerName === ownerName && node.nodeId === nodeId && node.kind === kind);
+  if (!hasNode("main", 0, "SourceAstExprNodeBinary") || !hasNode("branch", 0, "SourceAstExprNodeIfElse") || !hasNode("neg", 0, "SourceAstExprNodePrefixNeg") || !hasNode("choose", 0, "SourceAstExprNodeMatch")) {
+    fail("full chiba-level1 executable parser direct AST nodes must include main/branch/neg/match roots");
+  }
   if (fullGrammar.astOwnerNamespace !== "demo" || fullGrammar.astDefItemName !== "main") {
     fail("full chiba-level1 executable parser evidence must expose parser-owned demo::main symbol");
   }
