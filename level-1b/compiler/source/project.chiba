@@ -326,6 +326,7 @@ type SourceFrontendEvidence {
     ast_expression_has_if_else_body: bool,
     ast_expression_has_prefix_neg_body: bool,
     ast_expr_node_count: usize,
+    ast_expr_nodes: Array[SourceAstExprNodeFact],
     ast_from_chibacc: bool,
     has_recoverable_errors: bool,
 }

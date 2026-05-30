@@ -1046,6 +1046,11 @@ def source_ast_expr_node_push(out: Vec[SourceAstExprNodeFact], evidence: SourceF
         else_node: else_node,
     })
 
+/// Append parser-owned AST expression node facts supplied directly by frontend evidence.
+def source_ast_expr_nodes_append_direct(nodes: Array[SourceAstExprNodeFact], index: usize, out: Vec[SourceAstExprNodeFact]): Vec[SourceAstExprNodeFact] =
+    if index == nodes.len() { out }
+    else { source_ast_expr_nodes_append_direct(nodes, index + 1, out.push(nodes.get(index))) }
+
 /// Append recursive AST expression nodes for the generated `main = 2 + 3 * 4` slice.
 /// Binary node value uses PrimitiveBinaryOp ordinal: add=0, sub=1, mul=2, div=3.
 def source_ast_expr_nodes_add_mul(evidence: SourceFrontendEvidence, owner: String, name: String, out: Vec[SourceAstExprNodeFact]): Vec[SourceAstExprNodeFact] =
@@ -1099,18 +1104,22 @@ def source_ast_expr_nodes_from_evidence(evidence: Array[SourceFrontendEvidence],
     if index == evidence.len() { out.freeze() }
     else {
         let item = evidence.get(index)
-        let with_main = if item.ast_owner_namespace.len() > 0 && item.ast_def_item_name.len() > 0 {
-            source_ast_expr_nodes_for_shape(item, item.ast_owner_namespace, item.ast_def_item_name, item.ast_def_body_shape, out)
-        } else { out }
-        let with_branch = if item.ast_branch_owner_namespace.len() > 0 && item.ast_branch_def_item_name.len() > 0 {
-            source_ast_expr_nodes_for_shape(item, item.ast_branch_owner_namespace, item.ast_branch_def_item_name, item.ast_branch_body_shape, with_main)
-        } else { with_main }
-        let with_neg = if item.ast_neg_owner_namespace.len() > 0 && item.ast_neg_def_item_name.len() > 0 {
-            source_ast_expr_nodes_for_shape(item, item.ast_neg_owner_namespace, item.ast_neg_def_item_name, item.ast_neg_body_shape, with_branch)
-        } else { with_branch }
-        let with_match = if item.ast_match_owner_namespace.len() > 0 && item.ast_match_def_item_name.len() > 0 {
-            source_ast_expr_nodes_for_shape(item, item.ast_match_owner_namespace, item.ast_match_def_item_name, item.ast_match_body_shape, with_neg)
-        } else { with_neg }
+        let with_match = if item.ast_expr_nodes.len() > 0 {
+            source_ast_expr_nodes_append_direct(item.ast_expr_nodes, 0, out)
+        } else {
+            let with_main = if item.ast_owner_namespace.len() > 0 && item.ast_def_item_name.len() > 0 {
+                source_ast_expr_nodes_for_shape(item, item.ast_owner_namespace, item.ast_def_item_name, item.ast_def_body_shape, out)
+            } else { out }
+            let with_branch = if item.ast_branch_owner_namespace.len() > 0 && item.ast_branch_def_item_name.len() > 0 {
+                source_ast_expr_nodes_for_shape(item, item.ast_branch_owner_namespace, item.ast_branch_def_item_name, item.ast_branch_body_shape, with_main)
+            } else { with_main }
+            let with_neg = if item.ast_neg_owner_namespace.len() > 0 && item.ast_neg_def_item_name.len() > 0 {
+                source_ast_expr_nodes_for_shape(item, item.ast_neg_owner_namespace, item.ast_neg_def_item_name, item.ast_neg_body_shape, with_branch)
+            } else { with_branch }
+            if item.ast_match_owner_namespace.len() > 0 && item.ast_match_def_item_name.len() > 0 {
+                source_ast_expr_nodes_for_shape(item, item.ast_match_owner_namespace, item.ast_match_def_item_name, item.ast_match_body_shape, with_neg)
+            } else { with_neg }
+        }
         source_ast_expr_nodes_from_evidence(evidence, index + 1, with_match)
     }
 

@@ -592,12 +592,17 @@ function main() {
   pass(`full chiba-level1 generated parser WAT evidence ${fullGrammar.wat}`);
 
   const scanSource = read(path.join(SOURCE_ROOT, "scan.chiba"));
+  const projectSource = read(path.join(SOURCE_ROOT, "project.chiba"));
+  assertIncludes("frontend evidence direct AST node field", projectSource, [
+    "ast_expr_nodes: Array[SourceAstExprNodeFact]",
+  ]);
   assertIncludes("compiler-side primary frontend evidence bridge", scanSource, [
     "parser: scan_project_parser_facts_from_primary_evidence(project.files, evidence)",
     "facts: scan_project_source_facts_from_primary_evidence(project, evidence)",
     "ast_owner_symbols: source_ast_owner_symbols_from_evidence(evidence, 0, Vec[SourceAstOwnerSymbolFact].new())",
     "ast_expr_nodes: source_ast_expr_nodes_from_evidence(evidence, 0, Vec[SourceAstExprNodeFact].new())",
     "def source_ast_expr_nodes_from_evidence",
+    "def source_ast_expr_nodes_append_direct",
     "def source_ast_expr_nodes_for_shape",
     "Binary node value uses PrimitiveBinaryOp ordinal",
     "SourceAstExprNodeBinary, 2",
