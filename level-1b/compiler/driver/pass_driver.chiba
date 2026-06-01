@@ -40,21 +40,23 @@ def source_compile_if_fact_enabled(fact: SourceCompileIfFacts, target: CompileTa
 
 /// Evaluate the supported all(...) compile_if shape.
 def source_compile_if_all_enabled(fact: SourceCompileIfFacts, target: CompileTargetFacts): bool =
-    let target_ok = if fact.has_target_predicate { target.target == "wasm32-unknown-wasi" } else { true }
-    let backend_ok = if fact.has_backend_predicate { target.backend == "wasm-gc" } else { true }
-    target_ok && backend_ok
+    {
+        let target_ok = fact.has_target_predicate == false || target.target == "wasm32-unknown-wasi"
+        let backend_ok = fact.has_backend_predicate == false || target.backend == "wasm-gc"
+        target_ok && backend_ok
+    }
 
 /// Evaluate the supported or(...) compile_if shape.
 def source_compile_if_any_enabled(fact: SourceCompileIfFacts, target: CompileTargetFacts): bool =
-    let target_ok = if fact.has_target_predicate { target.target == "wasm32-unknown-wasi" } else { false }
-    let backend_ok = if fact.has_backend_predicate { target.backend == "wasm-gc" } else { false }
-    target_ok || backend_ok
+    {
+        let target_ok = fact.has_target_predicate && target.target == "wasm32-unknown-wasi"
+        let backend_ok = fact.has_backend_predicate && target.backend == "wasm-gc"
+        target_ok || backend_ok
+    }
 
 /// Evaluate the supported not(...) compile_if shape.
 def source_compile_if_not_enabled(fact: SourceCompileIfFacts, target: CompileTargetFacts): bool =
-    if fact.has_backend_predicate { target.backend != "wasm-gc" }
-    else if fact.has_target_predicate { target.target != "wasm32-unknown-wasi" }
-    else { false }
+    !source_compile_if_any_enabled(fact, target)
 
 /// Return true when a scanned item remains enabled after compile_if filtering.
 def source_item_enabled_for_target(item: SourceItemScanResult, target: CompileTargetFacts): bool =
@@ -65,20 +67,7 @@ def source_item_enabled_for_target(item: SourceItemScanResult, target: CompileTa
 
 /// Clear compile_if after the source driver has applied it.
 def source_item_after_compile_if_filter(item: SourceItemScanResult): SourceItemScanResult =
-    SourceItemScanResult {
-        file: item.file,
-        owner_namespace: item.owner_namespace,
-        kind: item.kind,
-        name: item.name,
-        private: item.private,
-        attributes: SourceItemAttributeFacts {
-            compile_if: None,
-            world_local: item.attributes.world_local,
-        },
-        surface: item.surface,
-        line: item.line,
-        column: item.column,
-    }
+    item
 
 /// Copy enabled source items into a fresh item array.
 def filter_source_items_for_target(items: Array[SourceItemScanResult], target: CompileTargetFacts, index: usize, out: Vec[SourceItemScanResult]): Array[SourceItemScanResult] =
@@ -117,11 +106,13 @@ def project_with_filtered_items(project: ProjectSurface, target: CompileTargetFa
 
 /// Run source loading, header filtering, and source-level semantic gates.
 def run_source_driver(input: DriverInput): Result[ProjectSurface, DriverDiagnostics] =
-    let filtered = project_with_filtered_items(input.project, input.target_facts)
-    match check_source_semantic_gates(filtered) {
-        result =>
-            if result.ok() { Ok(result.project) }
-            else { Err(source_gate_diagnostics(result.errors, 0, Vec[DriverDiagnostic].new())) }
+    {
+        let filtered = project_with_filtered_items(input.project, input.target_facts)
+        match check_source_semantic_gates(filtered) {
+            result =>
+                if result.ok() { Ok(result.project) }
+                else { Err(source_gate_diagnostics(result.errors, 0, Vec[DriverDiagnostic].new())) }
+        }
     }
 
 /// Convert a source gate error into a driver diagnostic.

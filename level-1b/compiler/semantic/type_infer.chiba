@@ -55,11 +55,36 @@ data PrimitiveBinaryOp {
     PrimitiveBinaryDiv,
 }
 
+/// Backend-neutral semantic value type carried before Core/WAT lowering.
+data TypedValueType {
+    TypedValUnit,
+    TypedValBool,
+    TypedValI32,
+    TypedValI64,
+    TypedValF32,
+    TypedValF64,
+    TypedValUsize,
+    TypedValString,
+    TypedValStr,
+    TypedValEqRef,
+    TypedValFuncRef,
+    TypedValArrayU8Ref,
+    TypedValLayoutRef(str),
+    TypedValNullableLayoutRef(str),
+}
+
 /// Typed expression shape used by semantic lowering before CPS.
 data TypedExprKind {
     TypedExprUnit,
     TypedExprI32Const(TypedI32ConstAtom),
     TypedExprParam(usize),
+    TypedExprTypedParam(usize, TypedValueType),
+    TypedExprLocal(str, TypedValueType),
+    TypedExprStringLiteral(str),
+    TypedExprCast(TypedExprKind, TypedValueType),
+    TypedExprStructNew(str, Array[TypedValueType], Array[TypedExprKind]),
+    TypedExprFieldGet(str, Array[TypedValueType], TypedExprKind, usize),
+    TypedExprCall(str, Array[TypedExprKind], TypedValueType),
     TypedExprTailCall(str),
     TypedExprTailCallArgs(str, Array[TypedExprKind]),
     TypedExprPrimitiveBinary(PrimitiveBinaryOp, TypedExprKind, TypedExprKind),
@@ -92,8 +117,15 @@ type TypedFunctionFact {
     is_main: bool,
     returns_i32: bool,
     i32_param_count: usize,
+    param_types: Array[TypedValueType],
+    result_type: TypedValueType,
     body: TypedExprKind,
 }
+
+/// Build typed i32 parameter entries for legacy source slices until full param AST lands.
+def typed_i32_param_types(count: usize, out: Vec[TypedValueType]): Array[TypedValueType] =
+    if count == 0 { out.freeze() }
+    else { typed_i32_param_types(count - 1, out.push(TypedValI32)) }
 
 /// Pick traversal kind for one typed expression node.
 def typed_expr_visit_kind(expr: TypedExprKind): TypedExprVisitKind =
@@ -101,6 +133,13 @@ def typed_expr_visit_kind(expr: TypedExprKind): TypedExprVisitKind =
         TypedExprUnit => TypedVisitUnit
         TypedExprI32Const(_) => TypedVisitAtom
         TypedExprParam(_) => TypedVisitAtom
+        TypedExprTypedParam(_, _) => TypedVisitAtom
+        TypedExprLocal(_, _) => TypedVisitAtom
+        TypedExprStringLiteral(_) => TypedVisitAtom
+        TypedExprCast(_, _) => TypedVisitAtom
+        TypedExprStructNew(_, _, _) => TypedVisitAtom
+        TypedExprFieldGet(_, _, _, _) => TypedVisitAtom
+        TypedExprCall(_, _, _) => TypedVisitTailCall
         TypedExprTailCall(_) => TypedVisitTailCall
         TypedExprTailCallArgs(_, _) => TypedVisitTailCall
         TypedExprPrimitiveBinary(_, _, _) => TypedVisitAtom
@@ -115,6 +154,10 @@ def typed_expr_traverse(owner: BinderId, expr: TypedExprKind, tail_position: boo
         match expr {
             TypedExprIfElse(_, then_expr, else_expr) =>
                 typed_expr_traverse(owner, else_expr, tail_position, typed_expr_traverse(owner, then_expr, tail_position, with_self))
+            TypedExprCast(value, _) => typed_expr_traverse(owner, value, false, with_self)
+            TypedExprStructNew(_, _, args) => typed_expr_traverse_args(owner, args, 0, false, with_self)
+            TypedExprFieldGet(_, _, value, _) => typed_expr_traverse(owner, value, false, with_self)
+            TypedExprCall(_, args, _) => typed_expr_traverse_args(owner, args, 0, false, with_self)
             TypedExprTailCallArgs(_, args) => typed_expr_traverse_args(owner, args, 0, false, with_self)
             TypedExprPrimitiveBinary(_, left, right) =>
                 typed_expr_traverse(owner, right, false, typed_expr_traverse(owner, left, false, with_self))
@@ -142,6 +185,101 @@ def typed_function_expr_visits_all(functions: Array[TypedFunctionFact], index: u
     else {
         let visits = typed_function_expr_visits(functions.get(index))
         typed_function_expr_visits_all(functions, index + 1, typed_function_expr_visits_append(functions.get(index), 0, visits, out))
+    }
+
+/// Return true when two typed values can share the same early backend storage class.
+def typed_value_type_storage_eq(left: TypedValueType, right: TypedValueType): bool =
+    match left {
+        TypedValUnit => match right { TypedValUnit => true, _ => false }
+        TypedValBool => match right { TypedValBool => true, TypedValI32 => true, _ => false }
+        TypedValI32 => match right { TypedValBool => true, TypedValI32 => true, _ => false }
+        TypedValI64 => match right { TypedValI64 => true, _ => false }
+        TypedValF32 => match right { TypedValF32 => true, _ => false }
+        TypedValF64 => match right { TypedValF64 => true, _ => false }
+        TypedValUsize => match right { TypedValUsize => true, TypedValI32 => true, _ => false }
+        TypedValString => match right { TypedValString => true, TypedValStr => true, TypedValArrayU8Ref => true, _ => false }
+        TypedValStr => match right { TypedValString => true, TypedValStr => true, TypedValArrayU8Ref => true, _ => false }
+        TypedValEqRef => match right { TypedValEqRef => true, _ => false }
+        TypedValFuncRef => match right { TypedValFuncRef => true, _ => false }
+        TypedValArrayU8Ref => match right { TypedValString => true, TypedValStr => true, TypedValArrayU8Ref => true, _ => false }
+        TypedValLayoutRef(label) =>
+            match right {
+                TypedValLayoutRef(other) => label == other
+                _ => false
+            }
+        TypedValNullableLayoutRef(label) =>
+            match right {
+                TypedValNullableLayoutRef(other) => label == other
+                _ => false
+            }
+    }
+
+/// Return true when a typed value will lower to a reference stack type.
+def typed_value_type_is_ref(ty: TypedValueType): bool =
+    match ty {
+        TypedValString => true
+        TypedValStr => true
+        TypedValEqRef => true
+        TypedValFuncRef => true
+        TypedValArrayU8Ref => true
+        TypedValLayoutRef(_) => true
+        TypedValNullableLayoutRef(_) => true
+        _ => false
+    }
+
+/// Merge branch result types before Core lowering.
+def typed_value_type_merge(left: TypedValueType, right: TypedValueType): TypedValueType =
+    if typed_value_type_storage_eq(left, right) { left }
+    else if typed_value_type_is_ref(left) && typed_value_type_is_ref(right) { TypedValEqRef }
+    else { left }
+
+/// Return the best available result type for one typed expression.
+def typed_expr_result_type(expr: TypedExprKind): TypedValueType =
+    match expr {
+        TypedExprUnit => TypedValUnit
+        TypedExprI32Const(_) => TypedValI32
+        TypedExprParam(_) => TypedValI32
+        TypedExprTypedParam(_, ty) => ty
+        TypedExprLocal(_, ty) => ty
+        TypedExprStringLiteral(_) => TypedValArrayU8Ref
+        TypedExprCast(_, ty) => ty
+        TypedExprStructNew(layout, _, _) => TypedValLayoutRef(layout)
+        TypedExprFieldGet(_, fields, _, index) =>
+            if index < fields.len() { fields.get(index) } else { TypedValEqRef }
+        TypedExprCall(_, _, ty) => ty
+        TypedExprTailCall(_) => TypedValI32
+        TypedExprTailCallArgs(_, _) => TypedValI32
+        TypedExprPrimitiveBinary(_, _, _) => TypedValI32
+        TypedExprIfElse(_, then_expr, else_expr) => typed_value_type_merge(typed_expr_result_type(then_expr), typed_expr_result_type(else_expr))
+        TypedExprBranchJoinPending => TypedValUnit
+    }
+
+/// Look up the declared/inferred result type for one typed function symbol.
+def typed_function_result_type_for_symbol(functions: Array[TypedFunctionFact], target: str, index: usize): Option[TypedValueType] =
+    if index == functions.len() { None }
+    else if typed_function_symbol_eq(functions.get(index).symbol, target, 0) { Some(functions.get(index).result_type) }
+    else { typed_function_result_type_for_symbol(functions, target, index + 1) }
+
+/// Return the best available result type for one typed expression with function-table context.
+def typed_expr_result_type_with_functions(functions: Array[TypedFunctionFact], expr: TypedExprKind): TypedValueType =
+    match expr {
+        TypedExprTailCall(target) =>
+            match typed_function_result_type_for_symbol(functions, target, 0) {
+                Some(ty) => ty
+                None => TypedValI32
+            }
+        TypedExprTailCallArgs(target, _) =>
+            match typed_function_result_type_for_symbol(functions, target, 0) {
+                Some(ty) => ty
+                None => TypedValI32
+            }
+        TypedExprIfElse(_, then_expr, else_expr) =>
+            typed_value_type_merge(
+                typed_expr_result_type_with_functions(functions, then_expr),
+                typed_expr_result_type_with_functions(functions, else_expr))
+        TypedExprCast(_, ty) => ty
+        TypedExprCall(_, _, ty) => ty
+        _ => typed_expr_result_type(expr)
     }
 
 /// Scan a function-slice no-argument tail-call target from a function body region.
@@ -364,6 +502,48 @@ def typed_source_region_is_param(text: String, param: SourceNameSlice, start: us
 def typed_type_slice_is_primitive_i32_like(text: String, ty: SourceNameSlice): bool =
     source_name_slice_eq_text(text, ty, "i32") || source_name_slice_eq_text(text, ty, "bool")
 
+/// Convert a source type slice to the backend-neutral value type carried by typed expressions.
+def typed_value_type_from_slice(text: String, ty: SourceNameSlice): TypedValueType =
+    if source_name_slice_eq_text(text, ty, "bool") { TypedValBool }
+    else if source_name_slice_eq_text(text, ty, "i32") { TypedValI32 }
+    else if source_name_slice_eq_text(text, ty, "i64") { TypedValI64 }
+    else if source_name_slice_eq_text(text, ty, "f32") { TypedValF32 }
+    else if source_name_slice_eq_text(text, ty, "f64") { TypedValF64 }
+    else if source_name_slice_eq_text(text, ty, "usize") { TypedValUsize }
+    else if source_name_slice_eq_text(text, ty, "String") { TypedValString }
+    else if source_name_slice_eq_text(text, ty, "str") { TypedValStr }
+    else if source_name_slice_eq_text(text, ty, "Str") { TypedValStr }
+    else if source_name_slice_eq_text(text, ty, "eqref") { TypedValEqRef }
+    else if source_name_slice_eq_text(text, ty, "funcref") { TypedValFuncRef }
+    else { TypedValEqRef }
+
+/// Build typed parameter entries from the function header in declaration order.
+def typed_function_param_types_from_header(text: String, item: TypedItemSkeleton): Array[TypedValueType] =
+    let close = typed_function_param_list_close(text, item)
+    let open = typed_source_region_find_byte_or_end(text, item.surface.header.offset, item.surface.header.offset + item.surface.header.len, 40)
+    if open >= item.surface.header.offset + item.surface.header.len { Vec[TypedValueType].new().freeze() }
+    else { typed_function_param_types_from_header_loop(text, open + 1, close, Vec[TypedValueType].new()) }
+
+/// Scan each parameter declaration and preserve its typed value representation.
+def typed_function_param_types_from_header_loop(text: String, offset: usize, close: usize, out: Vec[TypedValueType]): Array[TypedValueType] =
+    let start = source_skip_spaces(text, offset)
+    if start >= close { out.freeze() }
+    else {
+        match source_scan_ident_slice(text, start) {
+            Some(param) => {
+                let decl_end = typed_function_param_decl_end(text, source_name_slice_end(param), close)
+                let next_out = match typed_function_param_type_slice(text, param, decl_end) {
+                    Some(ty) => out.push(typed_value_type_from_slice(text, ty))
+                    None => out.push(TypedValEqRef)
+                }
+                let next = source_skip_spaces(text, decl_end)
+                if next < close && text.byte_at(next) == 44 { typed_function_param_types_from_header_loop(text, next + 1, close, next_out) }
+                else { next_out.freeze() }
+            }
+            None => out.freeze()
+        }
+    }
+
 /// Return true when a source symbol is in the builtin numeric receiver family.
 def typed_intrinsic_numeric_receiver(receiver: str): bool =
     if receiver == "u8" { true }
@@ -382,8 +562,8 @@ def typed_primitive_binary_intrinsic_from_name(name: str): Option[PrimitiveBinar
     let dot = method_name_last_dot(name, 0, name.len())
     if dot >= name.len() { None }
     else {
-        let receiver = name.slice(0, dot)
-        let member = name.slice(dot + 1, name.len() - dot - 1)
+        let receiver: str = name.slice(0, dot)
+        let member: str = name.slice(dot + 1, name.len() - dot - 1)
         if typed_intrinsic_numeric_receiver(receiver) == false { None }
         else if member == "op_add" { Some(PrimitiveBinaryAdd) }
         else if member == "op_sub" { Some(PrimitiveBinarySub) }
@@ -424,6 +604,32 @@ def typed_function_param_index_from_region_loop(text: String, item: TypedItemSke
                     let decl_end = typed_function_param_decl_end(text, source_name_slice_end(param), close)
                     let next = source_skip_spaces(text, decl_end)
                     if next < close && text.byte_at(next) == 44 { typed_function_param_index_from_region_loop(text, item, start, end, next + 1, index + 1) }
+                    else { None }
+                }
+            None => None
+        }
+    }
+
+/// Pick a typed parameter expression directly, avoiding scalar Option payload reboxing.
+def typed_function_param_expr_from_region_loop(text: String, item: TypedItemSkeleton, start: usize, end: usize, offset: usize, index: usize): Option[TypedExprKind] =
+    let close = typed_function_param_list_close(text, item)
+    let param_start = source_skip_spaces(text, offset)
+    let open = typed_source_region_find_byte_or_end(text, item.surface.header.offset, item.surface.header.offset + item.surface.header.len, 40)
+    let scan_start = if param_start <= open { source_skip_spaces(text, open + 1) } else { param_start }
+    if scan_start >= close { None }
+    else {
+        match source_scan_ident_slice(text, scan_start) {
+            Some(param) =>
+                if typed_source_region_is_param(text, param, start, end) {
+                    let decl_end = typed_function_param_decl_end(text, source_name_slice_end(param), close)
+                    match typed_function_param_type_slice(text, param, decl_end) {
+                        Some(ty) => Some(TypedExprTypedParam(index, typed_value_type_from_slice(text, ty)))
+                        None => Some(TypedExprParam(index))
+                    }
+                } else {
+                    let decl_end = typed_function_param_decl_end(text, source_name_slice_end(param), close)
+                    let next = source_skip_spaces(text, decl_end)
+                    if next < close && text.byte_at(next) == 44 { typed_function_param_expr_from_region_loop(text, item, start, end, next + 1, index + 1) }
                     else { None }
                 }
             None => None
@@ -473,9 +679,27 @@ def typed_function_param_type_from_region_loop(text: String, item: TypedItemSkel
 
 /// Pick a typed indexed parameter expression from a bounded source region.
 def typed_function_param_expr_from_region(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
-    match typed_function_param_index_from_region(text, item, start, end) {
-        Some(index) => Some(TypedExprParam(index))
-        None => None
+    typed_function_param_expr_from_region_loop(text, item, start, end, item.surface.header.offset, 0)
+
+/// Pick a branch condition parameter directly, avoiding scalar Option payload reboxing.
+def typed_branch_condition_param_from_region_loop(text: String, item: TypedItemSkeleton, start: usize, end: usize, offset: usize, index: usize): Option[TypedBranchCondition] =
+    let close = typed_function_param_list_close(text, item)
+    let param_start = source_skip_spaces(text, offset)
+    let open = typed_source_region_find_byte_or_end(text, item.surface.header.offset, item.surface.header.offset + item.surface.header.len, 40)
+    let scan_start = if param_start <= open { source_skip_spaces(text, open + 1) } else { param_start }
+    if scan_start >= close { None }
+    else {
+        match source_scan_ident_slice(text, scan_start) {
+            Some(param) =>
+                if typed_source_region_is_param(text, param, start, end) { Some(TypedBranchConditionParam(index)) }
+                else {
+                    let decl_end = typed_function_param_decl_end(text, source_name_slice_end(param), close)
+                    let next = source_skip_spaces(text, decl_end)
+                    if next < close && text.byte_at(next) == 44 { typed_branch_condition_param_from_region_loop(text, item, start, end, next + 1, index + 1) }
+                    else { None }
+                }
+            None => None
+        }
     }
 
 /// Return true when a byte can separate simple call arguments.
@@ -756,13 +980,69 @@ def typed_function_tail_call_args_body(text: String, item: TypedItemSkeleton, st
 
 /// Parse a single top-level infix operator expression that maps to a method protocol call.
 def typed_operator_expr_body(text: String, item: TypedItemSkeleton, start: usize, end: usize): Option[TypedExprKind] =
-    match typed_operator_find_low_precedence(text, source_skip_spaces(text, start), end, 0, 0, 0, None) {
-        Some(op) => typed_operator_binary_expr_body(text, item, start, op, end)
-        None =>
-            match typed_operator_find_high_precedence(text, source_skip_spaces(text, start), end, 0, 0, 0, None) {
-                Some(op) => typed_operator_binary_expr_body(text, item, start, op, end)
-                None => None
-            }
+    match typed_operator_expr_low_from(text, item, start, source_skip_spaces(text, start), end, 0, 0, 0, 0, false) {
+        Some(expr) => Some(expr)
+        None => typed_operator_expr_high_from(text, item, start, source_skip_spaces(text, start), end, 0, 0, 0, 0, false)
+    }
+
+/// Find and lower the rightmost top-level low-precedence operator without reboxing Option[usize].
+def typed_operator_expr_low_from(text: String, item: TypedItemSkeleton, expr_start: usize, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize, last: usize, seen: bool): Option[TypedExprKind] =
+    if offset >= end {
+        if seen { typed_operator_binary_expr_body(text, item, expr_start, last, end) }
+        else { None }
+    }
+    else if offset >= text.len() {
+        if seen { typed_operator_binary_expr_body(text, item, expr_start, last, end) }
+        else { None }
+    }
+    else {
+        let byte = text.byte_at(offset)
+        if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 && typed_operator_is_low_precedence(byte) && typed_operator_is_binary_low_at(text, expr_start, offset) {
+            typed_operator_expr_low_from(text, item, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth, offset, true)
+        }
+        else if byte == 40 { typed_operator_expr_low_from(text, item, expr_start, offset + 1, end, paren_depth + 1, brace_depth, bracket_depth, last, seen) }
+        else if byte == 41 {
+            typed_operator_expr_low_from(text, item, expr_start, offset + 1, end, if paren_depth > 0 { paren_depth - 1 } else { 0 }, brace_depth, bracket_depth, last, seen)
+        }
+        else if byte == 123 { typed_operator_expr_low_from(text, item, expr_start, offset + 1, end, paren_depth, brace_depth + 1, bracket_depth, last, seen) }
+        else if byte == 125 {
+            typed_operator_expr_low_from(text, item, expr_start, offset + 1, end, paren_depth, if brace_depth > 0 { brace_depth - 1 } else { 0 }, bracket_depth, last, seen)
+        }
+        else if byte == 91 { typed_operator_expr_low_from(text, item, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth + 1, last, seen) }
+        else if byte == 93 {
+            typed_operator_expr_low_from(text, item, expr_start, offset + 1, end, paren_depth, brace_depth, if bracket_depth > 0 { bracket_depth - 1 } else { 0 }, last, seen)
+        }
+        else { typed_operator_expr_low_from(text, item, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth, last, seen) }
+    }
+
+/// Find and lower the rightmost top-level high-precedence operator without reboxing Option[usize].
+def typed_operator_expr_high_from(text: String, item: TypedItemSkeleton, expr_start: usize, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize, last: usize, seen: bool): Option[TypedExprKind] =
+    if offset >= end {
+        if seen { typed_operator_binary_expr_body(text, item, expr_start, last, end) }
+        else { None }
+    }
+    else if offset >= text.len() {
+        if seen { typed_operator_binary_expr_body(text, item, expr_start, last, end) }
+        else { None }
+    }
+    else {
+        let byte = text.byte_at(offset)
+        if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 && typed_operator_is_high_precedence(byte) {
+            typed_operator_expr_high_from(text, item, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth, offset, true)
+        }
+        else if byte == 40 { typed_operator_expr_high_from(text, item, expr_start, offset + 1, end, paren_depth + 1, brace_depth, bracket_depth, last, seen) }
+        else if byte == 41 {
+            typed_operator_expr_high_from(text, item, expr_start, offset + 1, end, if paren_depth > 0 { paren_depth - 1 } else { 0 }, brace_depth, bracket_depth, last, seen)
+        }
+        else if byte == 123 { typed_operator_expr_high_from(text, item, expr_start, offset + 1, end, paren_depth, brace_depth + 1, bracket_depth, last, seen) }
+        else if byte == 125 {
+            typed_operator_expr_high_from(text, item, expr_start, offset + 1, end, paren_depth, if brace_depth > 0 { brace_depth - 1 } else { 0 }, bracket_depth, last, seen)
+        }
+        else if byte == 91 { typed_operator_expr_high_from(text, item, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth + 1, last, seen) }
+        else if byte == 93 {
+            typed_operator_expr_high_from(text, item, expr_start, offset + 1, end, paren_depth, brace_depth, if bracket_depth > 0 { bracket_depth - 1 } else { 0 }, last, seen)
+        }
+        else { typed_operator_expr_high_from(text, item, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth, last, seen) }
     }
 
 /// Return true when a byte is a low-precedence binary operator.
@@ -770,16 +1050,22 @@ def typed_operator_is_low_precedence(byte: u8): bool =
     if byte == 43 { true }
     else { byte == 45 }
 
-/// Return the previous non-space byte before an operator.
-def typed_operator_previous_non_space(text: String, start: usize, op: usize, offset: usize, previous: Option[u8]): Option[u8] =
-    if offset >= op { previous }
-    else if offset >= text.len() { previous }
+/// Return whether the previous non-space token before `-` allows binary minus.
+def typed_operator_minus_has_left_operand_from(text: String, start: usize, op: usize, offset: usize, previous: u8, seen: bool): bool =
+    if offset >= op {
+        if seen { typed_operator_previous_allows_prefix(previous) == false }
+        else { false }
+    }
+    else if offset >= text.len() {
+        if seen { typed_operator_previous_allows_prefix(previous) == false }
+        else { false }
+    }
     else {
         let byte = text.byte_at(offset)
         if byte == 32 || byte == 9 || byte == 10 || byte == 13 {
-            typed_operator_previous_non_space(text, start, op, offset + 1, previous)
+            typed_operator_minus_has_left_operand_from(text, start, op, offset + 1, previous, seen)
         } else {
-            typed_operator_previous_non_space(text, start, op, offset + 1, Some(byte))
+            typed_operator_minus_has_left_operand_from(text, start, op, offset + 1, byte, true)
         }
     }
 
@@ -799,10 +1085,7 @@ def typed_operator_previous_allows_prefix(prev: u8): bool =
 
 /// Return true when a `-` byte has a left operand in this bounded expression.
 def typed_operator_minus_has_left_operand(text: String, start: usize, op: usize): bool =
-    match typed_operator_previous_non_space(text, start, op, start, None) {
-        Some(prev) => typed_operator_previous_allows_prefix(prev) == false
-        None => false
-    }
+    typed_operator_minus_has_left_operand_from(text, start, op, start, 0, false)
 
 /// Return true when one byte is a binary low-precedence operator at this offset.
 def typed_operator_is_binary_low_at(text: String, start: usize, op: usize): bool =
@@ -829,6 +1112,30 @@ def typed_operator_method_name(byte: u8): str =
     else if byte == 45 { "op_sub" }
     else if byte == 42 { "op_mul" }
     else { "op_div" }
+
+/// Map an AST primitive operator ordinal to the method protocol member name.
+def typed_operator_method_name_from_ast_value(value: usize): Option[str] =
+    match value {
+        0 => Some("op_add")
+        1 => Some("op_sub")
+        2 => Some("op_mul")
+        3 => Some("op_div")
+        _ => None
+    }
+
+/// Build the canonical builtin i32 operator target used by bootstrap AST facts.
+def typed_i32_operator_target(member: str): str =
+    "i32.".concat(member)
+
+/// Build the canonical i32 operator target directly from parser AST opcode.
+def typed_i32_operator_target_from_ast_value(value: usize): str =
+    match value {
+        0 => "i32.op_add"
+        1 => "i32.op_sub"
+        2 => "i32.op_mul"
+        3 => "i32.op_div"
+        _ => ""
+    }
 
 /// Find the rightmost top-level low-precedence operator in a bounded expression.
 def typed_operator_find_low_precedence_from(text: String, expr_start: usize, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize, last: Option[usize]): Option[usize] =
@@ -884,11 +1191,34 @@ def typed_operator_find_high_precedence(text: String, offset: usize, end: usize,
 
 /// Find a top-level `+` operator in a bounded expression.
 def typed_operator_find_add(text: String, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize): Option[usize] =
-    match typed_operator_find_low_precedence(text, offset, end, paren_depth, brace_depth, bracket_depth, None) {
-        Some(op) =>
-            if text.byte_at(op) == 43 { Some(op) }
-            else { None }
-        None => None
+    typed_operator_find_add_from(text, offset, offset, end, paren_depth, brace_depth, bracket_depth, 0, false)
+
+/// Find top-level `+` without unboxing intermediate Option[usize].
+def typed_operator_find_add_from(text: String, expr_start: usize, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize, last: usize, seen: bool): Option[usize] =
+    if offset >= end {
+        if seen { Some(last) } else { None }
+    }
+    else if offset >= text.len() {
+        if seen { Some(last) } else { None }
+    }
+    else {
+        let byte = text.byte_at(offset)
+        if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 && byte == 43 {
+            typed_operator_find_add_from(text, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth, offset, true)
+        }
+        else if byte == 40 { typed_operator_find_add_from(text, expr_start, offset + 1, end, paren_depth + 1, brace_depth, bracket_depth, last, seen) }
+        else if byte == 41 {
+            typed_operator_find_add_from(text, expr_start, offset + 1, end, if paren_depth > 0 { paren_depth - 1 } else { 0 }, brace_depth, bracket_depth, last, seen)
+        }
+        else if byte == 123 { typed_operator_find_add_from(text, expr_start, offset + 1, end, paren_depth, brace_depth + 1, bracket_depth, last, seen) }
+        else if byte == 125 {
+            typed_operator_find_add_from(text, expr_start, offset + 1, end, paren_depth, if brace_depth > 0 { brace_depth - 1 } else { 0 }, bracket_depth, last, seen)
+        }
+        else if byte == 91 { typed_operator_find_add_from(text, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth + 1, last, seen) }
+        else if byte == 93 {
+            typed_operator_find_add_from(text, expr_start, offset + 1, end, paren_depth, brace_depth, if bracket_depth > 0 { bracket_depth - 1 } else { 0 }, last, seen)
+        }
+        else { typed_operator_find_add_from(text, expr_start, offset + 1, end, paren_depth, brace_depth, bracket_depth, last, seen) }
     }
 
 /// Find the first top-level binary operator understood by the current operator slice.
@@ -952,10 +1282,10 @@ def typed_prefix_neg_expr_body(text: String, item: TypedItemSkeleton, start: usi
 /// Compare primitive binary operators.
 def primitive_binary_op_eq(left: PrimitiveBinaryOp, right: PrimitiveBinaryOp): bool =
     match left {
-        PrimitiveBinaryAdd => match right { PrimitiveBinaryAdd => true  _ => false }
-        PrimitiveBinarySub => match right { PrimitiveBinarySub => true  _ => false }
-        PrimitiveBinaryMul => match right { PrimitiveBinaryMul => true  _ => false }
-        PrimitiveBinaryDiv => match right { PrimitiveBinaryDiv => true  _ => false }
+        PrimitiveBinaryAdd => match right { PrimitiveBinaryAdd => true, _ => false }
+        PrimitiveBinarySub => match right { PrimitiveBinarySub => true, _ => false }
+        PrimitiveBinaryMul => match right { PrimitiveBinaryMul => true, _ => false }
+        PrimitiveBinaryDiv => match right { PrimitiveBinaryDiv => true, _ => false }
     }
 
 /// Parse a source-slice receiver.method(args) call as receiver-first method form.
@@ -1031,10 +1361,7 @@ def typed_branch_condition_from_item_region(text: String, item: TypedItemSkeleto
             let offset = source_skip_spaces(text, start)
             let if_start = source_skip_spaces(text, offset + "if".len())
             let condition_end = typed_source_region_find_byte_or_end(text, if_start, end, 123)
-            match typed_function_param_index_from_region(text, item, if_start, condition_end) {
-                Some(index) => Some(TypedBranchConditionParam(index))
-                None => None
-            }
+            typed_branch_condition_param_from_region_loop(text, item, if_start, condition_end, item.surface.header.offset, 0)
         }
     }
 
@@ -1092,23 +1419,24 @@ def typed_control_resume_arg_start(text: String, offset: usize, end: usize, name
         else { None }
     } else { None }
 
-/// Parse the numeric argument of a continuation resume call.
-def typed_control_resume_const_at(text: String, offset: usize, end: usize): Option[TypedI32ConstAtom] =
-    match typed_control_resume_arg_start(text, offset, end, "k") {
-        Some(arg) => {
+/// Parse a resume argument for one known continuation name without boxing a scalar Option payload.
+def typed_control_resume_const_for_name(text: String, offset: usize, end: usize, name: str): Option[TypedI32ConstAtom] =
+    if offset >= end { None }
+    else if source_starts_with_at(text, offset, name, 0) {
+        let open = source_skip_spaces(text, offset + name.len())
+        if open < end && text.byte_at(open) == 40 {
+            let arg = source_skip_spaces(text, open + 1)
             let close = typed_source_region_find_byte_or_end(text, arg, end, 41)
             if close >= end { None }
             else { typed_i32_const_atom_exact_from_region(text, arg, close) }
-        }
-        None =>
-            match typed_control_resume_arg_start(text, offset, end, "retry") {
-                Some(arg) => {
-                    let close = typed_source_region_find_byte_or_end(text, arg, end, 41)
-                    if close >= end { None }
-                    else { typed_i32_const_atom_exact_from_region(text, arg, close) }
-                }
-                None => None
-            }
+        } else { None }
+    } else { None }
+
+/// Parse the numeric argument of a continuation resume call.
+def typed_control_resume_const_at(text: String, offset: usize, end: usize): Option[TypedI32ConstAtom] =
+    match typed_control_resume_const_for_name(text, offset, end, "k") {
+        Some(atom) => Some(atom)
+        None => typed_control_resume_const_for_name(text, offset, end, "retry")
     }
 
 /// Return the final numeric resume value from a reset/shift/shiftn body.
@@ -1168,6 +1496,47 @@ def typed_function_if_else_expr_body(text: String, item: TypedItemSkeleton, star
 def typed_match_scrutinee_param_index(text: String, item: TypedItemSkeleton, start: usize, open: usize): Option[usize] =
     typed_function_param_index_from_region(text, item, start + "match".len(), open)
 
+/// Build a bool-match branch for a matching scrutinee parameter without scalar Option payload casts.
+def typed_match_bool_expr_for_param_loop(text: String, item: TypedItemSkeleton, start: usize, open: usize, close: usize, offset: usize, index: usize): Option[TypedExprKind] =
+    let params_close = typed_function_param_list_close(text, item)
+    let param_start = source_skip_spaces(text, offset)
+    let header_open = typed_source_region_find_byte_or_end(text, item.surface.header.offset, item.surface.header.offset + item.surface.header.len, 40)
+    let scan_start = if param_start <= header_open { source_skip_spaces(text, header_open + 1) } else { param_start }
+    if scan_start >= params_close { None }
+    else {
+        match source_scan_ident_slice(text, scan_start) {
+            Some(param) =>
+                if typed_source_region_is_param(text, param, start + "match".len(), open) {
+                    let true_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "true")
+                    let false_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "false")
+                    let fallback_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "_")
+                    let else_pattern = if false_pattern < close { false_pattern } else { fallback_pattern }
+                    let else_label = if false_pattern < close { "false" } else { "_" }
+                    if true_pattern >= close || else_pattern >= close { None }
+                    else {
+                        let true_expr_start = typed_match_arm_expr_start(text, true_pattern, close, "true")
+                        let false_expr_start = typed_match_arm_expr_start(text, else_pattern, close, else_label)
+                        let true_expr_end = typed_match_next_bool_arm(text, true_expr_start, close)
+                        let false_expr_end = typed_match_next_bool_arm(text, false_expr_start, close)
+                        match typed_function_expr_from_region(text, item, true_expr_start, true_expr_end) {
+                            Some(then_expr) =>
+                                match typed_function_expr_from_region(text, item, false_expr_start, false_expr_end) {
+                                    Some(else_expr) => Some(TypedExprIfElse(TypedBranchConditionParam(index), then_expr, else_expr))
+                                    None => None
+                                }
+                            None => None
+                        }
+                    }
+                } else {
+                    let decl_end = typed_function_param_decl_end(text, source_name_slice_end(param), params_close)
+                    let next = source_skip_spaces(text, decl_end)
+                    if next < params_close && text.byte_at(next) == 44 { typed_match_bool_expr_for_param_loop(text, item, start, open, close, next + 1, index + 1) }
+                    else { None }
+                }
+            None => None
+        }
+    }
+
 /// Locate the body expression that follows one `pattern =>` arm.
 def typed_match_arm_expr_start(text: String, pattern: usize, end: usize, label: str): usize =
     if pattern >= end { end }
@@ -1194,33 +1563,7 @@ def typed_function_match_bool_expr_body(text: String, item: TypedItemSkeleton, s
         let open = typed_source_region_find_byte_or_end(text, offset, end, 123)
         let close = typed_source_region_match_open_brace(text, open, end)
         if open >= end || close > end { None }
-        else {
-            match typed_match_scrutinee_param_index(text, item, offset, open) {
-                Some(param_index) => {
-                    let true_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "true")
-                    let false_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "false")
-                    let fallback_pattern = typed_source_region_find_text_or_end(text, open + 1, close, "_")
-                    let else_pattern = if false_pattern < close { false_pattern } else { fallback_pattern }
-                    let else_label = if false_pattern < close { "false" } else { "_" }
-                    if true_pattern >= close || else_pattern >= close { None }
-                    else {
-                        let true_expr_start = typed_match_arm_expr_start(text, true_pattern, close, "true")
-                        let false_expr_start = typed_match_arm_expr_start(text, else_pattern, close, else_label)
-                        let true_expr_end = typed_match_next_bool_arm(text, true_expr_start, close)
-                        let false_expr_end = typed_match_next_bool_arm(text, false_expr_start, close)
-                        match typed_function_expr_from_region(text, item, true_expr_start, true_expr_end) {
-                            Some(then_expr) =>
-                                match typed_function_expr_from_region(text, item, false_expr_start, false_expr_end) {
-                                    Some(else_expr) => Some(TypedExprIfElse(TypedBranchConditionParam(param_index), then_expr, else_expr))
-                                    None => None
-                                }
-                            None => None
-                        }
-                    }
-                }
-                None => None
-            }
-        }
+        else { typed_match_bool_expr_for_param_loop(text, item, offset, open, close, item.surface.header.offset, 0) }
     }
 
 /// Pick a typed expression from a bounded source region.
@@ -1289,6 +1632,11 @@ def typed_function_main_abi_valid(functions: Array[TypedFunctionFact], index: us
 /// Return true when every function-slice tail-call target resolves within this typed module.
 def typed_function_tail_targets_resolved_for_body(functions: Array[TypedFunctionFact], body: TypedExprKind): bool =
     match body {
+        TypedExprCast(value, _) => typed_function_tail_targets_resolved_for_body(functions, value)
+        TypedExprStructNew(_, _, args) => typed_function_tail_targets_resolved_for_args(functions, args, 0)
+        TypedExprFieldGet(_, _, value, _) => typed_function_tail_targets_resolved_for_body(functions, value)
+        TypedExprCall(target, args, _) =>
+            typed_functions_have_symbol(functions, target, 0) && typed_function_tail_targets_resolved_for_args(functions, args, 0)
         TypedExprTailCall(target) => typed_functions_have_symbol(functions, target, 0)
         TypedExprTailCallArgs(target, args) =>
             typed_functions_have_symbol(functions, target, 0) && typed_function_tail_targets_resolved_for_args(functions, args, 0)
@@ -1334,6 +1682,8 @@ type TypedAstOwnerSymbolFact {
     has_i32_prefix_neg_body: bool,
     has_i32_match_param_body: bool,
     from_chibacc: bool,
+    root_node_id: usize,
+    i32_param_count: usize,
 }
 
 /// Source import fact before full namespace/name resolution.
@@ -1740,6 +2090,8 @@ def typed_function_fact_from_skeleton(project: ProjectSurface, item: TypedItemSk
         TypedItemFunction => {
             let text = typed_source_file_text(project.files, item.file, 0)
             let returns_i32 = typed_item_surface_returns_i32(text, item)
+            let param_types = typed_function_param_types_from_header(text, item)
+            let body = typed_function_body_kind_from_surface(text, item)
             match item.name {
                 Some(name) =>
                     Some(TypedFunctionFact {
@@ -1749,8 +2101,10 @@ def typed_function_fact_from_skeleton(project: ProjectSurface, item: TypedItemSk
                         local_symbol: typed_function_tail_call_target_text(text, name),
                         is_main: source_name_slice_eq_text(text, name, "main"),
                         returns_i32: returns_i32,
-                        i32_param_count: typed_function_i32_param_count(text, item),
-                        body: typed_function_body_kind_from_surface(text, item),
+                        i32_param_count: param_types.len(),
+                        param_types: param_types,
+                        result_type: if returns_i32 { TypedValI32 } else { typed_expr_result_type(body) },
+                        body: body,
                     })
                 None => None
             }
@@ -1782,6 +2136,173 @@ def typed_primitive_binary_op_from_ast_value(value: usize): Option[PrimitiveBina
         _ => None
     }
 
+/// Decode a compact AST value type ordinal used by parser-owned expression facts.
+def typed_value_type_from_ast_value(value: usize, label: String): TypedValueType =
+    match value {
+        0 => TypedValI32
+        1 => TypedValBool
+        2 => TypedValI64
+        3 => TypedValF32
+        4 => TypedValF64
+        5 => TypedValUsize
+        6 => TypedValString
+        7 => TypedValStr
+        8 => TypedValEqRef
+        9 => TypedValFuncRef
+        10 => TypedValArrayU8Ref
+        11 => TypedValLayoutRef(label)
+        12 => TypedValNullableLayoutRef(label)
+        _ => TypedValEqRef
+    }
+
+/// Read the typed value carried by one parser-owned parameter node.
+def typed_ast_param_value_type(node: SourceAstExprNodeFact): TypedValueType =
+    typed_value_type_from_ast_value(node.value, node.member)
+
+/// Return true when an AST-owned callee text is already owner-qualified or method-qualified.
+def typed_ast_callee_is_qualified(callee: String, index: usize): bool =
+    if index >= callee.len() { false }
+    else if callee.byte_at(index) == 46 { true }
+    else if index + 1 < callee.len() && callee.byte_at(index) == 58 && callee.byte_at(index + 1) == 58 { true }
+    else { typed_ast_callee_is_qualified(callee, index + 1) }
+
+/// Resolve a parser-owned callee using the AST owner namespace when it is bare.
+def typed_ast_resolve_callee(origin: TypedAstOwnerSymbolFact, callee: String): str =
+    if typed_ast_callee_is_qualified(callee, 0) { callee }
+    else { origin.owner_namespace.concat("::").concat(callee) }
+
+/// Append one AST expression argument when it is present.
+def typed_ast_expr_arg_push(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node_id: usize, out: Vec[TypedExprKind]): Option[Vec[TypedExprKind]] =
+    match typed_expr_from_ast_node_id(nodes, origin, node_id) {
+        Some(expr) => Some(out.push(expr))
+        None => None
+    }
+
+/// Return true when legacy fixed-width AST argument slots are absent.
+def typed_ast_node_has_no_legacy_args(node: SourceAstExprNodeFact): bool = node.arg_count == 0
+
+/// Return true when exactly one legacy fixed-width AST argument slot is present.
+def typed_ast_node_has_one_legacy_arg(node: SourceAstExprNodeFact): bool = node.arg_count == 1
+
+/// Return true when exactly two legacy fixed-width AST argument slots are present.
+def typed_ast_node_has_two_legacy_args(node: SourceAstExprNodeFact): bool = node.arg_count == 2
+
+/// Recover fixed-width argument ids emitted by older frontend evidence.
+def typed_ast_legacy_arg_ids_from_node(node: SourceAstExprNodeFact): Array[usize] =
+    if typed_ast_node_has_no_legacy_args(node) { Vec[usize].new().freeze() }
+    else if typed_ast_node_has_one_legacy_arg(node) { Vec[usize].new().push(node.arg0).freeze() }
+    else if typed_ast_node_has_two_legacy_args(node) { Vec[usize].new().push(node.arg0).push(node.arg1).freeze() }
+    else { Vec[usize].new().push(node.arg0).push(node.arg1).push(node.arg2).freeze() }
+
+/// Prefer the unbounded parser-owned argument vector, falling back to legacy arg0..arg2 evidence.
+def typed_ast_arg_ids_from_node(node: SourceAstExprNodeFact): Array[usize] =
+    if node.args.len() > 0 { node.args }
+    else { typed_ast_legacy_arg_ids_from_node(node) }
+
+/// Lower parser-owned AST argument node ids in source order.
+def typed_ast_expr_args_from_ids(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, args: Array[usize], index: usize, out: Vec[TypedExprKind]): Option[Array[TypedExprKind]] =
+    if index == args.len() { Some(out.freeze()) }
+    else {
+        match typed_ast_expr_arg_push(nodes, origin, args.get(index), out) {
+            Some(next) => typed_ast_expr_args_from_ids(nodes, origin, args, index + 1, next)
+            None => None
+        }
+    }
+
+/// Lower parser-owned AST argument node ids in order.
+def typed_ast_expr_args_from_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact): Option[Array[TypedExprKind]] =
+    typed_ast_expr_args_from_ids(nodes, origin, typed_ast_arg_ids_from_node(node), 0, Vec[TypedExprKind].new())
+
+/// Prepend an AST receiver expression before method/index arguments.
+def typed_ast_receiver_first_args(receiver: TypedExprKind, args: Array[TypedExprKind], index: usize, out: Vec[TypedExprKind]): Array[TypedExprKind] =
+    if index == args.len() { out.freeze() }
+    else { typed_ast_receiver_first_args(receiver, args, index + 1, out.push(args.get(index))) }
+
+/// Find the typed value for one AST-owned parameter index.
+def typed_ast_owner_param_type_at(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, param_index: usize, index: usize): TypedValueType =
+    if index == nodes.len() { TypedValI32 }
+    else {
+        let node = nodes.get(index)
+        if typed_ast_expr_node_owner_eq(node, origin) && node.param_index == param_index {
+            match node.kind {
+                SourceAstExprNodeParam => typed_ast_param_value_type(node)
+                _ => typed_ast_owner_param_type_at(nodes, origin, param_index, index + 1)
+            }
+        } else { typed_ast_owner_param_type_at(nodes, origin, param_index, index + 1) }
+    }
+
+/// Build typed parameter entries for parser-owned AST functions.
+def typed_ast_owner_param_types(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, count: usize, index: usize, out: Vec[TypedValueType]): Array[TypedValueType] =
+    if index == count { out.freeze() }
+    else { typed_ast_owner_param_types(nodes, origin, count, index + 1, out.push(typed_ast_owner_param_type_at(nodes, origin, index, 0))) }
+
+/// Lower a parser-owned call node to the same typed tail-call shape as source calls.
+def typed_expr_from_ast_call_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact): Option[TypedExprKind] =
+    match typed_ast_expr_args_from_node(nodes, origin, node) {
+        Some(args) => Some(TypedExprTailCallArgs(typed_ast_resolve_callee(origin, node.callee), args))
+        None => None
+    }
+
+/// Lower a parser-owned receiver.method node to receiver-first method form.
+def typed_expr_from_ast_method_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact): Option[TypedExprKind] =
+    match typed_expr_from_ast_node_id(nodes, origin, node.left) {
+        Some(receiver) =>
+            match typed_ast_expr_args_from_node(nodes, origin, node) {
+                Some(args) =>
+                    Some(TypedExprTailCallArgs(
+                        typed_ast_resolve_callee(origin, node.callee),
+                        typed_ast_receiver_first_args(receiver, args, 0, Vec[TypedExprKind].new().push(receiver))))
+                None => None
+            }
+        None => None
+    }
+
+/// Lower a parser-owned index or slice node to method-protocol call form.
+def typed_expr_from_ast_index_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact, target: String): Option[TypedExprKind] =
+    match typed_expr_from_ast_node_id(nodes, origin, node.left) {
+        Some(receiver) =>
+            match typed_ast_expr_args_from_node(nodes, origin, node) {
+                Some(args) =>
+                    Some(TypedExprTailCallArgs(
+                        typed_ast_resolve_callee(origin, target),
+                        typed_ast_receiver_first_args(receiver, args, 0, Vec[TypedExprKind].new().push(receiver))))
+                None => None
+            }
+        None => None
+    }
+
+/// Pick an explicit parser-owned index callee when present, otherwise use the intrinsic fallback.
+def typed_ast_index_target(node: SourceAstExprNodeFact, fallback: String): String =
+    if node.callee == "" { fallback } else { node.callee }
+
+/// Lower a parser-owned struct allocation node with layout/type metadata.
+def typed_expr_from_ast_struct_new_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact): Option[TypedExprKind] =
+    match typed_ast_expr_args_from_node(nodes, origin, node) {
+        Some(args) =>
+            Some(TypedExprStructNew(
+                node.member,
+                typed_ast_struct_field_types(args.len(), typed_value_type_from_ast_value(node.value, node.member), Vec[TypedValueType].new()),
+                args))
+        None => None
+    }
+
+/// Build homogeneous field type hints for parser-owned struct allocation facts.
+def typed_ast_struct_field_types(count: usize, ty: TypedValueType, out: Vec[TypedValueType]): Array[TypedValueType] =
+    if count == 0 { out.freeze() }
+    else { typed_ast_struct_field_types(count - 1, ty, out.push(ty)) }
+
+/// Lower a parser-owned field read node.
+def typed_expr_from_ast_field_get_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact): Option[TypedExprKind] =
+    match typed_expr_from_ast_node_id(nodes, origin, node.left) {
+        Some(value) =>
+            Some(TypedExprFieldGet(
+                node.member,
+                typed_ast_struct_field_types(node.param_index + 1, typed_value_type_from_ast_value(node.value, node.member), Vec[TypedValueType].new()),
+                value,
+                node.param_index))
+        None => None
+    }
+
 /// Return true when one AST node belongs to a parser-owned function.
 def typed_ast_expr_node_owner_eq(node: SourceAstExprNodeFact, origin: TypedAstOwnerSymbolFact): bool =
     node.file.index == origin.file.index && node.owner_namespace == origin.owner_namespace && node.owner_name == origin.name
@@ -1795,6 +2316,25 @@ def typed_ast_expr_node_find(nodes: Array[SourceAstExprNodeFact], origin: TypedA
         else { typed_ast_expr_node_find(nodes, origin, node_id, index + 1) }
     }
 
+/// Convert a parser-owned AST condition node into the branch condition carried through CPS/Core.
+def typed_branch_condition_from_ast_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node_id: usize): Option[TypedBranchCondition] =
+    match typed_ast_expr_node_find(nodes, origin, node_id, 0) {
+        Some(node) =>
+            match node.kind {
+                SourceAstExprNodeI32Const =>
+                    if node.value == 0 { Some(TypedBranchConditionFalse) }
+                    else { Some(TypedBranchConditionTrue) }
+                SourceAstExprNodeParam => Some(TypedBranchConditionParam(node.param_index))
+                _ => None
+            }
+        None => None
+    }
+
+/// AST fixtures emitted before condition-node support used `left = 0` for literal-true if.
+def typed_if_condition_from_ast_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact): Option[TypedBranchCondition] =
+    if node.left == 0 { Some(TypedBranchConditionTrue) }
+    else { typed_branch_condition_from_ast_node(nodes, origin, node.left) }
+
 /// Lower one parser-owned AST expression node recursively.
 def typed_expr_from_ast_node_id(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node_id: usize): Option[TypedExprKind] =
     match typed_ast_expr_node_find(nodes, origin, node_id, 0) {
@@ -1806,47 +2346,69 @@ def typed_expr_from_ast_node_id(nodes: Array[SourceAstExprNodeFact], origin: Typ
 def typed_expr_from_ast_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact): Option[TypedExprKind] =
     match node.kind {
         SourceAstExprNodeI32Const => Some(TypedExprI32Const(TypedI32ConstLiteral(node.value)))
-        SourceAstExprNodeParam => Some(TypedExprParam(node.param_index))
+        SourceAstExprNodeParam => Some(TypedExprTypedParam(node.param_index, typed_ast_param_value_type(node)))
         SourceAstExprNodePrefixNeg =>
             match typed_expr_from_ast_node_id(nodes, origin, node.left) {
                 Some(inner) =>
-                    Some(TypedExprPrimitiveBinary(
-                        PrimitiveBinarySub,
-                        TypedExprI32Const(TypedI32ConstLiteral(0)),
-                        inner))
+                    Some(TypedExprTailCallArgs(
+                        typed_i32_operator_target("op_sub"),
+                        Vec[TypedExprKind].new().push(TypedExprI32Const(TypedI32ConstLiteral(0))).push(inner).freeze()))
                 None => None
             }
         SourceAstExprNodeBinary =>
-            match typed_primitive_binary_op_from_ast_value(node.value) {
-                Some(op) =>
-                    match typed_expr_from_ast_node_id(nodes, origin, node.left) {
-                        Some(left) =>
-                            match typed_expr_from_ast_node_id(nodes, origin, node.right) {
-                                Some(right) => Some(TypedExprPrimitiveBinary(op, left, right))
+            if typed_i32_operator_target_from_ast_value(node.value) == "" { None }
+            else {
+                match typed_expr_from_ast_node_id(nodes, origin, node.left) {
+                    Some(left) =>
+                        match typed_expr_from_ast_node_id(nodes, origin, node.right) {
+                            Some(right) =>
+                                Some(TypedExprTailCallArgs(
+                                    typed_i32_operator_target_from_ast_value(node.value),
+                                    Vec[TypedExprKind].new().push(left).push(right).freeze()))
+                            None => None
+                        }
+                    None => None
+                }
+            }
+        SourceAstExprNodeIfElse =>
+            match typed_if_condition_from_ast_node(nodes, origin, node) {
+                Some(condition) =>
+                    match typed_expr_from_ast_node_id(nodes, origin, node.then_node) {
+                        Some(then_expr) =>
+                            match typed_expr_from_ast_node_id(nodes, origin, node.else_node) {
+                                Some(else_expr) => Some(TypedExprIfElse(condition, then_expr, else_expr))
                                 None => None
                             }
                         None => None
                     }
                 None => None
             }
-        SourceAstExprNodeIfElse =>
-            match typed_expr_from_ast_node_id(nodes, origin, node.then_node) {
-                Some(then_expr) =>
-                    match typed_expr_from_ast_node_id(nodes, origin, node.else_node) {
-                        Some(else_expr) => Some(TypedExprIfElse(TypedBranchConditionTrue, then_expr, else_expr))
-                        None => None
-                    }
-                None => None
-            }
         SourceAstExprNodeMatch =>
-            match typed_expr_from_ast_node_id(nodes, origin, node.then_node) {
-                Some(then_expr) =>
-                    match typed_expr_from_ast_node_id(nodes, origin, node.else_node) {
-                        Some(else_expr) => Some(TypedExprIfElse(TypedBranchConditionParam(node.param_index), then_expr, else_expr))
+            match typed_branch_condition_from_ast_node(nodes, origin, node.left) {
+                Some(condition) =>
+                    match typed_expr_from_ast_node_id(nodes, origin, node.then_node) {
+                        Some(then_expr) =>
+                            match typed_expr_from_ast_node_id(nodes, origin, node.else_node) {
+                                Some(else_expr) => Some(TypedExprIfElse(condition, then_expr, else_expr))
+                                None => None
+                            }
                         None => None
                     }
                 None => None
             }
+        SourceAstExprNodeCall => typed_expr_from_ast_call_node(nodes, origin, node)
+        SourceAstExprNodeMethodCall => typed_expr_from_ast_method_node(nodes, origin, node)
+        SourceAstExprNodeIndex => typed_expr_from_ast_index_node(nodes, origin, node, typed_ast_index_target(node, "i32.op_index"))
+        SourceAstExprNodeIndexSlice => typed_expr_from_ast_index_node(nodes, origin, node, typed_ast_index_target(node, "i32.op_index_slice"))
+        SourceAstExprNodeLocal => Some(TypedExprLocal(node.member, typed_value_type_from_ast_value(node.value, node.member)))
+        SourceAstExprNodeStringLiteral => Some(TypedExprStringLiteral(node.member))
+        SourceAstExprNodeCast =>
+            match typed_expr_from_ast_node_id(nodes, origin, node.left) {
+                Some(value) => Some(TypedExprCast(value, typed_value_type_from_ast_value(node.value, node.member)))
+                None => None
+            }
+        SourceAstExprNodeStructNew => typed_expr_from_ast_struct_new_node(nodes, origin, node)
+        SourceAstExprNodeFieldGet => typed_expr_from_ast_field_get_node(nodes, origin, node)
         SourceAstExprNodeUnknown => None
     }
 
@@ -1883,7 +2445,7 @@ def typed_ast_owner_match_param_body(): TypedExprKind =
 
 /// Build the typed body carried by parser-owned full AST evidence.
 def typed_expr_from_ast_owner(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact): Option[TypedExprKind] =
-    match typed_expr_from_ast_node_id(nodes, origin, 0) {
+    match typed_expr_from_ast_node_id(nodes, origin, origin.root_node_id) {
         Some(body) => Some(body)
         None =>
             if origin.from_chibacc { None }
@@ -1910,7 +2472,8 @@ def typed_function_fact_from_ast_owner(nodes: Array[SourceAstExprNodeFact], orig
     if origin.from_chibacc == false { None }
     else {
         match typed_expr_from_ast_owner(nodes, origin) {
-            Some(body) =>
+            Some(body) => {
+                let param_count = if origin.i32_param_count > 0 { origin.i32_param_count } else if origin.has_i32_match_param_body { 1 } else { 0 }
                 Some(TypedFunctionFact {
                     owner: origin.owner,
                     file: origin.file,
@@ -1918,9 +2481,12 @@ def typed_function_fact_from_ast_owner(nodes: Array[SourceAstExprNodeFact], orig
                     local_symbol: origin.name,
                     is_main: origin.name == "main",
                     returns_i32: true,
-                    i32_param_count: if origin.has_i32_match_param_body { 1 } else { 0 },
+                    i32_param_count: param_count,
+                    param_types: typed_ast_owner_param_types(nodes, origin, param_count, 0, Vec[TypedValueType].new()),
+                    result_type: typed_expr_result_type(body),
                     body: body,
                 })
+            }
             None => None
         }
     }
@@ -1935,6 +2501,72 @@ def typed_function_fact_has_symbol(functions: Array[TypedFunctionFact], symbol: 
 def typed_function_facts_copy_to_vec(functions: Array[TypedFunctionFact], index: usize, out: Vec[TypedFunctionFact]): Vec[TypedFunctionFact] =
     if index == functions.len() { out }
     else { typed_function_facts_copy_to_vec(functions, index + 1, out.push(functions.get(index))) }
+
+/// Stable synthetic binder for compiler-provided builtin intrinsic helpers.
+def typed_builtin_intrinsic_binder(index: usize): BinderId =
+    BinderId { index: 1000000 + index }
+
+/// Build one compiler-provided builtin i32 binary intrinsic helper.
+def typed_builtin_i32_binary_intrinsic(index: usize, symbol: str, op: PrimitiveBinaryOp): TypedFunctionFact =
+    TypedFunctionFact {
+        owner: typed_builtin_intrinsic_binder(index),
+        file: SourceFileId { index: 0 },
+        symbol: symbol,
+        local_symbol: symbol,
+        is_main: false,
+        returns_i32: true,
+        i32_param_count: 2,
+        param_types: typed_i32_param_types(2, Vec[TypedValueType].new()),
+        result_type: TypedValI32,
+        body: TypedExprPrimitiveBinary(op, TypedExprTypedParam(0, TypedValI32), TypedExprTypedParam(1, TypedValI32)),
+    }
+
+/// Build the compiler-provided i32 index intrinsic helper used by bootstrap AST facts.
+def typed_builtin_i32_index_intrinsic(): TypedFunctionFact =
+    TypedFunctionFact {
+        owner: typed_builtin_intrinsic_binder(4),
+        file: SourceFileId { index: 0 },
+        symbol: "i32.op_index",
+        local_symbol: "i32.op_index",
+        is_main: false,
+        returns_i32: true,
+        i32_param_count: 2,
+        param_types: typed_i32_param_types(2, Vec[TypedValueType].new()),
+        result_type: TypedValI32,
+        body: TypedExprPrimitiveBinary(PrimitiveBinaryAdd, TypedExprTypedParam(0, TypedValI32), TypedExprTypedParam(1, TypedValI32)),
+    }
+
+/// Build the compiler-provided i32 slice intrinsic helper used by bootstrap AST facts.
+def typed_builtin_i32_index_slice_intrinsic(): TypedFunctionFact =
+    TypedFunctionFact {
+        owner: typed_builtin_intrinsic_binder(5),
+        file: SourceFileId { index: 0 },
+        symbol: "i32.op_index_slice",
+        local_symbol: "i32.op_index_slice",
+        is_main: false,
+        returns_i32: true,
+        i32_param_count: 3,
+        param_types: typed_i32_param_types(3, Vec[TypedValueType].new()),
+        result_type: TypedValI32,
+        body: TypedExprPrimitiveBinary(
+            PrimitiveBinaryAdd,
+            TypedExprPrimitiveBinary(PrimitiveBinaryAdd, TypedExprTypedParam(0, TypedValI32), TypedExprTypedParam(1, TypedValI32)),
+            TypedExprTypedParam(2, TypedValI32)),
+    }
+
+/// Append one builtin intrinsic helper only when no source/parser symbol already owns it.
+def typed_function_facts_push_builtin_if_absent(functions: Array[TypedFunctionFact], symbol: str, fact: TypedFunctionFact, out: Vec[TypedFunctionFact]): Vec[TypedFunctionFact] =
+    if typed_function_fact_has_symbol(functions, symbol, 0) { out }
+    else { out.push(fact) }
+
+/// Append builtin intrinsic helpers after user/parser functions so user-defined methods still win.
+def typed_function_facts_append_builtin_i32_intrinsics(functions: Array[TypedFunctionFact], out: Vec[TypedFunctionFact]): Array[TypedFunctionFact] =
+    let with_add = typed_function_facts_push_builtin_if_absent(functions, "i32.op_add", typed_builtin_i32_binary_intrinsic(0, "i32.op_add", PrimitiveBinaryAdd), out)
+    let with_sub = typed_function_facts_push_builtin_if_absent(functions, "i32.op_sub", typed_builtin_i32_binary_intrinsic(1, "i32.op_sub", PrimitiveBinarySub), with_add)
+    let with_mul = typed_function_facts_push_builtin_if_absent(functions, "i32.op_mul", typed_builtin_i32_binary_intrinsic(2, "i32.op_mul", PrimitiveBinaryMul), with_sub)
+    let with_div = typed_function_facts_push_builtin_if_absent(functions, "i32.op_div", typed_builtin_i32_binary_intrinsic(3, "i32.op_div", PrimitiveBinaryDiv), with_mul)
+    let with_index = typed_function_facts_push_builtin_if_absent(functions, "i32.op_index", typed_builtin_i32_index_intrinsic(), with_div)
+    typed_function_facts_push_builtin_if_absent(functions, "i32.op_index_slice", typed_builtin_i32_index_slice_intrinsic(), with_index).freeze()
 
 /// Append parser-owned typed function facts without duplicating scanner-derived symbols.
 def typed_function_facts_append_ast_owners(base: Array[TypedFunctionFact], origins: Array[TypedAstOwnerSymbolFact], nodes: Array[SourceAstExprNodeFact], index: usize, out: Vec[TypedFunctionFact]): Array[TypedFunctionFact] =
@@ -1953,7 +2585,33 @@ def typed_function_facts_append_ast_owners(base: Array[TypedFunctionFact], origi
 
 /// Merge scanner-derived and parser-owned typed function facts.
 def typed_function_facts_with_ast_owners(base: Array[TypedFunctionFact], origins: Array[TypedAstOwnerSymbolFact], nodes: Array[SourceAstExprNodeFact]): Array[TypedFunctionFact] =
-    typed_function_facts_append_ast_owners(base, origins, nodes, 0, typed_function_facts_copy_to_vec(base, 0, Vec[TypedFunctionFact].new()))
+    let merged = typed_function_facts_append_ast_owners(base, origins, nodes, 0, typed_function_facts_copy_to_vec(base, 0, Vec[TypedFunctionFact].new()))
+    typed_function_facts_append_builtin_i32_intrinsics(merged, typed_function_facts_copy_to_vec(merged, 0, Vec[TypedFunctionFact].new()))
+
+/// Rebuild one function fact after full function-table result inference is available.
+def typed_function_fact_with_final_result(functions: Array[TypedFunctionFact], function: TypedFunctionFact): TypedFunctionFact =
+    TypedFunctionFact {
+        owner: function.owner,
+        file: function.file,
+        symbol: function.symbol,
+        local_symbol: function.local_symbol,
+        is_main: function.is_main,
+        returns_i32: function.returns_i32,
+        i32_param_count: function.i32_param_count,
+        param_types: function.param_types,
+        result_type: if function.returns_i32 { TypedValI32 } else { typed_expr_result_type_with_functions(functions, function.body) },
+        body: function.body,
+    }
+
+/// Finalize function result types after all user/parser/builtin functions are visible.
+def typed_function_facts_finalize_result_types(functions: Array[TypedFunctionFact], index: usize, out: Vec[TypedFunctionFact]): Array[TypedFunctionFact] =
+    if index == functions.len() { out.freeze() }
+    else {
+        typed_function_facts_finalize_result_types(
+            functions,
+            index + 1,
+            out.push(typed_function_fact_with_final_result(functions, functions.get(index))))
+    }
 
 /// Find one byte in a bounded source region.
 def typed_adt_find_byte_or_end(text: String, offset: usize, end: usize, byte: u8): usize =
@@ -2192,6 +2850,8 @@ def ast_owner_symbol_fact_from_alpha(origin: AlphaAstOwnerOrigin): TypedAstOwner
         has_i32_prefix_neg_body: origin.has_i32_prefix_neg_body,
         has_i32_match_param_body: origin.has_i32_match_param_body,
         from_chibacc: origin.from_chibacc,
+        root_node_id: origin.root_node_id,
+        i32_param_count: origin.i32_param_count,
     }
 
 /// Build typed parser-owned namespace symbol facts.
@@ -2341,7 +3001,7 @@ def method_use_surface_fact_from_skeleton(project: ProjectSurface, item: TypedIt
                 receiver: receiver,
                 receiver_type: receiver_ty,
                 member: SourceNameSlice { offset: member_start, len: member_end - member_start },
-                static_receiver: match receiver_ty { Some(_) => false  None => true },
+                static_receiver: match receiver_ty { Some(_) => false, None => true },
             })
         }
     }
@@ -3082,7 +3742,8 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let closure_surface = closure_surface_facts_from_skeletons(skeletons, 0, Vec[ClosureSurfaceFact].new())
     let scope_shadow = scope_shadow_facts_from_skeletons(skeletons, 0, Vec[ScopeShadowFact].new())
     let skeleton_functions = typed_function_facts_from_skeletons(module.project, skeletons, 0, Vec[TypedFunctionFact].new())
-    let functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, module.project.facts.ast_expr_nodes)
+    let initial_functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, module.project.facts.ast_expr_nodes)
+    let functions = typed_function_facts_finalize_result_types(initial_functions, 0, Vec[TypedFunctionFact].new())
     let adt_ctors = typed_adt_ctors_from_skeletons(module.project, skeletons, 0, Vec[LoweredAdtCtor].new())
     if typed_source_has_utf8_scanner_fallback(module.project) {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
@@ -3173,7 +3834,8 @@ def check_l2_types(module: TypedModule): Result[TypedModule, SemanticDiagnostics
 
 /// Historical diagnostics kept stable for tooling while primary lowering now continues with facts.
 def semantic_retired_blocker_messages(): Array[String] =
-    Vec[String].new()
+    {
+        Vec[String].new()
         .push("missing-facts: method/operator surface fact generation absent")
         .push("missing-lowering: method receiver Self binding absent")
         .push("missing-facts: generic surface fact generation absent")
@@ -3203,3 +3865,4 @@ def semantic_retired_blocker_messages(): Array[String] =
         .push("invalid-surface: operator overload candidate missing")
         .push("invalid-surface: operator operand type mismatch")
         .freeze()
+    }

@@ -5,7 +5,7 @@ use parser.chiba_level1.*
 use backend.cir.ir.*
 
 data AlphaBinding {
-    AlphaBinding(Str, i64, i64)
+    AlphaBinding(Str, Str, i64, i64)
 }
 
 data AlphaEnv {
@@ -16,10 +16,11 @@ data AlphaEnv {
 type AlphaCtx {
     next_binder: i64
     env: i64
+    namespace_name: Str
 }
 
 def alpha_ctx_new(): AlphaCtx =
-    AlphaCtx { next_binder: heap_alloc(8), env: heap_alloc(8) }
+    AlphaCtx { next_binder: heap_alloc(8), env: heap_alloc(8), namespace_name: mk_str("", 0) }
 
 def alpha_ctx_init(ctx: AlphaCtx): AlphaCtx = {
     let _ = store64(ctx.next_binder, 0, 0)
@@ -27,14 +28,17 @@ def alpha_ctx_init(ctx: AlphaCtx): AlphaCtx = {
     ctx
 }
 
+def alpha_ctx_with_namespace(ctx: AlphaCtx, namespace_name: Str): AlphaCtx =
+    AlphaCtx { next_binder: ctx.next_binder, env: ctx.env, namespace_name: namespace_name }
+
 def alpha_fresh(ctx: AlphaCtx): i64 = {
     let id = load64(ctx.next_binder, 0)
     let _ = store64(ctx.next_binder, 0, id + 1)
     id
 }
 
-def alpha_env_push(env: AlphaEnv, name: Str, id: i64, is_global: i64): AlphaEnv =
-    AlphaEnvCons(AlphaBinding(name, id, is_global), env)
+def alpha_env_push(env: AlphaEnv, namespace_name: Str, name: Str, id: i64, is_global: i64): AlphaEnv =
+    AlphaEnvCons(AlphaBinding(namespace_name, name, id, is_global), env)
 
 def alpha_env_get(ctx: AlphaCtx): AlphaEnv =
     load64(ctx.env, 0) as AlphaEnv
@@ -42,17 +46,20 @@ def alpha_env_get(ctx: AlphaCtx): AlphaEnv =
 def alpha_env_set(ctx: AlphaCtx, env: AlphaEnv): i64 =
     store64(ctx.env, 0, env as i64)
 
+def alpha_namespace_get(ctx: AlphaCtx): Str =
+    ctx.namespace_name
+
 def alpha_env_push_ctx(ctx: AlphaCtx, name: Str, id: i64, is_global: i64): i64 =
-    alpha_env_set(ctx, alpha_env_push(alpha_env_get(ctx), name, id, is_global))
+    alpha_env_set(ctx, alpha_env_push(alpha_env_get(ctx), alpha_namespace_get(ctx), name, id, is_global))
 
 def alpha_env_lookup(env: AlphaEnv, name: Str): CirRef =
     match env {
-        AlphaEnvEnd => L1RefUnresolved(name)
+        AlphaEnvEnd => L1RefUnresolved(mk_str("", 0), name)
         AlphaEnvCons(binding, rest) =>
             match binding {
-                AlphaBinding(bound_name, id, is_global) =>
+                AlphaBinding(namespace_name, bound_name, id, is_global) =>
                     if streq(bound_name, name) != 0 {
-                        if is_global != 0 { L1RefGlobal(name) }
+                        if is_global != 0 { L1RefGlobal(namespace_name, name, id) }
                         else { L1RefLocal(id, name) }
                     }
                     else { alpha_env_lookup(rest, name) }
@@ -64,7 +71,7 @@ def alpha_env_lookup_id(env: AlphaEnv, name: Str): i64 =
         AlphaEnvEnd => -1
         AlphaEnvCons(binding, rest) =>
             match binding {
-                AlphaBinding(bound_name, id, _) =>
+                AlphaBinding(_, bound_name, id, _) =>
                     if streq(bound_name, name) != 0 { id }
                     else { alpha_env_lookup_id(rest, name) }
             }
@@ -81,7 +88,7 @@ def alpha_param_list(params: CirParamList, ctx: AlphaCtx): CirParamList =
             match param {
                 L0Param(name, ty) => {
                     let id = alpha_fresh(ctx)
-                    let binder = cir_binder(id, name)
+                    let binder = cir_binder_in(mk_str("", 0), id, name)
                     let _ = alpha_env_push_ctx(ctx, name, id, 0)
                     CirParamCons(L1Param(binder, ty), alpha_param_list(rest, ctx))
                 }
@@ -123,7 +130,7 @@ def alpha_stmt_list(stmts: CirStmtList, tail: CirExpr, ctx: AlphaCtx): AlphaStmt
                 L0StmtLet(name, value) => {
                     let value2 = alpha_expr(value, ctx)
                     let id = alpha_fresh(ctx)
-                    let binder = cir_binder(id, name)
+                    let binder = cir_binder_in(mk_str("", 0), id, name)
                     let _ = alpha_env_push_ctx(ctx, name, id, 0)
                     match alpha_stmt_list(rest, tail, ctx) {
                         AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtLet(binder, value2), rest2), tail2)
@@ -148,11 +155,23 @@ def alpha_stmt_list(stmts: CirStmtList, tail: CirExpr, ctx: AlphaCtx): AlphaStmt
                         AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtAssign(lhs2, rhs2), rest2), tail2)
                     }
                 }
+                L0StmtLetPattern(pat, value) => {
+                    let value2 = alpha_expr(value, ctx)
+                    let _ = alpha_bind_pattern_ctx(ctx, pat)
+                    match alpha_stmt_list(rest, tail, ctx) {
+                        AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtLetPattern(pat, value2), rest2), tail2)
+                    }
+                }
                 L0StmtFor(label, cond, body) => {
                     let cond2 = alpha_expr(cond, ctx)
                     let body2 = alpha_expr(body, ctx)
                     match alpha_stmt_list(rest, tail, ctx) {
                         AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtFor(label, cond2, body2), rest2), tail2)
+                    }
+                }
+                L0StmtUnsupported(ast, reason) => {
+                    match alpha_stmt_list(rest, tail, ctx) {
+                        AlphaStmtResult(rest2, tail2) => AlphaStmtResult(CirStmtCons(L1StmtUnsupported(ast, reason), rest2), tail2)
                     }
                 }
                 _ => {
@@ -242,7 +261,7 @@ def alpha_expr(expr: CirExpr, ctx: AlphaCtx): CirExpr =
             L1OpReset(label, alpha_expr(body, ctx))
         L0OpShift(label, name, body) => {
             let id = alpha_fresh(ctx)
-            let binder = cir_binder(id, name)
+            let binder = cir_binder_in(alpha_namespace_get(ctx), id, name)
             let old_env = alpha_env_get(ctx)
             let _ = alpha_env_push_ctx(ctx, name, id, 0)
             let body2 = alpha_expr(body, ctx)
@@ -288,7 +307,7 @@ def alpha_item(item: CirItem, ctx: AlphaCtx): CirItem =
         L0ItemDef(name, params, ret, body) => {
             let old_env = alpha_env_get(ctx)
             let id = alpha_env_lookup_id(old_env, name)
-            let binder = cir_binder(id, name)
+            let binder = cir_binder_in(alpha_namespace_get(ctx), id, name)
             let params2 = alpha_param_list(params, ctx)
             let body2 = alpha_expr(body, ctx)
             let _ = alpha_env_set(ctx, old_env)
@@ -296,7 +315,7 @@ def alpha_item(item: CirItem, ctx: AlphaCtx): CirItem =
         }
         L0ItemExtern(name, params, ret, import) => {
             let id = alpha_env_lookup_id(alpha_env_get(ctx), name)
-            let binder = cir_binder(id, name)
+            let binder = cir_binder_in(alpha_namespace_get(ctx), id, name)
             let params2 = alpha_param_list(params, ctx)
             L1ItemExtern(binder, params2, ret, import)
         }
@@ -335,7 +354,15 @@ def alpha_items(items: CirItemList, ctx: AlphaCtx): CirItemList =
 def alpha_module(module: CirModule): CirModule =
     match module {
         L0Module(header, items) => {
-            let ctx = alpha_ctx_init(alpha_ctx_new())
+            let base_ctx = alpha_ctx_init(alpha_ctx_new())
+            let ctx = match header {
+                SourceFile(_, ns, _) =>
+                    match ns {
+                        Namespace(name) => alpha_ctx_with_namespace(base_ctx, name)
+                        _ => base_ctx
+                    }
+                _ => base_ctx
+            }
             let _ = alpha_prebind_items(items, ctx)
             L1Module(header, alpha_items(items, ctx))
         }

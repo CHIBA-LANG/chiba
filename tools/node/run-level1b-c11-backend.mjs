@@ -68,22 +68,34 @@ const REQUIRED_TEXT = [
   "data CoreExprKind",
   "data CoreI32ConstAtom",
   "data CoreBranchCondition",
+  "data CoreValueType",
   "CoreExprI32Const",
   "CoreExprParam(usize)",
+  "CoreExprTypedParam",
+  "CoreExprLocal",
+  "CoreExprStringLiteral",
+  "CoreExprCast",
+  "CoreExprStructNew",
+  "CoreExprFieldGet",
+  "CoreExprCall",
   "CoreExprTailCall",
   "CoreExprTailCallArgs",
   "CoreExprPrimitiveBinary",
   "CoreExprIfElse",
   "CoreExprBranchJoinPending",
   "def core_i32_const_atom_from_typed",
+  "def core_value_types_from_typed",
   "def core_branch_condition_from_typed",
   "export_main: bool",
   "function_body: Option[CoreExprKind]",
   "type CoreFunctionSymbol",
   "function_symbol: Option[CoreFunctionSymbol]",
   "i32_param_count: usize",
+  "param_types: Array[CoreValueType]",
   "def emit_core_function_symbol",
+  "def emit_core_typed_function_params",
   "def emit_core_function_params",
+  "def emit_core_op_function_params",
   "frame_count: usize",
   "CoreOpFunction",
   "CoreOpStacklessFunction",
@@ -195,8 +207,14 @@ const REQUIRED_TEXT = [
   "def emit_wat",
   "def empty_wat_module",
   "def emit_core_function",
+  "def emit_core_stackless_function",
+  "def emit_core_owner_suffix",
+  "def emit_contn_resume_function_name",
+  "def emit_contn_frame_chain_function_name",
+  "def emit_contn_package_function_name",
   "def emit_core_expr_instruction",
-  "def emit_core_if_else_expr",
+  "def emit_core_if_else_instruction",
+  "def emit_core_if_else_body",
   "def emit_core_function_body",
   "def validate_core_expr_symbol",
   "def core_expr_args_from_cps_terms",
@@ -204,7 +222,7 @@ const REQUIRED_TEXT = [
   "CoreExprTailCallArgs(target, args)",
   "CoreExprPrimitiveBinary(op, left, right)",
   "def core_expr_from_stackless_resume_body",
-  "CoreOpStacklessFunction => Ok(\"(func \".concat(emit_core_function_body(op.function_body))",
+  "CoreOpStacklessFunction => Ok(emit_core_stackless_function(ops, op))",
   "def emit_boxed_cont1_resume_function",
   "def emit_contn_frame_chain_function",
   "def emit_contn_package_function",
@@ -565,57 +583,139 @@ function astExprNodes(full) {
   return nodes;
 }
 
-function astExprNode(nodes, ownerName, nodeId) {
-  const node = nodes.find((item) => item.ownerNamespace === "demo" && item.ownerName === ownerName && item.nodeId === nodeId);
-  if (node == null) fail(`missing AST expression node ${ownerName}#${nodeId}`);
+function astOwnerParts(ownerOrName, fallbackNamespace = "demo") {
+  if (typeof ownerOrName === "object" && ownerOrName != null) return ownerOrName;
+  if (typeof ownerOrName === "string" && ownerOrName.includes("::")) {
+    const [namespace, name] = ownerOrName.split("::");
+    return { namespace, name };
+  }
+  return { namespace: fallbackNamespace, name: ownerOrName };
+}
+
+function astExprNode(nodes, ownerOrName, nodeId) {
+  const owner = astOwnerParts(ownerOrName);
+  const node = nodes.find((item) => item.ownerNamespace === owner.namespace && item.ownerName === owner.name && item.nodeId === nodeId);
+  if (node == null) fail(`missing AST expression node ${owner.namespace}::${owner.name}#${nodeId}`);
   return node;
 }
 
-function astBinaryInstruction(value) {
-  if (value === 0) return "i32.add";
-  if (value === 1) return "i32.sub";
-  if (value === 2) return "i32.mul";
-  if (value === 3) return "i32.div_s";
+function astBinaryTarget(value) {
+  if (value === 0) return "i32.op_add";
+  if (value === 1) return "i32.op_sub";
+  if (value === 2) return "i32.op_mul";
+  if (value === 3) return "i32.op_div";
   fail(`unsupported AST primitive binary ordinal ${value}`);
 }
 
 function coreExprFromAstNode(nodes, ownerName, nodeId) {
-  const node = astExprNode(nodes, ownerName, nodeId);
+  const owner = astOwnerParts(ownerName);
+  const node = astExprNode(nodes, owner, nodeId);
   if (node.kind === "SourceAstExprNodeI32Const") return { kind: "const", value: node.value };
   if (node.kind === "SourceAstExprNodeParam") return { kind: "param", index: node.paramIndex };
   if (node.kind === "SourceAstExprNodePrefixNeg") {
     return {
-      kind: "binary",
-      instruction: "i32.sub",
-      left: { kind: "const", value: 0 },
-      right: coreExprFromAstNode(nodes, ownerName, node.left),
+      kind: "tailcall_args",
+      target: "i32.op_sub",
+      args: [{ kind: "const", value: 0 }, coreExprFromAstNode(nodes, owner, node.left)],
     };
   }
   if (node.kind === "SourceAstExprNodeBinary") {
     return {
-      kind: "binary",
-      instruction: astBinaryInstruction(node.value),
-      left: coreExprFromAstNode(nodes, ownerName, node.left),
-      right: coreExprFromAstNode(nodes, ownerName, node.right),
+      kind: "tailcall_args",
+      target: astBinaryTarget(node.value),
+      args: [coreExprFromAstNode(nodes, owner, node.left), coreExprFromAstNode(nodes, owner, node.right)],
     };
   }
   if (node.kind === "SourceAstExprNodeIfElse") {
     return {
       kind: "if",
-      condition: { kind: "const", value: 1 },
-      thenExpr: coreExprFromAstNode(nodes, ownerName, node.thenNode),
-      elseExpr: coreExprFromAstNode(nodes, ownerName, node.elseNode),
+      condition: astIfCondition(nodes, owner, node),
+      thenExpr: coreExprFromAstNode(nodes, owner, node.thenNode),
+      elseExpr: coreExprFromAstNode(nodes, owner, node.elseNode),
     };
   }
   if (node.kind === "SourceAstExprNodeMatch") {
     return {
       kind: "if",
-      condition: coreExprFromAstNode(nodes, ownerName, node.left),
-      thenExpr: coreExprFromAstNode(nodes, ownerName, node.thenNode),
-      elseExpr: coreExprFromAstNode(nodes, ownerName, node.elseNode),
+      condition: astConditionNode(nodes, owner, node.left),
+      thenExpr: coreExprFromAstNode(nodes, owner, node.thenNode),
+      elseExpr: coreExprFromAstNode(nodes, owner, node.elseNode),
+    };
+  }
+  if (node.kind === "SourceAstExprNodeCall") {
+    const args = astNodeArgs(nodes, owner, node);
+    if (args.length === 0) return { kind: "tailcall", target: astNodeTarget(node) };
+    return { kind: "tailcall_args", target: astNodeTarget(node), args };
+  }
+  if (node.kind === "SourceAstExprNodeMethodCall") {
+    return {
+      kind: "tailcall_args",
+      target: astNodeTarget(node),
+      args: [coreExprFromAstNode(nodes, owner, node.left), ...astNodeArgs(nodes, owner, node)],
+    };
+  }
+  if (node.kind === "SourceAstExprNodeIndex") {
+    return {
+      kind: "tailcall_args",
+      target: astNodeTarget(node, "i32.op_index"),
+      args: [coreExprFromAstNode(nodes, owner, node.left), ...astNodeArgs(nodes, owner, node)],
+    };
+  }
+  if (node.kind === "SourceAstExprNodeIndexSlice") {
+    return {
+      kind: "tailcall_args",
+      target: astNodeTarget(node, "i32.op_index_slice"),
+      args: [coreExprFromAstNode(nodes, owner, node.left), ...astNodeArgs(nodes, owner, node)],
     };
   }
   fail(`unsupported AST expression node kind ${node.kind}`);
+}
+
+function astConditionNode(nodes, owner, nodeId) {
+  const node = astExprNode(nodes, owner, nodeId);
+  if (node.kind === "SourceAstExprNodeI32Const") return { kind: "const", value: node.value === 0 ? 0 : 1 };
+  if (node.kind === "SourceAstExprNodeParam") return { kind: "param", index: node.paramIndex };
+  fail(`unsupported AST condition node kind ${node.kind}`);
+}
+
+function astIfCondition(nodes, owner, node) {
+  if ((node.left ?? 0) === 0) return { kind: "const", value: 1 };
+  return astConditionNode(nodes, owner, node.left);
+}
+
+function astNodeTarget(node, fallback = "") {
+  return typeof node.callee === "string" && node.callee.length > 0 ? node.callee : fallback;
+}
+
+function astNodeArgCount(node) {
+  return node.argCount ?? node.arg_count ?? 0;
+}
+
+function astNodeArgs(nodes, ownerName, node) {
+  const ids = Array.isArray(node.args)
+    ? node.args
+    : [node.arg0, node.arg1, node.arg2].slice(0, astNodeArgCount(node));
+  return ids.map((id) => coreExprFromAstNode(nodes, ownerName, id));
+}
+
+function astPrimaryBuiltinIntrinsicFunctions() {
+  return [
+    { symbol: "i32.op_add", body: { kind: "binary", instruction: "i32.add", left: { kind: "param", index: 0 }, right: { kind: "param", index: 1 } }, params: 2 },
+    { symbol: "i32.op_sub", body: { kind: "binary", instruction: "i32.sub", left: { kind: "param", index: 0 }, right: { kind: "param", index: 1 } }, params: 2 },
+    { symbol: "i32.op_mul", body: { kind: "binary", instruction: "i32.mul", left: { kind: "param", index: 0 }, right: { kind: "param", index: 1 } }, params: 2 },
+    { symbol: "i32.op_div", body: { kind: "binary", instruction: "i32.div_s", left: { kind: "param", index: 0 }, right: { kind: "param", index: 1 } }, params: 2 },
+    { symbol: "i32.op_index", body: { kind: "binary", instruction: "i32.add", left: { kind: "param", index: 0 }, right: { kind: "param", index: 1 } }, params: 2 },
+    {
+      symbol: "i32.op_index_slice",
+      body: {
+        kind: "binary",
+        instruction: "i32.add",
+        left: { kind: "binary", instruction: "i32.add", left: { kind: "param", index: 0 }, right: { kind: "param", index: 1 } },
+        right: { kind: "param", index: 2 },
+      },
+      params: 3,
+    },
+  ];
 }
 
 function normalizeSourceExpr(expr) {
@@ -1614,6 +1714,7 @@ function checkAstPrimaryTypedMainWat() {
   }
   const nodes = astExprNodes(full);
   const wat = emitCoreFixtureModule([
+    ...astPrimaryBuiltinIntrinsicFunctions(),
     {
       symbol: `${full.astOwnerNamespace}::${full.astDefItemName}`,
       exportName: "main",
@@ -1623,6 +1724,12 @@ function checkAstPrimaryTypedMainWat() {
       symbol: `${full.astBranchOwnerNamespace}::${full.astBranchDefItemName}`,
       exportName: "branch",
       body: coreExprFromAstNode(nodes, full.astBranchDefItemName, 0),
+    },
+    {
+      symbol: "demo::branch_param",
+      exportName: "branch_param",
+      params: 1,
+      body: coreExprFromAstNode(nodes, "branch_param", 0),
     },
     {
       symbol: `${full.astNegOwnerNamespace}::${full.astNegDefItemName}`,
@@ -1635,13 +1742,48 @@ function checkAstPrimaryTypedMainWat() {
       params: 1,
       body: coreExprFromAstNode(nodes, full.astMatchDefItemName, 0),
     },
+    {
+      symbol: "demo::id",
+      exportName: "id",
+      params: 1,
+      body: coreExprFromAstNode(nodes, "id", 0),
+    },
+    {
+      symbol: "demo::call_id",
+      exportName: "call_id",
+      body: coreExprFromAstNode(nodes, "call_id", 0),
+    },
+    {
+      symbol: "demo::i32_index",
+      exportName: "i32_index",
+      params: 2,
+      body: coreExprFromAstNode(nodes, "i32_index", 0),
+    },
+    {
+      symbol: "demo::index_style",
+      exportName: "index_style",
+      params: 1,
+      body: coreExprFromAstNode(nodes, "index_style", 0),
+    },
+    {
+      symbol: "demo::method_style",
+      exportName: "method_style",
+      body: coreExprFromAstNode(nodes, "method_style", 0),
+    },
   ]);
   checkWatArtifactRunnable("ast-primary-typed-main", wat, [
     { exportName: "main", expectedStdout: "14" },
     { exportName: "branch", expectedStdout: "7" },
+    { exportName: "branch_param", args: [1], expectedStdout: "7" },
+    { exportName: "branch_param", args: [0], expectedStdout: "13" },
     { exportName: "neg", expectedStdout: "-7" },
     { exportName: "choose", args: [1], expectedStdout: "7" },
     { exportName: "choose", args: [0], expectedStdout: "13" },
+    { exportName: "id", args: [23], expectedStdout: "23" },
+    { exportName: "call_id", expectedStdout: "23" },
+    { exportName: "i32_index", args: [20, 7], expectedStdout: "27" },
+    { exportName: "index_style", args: [20], expectedStdout: "27" },
+    { exportName: "method_style", expectedStdout: "29" },
   ]);
 }
 

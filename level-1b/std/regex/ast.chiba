@@ -76,4 +76,4 @@ def regex_repeat_lazy(min: usize, max: Option[usize]): RegexRepeat =
 
 /// Return true when an AST node is empty.
 def RegexAst.is_empty(self): bool =
-    match self { RegexEmpty => true  _ => false }
+    match self { RegexEmpty => true, _ => false }

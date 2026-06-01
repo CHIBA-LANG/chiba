@@ -132,8 +132,8 @@ def row_fields_same(left: Array[RowFieldId], right: Array[RowFieldId], index: us
 /// Return true when optional row tails are the same type variable shape.
 def row_tail_same(left: Option[TypeVar], right: Option[TypeVar]): bool =
     match left {
-        None => match right { None => true  Some(_) => false }
-        Some(var) => match right { Some(other) => var.eq(other)  None => false }
+        None => match right { None => true, Some(_) => false }
+        Some(var) => match right { Some(other) => var.eq(other), None => false }
     }
 
 /// Unify two types under an existing substitution set.
@@ -166,16 +166,16 @@ def unify_with_substitutions(left: SemType, right: SemType, substitutions: Array
                 _ => Err(unify_diagnostic("type mismatch"))
             }
         TyArray(inner) =>
-            match r { TyArray(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+            match r { TyArray(rinner) => unify_with_substitutions(inner, rinner, substitutions), _ => Err(unify_diagnostic("type mismatch")) }
         TySlice(inner) =>
-            match r { TySlice(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+            match r { TySlice(rinner) => unify_with_substitutions(inner, rinner, substitutions), _ => Err(unify_diagnostic("type mismatch")) }
         TyRef(inner) =>
-            match r { TyRef(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+            match r { TyRef(rinner) => unify_with_substitutions(inner, rinner, substitutions), _ => Err(unify_diagnostic("type mismatch")) }
         TyUnsafeRef(inner) =>
-            match r { TyUnsafeRef(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+            match r { TyUnsafeRef(rinner) => unify_with_substitutions(inner, rinner, substitutions), _ => Err(unify_diagnostic("type mismatch")) }
         TyPtr(inner) =>
-            match r { TyPtr(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+            match r { TyPtr(rinner) => unify_with_substitutions(inner, rinner, substitutions), _ => Err(unify_diagnostic("type mismatch")) }
         TyAtomic(inner) =>
-            match r { TyAtomic(rinner) => unify_with_substitutions(inner, rinner, substitutions)  _ => Err(unify_diagnostic("type mismatch")) }
+            match r { TyAtomic(rinner) => unify_with_substitutions(inner, rinner, substitutions), _ => Err(unify_diagnostic("type mismatch")) }
     }
 }

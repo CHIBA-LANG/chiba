@@ -21,8 +21,12 @@ def CompileIfPredicate.eval(self, facts: CompileTargetFacts): bool =
         CompileIfEq(key, value) => compile_if_eq(key, value, facts)
         CompileIfAll(items) => compile_if_all(items, facts)
         CompileIfAny(items) => compile_if_any(items, facts)
-        CompileIfNot(item) => item.eval(facts) == false
+        CompileIfNot(item) => !compile_if_predicate_eval(item, facts)
     }
+
+/// Evaluate a compile_if predicate without relying on method-call parsing.
+def compile_if_predicate_eval(item: CompileIfPredicate, facts: CompileTargetFacts): bool =
+    item.eval(facts)
 
 /// Evaluate one key/value predicate.
 def compile_if_eq(key: String, value: String, facts: CompileTargetFacts): bool =
@@ -35,7 +39,7 @@ def compile_if_all(items: List[CompileIfPredicate], facts: CompileTargetFacts): 
     match items {
         Nil => true
         Cons(head, tail) =>
-            if head.eval(facts) { compile_if_all(tail, facts) }
+            if compile_if_predicate_eval(head, facts) { compile_if_all(tail, facts) }
             else { false }
     }
 
@@ -44,7 +48,7 @@ def compile_if_any(items: List[CompileIfPredicate], facts: CompileTargetFacts): 
     match items {
         Nil => false
         Cons(head, tail) =>
-            if head.eval(facts) { true }
+            if compile_if_predicate_eval(head, facts) { true }
             else { compile_if_any(tail, facts) }
     }
 

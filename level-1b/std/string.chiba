@@ -68,7 +68,7 @@ def str.to_string(self): String = __compiler_builtin("std.str_to_string")
 def str.to_str(self): str = self
 
 /// Return this managed byte view as a generic byte slice.
-def str.to_slice(self): Slice[u8] = self
+def str.to_slice(self): Slice[u8] = self.slice(0, self.len())
 
 /// Copy string-view bytes into a growable byte builder.
 def str.to_byte_vec_loop(self, index: usize, out: Vec[u8]): Vec[u8] =

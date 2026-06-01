@@ -573,10 +573,10 @@ def lex_init_patterns(): Vec = {
     let p83 = mk_str("(?:\")", 5)
     let _ = vec_push(pats, lex_compile_pat(p83) as i64)
     // rule 84
-    let p84 = mk_str("(?:\\{)", 6)
+    let p84 = mk_str("(?:\\$\\{)", 8)
     let _ = vec_push(pats, lex_compile_pat(p84) as i64)
     // rule 85
-    let p85 = mk_str("(?:[^\"{}]+)", 11)
+    let p85 = mk_str("(?:((?:\\\\.)|[^\"{}\\\\])+)", 23)
     let _ = vec_push(pats, lex_compile_pat(p85) as i64)
     // rule 86
     let p86 = mk_str(".", 1)

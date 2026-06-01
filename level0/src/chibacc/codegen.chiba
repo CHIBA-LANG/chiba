@@ -317,10 +317,7 @@ def replace_parser_with_lexer(out: Str, ns: Str): i64 =
     replace_parser_with_lexer_loop(out, ns, 0, 0)
 
 def replace_parser_with_lexer_loop(out: Str, ns: Str, i: i64, matched: i64): i64 =
-    if i >= ns.len {
-        if matched == 0 { str_append(out, ns) }
-        else { 0 }
-    }
+    if i >= ns.len { 0 }
     else if str_starts_with_at(ns, i, mk_str("parser", 6)) != 0 && matched == 0 {
         let _ = str_push_cstr(out, "lexer")
         replace_parser_with_lexer_loop(out, ns, i + 6, 1)
@@ -382,6 +379,7 @@ def find_sync_token_name(items: Vec, i: i64): Str =
 
 def sync_stop_token_name(sync_name: Str): Str =
     if streq(sync_name, mk_str("FatArrow", 8)) != 0 { mk_str("RBrace", 6) }
+    else if streq(sync_name, mk_str("Colon", 5)) != 0 { mk_str("RBrace", 6) }
     else { str_empty() }
 
 def emit_recovery_position_expr(out: Str, sync_name: Str): i64 = {
@@ -1758,7 +1756,10 @@ def emit_support_helpers(out: Str, token_names: Vec, bound_names: Vec): i64 = {
     let _ = emit_line_cstr(out, 1, c"if streq(name, mk_str(\"Eof\", 3)) != 0 {")
     let _ = emit_line_cstr(out, 2, c"if pos >= vec_len(tokens) { 1 } else {")
     let _ = emit_line_cstr(out, 3, c"let ts = vec_get(tokens, pos) as TokenSpan")
-    let _ = emit_line_cstr(out, 3, c"match ts.token { Eof => { 1 }  _ => { 0 } }")
+    let _ = emit_line_cstr(out, 3, c"match ts.token {")
+    let _ = emit_line_cstr(out, 4, c"Eof => 1")
+    let _ = emit_line_cstr(out, 4, c"_ => 0")
+    let _ = emit_line_cstr(out, 3, c"}")
     let _ = emit_line_cstr(out, 2, c"}")
     let _ = emit_line_cstr(out, 1, c"}")
     let _ = emit_line_cstr(out, 1, c"else if pos < vec_len(tokens) {")

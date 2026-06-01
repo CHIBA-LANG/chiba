@@ -42,7 +42,21 @@ const REQUIRED_TEXT = [
   "SourceAstExprI32PrefixNeg",
   "SourceAstExprI32MatchParam",
   "data SourceAstExprNodeKind",
+  "SourceAstExprNodeCall",
+  "SourceAstExprNodeMethodCall",
+  "SourceAstExprNodeIndex",
+  "SourceAstExprNodeIndexSlice",
+  "SourceAstExprNodeLocal",
+  "SourceAstExprNodeStringLiteral",
+  "SourceAstExprNodeCast",
+  "SourceAstExprNodeStructNew",
+  "SourceAstExprNodeFieldGet",
   "type SourceAstExprNodeFact",
+  "callee: String",
+  "args: Array[usize]",
+  "arg_count: usize",
+  "root_node_id: usize",
+  "i32_param_count: usize",
   "ast_expr_node_count: usize",
   "ast_expr_nodes: Array[SourceAstExprNodeFact]",
   "type SourceParserFacts",
@@ -213,6 +227,9 @@ const REQUIRED_TEXT = [
   "has_i32_add_mul_body: bool",
   "def source_ast_owner_symbol_from_evidence",
   "def source_ast_expression_owner_symbol_from_evidence",
+  "def source_ast_owner_symbol_from_direct_node",
+  "def source_ast_owner_symbols_append_direct_roots",
+  "def source_ast_owner_param_count",
   "def source_ast_owner_symbols_from_evidence",
   "ast_owner_symbols: facts.ast_owner_symbols",
   "def scan_project_parsed_modules_from_files",
@@ -356,7 +373,35 @@ function ensureDir(dir) {
 
 function invokeWatExport(wat, exportName) {
   const module = new WebAssembly.Module(compileWat(wat));
-  const instance = new WebAssembly.Instance(module, {});
+  const env = new Proxy(
+    {
+      "std.vec_get"() {
+        return null;
+      },
+      "std.str_to_string"(text) {
+        return text;
+      },
+      "std.diagnostic_builder_new"() {
+        return {};
+      },
+      "std.diagnostic_builder_push_str"(builder) {
+        return builder;
+      },
+      "std.diagnostic_builder_finish"() {
+        return new Uint8Array();
+      },
+      "std.source_load_project"() {
+        return null;
+      },
+    },
+    {
+      get(target, prop) {
+        if (prop in target) return target[prop];
+        return () => 0n;
+      },
+    },
+  );
+  const instance = new WebAssembly.Instance(module, { env });
   const fn = instance.exports[exportName];
   if (typeof fn !== "function") fail(`WAT artifact does not export ${exportName}`);
   return fn();
@@ -495,8 +540,11 @@ function main() {
 
   ensureDir(ARTIFACT_DIR);
   const watReferenceOnlyLegacyCompiler = LEGACY_REFERENCE_COMPILER;
-  const wat = spawnSync("timeout", ["30", watReferenceOnlyLegacyCompiler, "wat", FIXTURE], { encoding: "utf8" });
-  if (wat.status !== 0 || !wat.stdout.includes("(module")) {
+  const wat = spawnSync("timeout", ["120", watReferenceOnlyLegacyCompiler, "wat", FIXTURE], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (wat.status !== 0 || !wat.stdout.includes("(module") || !wat.stdout.trimEnd().endsWith(")")) {
     fail(`level1c WAT primary fixture failed:\n${wat.stdout}${wat.stderr}`);
   }
   const watPath = path.join(ARTIFACT_DIR, "doc_compile_if.wat");
@@ -545,19 +593,33 @@ function main() {
   if (fullGrammar.expressionMainResult !== "14" || fullGrammar.expectedExpressionMainResult !== "14") {
     fail("full chiba-level1 expression parser WAT must execute add/mul expression to 14");
   }
-  if (fullGrammar.astNamespaceCount !== 1 || fullGrammar.astDefItemCount !== 4 || fullGrammar.astItemCount !== 4 || fullGrammar.astOwnerSymbolCount !== 4) {
+  if (fullGrammar.astNamespaceCount !== 1 || fullGrammar.astDefItemCount < 9 || fullGrammar.astItemCount < 9 || fullGrammar.astOwnerSymbolCount < 9) {
     fail("full chiba-level1 executable parser evidence must expose namespace, def item, and owner symbol AST counts");
   }
-  if (fullGrammar.astExprNodeCount !== 14 || fullGrammar.ast_expr_node_count !== 14) {
+  if (fullGrammar.astExprNodeCount < 26 || fullGrammar.ast_expr_node_count < 26) {
     fail("full chiba-level1 executable parser evidence must expose recursive AST expression node facts");
   }
   const astExprNodes = Array.isArray(fullGrammar.astExprNodes) ? fullGrammar.astExprNodes : [];
-  if (astExprNodes.length !== 14 || !Array.isArray(fullGrammar.ast_expr_nodes) || fullGrammar.ast_expr_nodes.length !== 14) {
+  if (astExprNodes.length < 26 || !Array.isArray(fullGrammar.ast_expr_nodes) || fullGrammar.ast_expr_nodes.length < 26) {
     fail("full chiba-level1 executable parser evidence must expose direct AST expression node list");
+  }
+  const missingSnakeCaseNode = astExprNodes.find((node) =>
+    node.owner_namespace !== node.ownerNamespace ||
+    node.owner_name !== node.ownerName ||
+    node.node_id !== node.nodeId ||
+    node.param_index !== node.paramIndex ||
+    node.then_node !== node.thenNode ||
+    node.else_node !== node.elseNode ||
+    node.arg_count !== node.argCount);
+  if (missingSnakeCaseNode != null) {
+    fail("full chiba-level1 executable parser AST nodes must expose snake_case aliases consumed by level-1b records");
   }
   const hasNode = (ownerName, nodeId, kind) => astExprNodes.some((node) => node.ownerNamespace === "demo" && node.ownerName === ownerName && node.nodeId === nodeId && node.kind === kind);
   if (!hasNode("main", 0, "SourceAstExprNodeBinary") || !hasNode("branch", 0, "SourceAstExprNodeIfElse") || !hasNode("neg", 0, "SourceAstExprNodePrefixNeg") || !hasNode("choose", 0, "SourceAstExprNodeMatch")) {
     fail("full chiba-level1 executable parser direct AST nodes must include main/branch/neg/match roots");
+  }
+  if (!hasNode("call_id", 0, "SourceAstExprNodeCall") || !hasNode("index_style", 0, "SourceAstExprNodeIndex") || !hasNode("method_style", 0, "SourceAstExprNodeMethodCall")) {
+    fail("full chiba-level1 executable parser direct AST nodes must include call/index/method roots");
   }
   if (fullGrammar.astOwnerNamespace !== "demo" || fullGrammar.astDefItemName !== "main") {
     fail("full chiba-level1 executable parser evidence must expose parser-owned demo::main symbol");

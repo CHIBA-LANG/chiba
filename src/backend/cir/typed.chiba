@@ -11,7 +11,7 @@ data CirTypeEnv {
 
 data CirGlobalTypeEnv {
     CirGlobalTypeEnvEnd,
-    CirGlobalTypeEnvCons(Str, CirType, CirGlobalTypeEnv)
+    CirGlobalTypeEnvCons(i64, Str, Str, CirType, CirGlobalTypeEnv)
 }
 
 type CirTypedStmtResult {
@@ -41,15 +41,91 @@ def cir_type_env_lookup_ast(env: CirTypeEnv, id: i64): AST =
 def cir_type_env_add(env: CirTypeEnv, binder: CirBinder, ty: CirType, ty_ast: AST): CirTypeEnv =
     CirTypeEnvCons(binder.id, ty, ty_ast, env)
 
+def cir_type_merge(left: CirType, right: CirType): CirType =
+    match left {
+        CirTyUnknown => right
+        CirTyI64 =>
+            match right {
+                CirTyUnknown => left
+                CirTyI64 => left
+                CirTyUsize => left
+                _ => CirTyUnknown
+            }
+        CirTyUsize =>
+            match right {
+                CirTyUnknown => left
+                CirTyI64 => CirTyI64
+                CirTyUsize => left
+                _ => CirTyUnknown
+            }
+        CirTyI32 =>
+            match right {
+                CirTyUnknown => left
+                CirTyI32 => left
+                _ => CirTyUnknown
+            }
+        CirTyBool =>
+            match right {
+                CirTyUnknown => left
+                CirTyBool => left
+                _ => CirTyUnknown
+            }
+        CirTyString =>
+            match right {
+                CirTyUnknown => left
+                CirTyString => left
+                CirTyStr => CirTyString
+                _ => CirTyUnknown
+            }
+        CirTyStr =>
+            match right {
+                CirTyUnknown => left
+                CirTyString => CirTyString
+                CirTyStr => left
+                _ => CirTyUnknown
+            }
+        CirTySliceU8 =>
+            match right {
+                CirTyUnknown => left
+                CirTySliceU8 => left
+                _ => CirTyUnknown
+            }
+        CirTyConst(name) =>
+            match right {
+                CirTyUnknown => left
+                CirTyConst(other) => if streq(name, other) != 0 { left } else { CirTyUnknown }
+                _ => CirTyUnknown
+            }
+        _ =>
+            match right {
+                CirTyUnknown => left
+                _ => left
+            }
+    }
+
 def cir_global_type_env_lookup(env: CirGlobalTypeEnv, name: Str): CirType =
     match env {
         CirGlobalTypeEnvEnd => CirTyUnknown
-        CirGlobalTypeEnvCons(entry_name, ty, rest) =>
-            if streq(entry_name, name) != 0 { ty } else { cir_global_type_env_lookup(rest, name) }
+        CirGlobalTypeEnvCons(_, entry_namespace, entry_name, ty, rest) =>
+            if entry_namespace.len == 0 && streq(entry_name, name) != 0 { ty } else { cir_global_type_env_lookup(rest, name) }
     }
 
-def cir_global_type_env_add(env: CirGlobalTypeEnv, name: Str, ty: CirType): CirGlobalTypeEnv =
-    CirGlobalTypeEnvCons(name, ty, env)
+def cir_global_type_env_lookup_symbol(env: CirGlobalTypeEnv, namespace_name: Str, name: Str): CirType =
+    match env {
+        CirGlobalTypeEnvEnd => CirTyUnknown
+        CirGlobalTypeEnvCons(_, entry_namespace, entry_name, ty, rest) =>
+            if streq(entry_namespace, namespace_name) != 0 && streq(entry_name, name) != 0 { ty } else { cir_global_type_env_lookup_symbol(rest, namespace_name, name) }
+    }
+
+def cir_global_type_env_lookup_id(env: CirGlobalTypeEnv, id: i64): CirType =
+    match env {
+        CirGlobalTypeEnvEnd => CirTyUnknown
+        CirGlobalTypeEnvCons(entry_id, _, _, ty, rest) =>
+            if entry_id == id { ty } else { cir_global_type_env_lookup_id(rest, id) }
+    }
+
+def cir_global_type_env_add(env: CirGlobalTypeEnv, id: i64, namespace_name: Str, name: Str, ty: CirType): CirGlobalTypeEnv =
+    CirGlobalTypeEnvCons(id, namespace_name, name, ty, env)
 
 def cir_typed_type_args(args: AST, fallback: CirType): CirTypeList =
     match args {
@@ -283,20 +359,41 @@ def cir_type_env_from_params(params: CirParamList): CirTypeEnv =
             }
     }
 
-def cir_global_type_env_from_items(items: CirItemList): CirGlobalTypeEnv =
+def cir_global_type_env_from_items_acc(items: CirItemList, out: CirGlobalTypeEnv): CirGlobalTypeEnv =
     match items {
-        CirItemEnd => CirGlobalTypeEnvEnd
+        CirItemEnd => out
         CirItemCons(item, rest) => {
-            let tail = cir_global_type_env_from_items(rest)
-            match item {
+            let next = match item {
                 L1ItemDef(binder, _, ret, _) =>
-                    cir_global_type_env_add(tail, binder.name, cir_typed_type_from_ast(ret, CirTyUnknown))
+                    cir_global_type_env_add(out, binder.id, binder.namespace_name, binder.name, cir_typed_type_from_ast(ret, CirTyUnknown))
                 L1ItemExtern(binder, _, ret, _) =>
-                    cir_global_type_env_add(tail, binder.name, cir_typed_type_from_ast(ret, CirTyUnknown))
-                _ => tail
+                    cir_global_type_env_add(out, binder.id, binder.namespace_name, binder.name, cir_typed_type_from_ast(ret, CirTyUnknown))
+                _ => out
             }
+            cir_global_type_env_from_items_acc(rest, next)
         }
     }
+
+def cir_global_type_env_from_items(items: CirItemList): CirGlobalTypeEnv =
+    cir_global_type_env_from_items_acc(items, CirGlobalTypeEnvEnd)
+
+def cir_global_type_env_from_typed_items_acc(items: CirItemList, out: CirGlobalTypeEnv): CirGlobalTypeEnv =
+    match items {
+        CirItemEnd => out
+        CirItemCons(item, rest) => {
+            let next = match item {
+                L2ItemDef(binder, _, ret, body) =>
+                    cir_global_type_env_add(out, binder.id, binder.namespace_name, binder.name, cir_typed_item_return(ret, cir_typed_expr_type(body)))
+                L2ItemExtern(binder, _, ret, _) =>
+                    cir_global_type_env_add(out, binder.id, binder.namespace_name, binder.name, cir_typed_type_from_ast(ret, CirTyUnknown))
+                _ => out
+            }
+            cir_global_type_env_from_typed_items_acc(rest, next)
+        }
+    }
+
+def cir_global_type_env_from_typed_items(items: CirItemList, fallback: CirGlobalTypeEnv): CirGlobalTypeEnv =
+    cir_global_type_env_from_typed_items_acc(items, fallback)
 
 def cir_typed_ret_has_annotation(ret: AST): i64 =
     match ret {
@@ -308,21 +405,6 @@ def cir_typed_ret_has_annotation(ret: AST): i64 =
 
 def cir_typed_item_return(ret: AST, inferred: CirType): CirType =
     if cir_typed_ret_has_annotation(ret) != 0 { cir_typed_type_from_ast(ret, CirTyUnknown) } else { inferred }
-
-def cir_global_type_env_from_typed_items(items: CirItemList, fallback: CirGlobalTypeEnv): CirGlobalTypeEnv =
-    match items {
-        CirItemEnd => fallback
-        CirItemCons(item, rest) => {
-            let tail = cir_global_type_env_from_typed_items(rest, fallback)
-            match item {
-                L2ItemDef(binder, _, ret, body) =>
-                    cir_global_type_env_add(tail, binder.name, cir_typed_item_return(ret, cir_typed_expr_type(body)))
-                L2ItemExtern(binder, _, ret, _) =>
-                    cir_global_type_env_add(tail, binder.name, cir_typed_type_from_ast(ret, CirTyUnknown))
-                _ => tail
-            }
-        }
-    }
 
 def cir_type_is_i64(ty: CirType): i64 =
     match ty {
@@ -393,12 +475,16 @@ def cir_typed_method_receiver_type(name: Str): CirType =
     else if streq(name, mk_str("Array.len", 9)) != 0 { CirTyConst(mk_str("Array", 5)) }
     else if streq(name, mk_str("Array.get", 9)) != 0 { CirTyConst(mk_str("Array", 5)) }
     else if streq(name, mk_str("Array.slice", 11)) != 0 { CirTyConst(mk_str("Array", 5)) }
+    else if streq(name, mk_str("Array.to_slice", 14)) != 0 { CirTyConst(mk_str("Array", 5)) }
     else if streq(name, mk_str("Array.is_empty", 14)) != 0 { CirTyConst(mk_str("Array", 5)) }
     else if streq(name, mk_str("Vec.len", 7)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Vec.push", 8)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Vec.freeze", 10)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Vec.extend", 10)) != 0 { CirTyConst(mk_str("Vec", 3)) }
     else if streq(name, mk_str("Vec.extend_loop", 15)) != 0 { CirTyConst(mk_str("Vec", 3)) }
+    else if streq(name, mk_str("Slice.len", 9)) != 0 { CirTySliceU8 }
+    else if streq(name, mk_str("Slice.get", 9)) != 0 { CirTySliceU8 }
+    else if streq(name, mk_str("Slice.slice", 11)) != 0 { CirTySliceU8 }
     else if streq(name, mk_str("Slice.is_empty", 14)) != 0 { CirTySliceU8 }
     else { CirTyUnknown }
 
@@ -499,6 +585,18 @@ def cir_typed_match_arms_in_g(arms: CirMatchArmList, env: CirTypeEnv, globals: C
             }
     }
 
+def cir_typed_match_arms_result_type(arms: CirMatchArmList): CirType =
+    match arms {
+        CirMatchArmEnd => CirTyUnknown
+        CirMatchArmCons(head, tail) => {
+            let head_ty = match head {
+                L0MatchArm(_, _, body) => cir_typed_expr_type(body)
+                L1MatchArm(_, _, body) => cir_typed_expr_type(body)
+            }
+            cir_type_merge(head_ty, cir_typed_match_arms_result_type(tail))
+        }
+    }
+
 def cir_typed_method_name(owner: Str, field: Str): Str = {
     let out = str_new()
     let _ = str_append(out, owner)
@@ -525,16 +623,18 @@ def cir_typed_type_from_type_expr(expr: CirExpr): CirType =
             match inner {
                 L1OpRef(ref) =>
                     match ref {
-                        L1RefGlobal(name) => cir_typed_type_from_name(name)
-                        L1RefUnresolved(name) => cir_typed_type_from_name(name)
+                        L1RefGlobal(_, name, _) => cir_typed_type_from_name(name)
+                        L1RefUnresolved(_, name) => cir_typed_type_from_name(name)
+                        L0RefName(name) => cir_typed_type_from_name(name)
                         _ => ty
                     }
                 _ => ty
             }
         L1OpRef(ref) =>
             match ref {
-                L1RefGlobal(name) => cir_typed_type_from_name(name)
-                L1RefUnresolved(name) => cir_typed_type_from_name(name)
+                L1RefGlobal(_, name, _) => cir_typed_type_from_name(name)
+                L1RefUnresolved(_, name) => cir_typed_type_from_name(name)
+                L0RefName(name) => cir_typed_type_from_name(name)
                 _ => CirTyUnknown
             }
         _ => CirTyUnknown
@@ -562,8 +662,9 @@ def cir_typed_type_application(value: CirExpr, args: CirExprList): CirType =
         L2OpTyped(inner, _) => cir_typed_type_application(inner, args)
         L1OpRef(ref) =>
             match ref {
-                L1RefGlobal(name) => CirTyApp(CirTyConst(name), cir_typed_type_args_from_exprs(args))
-                L1RefUnresolved(name) => CirTyApp(CirTyConst(name), cir_typed_type_args_from_exprs(args))
+                L1RefGlobal(_, name, _) => CirTyApp(CirTyConst(name), cir_typed_type_args_from_exprs(args))
+                L1RefUnresolved(_, name) => CirTyApp(CirTyConst(name), cir_typed_type_args_from_exprs(args))
+                L0RefName(name) => CirTyApp(CirTyConst(name), cir_typed_type_args_from_exprs(args))
                 _ => CirTyUnknown
             }
         _ => CirTyUnknown
@@ -588,10 +689,17 @@ def cir_typed_method_result_from_receiver(receiver: CirType, field: Str, fallbac
                     } else if streq(owner, mk_str("Array", 5)) != 0 {
                         if streq(field, mk_str("len", 3)) != 0 { CirTyUsize }
                         else if streq(field, mk_str("get", 3)) != 0 { cir_typed_type_first_arg_from_list(args) }
+                        else if streq(field, mk_str("slice", 5)) != 0 { CirTySliceU8 }
+                        else if streq(field, mk_str("to_slice", 8)) != 0 { CirTySliceU8 }
                         else { fallback }
                     } else { fallback }
                 _ => fallback
             }
+        CirTySliceU8 =>
+            if streq(field, mk_str("len", 3)) != 0 { CirTyUsize }
+            else if streq(field, mk_str("get", 3)) != 0 { CirTyConst(mk_str("AST", 3)) }
+            else if streq(field, mk_str("slice", 5)) != 0 { CirTySliceU8 }
+            else { fallback }
         _ => fallback
     }
 
@@ -605,6 +713,10 @@ def cir_typed_known_callee_result(name: Str): CirType =
     else if streq(name, mk_str("Vec.freeze", 10)) != 0 { CirTyConst(mk_str("Array", 5)) }
     else if streq(name, mk_str("Vec.get", 7)) != 0 { CirTyConst(mk_str("AST", 3)) }
     else if streq(name, mk_str("vec_get", 7)) != 0 { CirTyConst(mk_str("AST", 3)) }
+    else if streq(name, mk_str("Array.slice", 11)) != 0 { CirTySliceU8 }
+    else if streq(name, mk_str("Array.to_slice", 14)) != 0 { CirTySliceU8 }
+    else if streq(name, mk_str("Slice.slice", 11)) != 0 { CirTySliceU8 }
+    else if streq(name, mk_str("Slice.get", 9)) != 0 { CirTyConst(mk_str("AST", 3)) }
     else if streq(name, mk_str("mk_str", 6)) != 0 { CirTyStr }
     else if streq(name, mk_str("GeneratedParser.text", 20)) != 0 { CirTyString }
     else if streq(name, mk_str("generated_parser_text", 21)) != 0 { CirTyString }
@@ -625,14 +737,37 @@ def cir_typed_lookup_global_result(globals: CirGlobalTypeEnv, name: Str): CirTyp
         }
     }
 
+def cir_typed_lookup_global_ref_result(globals: CirGlobalTypeEnv, namespace_name: Str, name: Str, id: i64): CirType =
+    {
+        let looked = cir_global_type_env_lookup_id(globals, id)
+        match looked {
+            CirTyUnknown =>
+                if namespace_name.len == 0 {
+                    let by_name = cir_global_type_env_lookup(globals, name)
+                    match by_name {
+                        CirTyUnknown => cir_typed_known_callee_result(name)
+                        _ => by_name
+                    }
+                } else {
+                    let by_symbol = cir_global_type_env_lookup_symbol(globals, namespace_name, name)
+                    match by_symbol {
+                        CirTyUnknown => cir_typed_known_callee_result(name)
+                        _ => by_symbol
+                    }
+                }
+            _ => looked
+        }
+    }
+
 def cir_typed_callee_result(callee: CirExpr, globals: CirGlobalTypeEnv): CirType =
     match callee {
         L2OpTyped(inner, ty) =>
             match inner {
                 L1OpRef(ref) =>
                     match ref {
-                        L1RefGlobal(name) => cir_typed_lookup_global_result(globals, name)
-                        L1RefUnresolved(name) => cir_typed_lookup_global_result(globals, name)
+                        L1RefGlobal(namespace_name, name, id) => cir_typed_lookup_global_ref_result(globals, namespace_name, name, id)
+                        L1RefUnresolved(namespace_name, name) => cir_typed_lookup_global_ref_result(globals, namespace_name, name, -1)
+                        L0RefName(name) => cir_typed_lookup_global_result(globals, name)
                         _ => ty
                     }
                 L1OpField(value, field) => {
@@ -646,8 +781,9 @@ def cir_typed_callee_result(callee: CirExpr, globals: CirGlobalTypeEnv): CirType
             }
         L1OpRef(ref) =>
             match ref {
-                L1RefGlobal(name) => cir_typed_lookup_global_result(globals, name)
-                L1RefUnresolved(name) => cir_typed_lookup_global_result(globals, name)
+                L1RefGlobal(namespace_name, name, id) => cir_typed_lookup_global_ref_result(globals, namespace_name, name, id)
+                L1RefUnresolved(namespace_name, name) => cir_typed_lookup_global_ref_result(globals, namespace_name, name, -1)
+                L0RefName(name) => cir_typed_lookup_global_result(globals, name)
                 _ => CirTyUnknown
             }
         L1OpField(value, field) => {
@@ -661,8 +797,9 @@ def cir_typed_callee_result(callee: CirExpr, globals: CirGlobalTypeEnv): CirType
 
 def cir_typed_ref_tuple_call_result(ref: CirRef, args: CirExprList, fallback: CirType): CirType =
     match ref {
-        L1RefGlobal(name) => cir_typed_name_tuple_call_result(name, args, fallback)
-        L1RefUnresolved(name) => cir_typed_name_tuple_call_result(name, args, fallback)
+        L1RefGlobal(_, name, _) => cir_typed_name_tuple_call_result(name, args, fallback)
+        L1RefUnresolved(_, name) => cir_typed_name_tuple_call_result(name, args, fallback)
+        L0RefName(name) => cir_typed_name_tuple_call_result(name, args, fallback)
         _ => fallback
     }
 
@@ -697,6 +834,43 @@ def cir_typed_index_result(args: CirExprList): CirType =
         _ => CirTyUnknown
     }
 
+def cir_typed_index_result_from_value(value: CirExpr, args: CirExprList): CirType =
+    match cir_typed_expr_type(value) {
+        CirTyString => cir_typed_index_result(args)
+        CirTyStr => cir_typed_index_result(args)
+        CirTySliceU8 =>
+            match args {
+                CirExprCons(head, CirExprEnd) =>
+                    match head {
+                        L2OpTyped(L1OpBinary(op, _, _), _) =>
+                            if streq(op, mk_str("..", 2)) != 0 { CirTySliceU8 } else { CirTyConst(mk_str("AST", 3)) }
+                        L1OpBinary(op, _, _) =>
+                            if streq(op, mk_str("..", 2)) != 0 { CirTySliceU8 } else { CirTyConst(mk_str("AST", 3)) }
+                        _ => CirTyConst(mk_str("AST", 3))
+                    }
+                _ => CirTyUnknown
+            }
+        CirTyApp(callee, type_args) =>
+            match callee {
+                CirTyConst(owner) =>
+                    if streq(owner, mk_str("Array", 5)) != 0 {
+                        match args {
+                            CirExprCons(head, CirExprEnd) =>
+                                match head {
+                                    L2OpTyped(L1OpBinary(op, _, _), _) =>
+                                        if streq(op, mk_str("..", 2)) != 0 { CirTySliceU8 } else { cir_typed_type_first_arg_from_list(type_args) }
+                                    L1OpBinary(op, _, _) =>
+                                        if streq(op, mk_str("..", 2)) != 0 { CirTySliceU8 } else { cir_typed_type_first_arg_from_list(type_args) }
+                                    _ => cir_typed_type_first_arg_from_list(type_args)
+                                }
+                            _ => CirTyUnknown
+                        }
+                    } else { cir_typed_index_result(args) }
+                _ => cir_typed_index_result(args)
+            }
+        _ => cir_typed_index_result(args)
+    }
+
 def cir_typed_expr_list(args: CirExprList): CirExprList =
     match args {
         CirExprEnd => CirExprEnd
@@ -717,6 +891,13 @@ def cir_typed_record_field_exprs_in_g(args: CirRecordFieldExprList, env: CirType
                 CirRecordFieldExpr { field_name: head.field_name, value: cir_typed_expr_in_g(head.value, env, globals) },
                 cir_typed_record_field_exprs_in_g(tail, env, globals)
             )
+    }
+
+def cir_typed_string_parts_in_g(parts: CirStringPartList, env: CirTypeEnv, globals: CirGlobalTypeEnv): CirStringPartList =
+    match parts {
+        CirStringPartEnd => CirStringPartEnd
+        CirStringPartChunk(chunk, rest) => CirStringPartChunk(chunk, cir_typed_string_parts_in_g(rest, env, globals))
+        CirStringPartExpr(value, rest) => CirStringPartExpr(cir_typed_expr_in_g(value, env, globals), cir_typed_string_parts_in_g(rest, env, globals))
     }
 
 def cir_typed_expr_list_in(args: CirExprList, env: CirTypeEnv): CirExprList =
@@ -743,16 +924,23 @@ def cir_typed_stmt(stmt: CirStmt): CirStmt =
 
 def cir_typed_stmt_in_g(stmt: CirStmt, env: CirTypeEnv, globals: CirGlobalTypeEnv): CirTypedStmtResult =
     match stmt {
+        L0StmtLet(_, value) => CirTypedStmtResult { stmt: L1StmtUnsupported(Expr_String, CirUnsupportedPass(mk_str("typed L0 let requires alpha binder", 32))), env: env }
         L1StmtLet(binder, value) => {
             let value2 = cir_typed_expr_in_g(value, env, globals)
             let ty = cir_typed_expr_type(value2)
             CirTypedStmtResult { stmt: L2StmtLet(binder, ty, value2), env: cir_type_env_add(env, binder, ty, cir_typed_type_to_ast(ty)) }
         }
+        L0StmtLetPattern(pat, value) => cir_typed_stmt_in_g(L1StmtLetPattern(pat, value), env, globals)
         L1StmtLetPattern(pat, value) => CirTypedStmtResult { stmt: L2StmtLetPattern(pat, cir_typed_expr_in_g(value, env, globals)), env: env }
+        L0StmtAssign(lhs, rhs) => cir_typed_stmt_in_g(L1StmtAssign(lhs, rhs), env, globals)
         L1StmtAssign(lhs, rhs) => CirTypedStmtResult { stmt: L2StmtAssign(cir_typed_expr_in_g(lhs, env, globals), cir_typed_expr_in_g(rhs, env, globals)), env: env }
+        L0StmtExpr(value) => cir_typed_stmt_in_g(L1StmtExpr(value), env, globals)
         L1StmtExpr(value) => CirTypedStmtResult { stmt: L2StmtExpr(cir_typed_expr_in_g(value, env, globals)), env: env }
+        L0StmtReturn(value) => cir_typed_stmt_in_g(L1StmtReturn(value), env, globals)
         L1StmtReturn(value) => CirTypedStmtResult { stmt: L2StmtReturn(cir_typed_expr_in_g(value, env, globals)), env: env }
+        L0StmtFor(label, cond, body) => cir_typed_stmt_in_g(L1StmtFor(label, cond, body), env, globals)
         L1StmtFor(label, cond, body) => CirTypedStmtResult { stmt: L2StmtFor(label, cir_typed_expr_in_g(cond, env, globals), cir_typed_expr_in_g(body, env, globals)), env: env }
+        L0StmtUnsupported(ast, reason) => cir_typed_stmt_in_g(L1StmtUnsupported(ast, reason), env, globals)
         L1StmtUnsupported(ast, reason) => CirTypedStmtResult { stmt: L2StmtUnsupported(ast, reason), env: env }
         _ => CirTypedStmtResult { stmt: stmt, env: env }
     }
@@ -765,30 +953,44 @@ def cir_typed_expr(expr: CirExpr): CirExpr =
 
 def cir_typed_expr_in_g(expr: CirExpr, env: CirTypeEnv, globals: CirGlobalTypeEnv): CirExpr =
     match expr {
+        L0OpBlock(stmts, tail) => cir_typed_expr_in_g(L1OpBlock(stmts, tail), env, globals)
         L1OpBlock(stmts, tail) => {
             let stmts2 = cir_typed_stmt_list_in_g(stmts, env, globals)
             let tail2 = cir_typed_expr_in_g(tail, stmts2.env, globals)
             L2OpTyped(L1OpBlock(stmts2.stmts, tail2), cir_typed_expr_type(tail2))
         }
+        L0OpIf(cond, then_expr, else_expr) => cir_typed_expr_in_g(L1OpIf(cond, then_expr, else_expr), env, globals)
         L1OpIf(cond, then_expr, else_expr) => {
             let then2 = cir_typed_expr_in_g(then_expr, env, globals)
             L2OpTyped(L1OpIf(cir_typed_expr_in_g(cond, env, globals), then2, cir_typed_expr_in_g(else_expr, env, globals)), cir_typed_expr_type(then2))
         }
-        L1OpMatch(value, arms) => L2OpTyped(L1OpMatch(cir_typed_expr_in_g(value, env, globals), cir_typed_match_arms_in_g(arms, env, globals)), CirTyUnknown)
+        L0OpMatch(value, arms) => cir_typed_expr_in_g(L1OpMatch(value, arms), env, globals)
+        L1OpMatch(value, arms) => {
+            let value2 = cir_typed_expr_in_g(value, env, globals)
+            let arms2 = cir_typed_match_arms_in_g(arms, env, globals)
+            L2OpTyped(L1OpMatch(value2, arms2), cir_typed_match_arms_result_type(arms2))
+        }
+        L0OpClosure(params, body) => cir_typed_expr_in_g(L1OpClosure(params, body), env, globals)
         L1OpClosure(params, body) => L2OpTyped(L1OpClosure(params, cir_typed_expr_in_g(body, env, globals)), CirTyUnknown)
+        L0OpReset(label, body) => cir_typed_expr_in_g(L1OpReset(label, body), env, globals)
         L1OpReset(label, body) => {
             let body2 = cir_typed_expr_in_g(body, env, globals)
             L2OpTyped(L1OpReset(label, body2), cir_typed_expr_type(body2))
         }
+        L0OpShift(_, _, _) => L2OpTyped(L1OpUnsupported(Expr_String, CirUnsupportedPass(mk_str("typed L0 shift requires alpha binder", 34))), CirTyUnknown)
         L1OpShift(label, binder, body) => L2OpTyped(L1OpShift(label, binder, cir_typed_expr_in_g(body, env, globals)), CirTyUnknown)
+        L0OpCall(callee, args) => cir_typed_expr_in_g(L1OpCall(callee, args), env, globals)
         L1OpCall(callee, args) => {
             let callee2 = cir_typed_expr_in_g(callee, env, globals)
             let args2 = cir_typed_expr_list_in_g(args, env, globals)
             let result = cir_typed_tuple_call_result(callee2, args2, cir_typed_callee_result(callee2, globals))
             L2OpTyped(L1OpCall(callee2, args2), result)
         }
+        L0OpTypeApply(value, args) => cir_typed_expr_in_g(L1OpTypeApply(value, args), env, globals)
+        L0OpNominalCtor(name, fields) => cir_typed_expr_in_g(L1OpNominalCtor(name, fields), env, globals)
         L1OpNominalCtor(name, fields) =>
             L2OpTyped(L1OpNominalCtor(name, cir_typed_record_field_exprs_in_g(fields, env, globals)), CirTyConst(name))
+        L0OpField(value, field) => cir_typed_expr_in_g(L1OpField(value, field), env, globals)
         L1OpField(value, field) => {
             let value2 = cir_typed_expr_in_g(value, env, globals)
             let owner = cir_typed_value_owner_name(value2)
@@ -805,49 +1007,65 @@ def cir_typed_expr_in_g(expr: CirExpr, env: CirTypeEnv, globals: CirGlobalTypeEn
             }
             L2OpTyped(L1OpField(value2, field), inferred)
         }
+        L0OpIndex(value, args) => cir_typed_expr_in_g(L1OpIndex(value, args), env, globals)
         L1OpIndex(value, args) => {
             let value2 = cir_typed_expr_in_g(value, env, globals)
             let args2 = cir_typed_expr_list_in_g(args, env, globals)
-            L2OpTyped(L1OpIndex(value2, args2), cir_typed_index_result(args2))
+            L2OpTyped(L1OpIndex(value2, args2), cir_typed_index_result_from_value(value2, args2))
         }
         L1OpTypeApply(value, args) => {
             let value2 = cir_typed_expr_in_g(value, env, globals)
             let args2 = cir_typed_expr_list_in_g(args, env, globals)
             L2OpTyped(L1OpTypeApply(value2, args2), cir_typed_type_application(value2, args2))
         }
+        L0OpAssign(lhs, rhs) => cir_typed_expr_in_g(L1OpAssign(lhs, rhs), env, globals)
         L1OpAssign(lhs, rhs) => {
             let rhs2 = cir_typed_expr_in_g(rhs, env, globals)
             L2OpTyped(L1OpAssign(cir_typed_expr_in_g(lhs, env, globals), rhs2), cir_typed_expr_type(rhs2))
         }
+        L0OpUnsafe(body) => cir_typed_expr_in_g(L1OpUnsafe(body), env, globals)
         L1OpUnsafe(body) => {
             let body2 = cir_typed_expr_in_g(body, env, globals)
             L2OpTyped(L1OpUnsafe(body2), cir_typed_expr_type(body2))
         }
+        L0OpCast(value, ty) => cir_typed_expr_in_g(L1OpCast(value, ty), env, globals)
         L1OpCast(value, ty) =>
             L2OpTyped(L1OpCast(cir_typed_expr_in_g(value, env, globals), ty), cir_typed_type_from_ast(ty, CirTyUnknown))
+        L0OpPrefix(op, value) => cir_typed_expr_in_g(L1OpPrefix(op, value), env, globals)
         L1OpPrefix(op, value) => L2OpTyped(L1OpPrefix(op, cir_typed_expr_in_g(value, env, globals)), CirTyI64)
+        L0OpBinary(op, lhs, rhs) => cir_typed_expr_in_g(L1OpBinary(op, lhs, rhs), env, globals)
         L1OpBinary(op, lhs, rhs) => {
             let lhs2 = cir_typed_expr_in_g(lhs, env, globals)
             let rhs2 = cir_typed_expr_in_g(rhs, env, globals)
             L2OpTyped(L1OpBinary(op, lhs2, rhs2), cir_type_of_binary(op, cir_typed_expr_type(lhs2), cir_typed_expr_type(rhs2)))
         }
+        L0OpName(name) => cir_typed_expr_in_g(L1OpRef(L0RefName(name)), env, globals)
         L1OpRef(ref) => {
             let ty = match ref {
                 L1RefLocal(id, _) => cir_type_env_lookup(env, id)
-                L1RefGlobal(name) => cir_global_type_env_lookup(globals, name)
-                L1RefUnresolved(name) => cir_global_type_env_lookup(globals, name)
-                _ => CirTyUnknown
+                L1RefGlobal(namespace_name, name, id) => cir_global_type_env_lookup_id(globals, id)
+                L1RefUnresolved(namespace_name, name) => cir_global_type_env_lookup_symbol(globals, namespace_name, name)
+                L0RefName(name) => cir_typed_lookup_global_result(globals, name)
             }
             L2OpTyped(expr, ty)
         }
+        L0OpInt(n) => cir_typed_expr_in_g(L1OpInt(n), env, globals)
         L1OpInt(_) => L2OpTyped(expr, CirTyI64)
+        L0OpFloat(n) => cir_typed_expr_in_g(L1OpFloat(n), env, globals)
         L1OpFloat(_) => L2OpTyped(expr, CirTyUnknown)
+        L0OpAtom(atom) => cir_typed_expr_in_g(L1OpAtom(atom), env, globals)
         L1OpAtom(_) => L2OpTyped(expr, CirTyUnknown)
+        L0OpBool(v) => cir_typed_expr_in_g(L1OpBool(v), env, globals)
         L1OpBool(_) => L2OpTyped(expr, CirTyBool)
+        L0OpString => cir_typed_expr_in_g(L1OpString, env, globals)
         L1OpString => L2OpTyped(expr, CirTyString)
+        L0OpStringBytes(bytes) => cir_typed_expr_in_g(L1OpStringBytes(bytes), env, globals)
         L1OpStringBytes(_) => L2OpTyped(expr, CirTyString)
-        L1OpStringInterp(_) => L2OpTyped(expr, CirTyString)
+        L0OpStringInterp(parts) => cir_typed_expr_in_g(L1OpStringInterp(parts), env, globals)
+        L1OpStringInterp(parts) => L2OpTyped(L1OpStringInterp(cir_typed_string_parts_in_g(parts, env, globals)), CirTyString)
+        L0OpUnit => cir_typed_expr_in_g(L1OpUnit, env, globals)
         L1OpUnit => L2OpTyped(expr, CirTyUnit)
+        L0OpUnsupported(ast, reason) => cir_typed_expr_in_g(L1OpUnsupported(ast, reason), env, globals)
         L1OpUnsupported(_, _) => L2OpTyped(expr, CirTyUnknown)
         _ => expr
     }

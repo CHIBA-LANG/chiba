@@ -5,6 +5,7 @@ use compiler.backend.validate_core.*
 use compiler.backend.layout.*
 use compiler.semantic.driver.*
 use compiler.semantic.adt_tuple_lowering.*
+use compiler.semantic.types.*
 use std.diagnostic.*
 
 /// Textual WAT module.
@@ -54,7 +55,7 @@ def build_symbol_debug_entries(ops: Array[CoreOp], index: usize, out: Vec[Symbol
     }
 
 /// Build the symbol debug manifest from validated Core symbols.
-def build_symbol_debug_manifest(module: ValidatedCoreModule): Result[SymbolDebugManifest, SemanticDiagnostics] =
+def build_symbol_debug_manifest(module: BackendValidatedCoreModule): Result[SymbolDebugManifest, SemanticDiagnostics] =
     Ok(SymbolDebugManifest {
         entries: build_symbol_debug_entries(module.core.ops, 0, Vec[SymbolDebugEntry].new()),
     })
@@ -91,6 +92,26 @@ def WasmGcLayoutKind.wat_type_label(self): str =
         LayoutSliceView => "$chiba.layout.slice_view"
     }
 
+/// Return the emitted WAT label for a concrete layout entry.
+def emit_layout_ref_label(layout: WasmGcLayout): str =
+    match layout.kind {
+        LayoutStruct =>
+            if layout.key.len() == 0 { layout.kind.wat_type_label() }
+            else if layout.key.byte_at(0) == 36 { layout.key }
+            else { "$".concat(layout.key) }
+        _ => layout.kind.wat_type_label()
+    }
+
+/// Emit one typed field entry for a concrete layout.
+def emit_layout_struct_fields(fields: Array[WasmGcFieldLayout], index: usize): String =
+    if index == fields.len() { "" }
+    else {
+        "(field "
+            .concat(emit_core_value_type(fields.get(index).value_type))
+            .concat(") ")
+            .concat(emit_layout_struct_fields(fields, index + 1))
+    }
+
 /// Emit a conservative Wasm-GC struct type for one layout entry.
 def emit_layout_type(layout: WasmGcLayout): String =
     match layout.kind {
@@ -101,17 +122,17 @@ def emit_layout_type(layout: WasmGcLayout): String =
         LayoutClosureEnv =>
             "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field funcref) (field eqref)))\n")
         LayoutContinuationFrame =>
-            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field funcref) (field eqref)))\n")
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field (ref null func)) (field eqref)))\n")
         LayoutContinuationFrameChain =>
-            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field (ref null $chiba.layout.continuation_frame)) (field (ref null $chiba.layout.continuation_frame_chain))))\n")
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field (ref $chiba.layout.continuation_frame)) (field (ref null $chiba.layout.continuation_frame_chain))))\n")
         LayoutBoxedCont1 =>
             "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field (ref null $chiba.layout.continuation_frame)) (field (mut i32))))\n")
         LayoutContNPackage =>
-            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field (ref null $chiba.layout.continuation_frame_chain)) (field i32)))\n")
+            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field (ref $chiba.layout.continuation_frame_chain)) (field i32)))\n")
         LayoutContinuationPackage =>
             "(type ".concat(layout.kind.wat_type_label()).concat(" (struct (field i32) (field eqref)))\n")
         LayoutStruct =>
-            "(type ".concat(layout.kind.wat_type_label()).concat(" (struct))\n")
+            "(type ".concat(emit_layout_ref_label(layout)).concat(" (struct ").concat(emit_layout_struct_fields(layout.fields, 0)).concat("))\n")
     }
 
 /// Append canonical layout type declarations.
@@ -232,6 +253,140 @@ def emit_core_primitive_binary_op(op: PrimitiveBinaryOp): str =
         PrimitiveBinaryDiv => "i32.div_s"
     }
 
+/// Render a backend-neutral value type as WAT value type text.
+def emit_core_ref_label(label: str): String =
+    if label.len() == 0 { "$chiba.layout.struct" }
+    else if label.byte_at(0) == 36 { label }
+    else { "$".concat(label) }
+
+/// Render a backend-neutral value type as WAT value type text.
+def emit_core_value_type(ty: CoreValueType): String =
+    match ty {
+        CoreValUnit => ""
+        CoreValBool => "i32"
+        CoreValI32 => "i32"
+        CoreValI64 => "i64"
+        CoreValF32 => "f32"
+        CoreValF64 => "f64"
+        CoreValUsize => "i32"
+        CoreValString => "(ref $chiba.layout.array)"
+        CoreValStr => "(ref $chiba.layout.array)"
+        CoreValEqRef => "eqref"
+        CoreValFuncRef => "funcref"
+        CoreValArrayU8Ref => "(ref $chiba.layout.array)"
+        CoreValLayoutRef(label) => "(ref ".concat(emit_core_ref_label(label)).concat(")")
+        CoreValNullableLayoutRef(label) => "(ref null ".concat(emit_core_ref_label(label)).concat(")")
+    }
+
+/// Return true when two Core value types require the same WAT stack type.
+def core_value_type_wat_eq(left: CoreValueType, right: CoreValueType): bool =
+    emit_core_value_type(left) == emit_core_value_type(right)
+
+/// Return true when a Core value lowers to a Wasm reference stack type.
+def core_value_type_is_ref(ty: CoreValueType): bool =
+    match ty {
+        CoreValString => true
+        CoreValStr => true
+        CoreValEqRef => true
+        CoreValFuncRef => true
+        CoreValArrayU8Ref => true
+        CoreValLayoutRef(_) => true
+        CoreValNullableLayoutRef(_) => true
+        _ => false
+    }
+
+/// Merge branch result types before spelling the WAT `if (result ...)` type.
+def core_value_type_merge(left: CoreValueType, right: CoreValueType): CoreValueType =
+    if core_value_type_wat_eq(left, right) { left }
+    else if core_value_type_is_ref(left) && core_value_type_is_ref(right) { CoreValEqRef }
+    else { left }
+
+/// Return true when a WAT ref cast can adapt the actual value to the expected type.
+def core_value_type_needs_ref_cast(actual: CoreValueType, expected: CoreValueType): bool =
+    if core_value_type_wat_eq(actual, expected) { false }
+    else {
+        match expected {
+            CoreValString => true
+            CoreValStr => true
+            CoreValArrayU8Ref => true
+            CoreValLayoutRef(_) => true
+            CoreValNullableLayoutRef(_) => true
+            _ => false
+        }
+    }
+
+/// Infer the WAT-level result type of a Core expression.
+def core_expr_result_type(expr: CoreExprKind): CoreValueType =
+    match expr {
+        CoreExprUnit => CoreValUnit
+        CoreExprI32Const(_) => CoreValI32
+        CoreExprParam(_) => CoreValI32
+        CoreExprTypedParam(_, ty) => ty
+        CoreExprLocal(_, ty) => ty
+        CoreExprStringLiteral(_) => CoreValArrayU8Ref
+        CoreExprCast(_, ty) => ty
+        CoreExprStructNew(layout, _) => CoreValLayoutRef(emit_layout_ref_label(layout))
+        CoreExprFieldGet(layout, _, index) => wasm_gc_layout_field_type(layout, index)
+        CoreExprCall(_, _, ty) => ty
+        CoreExprTailCall(_) => CoreValI32
+        CoreExprTailCallArgs(_, _) => CoreValI32
+        CoreExprPrimitiveBinary(_, _, _) => CoreValI32
+        CoreExprIfElse(_, then_expr, else_expr) => core_value_type_merge(core_expr_result_type(then_expr), core_expr_result_type(else_expr))
+        CoreExprBranchJoinPending => CoreValUnit
+    }
+
+/// Infer the WAT-level result type of a Core expression with symbol table context.
+def core_expr_result_type_with_ops(ops: Array[CoreOp], expr: CoreExprKind): CoreValueType =
+    match expr {
+        CoreExprTailCall(target) => core_ops_function_result_type(ops, target)
+        CoreExprTailCallArgs(target, _) => core_ops_function_result_type(ops, target)
+        CoreExprIfElse(_, then_expr, else_expr) =>
+            core_value_type_merge(core_expr_result_type_with_ops(ops, then_expr), core_expr_result_type_with_ops(ops, else_expr))
+        CoreExprCast(_, ty) => ty
+        CoreExprCall(_, _, ty) => ty
+        _ => core_expr_result_type(expr)
+    }
+
+/// Return the result type of a Core function body without hardcoding i32.
+def core_function_result_type(body: Option[CoreExprKind]): CoreValueType =
+    match body {
+        Some(expr) => core_expr_result_type(expr)
+        None => CoreValUnit
+    }
+
+/// Find the Core op that defines a function symbol.
+def core_ops_find_function(ops: Array[CoreOp], target: str, index: usize): Option[CoreOp] =
+    if index == ops.len() { None }
+    else {
+        let op = ops.get(index)
+        match op.function_symbol {
+            Some(symbol) =>
+                if symbol.name == target { Some(op) }
+                else { core_ops_find_function(ops, target, index + 1) }
+            None => core_ops_find_function(ops, target, index + 1)
+        }
+    }
+
+/// Return the known parameter types for a Core function symbol.
+def core_ops_function_param_types(ops: Array[CoreOp], target: str): Array[CoreValueType] =
+    match core_ops_find_function(ops, target, 0) {
+        Some(op) => op.param_types
+        None => Vec[CoreValueType].new().freeze()
+    }
+
+/// Return the known result type for a Core function symbol.
+def core_ops_function_result_type(ops: Array[CoreOp], target: str): CoreValueType =
+    match core_ops_find_function(ops, target, 0) {
+        Some(op) => op.result_type
+        None => CoreValI32
+    }
+
+/// Emit a cast after a value when the consumer requires a narrower heap ref.
+def emit_core_result_cast(actual: CoreValueType, expected: CoreValueType): String =
+    if core_value_type_needs_ref_cast(actual, expected) {
+        " ref.cast ".concat(emit_core_value_type(expected))
+    } else { "" }
+
 /// Emit the literal condition for the first executable branch slice.
 def emit_core_branch_condition(condition: CoreBranchCondition): String =
     match condition {
@@ -244,77 +399,180 @@ def emit_core_branch_condition(condition: CoreBranchCondition): String =
 def emit_core_param(index: usize): String =
     "local.get ".concat(emit_core_small_usize(index))
 
-/// Emit Core tail-call arguments in evaluation order.
-def emit_core_tail_call_args(args: Array[CoreExprKind], index: usize): String =
+/// Emit a named local read.
+def emit_core_local(name: str): String =
+    "local.get $".concat(name)
+
+/// Emit a string literal placeholder until source string allocation reaches Core.
+def emit_core_string_literal(_: str): String =
+    "i32.const 0 i32.const 0 array.new $chiba.layout.array"
+
+/// Emit one Core expression with an expected consumer type.
+def emit_core_expr_with_expected(ops: Array[CoreOp], body: CoreExprKind, expected: CoreValueType): String =
+    emit_core_expr_value_instruction(ops, body).concat(emit_core_result_cast(core_expr_result_type_with_ops(ops, body), expected))
+
+/// Emit Core expression arguments with callee-provided expected types.
+def emit_core_call_args(ops: Array[CoreOp], args: Array[CoreExprKind], expected: Array[CoreValueType], index: usize): String =
     if index == args.len() { "" }
     else {
-        let current = emit_core_expr_value_instruction(args.get(index))
+        let hint = if index < expected.len() { expected.get(index) } else { core_expr_result_type_with_ops(ops, args.get(index)) }
+        let current = emit_core_expr_with_expected(ops, args.get(index), hint)
         if index + 1 == args.len() { current }
-        else { current.concat(" ").concat(emit_core_tail_call_args(args, index + 1)) }
+        else { current.concat(" ").concat(emit_core_call_args(ops, args, expected, index + 1)) }
     }
 
-/// Emit a multi-argument Core tail call.
-def emit_core_tail_call_args_expr(target: str, args: Array[CoreExprKind]): String =
-    emit_core_tail_call_args(args, 0).concat(" return_call $chiba.").concat(target)
+/// Return the expected field types for one struct.new layout.
+def core_struct_new_expected_fields(layout: WasmGcLayout, args: Array[CoreExprKind], index: usize, out: Vec[CoreValueType]): Array[CoreValueType] =
+    if index == args.len() { out.freeze() }
+    else { core_struct_new_expected_fields(layout, args, index + 1, out.push(wasm_gc_layout_field_type(layout, index))) }
+
+/// Emit a layout-aware Wasm-GC struct allocation.
+def emit_core_struct_new(ops: Array[CoreOp], layout: WasmGcLayout, args: Array[CoreExprKind]): String =
+    emit_core_call_args(ops, args, core_struct_new_expected_fields(layout, args, 0, Vec[CoreValueType].new()), 0)
+        .concat(" struct.new ")
+        .concat(emit_layout_ref_label(layout))
+
+/// Emit a layout-aware Wasm-GC field read.
+def emit_core_field_get(ops: Array[CoreOp], layout: WasmGcLayout, value: CoreExprKind, index: usize): String =
+    emit_core_expr_with_expected(ops, value, CoreValLayoutRef(emit_layout_ref_label(layout)))
+        .concat(" struct.get ")
+        .concat(emit_layout_ref_label(layout))
+        .concat(" ")
+        .concat(emit_core_small_usize(index))
+
+/// Emit Core tail-call arguments in evaluation order.
+def emit_core_tail_call_args(ops: Array[CoreOp], args: Array[CoreExprKind], expected: Array[CoreValueType], index: usize): String =
+    if index == args.len() { "" }
+    else {
+        let hint = if index < expected.len() { expected.get(index) } else { core_expr_result_type_with_ops(ops, args.get(index)) }
+        let current = emit_core_expr_with_expected(ops, args.get(index), hint)
+        if index + 1 == args.len() { current }
+        else { current.concat(" ").concat(emit_core_tail_call_args(ops, args, expected, index + 1)) }
+    }
 
 /// Emit one Core expression without the function result prefix.
-def emit_core_expr_instruction(body: CoreExprKind): String =
+def emit_core_expr_instruction(ops: Array[CoreOp], body: CoreExprKind): String =
     match body {
         CoreExprI32Const(atom) => emit_core_i32_const_atom(atom)
         CoreExprParam(index) => emit_core_param(index)
+        CoreExprTypedParam(index, _) => emit_core_param(index)
+        CoreExprLocal(name, _) => emit_core_local(name as str)
+        CoreExprStringLiteral(text) => emit_core_string_literal(text as str)
+        CoreExprCast(value, ty) => emit_core_expr_with_expected(ops, value, ty)
+        CoreExprStructNew(layout, args) => emit_core_struct_new(ops, layout, args)
+        CoreExprFieldGet(layout, value, index) => emit_core_field_get(ops, layout, value, index)
+        CoreExprCall(target, args, _) => emit_core_call_args(ops, args, core_ops_function_param_types(ops, target), 0).concat(" call $chiba.").concat(target)
         CoreExprTailCall(target) => "return_call $chiba.".concat(target)
-        CoreExprTailCallArgs(target, args) => emit_core_tail_call_args_expr(target, args)
+        CoreExprTailCallArgs(target, args) =>
+            emit_core_tail_call_args(ops, args, core_ops_function_param_types(ops, target), 0).concat(" return_call $chiba.").concat(target)
         CoreExprPrimitiveBinary(op, left, right) =>
-            emit_core_expr_value_instruction(left).concat(" ").concat(emit_core_expr_value_instruction(right)).concat(" ").concat(emit_core_primitive_binary_op(op))
-        CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_expr(condition, then_expr, else_expr)
+            emit_core_expr_value_instruction(ops, left).concat(" ").concat(emit_core_expr_value_instruction(ops, right)).concat(" ").concat(emit_core_primitive_binary_op(op))
+        CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_instruction(ops, condition, then_expr, else_expr)
         CoreExprBranchJoinPending => "unreachable"
         CoreExprUnit => ""
     }
 
 /// Emit one Core expression in value position. Nested calls must not return from the enclosing function.
-def emit_core_expr_value_instruction(body: CoreExprKind): String =
+def emit_core_expr_value_instruction(ops: Array[CoreOp], body: CoreExprKind): String =
     match body {
         CoreExprI32Const(atom) => emit_core_i32_const_atom(atom)
         CoreExprParam(index) => emit_core_param(index)
+        CoreExprTypedParam(index, _) => emit_core_param(index)
+        CoreExprLocal(name, _) => emit_core_local(name as str)
+        CoreExprStringLiteral(text) => emit_core_string_literal(text as str)
+        CoreExprCast(value, ty) => emit_core_expr_with_expected(ops, value, ty)
+        CoreExprStructNew(layout, args) => emit_core_struct_new(ops, layout, args)
+        CoreExprFieldGet(layout, value, index) => emit_core_field_get(ops, layout, value, index)
+        CoreExprCall(target, args, _) => emit_core_call_args(ops, args, core_ops_function_param_types(ops, target), 0).concat(" call $chiba.").concat(target)
         CoreExprTailCall(target) => "call $chiba.".concat(target)
-        CoreExprTailCallArgs(target, args) => emit_core_tail_call_args(args, 0).concat(" call $chiba.").concat(target)
+        CoreExprTailCallArgs(target, args) => emit_core_tail_call_args(ops, args, core_ops_function_param_types(ops, target), 0).concat(" call $chiba.").concat(target)
         CoreExprPrimitiveBinary(op, left, right) =>
-            emit_core_expr_value_instruction(left).concat(" ").concat(emit_core_expr_value_instruction(right)).concat(" ").concat(emit_core_primitive_binary_op(op))
-        CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_expr(condition, then_expr, else_expr)
+            emit_core_expr_value_instruction(ops, left).concat(" ").concat(emit_core_expr_value_instruction(ops, right)).concat(" ").concat(emit_core_primitive_binary_op(op))
+        CoreExprIfElse(condition, then_expr, else_expr) => emit_core_if_else_instruction(ops, condition, then_expr, else_expr)
         CoreExprBranchJoinPending => "unreachable"
         CoreExprUnit => ""
     }
 
-/// Emit an executable if/else expression.
-def emit_core_if_else_expr(condition: CoreBranchCondition, then_expr: CoreExprKind, else_expr: CoreExprKind): String =
-    "(result i32) (if (result i32) ("
+/// Emit a WAT if/else instruction in value position.
+def emit_core_if_else_instruction(ops: Array[CoreOp], condition: CoreBranchCondition, then_expr: CoreExprKind, else_expr: CoreExprKind): String =
+    let result_type = emit_core_value_type(core_value_type_merge(core_expr_result_type_with_ops(ops, then_expr), core_expr_result_type_with_ops(ops, else_expr)))
+    let head = if result_type == "" { "(if (" } else { "(if (result ".concat(result_type).concat(") (") }
+    head
         .concat(emit_core_branch_condition(condition))
         .concat(") (then (")
-        .concat(emit_core_expr_instruction(then_expr))
+        .concat(emit_core_expr_instruction(ops, then_expr))
         .concat(")) (else (")
-        .concat(emit_core_expr_instruction(else_expr))
+        .concat(emit_core_expr_instruction(ops, else_expr))
         .concat(")))")
+
+/// Emit an executable if/else function body with the function result prefix.
+def emit_core_if_else_body(ops: Array[CoreOp], condition: CoreBranchCondition, then_expr: CoreExprKind, else_expr: CoreExprKind): String =
+    let result_type = emit_core_value_type(core_value_type_merge(core_expr_result_type_with_ops(ops, then_expr), core_expr_result_type_with_ops(ops, else_expr)))
+    if result_type == "" { emit_core_if_else_instruction(ops, condition, then_expr, else_expr) }
+    else { "(result ".concat(result_type).concat(") ").concat(emit_core_if_else_instruction(ops, condition, then_expr, else_expr)) }
+
+/// Emit parameters from real Core value types.
+def emit_core_typed_function_params(params: Array[CoreValueType], index: usize): String =
+    if index == params.len() { "" }
+    else {
+        "(param "
+            .concat(emit_core_value_type(params.get(index)))
+            .concat(") ")
+            .concat(emit_core_typed_function_params(params, index + 1))
+    }
 
 /// Emit parameters for the first executable i32 function slice.
 def emit_core_function_params(i32_param_count: usize): String =
     if i32_param_count == 0 { "" }
     else { "(param i32) ".concat(emit_core_function_params(i32_param_count - 1)) }
 
+/// Emit Core function params, preferring typed parameter vectors over legacy i32 counts.
+def emit_core_op_function_params(op: CoreOp): String =
+    if op.param_types.len() > 0 { emit_core_typed_function_params(op.param_types, 0) }
+    else { emit_core_function_params(op.i32_param_count) }
+
 /// Emit the body instructions for one lowered Core function.
-def emit_core_function_body(body: Option[CoreExprKind]): String =
+def emit_core_function_body(ops: Array[CoreOp], body: Option[CoreExprKind]): String =
     match body {
         Some(CoreExprI32Const(atom)) => "(result i32) ".concat(emit_core_i32_const_atom(atom))
         Some(CoreExprParam(index)) => "(result i32) ".concat(emit_core_param(index))
-        Some(CoreExprTailCall(target)) => "(result i32) return_call $chiba.".concat(target)
+        Some(CoreExprTypedParam(index, ty)) => "(result ".concat(emit_core_value_type(ty)).concat(") ").concat(emit_core_param(index))
+        Some(CoreExprLocal(name, ty)) => "(result ".concat(emit_core_value_type(ty)).concat(") ").concat(emit_core_local(name as str))
+        Some(CoreExprStringLiteral(text)) => "(result (ref $chiba.layout.array)) ".concat(emit_core_string_literal(text as str))
+        Some(CoreExprCast(value, ty)) => "(result ".concat(emit_core_value_type(ty)).concat(") ").concat(emit_core_expr_with_expected(ops, value, ty))
+        Some(CoreExprStructNew(layout, args)) => "(result (ref ".concat(emit_layout_ref_label(layout)).concat(")) ").concat(emit_core_struct_new(ops, layout, args))
+        Some(CoreExprFieldGet(layout, value, index)) => "(result ".concat(emit_core_value_type(wasm_gc_layout_field_type(layout, index))).concat(") ").concat(emit_core_field_get(ops, layout, value, index))
+        Some(CoreExprCall(target, args, result_ty)) =>
+            "(result ".concat(emit_core_value_type(result_ty)).concat(") ").concat(emit_core_call_args(ops, args, core_ops_function_param_types(ops, target), 0)).concat(" call $chiba.").concat(target)
+        Some(CoreExprTailCall(target)) => "(result ".concat(emit_core_value_type(core_ops_function_result_type(ops, target))).concat(") return_call $chiba.").concat(target)
         Some(CoreExprTailCallArgs(target, args)) =>
-            "(result i32) ".concat(emit_core_tail_call_args_expr(target, args))
+            "(result ".concat(emit_core_value_type(core_ops_function_result_type(ops, target))).concat(") ").concat(emit_core_tail_call_args(ops, args, core_ops_function_param_types(ops, target), 0).concat(" return_call $chiba.").concat(target))
         Some(CoreExprPrimitiveBinary(op, left, right)) =>
-            "(result i32) ".concat(emit_core_expr_instruction(left)).concat(" ").concat(emit_core_expr_instruction(right)).concat(" ").concat(emit_core_primitive_binary_op(op))
-        Some(CoreExprIfElse(condition, then_expr, else_expr)) => emit_core_if_else_expr(condition, then_expr, else_expr)
+            "(result i32) ".concat(emit_core_expr_value_instruction(ops, left)).concat(" ").concat(emit_core_expr_value_instruction(ops, right)).concat(" ").concat(emit_core_primitive_binary_op(op))
+        Some(CoreExprIfElse(condition, then_expr, else_expr)) => emit_core_if_else_body(ops, condition, then_expr, else_expr)
         Some(CoreExprBranchJoinPending) => "(result i32) unreachable"
         Some(CoreExprUnit) => ""
         None => ""
     }
+
+/// Stable suffix for owner-scoped runtime helper functions.
+def emit_core_owner_suffix(owner: Option[BinderId]): String =
+    match owner {
+        Some(binder) => emit_core_small_usize(binder.index)
+        None => "anon"
+    }
+
+/// Name of the stackless resume function for one continuation owner.
+def emit_contn_resume_function_name(owner: Option[BinderId]): String =
+    "$chiba.contn.resume.".concat(emit_core_owner_suffix(owner))
+
+/// Name of the frame-chain factory for one continuation owner.
+def emit_contn_frame_chain_function_name(owner: Option[BinderId]): String =
+    "$chiba.contn.frame_chain.".concat(emit_core_owner_suffix(owner))
+
+/// Name of the repeatable ContN package factory for one continuation owner.
+def emit_contn_package_function_name(owner: Option[BinderId]): String =
+    "$chiba.contn.package.".concat(emit_core_owner_suffix(owner))
 
 /// Emit an optional stable function label.
 def emit_core_function_symbol(symbol: Option[CoreFunctionSymbol]): String =
@@ -323,15 +581,55 @@ def emit_core_function_symbol(symbol: Option[CoreFunctionSymbol]): String =
         None => ""
     }
 
-/// Emit ADT tuple helper parameters in the canonical payload order.
-def emit_adt_tuple_ctor_params(count: usize): String =
-    if count == 0 { "" }
-    else { "(param i32) ".concat(emit_adt_tuple_ctor_params(count - 1)) }
+/// Map semantic tuple fields to their backend stack/storage representation.
+def core_value_type_from_sem_type(ty: SemType): CoreValueType =
+    match ty {
+        TyNominal(id) =>
+            if id.name == "bool" { CoreValBool }
+            else if id.name == "i32" { CoreValI32 }
+            else if id.name == "i64" { CoreValI64 }
+            else if id.name == "f32" { CoreValF32 }
+            else if id.name == "f64" { CoreValF64 }
+            else if id.name == "usize" { CoreValUsize }
+            else if id.name == "u8" { CoreValI32 }
+            else if id.name == "String" { CoreValString }
+            else if id.name == "str" { CoreValStr }
+            else if id.name == "Str" { CoreValStr }
+            else if id.name == "Symbol" { CoreValI32 }
+            else { CoreValEqRef }
+        TyArray(inner) =>
+            match inner {
+                TyNominal(id) => if id.name == "u8" { CoreValArrayU8Ref } else { CoreValEqRef }
+                _ => CoreValEqRef
+            }
+        TySlice(inner) =>
+            match inner {
+                TyNominal(id) => if id.name == "u8" { CoreValStr } else { CoreValEqRef }
+                _ => CoreValEqRef
+            }
+        TyFunction(_, _) => CoreValFuncRef
+        _ => CoreValEqRef
+    }
 
-/// Emit an i32 field for a tuple struct smoke layout.
+/// Emit ADT tuple helper parameters in the canonical payload order.
+def emit_adt_tuple_ctor_params(fields: Array[AdtTupleField], index: usize): String =
+    if index == fields.len() { "" }
+    else {
+        "(param "
+            .concat(emit_core_value_type(core_value_type_from_sem_type(fields.get(index).ty)))
+            .concat(") ")
+            .concat(emit_adt_tuple_ctor_params(fields, index + 1))
+    }
+
+/// Emit one typed field for a tuple struct layout.
 def emit_adt_tuple_struct_fields(fields: Array[AdtTupleField], index: usize): String =
     if index == fields.len() { "" }
-    else { "(field i32) ".concat(emit_adt_tuple_struct_fields(fields, index + 1)) }
+    else {
+        "(field "
+            .concat(emit_core_value_type(core_value_type_from_sem_type(fields.get(index).ty)))
+            .concat(") ")
+            .concat(emit_adt_tuple_struct_fields(fields, index + 1))
+    }
 
 /// Emit constructor tuple values: stable tag code first, then payload params.
 def emit_adt_tuple_ctor_values(obligation: CoreAdtCtorLoweringObligation, index: usize): String =
@@ -345,7 +643,7 @@ def emit_adt_tuple_ctor_function(obligation: CoreAdtCtorLoweringObligation): Str
     "(func $chiba."
         .concat(obligation.helper_name)
         .concat(" ")
-        .concat(emit_adt_tuple_ctor_params(obligation.helper_arity))
+        .concat(emit_adt_tuple_ctor_params(obligation.tuple_fields, 1))
         .concat("(result (ref ")
         .concat(tuple_label)
         .concat(")) ")
@@ -371,16 +669,26 @@ def emit_boxed_cont1_resume_function(): String =
         .concat("  i32.const 0)\n")
 
 /// Emit a materialized ContN frame-chain allocation shape.
-def emit_contn_frame_chain_function(): String =
-    "(func (result (ref $chiba.layout.continuation_frame_chain))\n"
-        .concat("  ref.null $chiba.layout.continuation_frame\n")
+def emit_contn_frame_chain_function(op: CoreOp): String =
+    "(func "
+        .concat(emit_contn_frame_chain_function_name(op.owner))
+        .concat(" (result (ref $chiba.layout.continuation_frame_chain))\n")
+        .concat("  ref.func ")
+        .concat(emit_contn_resume_function_name(op.owner))
+        .concat("\n")
+        .concat("  ref.null any\n")
+        .concat("  struct.new $chiba.layout.continuation_frame\n")
         .concat("  ref.null $chiba.layout.continuation_frame_chain\n")
         .concat("  struct.new $chiba.layout.continuation_frame_chain)\n")
 
 /// Emit a repeatable ContN package allocation shape.
-def emit_contn_package_function(): String =
-    "(func (result (ref $chiba.layout.contN_package))\n"
-        .concat("  ref.null $chiba.layout.continuation_frame_chain\n")
+def emit_contn_package_function(op: CoreOp): String =
+    "(func "
+        .concat(emit_contn_package_function_name(op.owner))
+        .concat(" (result (ref $chiba.layout.contN_package))\n")
+        .concat("  call ")
+        .concat(emit_contn_frame_chain_function_name(op.owner))
+        .concat("\n")
         .concat("  i32.const 1\n")
         .concat("  struct.new $chiba.layout.contN_package)\n")
 
@@ -479,30 +787,36 @@ def append_tuple_nominal_types(ops: Array[CoreOp], index: usize, builder: Diagno
     }
 
 /// Emit a function, exporting the first typed `main` slice as WebAssembly main.
-def emit_core_function(op: CoreOp): String =
+def emit_core_function(ops: Array[CoreOp], op: CoreOp): String =
     let head = if op.export_main { "(func ".concat(emit_core_function_symbol(op.function_symbol)).concat("(export \"main\") ") }
         else { "(func ".concat(emit_core_function_symbol(op.function_symbol)) }
-    head.concat(emit_core_function_params(op.i32_param_count)).concat(emit_core_function_body(op.function_body)).concat(")\n")
+    head.concat(emit_core_op_function_params(op)).concat(emit_core_function_body(ops, op.function_body)).concat(")\n")
+
+/// Emit a named stackless resume function so ContN frame chains can store a real funcref.
+def emit_core_stackless_function(ops: Array[CoreOp], op: CoreOp): String =
+    "(func "
+        .concat(emit_contn_resume_function_name(op.owner))
+        .concat(" ")
+        .concat(emit_core_op_function_params(op))
+        .concat(emit_core_function_body(ops, op.function_body))
+        .concat(")\n")
 
 /// Emit one Core op as WAT text.
-def emit_core_op(op: CoreOp): Result[String, SemanticDiagnostics] =
+def emit_core_op(ops: Array[CoreOp], op: CoreOp): Result[String, SemanticDiagnostics] =
     match op.kind {
-        CoreOpFunction => Ok(emit_core_function(op))
+        CoreOpFunction => Ok(emit_core_function(ops, op))
         CoreOpAdtTupleCtor =>
             match op.adt_tuple_ctor {
                 Some(obligation) => Ok(emit_adt_tuple_ctor_function(obligation))
                 None => Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new().push(SemanticDiagnostic("<backend>", 0, 0, "ADT tuple constructor op missing lowering payload")).freeze()))
             }
-        /// source-contract: CoreOpStacklessFunction => Ok("(func ".concat(emit_core_function_body(op.function_body))
-        CoreOpStacklessFunction =>
-            if op.i32_param_count == 0 { Ok("(func ".concat(emit_core_function_body(op.function_body)).concat(")\n")) }
-            else { Ok("(func ".concat(emit_core_function_params(op.i32_param_count)).concat(emit_core_function_body(op.function_body)).concat(")\n")) }
+        CoreOpStacklessFunction => Ok(emit_core_stackless_function(ops, op))
         CoreOpStructNew => Ok(emit_struct_new_function())
         CoreOpArrayNew => Ok(emit_array_new_function())
         CoreOpClosureCall => Ok(emit_closure_call_function())
         CoreOpBoxedCont1 => Ok(emit_boxed_cont1_resume_function())
-        CoreOpContinuationFrameChain => Ok(emit_contn_frame_chain_function())
-        CoreOpContNPackage => Ok(emit_contn_package_function())
+        CoreOpContinuationFrameChain => Ok(emit_contn_frame_chain_function(op))
+        CoreOpContNPackage => Ok(emit_contn_package_function(op))
         CoreOpContinuationPackage => Ok(emit_erased_continuation_package_function())
         CoreOpTailCall => Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new().push(SemanticDiagnostic("<backend>", 0, 0, "standalone CoreOpTailCall emission absent; tail calls must lower through CoreOpFunction body")).freeze()))
         CoreOpImportCall(module) =>
@@ -520,8 +834,8 @@ def CoreOpKind.is_import(self): bool =
     }
 
 /// Append one emitted Core op to the WAT builder.
-def append_core_op_wat(builder: DiagnosticBuilder, op: CoreOp): Result[DiagnosticBuilder, SemanticDiagnostics] =
-    match emit_core_op(op) {
+def append_core_op_wat(builder: DiagnosticBuilder, ops: Array[CoreOp], op: CoreOp): Result[DiagnosticBuilder, SemanticDiagnostics] =
+    match emit_core_op(ops, op) {
         Ok(text) => Ok(builder.push_str(text))
         Err(errors) => Err(errors)
     }
@@ -530,7 +844,7 @@ def append_core_op_wat(builder: DiagnosticBuilder, op: CoreOp): Result[Diagnosti
 def append_core_ops_wat(ops: Array[CoreOp], index: usize, builder: DiagnosticBuilder): Result[DiagnosticBuilder, SemanticDiagnostics] =
     if index == ops.len() { Ok(builder) }
     else {
-        match append_core_op_wat(builder, ops.get(index)) {
+        match append_core_op_wat(builder, ops, ops.get(index)) {
             Ok(next) => append_core_ops_wat(ops, index + 1, next)
             Err(errors) => Err(errors)
         }
@@ -542,7 +856,7 @@ def append_import_core_ops_wat(ops: Array[CoreOp], index: usize, builder: Diagno
     else {
         let op = ops.get(index)
         if op.kind.is_import() {
-            match append_core_op_wat(builder, op) {
+            match append_core_op_wat(builder, ops, op) {
                 Ok(next) => append_import_core_ops_wat(ops, index + 1, next)
                 Err(errors) => Err(errors)
             }
@@ -556,7 +870,7 @@ def append_runtime_core_ops_wat(ops: Array[CoreOp], index: usize, builder: Diagn
         let op = ops.get(index)
         if op.kind.is_import() { append_runtime_core_ops_wat(ops, index + 1, builder) }
         else {
-            match append_core_op_wat(builder, op) {
+            match append_core_op_wat(builder, ops, op) {
                 Ok(next) => append_runtime_core_ops_wat(ops, index + 1, next)
                 Err(errors) => Err(errors)
             }
@@ -577,7 +891,7 @@ def wat_emission_obligations(ops: Array[CoreOp], index: usize, out: Vec[WatEmiss
     else { wat_emission_obligations(ops, index + 1, out.push(wat_emission_obligation_from_op(ops.get(index)))) }
 
 /// Emit validated Core as WAT.
-def emit_wat(module: ValidatedCoreModule): Result[WatModule, SemanticDiagnostics] =
+def emit_wat(module: BackendValidatedCoreModule): Result[WatModule, SemanticDiagnostics] =
     let obligations = wat_emission_obligations(module.core.ops, 0, Vec[WatEmissionObligation].new())
     if obligations.len() == 0 {
         Ok(empty_wat_module())

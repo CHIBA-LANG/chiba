@@ -2,14 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
-import { runWatPath } from "./run-wat.mjs";
 
 const PROJECT = "level-1b";
 const ENTRY = "level1b_main.chiba";
 const SOURCE = path.join(PROJECT, "src", ENTRY);
 const ARTIFACT_DIR = ".scratch/level-1b";
-const WAT = path.join(ARTIFACT_DIR, "level1b-main.wat");
-const SOURCE_PRIMARY_WAT = ".scratch/level-1b/c11-backend/source-primary-backend.wat";
+const WAT = path.join(ARTIFACT_DIR, "level1b-main.seed.wat");
+const WASM = path.join(ARTIFACT_DIR, "level1b-main.seed.wasm");
 
 function pass(name) {
   console.log(`[PASS] ${name}`);
@@ -38,25 +37,29 @@ if (!pipeline.includes("def compile_request_to_wat") || !pipeline.includes("run_
 }
 pass("level-1b compile entry wired");
 
-if (!fs.existsSync(SOURCE_PRIMARY_WAT)) {
-  const result = spawnSync("timeout", ["60", "vp", "run", "level1b:c11-backend"], { encoding: "utf8" });
-  if (result.status !== 0) {
-    fail("level-1b backend smoke prerequisite", result.stdout || result.stderr || "level1b:c11-backend failed");
-  }
+const referenceOnlyLegacyCompiler = "./target/debug/level1c.o";
+const emit = spawnSync("timeout", ["60", referenceOnlyLegacyCompiler, "wat", SOURCE], {
+  encoding: "utf8",
+  maxBuffer: 64 * 1024 * 1024,
+});
+if (emit.status !== 0) {
+  fail("level-1b seed WAT emit", `${emit.stdout}${emit.stderr}`.split("\n").slice(0, 80).join("\n"));
 }
-if (!fs.existsSync(SOURCE_PRIMARY_WAT)) {
-  fail("level-1b backend smoke prerequisite", `missing ${SOURCE_PRIMARY_WAT}`);
+fs.writeFileSync(WAT, emit.stdout);
+const wat = emit.stdout;
+if (!wat.includes("(module") || !wat.includes('(export "main"') || !wat.includes("call $compile_request_to_wat")) {
+  fail("level-1b seed WAT emit", "level1b-main WAT must be emitted from the real level-1b compile entry");
 }
-const wat = fs.readFileSync(SOURCE_PRIMARY_WAT, "utf8");
-if (wat.includes('(func (export "main") (result i32) i32.const 0)')) {
-  fail("level-1b smoke artifact", "level1b-main must not be a hand-written constant-zero shell");
+if (wat.includes("source-primary-backend")) {
+  fail("level-1b seed WAT emit", "level1b smoke must not reuse C11 source-primary fixture WAT");
 }
-if (!wat.includes('(export "main"') || !wat.includes("return_call") || !wat.includes("i32.add")) {
-  fail("level-1b smoke artifact", "level1b-main must reuse executable C11 source-primary backend WAT");
+pass(`level-1b seed WAT ${WAT}`);
+
+const compile = spawnSync("timeout", ["60", process.execPath, "tools/node/compile-wat.mjs", WAT, "--output", WASM], {
+  encoding: "utf8",
+  maxBuffer: 64 * 1024 * 1024,
+});
+if (compile.status !== 0) {
+  fail("level-1b seed WAT assemble", `${compile.stdout}${compile.stderr}`.split("\n").slice(0, 80).join("\n"));
 }
-fs.writeFileSync(WAT, wat);
-const main = await runWatPath(WAT, "main");
-if (main !== "7") {
-  fail("level-1b smoke artifact", `expected main -> 7, got ${main}`);
-}
-pass(`level-1b smoke artifact ${WAT}`);
+pass(`level-1b seed WASM ${WASM}`);

@@ -134,25 +134,41 @@ Dev: "The truthfulness audit fails. Did we break the build?"
 
 Domain expert: "No. It is a feedback loop for known false-green paths; failure means it found blockers that must not be hidden."
 
-## Current Working Context — 2026-05-27
+## Current Working Context — 2026-06-01
 
 **Active P0 checkpoint**:
-Current work is paused mid-mainline on generated ChibaCC parser WAT execution.
-This is not P0 complete. The active task is to make real generated parser source
-parse, check, emit WAT, and run under the WAT runner without hand-written WAT or
-`.scratch` edits.
+Current work has cleared the generated ChibaCC parser WAT execution checkpoint.
+This is still not P0 complete and not level-1b self-bootstrap. The active task
+now moves back to making level-1b carry primary semantics instead of depending
+on the active `src` path.
 
-**Current failing command**:
+**Latest successful command**:
 
 ```sh
-timeout 20 node tools/node/run-wat.mjs .scratch/level-1b/chibacc-mini/simple.exec.exec.wat --invoke main
+timeout 360 vp run level1b:chibacc-mini
 ```
 
-**Failure meaning**:
-The generated parser source is close enough to parse/check and emit WAT, but
-WAT validation fails because the active backend still leaks `i64` assumptions
-into ref-shaped values. In this slice `AST`, `Vec`, `TokenSpan`, token payload
-`Str`, and `Option[AST]` must lower to ref-compatible WAT shapes.
+**Checkpoint result**:
+
+- simple/pratt/list/continuation/attribute/calculator generated parser source
+  parses, checks, emits WAT, and runs under the WAT runner.
+- Full `src/frontend/chiba-level1.chibacc` executable parser WAT emits and runs:
+  `.scratch/level-1b/chibacc-full/chiba-level1-parser.exec.wat`.
+- Full expression parser WAT emits and runs:
+  `.scratch/level-1b/chibacc-full/chiba-level1-parser.expr.exec.wat`.
+- AST evidence was emitted:
+  `.scratch/level-1b/chibacc-mini/ast-primary-evidence.json`.
+
+**Latest fixes that matter**:
+
+- `level-1b/compiler/semantic/type_infer.chiba` no longer stops parsing before
+  `infer_types`; this fixed the previous `call $infer_types` without function
+  definition WAT failure.
+- Core call symbols in level-1b backend were normalized toward `str`, and an
+  incorrectly lowered helper signature was removed from `wat_emit`.
+- Active `src/backend/wasm/wat.chiba` now knows
+  `CoreExprKind__CoreExprCall__a3` field 0 is `(ref $array_u8)`, fixing the
+  pattern payload local type used by generated level-1b backend WAT.
 
 **Key files for continuation**:
 
@@ -169,25 +185,38 @@ these back to `i64` just to satisfy a narrow WAT validator issue.
 
 **Immediate implementation direction**:
 
-- Make WAT local declarations derive from real typed values, not default `i64`.
-- Preserve `Str` as `(ref $array_u8)`, `AST`/nominal/data/record/vector as `eqref`
-  or their concrete heap refs as appropriate.
-- Make match pattern payload binders local-type aware.
-- Treat casts such as `__v0 as Str` as layout-aware ref casts/no-ops, not numeric casts.
-- Keep fixes in source/generator/backend; generated artifacts should be refreshed,
-  not manually patched.
+- Full typed AST traversal must feed real expression bodies, not source-slice or
+  narrow body facts.
+- CPS/reset/shift/shiftn must lower real bodies and preserve tail form after CPS.
+- Closure and ContN lowering must extract captures, envs, frame bodies, and
+  stackless frame-chain functions for real inputs.
+- Core/block/WAT must consume real AST/CPS-derived inputs, not only narrow
+  fixtures.
+- Keep `src` as a reference and active seed path only; level-1b must own the
+  final semantics.
+- Do not edit generated `.scratch` artifacts.
 
 **Validation ladder for this checkpoint**:
 
 ```sh
-timeout 300 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1c_main.chiba --output level1c.o
-timeout 120 vp run level1b:chibacc-mini
+timeout 600 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1c_main.chiba --output level1c.o
+timeout 360 vp run level1b:chibacc-mini
 timeout 120 vp run level1b:c08-semantic
 timeout 120 vp run level1b:c09-control-cps
 timeout 120 vp run level1b:c10-closure-package
 timeout 120 vp run level1b:c11-backend
 git diff --check
 ```
+
+Latest successful seed rebuild:
+
+```text
+target/debug/level1c.o 18057840 2026-06-01 16:46:53 +0200
+```
+
+Do not set `CHIBACC=/tmp/chibacc-project-clean/target/debug/chibacc.clean.o`
+unless that binary exists. The successful run used the runner default
+`./chibacc.o`.
 
 **Collaboration note**:
 If another engineer starts here, read `HANDOFF.md` first. It contains the exact

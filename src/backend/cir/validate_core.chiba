@@ -10,7 +10,10 @@ def cir_core_layout(id: i64, name: Str, kind: CirCoreLayoutKind): CirCoreLayout 
     CirCoreLayout { id: cir_core_layout_id(id), name: name, kind: kind }
 
 def cir_core_symbol(name: Str): CirCoreSymbol =
-    CirCoreSymbol { name: name }
+    CirCoreSymbol { id: -1, name: name }
+
+def cir_core_symbol_for_binder(binder: CirBinder): CirCoreSymbol =
+    CirCoreSymbol { id: binder.id, name: binder.name }
 
 def cir_l8_default_layouts(): CirCoreLayoutList =
     CirCoreLayoutCons(
@@ -58,6 +61,17 @@ def cir_l8_symbol_list_contains(symbols: CirCoreSymbolList, name: Str): i64 =
 
 def cir_l8_env_has_symbol(env: CirCoreEnv, name: Str): i64 =
     cir_l8_symbol_list_contains(env.symbols, name)
+
+def cir_l8_symbol_list_contains_id(symbols: CirCoreSymbolList, id: i64): i64 =
+    match symbols {
+        CirCoreSymbolEnd => 0
+        CirCoreSymbolCons(head, tail) =>
+            if head.id == id { 1 }
+            else { cir_l8_symbol_list_contains_id(tail, id) }
+    }
+
+def cir_l8_env_has_symbol_id(env: CirCoreEnv, id: i64): i64 =
+    if id < 0 { 0 } else { cir_l8_symbol_list_contains_id(env.symbols, id) }
 
 def cir_l8_layout_kind_eq(a: CirCoreLayoutKind, b: CirCoreLayoutKind): i64 =
     match a {
@@ -253,7 +267,7 @@ def cir_l8_payload_is_tailcall(expr: CirExpr): i64 =
 
 def cir_l8_ref_is_world_thread_boundary(ref: CirRef): i64 =
     match ref {
-        L1RefUnresolved(name) =>
+        L1RefUnresolved(_, name) =>
             if streq(name, mk_str("__world_resume", 14)) != 0 { 1 }
             else if streq(name, mk_str("__thread_resume", 15)) != 0 { 1 }
             else { 0 }
@@ -323,11 +337,12 @@ def cir_l8_usage_is_many(usage: CirUsage): i64 =
 
 def cir_l8_validate_ref_result(env: CirCoreEnv, ref: CirRef): CirCoreValidation =
     match ref {
-        L1RefGlobal(name) =>
-            if cir_l8_env_has_symbol(env, name) != 0 { L8ValidatedCoreOk }
+        L1RefGlobal(namespace_name, name, id) =>
+            if cir_l8_env_has_symbol_id(env, id) != 0 { L8ValidatedCoreOk }
+            else if cir_l8_env_has_symbol(env, cir_symbol_name(namespace_name, name)) != 0 { L8ValidatedCoreOk }
             else { L8ValidatedCoreErr(mk_str("dangling symbol", 15)) }
-        L1RefUnresolved(name) =>
-            if cir_l8_env_has_symbol(env, name) != 0 { L8ValidatedCoreOk }
+        L1RefUnresolved(namespace_name, name) =>
+            if cir_l8_env_has_symbol(env, cir_symbol_name(namespace_name, name)) != 0 { L8ValidatedCoreOk }
             else { L8ValidatedCoreErr(mk_str("dangling symbol", 15)) }
         _ => L8ValidatedCoreOk
     }
@@ -462,10 +477,10 @@ def cir_l8_item_symbols(items: CirItemList): CirCoreSymbolList =
         CirItemCons(item, rest) => {
             let tail = cir_l8_item_symbols(rest)
             match item {
-                L7CoreItemDef(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), tail)
-                L7CoreItemExtern(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), tail)
-                L8ValidatedCoreItemDef(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), tail)
-                L8ValidatedCoreItemExtern(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol(binder.name), tail)
+                L7CoreItemDef(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol_for_binder(binder), tail)
+                L7CoreItemExtern(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol_for_binder(binder), tail)
+                L8ValidatedCoreItemDef(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol_for_binder(binder), tail)
+                L8ValidatedCoreItemExtern(binder, _, _, _) => CirCoreSymbolCons(cir_core_symbol_for_binder(binder), tail)
                 _ => tail
             }
         }
@@ -524,7 +539,7 @@ def cir_invalid_core_smoke_module(header: AST): CirModule =
                     cir_binder(1, mk_str("invalid_dangling", 16)),
                     CirParamEnd,
                     header,
-                    cir_l8_validate_expr(L7CoreOp(L1OpRef(L1RefUnresolved(mk_str("missing_symbol", 14))), L7CoreFunc))
+                    cir_l8_validate_expr(L7CoreOp(L1OpRef(L1RefUnresolved(mk_str("", 0), mk_str("missing_symbol", 14))), L7CoreFunc))
                 ),
                 CirItemCons(
                     L8ValidatedCoreItemDef(
@@ -563,7 +578,7 @@ def cir_invalid_core_smoke_result(): CirCoreValidation =
     }
 
 def cir_invalid_core_dangling_result(): CirCoreValidation =
-    match cir_l8_validate_expr(L7CoreOp(L1OpRef(L1RefUnresolved(mk_str("missing_symbol", 14))), L7CoreFunc)) {
+    match cir_l8_validate_expr(L7CoreOp(L1OpRef(L1RefUnresolved(mk_str("", 0), mk_str("missing_symbol", 14))), L7CoreFunc)) {
         L8ValidatedCoreOp(_, result) => result
         _ => L8ValidatedCoreErr(mk_str("invalid dangling smoke did not validate", 38))
     }
@@ -571,7 +586,7 @@ def cir_invalid_core_dangling_result(): CirCoreValidation =
 def cir_valid_core_symbol_table_result(): CirCoreValidation =
     match cir_l8_validate_expr_with_env(
         cir_l8_env(CirCoreSymbolCons(cir_core_symbol(mk_str("present_symbol", 14)), CirCoreSymbolEnd)),
-        L7CoreOp(L1OpRef(L1RefUnresolved(mk_str("present_symbol", 14))), L7CoreFunc)
+        L7CoreOp(L1OpRef(L1RefUnresolved(mk_str("", 0), mk_str("present_symbol", 14))), L7CoreFunc)
     ) {
         L8ValidatedCoreOp(_, result) => result
         _ => L8ValidatedCoreErr(mk_str("valid symbol smoke did not validate", 35))
@@ -620,7 +635,7 @@ def cir_invalid_core_world_thread_result(): CirCoreValidation =
     match cir_l8_validate_expr(
         L7CoreOp(
             L1OpCall(
-                L1OpRef(L1RefUnresolved(mk_str("__world_resume", 14))),
+                L1OpRef(L1RefUnresolved(mk_str("", 0), mk_str("__world_resume", 14))),
                 CirExprEnd
             ),
             L7CoreContinuationPackage

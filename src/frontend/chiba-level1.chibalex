@@ -34,7 +34,8 @@ mode STRING
 @intlit = (@hexint | @octint | @binint | @decint) @suffix?
 
 @string_open = "#"* "\""
-@string_chunk = [^"{}]+
+@string_escape = "\\" .
+@string_chunk = (@string_escape | [^"{}\\])+
 
 // operator and keywords ignoring wsnl
 @kw_namespace = "namespace" @wsnl?
@@ -116,7 +117,7 @@ mode STRING
 @tok_rbracket = @wsnl? "]"
 
 @str_quote = "\""
-@str_lbrace = "{"
+@str_interp = "${"
 
 // Main source mode.
 tokens CODE :-
@@ -215,7 +216,7 @@ tokens CODE :-
 // String body mode. Closing is handled by hook because # count is dynamic.
 tokens STRING :-
     @str_quote              => string_quote
-    @str_lbrace             => string_enter_interp
+    @str_interp             => string_enter_interp
     @string_chunk           => string_chunk
     $ANY                    => string_chunk
 

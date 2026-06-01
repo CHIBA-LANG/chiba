@@ -45,18 +45,24 @@ def semantic_to_driver_diagnostics(items: Array[SemanticDiagnostic], index: usiz
 def SemanticDiagnostics.to_driver(self): DriverDiagnostics =
     semantic_to_driver_diagnostics(self.items, 0, Vec[DriverDiagnostic].new())
 
+/// Run backend after semantic typing without nested match parser recovery.
+def run_nanopass_wat_backend(typed: TypedModule): Result[WatModule, DriverDiagnostics] =
+    match run_wasm_gc_wat(typed) {
+        Ok(wat) => Ok(wat)
+        Err(errors) => Err(SemanticDiagnostics.to_driver(errors))
+    }
+
+/// Run semantic stage after source loading without nested match parser recovery.
+def run_nanopass_wat_semantic(project: SourceProject): Result[WatModule, DriverDiagnostics] =
+    match run_typed_semantics(project) {
+        Ok(typed) => run_nanopass_wat_backend(typed)
+        Err(errors) => Err(SemanticDiagnostics.to_driver(errors))
+    }
+
 /// Run the level-1b pass graph through WAT emission.
 def run_nanopass_wat(input: DriverInput): Result[WatModule, DriverDiagnostics] =
     match run_source_driver(input) {
-        Ok(project) =>
-            match run_typed_semantics(project) {
-                Ok(typed) =>
-                    match run_wasm_gc_wat(typed) {
-                        Ok(wat) => Ok(wat)
-                        Err(errors) => Err(errors.to_driver())
-                    }
-                Err(errors) => Err(errors.to_driver())
-            }
+        Ok(project) => run_nanopass_wat_semantic(project)
         Err(errors) => Err(errors)
     }
 
@@ -72,5 +78,5 @@ def compile_request_to_wat(request: CompileRequest): Result[WatModule, DriverDia
 def PipelineStage.after_semantic(self): bool =
     match self {
         StageSource => false
-        _ => true
+        _ => true,
     }

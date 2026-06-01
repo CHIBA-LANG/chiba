@@ -2,20 +2,34 @@ namespace bootstrap
 
 use compiler.cli.*
 use compiler.driver.nanopass_pipeline.*
-use compiler.source.compile_if.*
 use compiler.source.project.*
+
+def main_error_code(cli: ChibacCliConfig): i64 =
+    1
 
 /// Seed entry until level-1b owns parser, semantic checker, and WAT emission.
 def main(): i64 = {
-    let cli = cli_default_config()
+    let cli = ChibacCliConfig {
+        input_count: 0,
+        include_count: 0,
+        output_count: 0,
+        target: ChibacTargetMissing,
+        backend: ChibacBackendMissing,
+        emit: ChibacEmitDefault,
+        opt_level: ChibacOpt0,
+        debug: false,
+        error_format: ChibacErrorHuman,
+        color: ChibacColorAuto,
+        diagnostic_width: 0,
+    }
     let request = CompileRequest {
         cli: cli,
         inputs: Vec[String].new().freeze(),
         includes: Vec[IncludeDir].new().freeze(),
-        target_facts: wasm_gc_wasi_facts(),
+        target_facts: CompileTargetFacts { target: "wasm32-unknown-wasi", backend: "wasm-gc" },
     }
     match compile_request_to_wat(request) {
-        Ok(_) => 0
-        Err(_) => if cli_ready_for_codegen(cli) { 2 } else { 1 }
+        Ok(_) => 0,
+        Err(_) => main_error_code(cli)
     }
 }

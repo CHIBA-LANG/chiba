@@ -495,9 +495,29 @@ def cir_lower_if_cond_ident(type_names: CirTypeNameList, name: Str, rest: AST): 
         IfCondIdent_Call(args) => L0OpCall(L0OpName(name), cir_lower_expr_list(type_names, args))
         IfCondIdent_CallBinary(args, op, rhs) =>
             L0OpBinary(cir_lower_binary_op(op), L0OpCall(L0OpName(name), cir_lower_expr_list(type_names, args)), cir_lower_expr(type_names, rhs))
+        IfCondIdent_Postfix(tail) => cir_lower_if_cond_postfix(type_names, L0OpName(name), tail)
+        IfCondIdent_PostfixBinary(tail, op, rhs) =>
+            L0OpBinary(cir_lower_binary_op(op), cir_lower_if_cond_postfix(type_names, L0OpName(name), tail), cir_lower_expr(type_names, rhs))
+        IfCondIdent_ArithBinary(arith, op, rhs) =>
+            L0OpBinary(cir_lower_binary_op(op), cir_lower_if_cond_arith_tail(type_names, name, arith), cir_lower_expr(type_names, rhs))
         IfCondIdent_Binary(op, rhs) => L0OpBinary(cir_lower_binary_op(op), L0OpName(name), cir_lower_expr(type_names, rhs))
         IfCondIdent_Name => L0OpName(name)
         _ => cir_l0_unsupported(rest, mk_str("if cond ident unsupported", 25))
+    }
+
+def cir_lower_if_cond_postfix(type_names: CirTypeNameList, base: CirExpr, tail: AST): CirExpr =
+    match tail {
+        IfCondPostfix_Call(args, rest) => cir_lower_if_cond_postfix(type_names, L0OpCall(base, cir_lower_expr_list(type_names, args)), rest)
+        IfCondPostfix_Field(field, rest) => cir_lower_if_cond_postfix(type_names, L0OpField(base, field), rest)
+        IfCondPostfix_Index(args, rest) => cir_lower_if_cond_postfix(type_names, L0OpIndex(base, cir_lower_expr_list(type_names, args)), rest)
+        IfCondPostfix_End => base
+        _ => base
+    }
+
+def cir_lower_if_cond_arith_tail(type_names: CirTypeNameList, name: Str, arith: AST): CirExpr =
+    match arith {
+        IfCondArithTail(op, rhs) => L0OpBinary(cir_lower_binary_op(op), L0OpName(name), cir_lower_expr(type_names, rhs))
+        _ => L0OpName(name)
     }
 
 def cir_lower_prefix_op(op: AST): Str =

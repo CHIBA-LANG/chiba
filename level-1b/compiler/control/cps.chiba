@@ -33,13 +33,20 @@ data CpsAtom {
     CpsAtomUnit,
     CpsAtomI32Const(TypedI32ConstAtom),
     CpsAtomParam(usize),
+    CpsAtomTypedParam(usize, TypedValueType),
+    CpsAtomLocal(str, TypedValueType),
+    CpsAtomStringLiteral(str),
 }
 
 /// CPS term kind after one-pass CPS and administrative beta.
 data CpsTermKind {
     CpsTermReturn(CpsAtom),
-    CpsTermTailCall(str, Array[CpsAtom]),
-    CpsTermTailCallExprs(str, Array[CpsTermKind]),
+    CpsTermTailCall(String, Array[CpsAtom]),
+    CpsTermTailCallExprs(String, Array[CpsTermKind]),
+    CpsTermCast(CpsTermKind, TypedValueType),
+    CpsTermStructNew(str, Array[TypedValueType], Array[CpsTermKind]),
+    CpsTermFieldGet(str, Array[TypedValueType], CpsTermKind, usize),
+    CpsTermCall(String, Array[CpsTermKind], TypedValueType),
     CpsTermPrimitiveBinary(PrimitiveBinaryOp, CpsTermKind, CpsTermKind),
     CpsTermBranch(TypedBranchCondition, CpsTermKind, CpsTermKind),
     CpsTermApplyContinuation(CpsContinuation, CpsAtom),
@@ -301,6 +308,7 @@ def cps_tail_form_kind_from_function(function: TypedFunctionFact): CpsTailFormKi
 /// Pick the CPS tail kind for one typed expression.
 def cps_tail_form_kind_from_expr(body: TypedExprKind): CpsTailFormKind =
     match body {
+        TypedExprCall(target, _, _) => CpsTailCall(target)
         TypedExprTailCall(target) => CpsTailCall(target)
         TypedExprTailCallArgs(target, _) => CpsTailCall(target)
         TypedExprParam(_) => CpsTailReturn
@@ -365,6 +373,16 @@ def cps_term_from_typed_expr(body: TypedExprKind): CpsTermKind =
         TypedExprUnit => CpsTermReturn(CpsAtomUnit)
         TypedExprI32Const(atom) => CpsTermReturn(CpsAtomI32Const(atom))
         TypedExprParam(index) => CpsTermReturn(CpsAtomParam(index))
+        TypedExprTypedParam(index, ty) => CpsTermReturn(CpsAtomTypedParam(index, ty))
+        TypedExprLocal(name, ty) => CpsTermReturn(CpsAtomLocal(name as str, ty))
+        TypedExprStringLiteral(text) => CpsTermReturn(CpsAtomStringLiteral(text as str))
+        TypedExprCast(value, ty) => CpsTermCast(cps_term_from_typed_expr(value), ty)
+        TypedExprStructNew(layout, fields, args) =>
+            CpsTermStructNew(layout as str, fields, cps_terms_from_typed_args(args, 0, Vec[CpsTermKind].new()))
+        TypedExprFieldGet(layout, fields, value, index) =>
+            CpsTermFieldGet(layout as str, fields, cps_term_from_typed_expr(value), index)
+        TypedExprCall(target, args, ty) =>
+            CpsTermCall(target, cps_terms_from_typed_args(args, 0, Vec[CpsTermKind].new()), ty)
         TypedExprTailCall(target) => CpsTermTailCall(target, Vec[CpsAtom].new().freeze())
         TypedExprTailCallArgs(target, args) =>
             match cps_atoms_from_typed_args(args, 0, Vec[CpsAtom].new()) {
@@ -383,6 +401,9 @@ def cps_atom_from_typed_arg(arg: TypedExprKind): Option[CpsAtom] =
     match arg {
         TypedExprI32Const(atom) => Some(CpsAtomI32Const(atom))
         TypedExprParam(param_index) => Some(CpsAtomParam(param_index))
+        TypedExprTypedParam(param_index, ty) => Some(CpsAtomTypedParam(param_index, ty))
+        TypedExprLocal(name, ty) => Some(CpsAtomLocal(name as str, ty))
+        TypedExprStringLiteral(text) => Some(CpsAtomStringLiteral(text as str))
         _ => None
     }
 

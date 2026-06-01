@@ -212,21 +212,14 @@ def bir_validate_summary(prog: BirProgram): i64 = {
 }
 
 def bir_validate_fun_marker(fun_id: i64): i64 = {
-    let s = str_new()
-    let _ = str_push_cstr(s, "[bir-validate] checking fun=")
-    let _ = str_append_i64(s, fun_id)
-    let _ = str_push_nl(s)
-    str_write_to(s, 2)
+    let _ = fun_id
+    0
 }
 
     def bir_validate_block_marker(fun_id: i64, block_id: i64): i64 = {
-        let s = str_new()
-        let _ = str_push_cstr(s, "[bir-validate] checking block fun=")
-        let _ = str_append_i64(s, fun_id)
-        let _ = str_push_cstr(s, " id=")
-        let _ = str_append_i64(s, block_id)
-        let _ = str_push_nl(s)
-        str_write_to(s, 2)
+        let _ = fun_id
+        let _ = block_id
+        0
     }
 
 def bir_report_missing_block(prefix: i64, fun_id: i64, block_id: i64, target: i64): i64 = {

@@ -16,10 +16,28 @@ data WasmGcLayoutKind {
     LayoutSliceView,
 }
 
+/// Backend-neutral value type used before WAT-specific spelling.
+data CoreValueType {
+    CoreValUnit,
+    CoreValBool,
+    CoreValI32,
+    CoreValI64,
+    CoreValF32,
+    CoreValF64,
+    CoreValUsize,
+    CoreValString,
+    CoreValStr,
+    CoreValEqRef,
+    CoreValFuncRef,
+    CoreValArrayU8Ref,
+    CoreValLayoutRef(str),
+    CoreValNullableLayoutRef(str),
+}
+
 /// Field entry in a Wasm-GC layout.
 type WasmGcFieldLayout {
     name: str,
-    value_type: str,
+    value_type: CoreValueType,
 }
 
 /// Stable layout table entry.
@@ -36,8 +54,13 @@ type WasmGcLayoutTable {
 }
 
 /// Build a field layout entry.
-def wasm_gc_field(name: str, value_type: str): WasmGcFieldLayout =
+def wasm_gc_field(name: str, value_type: CoreValueType): WasmGcFieldLayout =
     WasmGcFieldLayout { name: name, value_type: value_type }
+
+/// Return the typed field entry at a stable layout index.
+def wasm_gc_layout_field_type(layout: WasmGcLayout, index: usize): CoreValueType =
+    if index >= layout.fields.len() { CoreValEqRef }
+    else { layout.fields.get(index).value_type }
 
 /// Empty layout field array.
 def empty_wasm_gc_fields(): Array[WasmGcFieldLayout] =
@@ -59,9 +82,9 @@ def layout_slice_u8(): WasmGcLayout =
         key: "std.Slice[u8]",
         kind: LayoutSliceView,
         fields: Vec[WasmGcFieldLayout].new()
-            .push(wasm_gc_field("backing", "arrayref:u8"))
-            .push(wasm_gc_field("offset", "usize"))
-            .push(wasm_gc_field("len", "usize"))
+            .push(wasm_gc_field("backing", CoreValArrayU8Ref))
+            .push(wasm_gc_field("offset", CoreValUsize))
+            .push(wasm_gc_field("len", CoreValUsize))
             .freeze(),
     }
 
@@ -72,8 +95,8 @@ def layout_closure_env(): WasmGcLayout =
         key: "compiler.closure.env",
         kind: LayoutClosureEnv,
         fields: Vec[WasmGcFieldLayout].new()
-            .push(wasm_gc_field("fun", "funcref"))
-            .push(wasm_gc_field("env", "eqref"))
+            .push(wasm_gc_field("fun", CoreValFuncRef))
+            .push(wasm_gc_field("env", CoreValEqRef))
             .freeze(),
     }
 
@@ -84,8 +107,8 @@ def layout_continuation_frame(): WasmGcLayout =
         key: "compiler.continuation.frame",
         kind: LayoutContinuationFrame,
         fields: Vec[WasmGcFieldLayout].new()
-            .push(wasm_gc_field("resume", "funcref"))
-            .push(wasm_gc_field("state", "eqref"))
+            .push(wasm_gc_field("resume", CoreValFuncRef))
+            .push(wasm_gc_field("state", CoreValEqRef))
             .freeze(),
     }
 
@@ -96,8 +119,8 @@ def layout_continuation_frame_chain(): WasmGcLayout =
         key: "compiler.continuation.frame_chain",
         kind: LayoutContinuationFrameChain,
         fields: Vec[WasmGcFieldLayout].new()
-            .push(wasm_gc_field("head", "continuation-frame"))
-            .push(wasm_gc_field("parent", "continuation-frame-chain?"))
+            .push(wasm_gc_field("head", CoreValLayoutRef("$chiba.layout.continuation_frame")))
+            .push(wasm_gc_field("parent", CoreValNullableLayoutRef("$chiba.layout.continuation_frame_chain")))
             .freeze(),
     }
 
@@ -108,8 +131,8 @@ def layout_boxed_cont1(): WasmGcLayout =
         key: "compiler.continuation.boxed_cont1",
         kind: LayoutBoxedCont1,
         fields: Vec[WasmGcFieldLayout].new()
-            .push(wasm_gc_field("frame", "continuation-frame"))
-            .push(wasm_gc_field("consumed", "bool"))
+            .push(wasm_gc_field("frame", CoreValLayoutRef("$chiba.layout.continuation_frame")))
+            .push(wasm_gc_field("consumed", CoreValBool))
             .freeze(),
     }
 
@@ -120,8 +143,8 @@ def layout_continuation_package(): WasmGcLayout =
         key: "compiler.continuation.contN_package",
         kind: LayoutContNPackage,
         fields: Vec[WasmGcFieldLayout].new()
-            .push(wasm_gc_field("frames", "continuation-frame-chain"))
-            .push(wasm_gc_field("repeatable", "bool"))
+            .push(wasm_gc_field("frames", CoreValLayoutRef("$chiba.layout.continuation_frame_chain")))
+            .push(wasm_gc_field("repeatable", CoreValBool))
             .freeze(),
     }
 
@@ -132,8 +155,8 @@ def layout_erased_continuation_package(): WasmGcLayout =
         key: "compiler.continuation.erased_callable_package",
         kind: LayoutContinuationPackage,
         fields: Vec[WasmGcFieldLayout].new()
-            .push(wasm_gc_field("tag", "usize"))
-            .push(wasm_gc_field("payload", "eqref"))
+            .push(wasm_gc_field("tag", CoreValUsize))
+            .push(wasm_gc_field("payload", CoreValEqRef))
             .freeze(),
     }
 

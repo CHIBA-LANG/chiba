@@ -52,6 +52,13 @@ data CoreExprKind {
     CoreExprUnit,
     CoreExprI32Const(CoreI32ConstAtom),
     CoreExprParam(usize),
+    CoreExprTypedParam(usize, CoreValueType),
+    CoreExprLocal(str, CoreValueType),
+    CoreExprStringLiteral(str),
+    CoreExprCast(CoreExprKind, CoreValueType),
+    CoreExprStructNew(WasmGcLayout, Array[CoreExprKind]),
+    CoreExprFieldGet(WasmGcLayout, CoreExprKind, usize),
+    CoreExprCall(str, Array[CoreExprKind], CoreValueType),
     CoreExprTailCall(str),
     CoreExprTailCallArgs(str, Array[CoreExprKind]),
     CoreExprPrimitiveBinary(PrimitiveBinaryOp, CoreExprKind, CoreExprKind),
@@ -87,6 +94,8 @@ type CoreOp {
     export_main: bool,
     function_symbol: Option[CoreFunctionSymbol],
     i32_param_count: usize,
+    param_types: Array[CoreValueType],
+    result_type: CoreValueType,
     function_body: Option[CoreExprKind],
     adt_tuple_ctor: Option[CoreAdtCtorLoweringObligation],
     layout: Option[WasmGcLayout],
@@ -170,6 +179,55 @@ def optimized_closure_typed_module(module: OptimizedClosureModule): TypedModule 
 def optimized_closure_cps_module(module: OptimizedClosureModule): CpsModule =
     module.source.source.source.source.source
 
+/// Convert typed semantic value type to backend Core value type.
+def core_value_type_from_typed(ty: TypedValueType): CoreValueType =
+    match ty {
+        TypedValUnit => CoreValUnit
+        TypedValBool => CoreValBool
+        TypedValI32 => CoreValI32
+        TypedValI64 => CoreValI64
+        TypedValF32 => CoreValF32
+        TypedValF64 => CoreValF64
+        TypedValUsize => CoreValUsize
+        TypedValString => CoreValString
+        TypedValStr => CoreValStr
+        TypedValEqRef => CoreValEqRef
+        TypedValFuncRef => CoreValFuncRef
+        TypedValArrayU8Ref => CoreValArrayU8Ref
+        TypedValLayoutRef(label) => CoreValLayoutRef(label)
+        TypedValNullableLayoutRef(label) => CoreValNullableLayoutRef(label)
+    }
+
+/// Convert typed parameter value types into backend Core value types.
+def core_value_types_from_typed(types: Array[TypedValueType], index: usize, out: Vec[CoreValueType]): Array[CoreValueType] =
+    if index == types.len() { out.freeze() }
+    else { core_value_types_from_typed(types, index + 1, out.push(core_value_type_from_typed(types.get(index)))) }
+
+/// Normalize layout labels before storing them in layout field tables.
+def core_layout_field_label(label: str): str =
+    if label.len() == 0 { label }
+    else if label.byte_at(0) == 36 { label }
+    else { "$".concat(label) }
+
+/// Convert typed field hints to layout field entries until layout fields become typed.
+def core_wasm_gc_fields_from_typed(types: Array[TypedValueType], index: usize, out: Vec[WasmGcFieldLayout]): Array[WasmGcFieldLayout] =
+    if index == types.len() { out.freeze() }
+    else {
+        core_wasm_gc_fields_from_typed(
+            types,
+            index + 1,
+            out.push(wasm_gc_field("_", core_value_type_from_typed(types.get(index)))))
+    }
+
+/// Build a typed ad-hoc layout from semantic hints.
+def core_wasm_gc_layout_from_typed(label: str, fields: Array[TypedValueType]): WasmGcLayout =
+    WasmGcLayout {
+        id: 1000 + fields.len(),
+        key: label,
+        kind: LayoutStruct,
+        fields: core_wasm_gc_fields_from_typed(fields, 0, Vec[WasmGcFieldLayout].new()),
+    }
+
 /// Convert a typed i32 const atom to Core.
 def core_i32_const_atom_from_typed(atom: TypedI32ConstAtom): CoreI32ConstAtom =
     match atom {
@@ -189,7 +247,10 @@ def core_expr_from_cps_atom(atom: CpsAtom): CoreExprKind =
     match atom {
         CpsAtomUnit => CoreExprUnit
         CpsAtomI32Const(atom) => CoreExprI32Const(core_i32_const_atom_from_typed(atom))
-        CpsAtomParam(index) => CoreExprParam(index)
+        CpsAtomParam(index) => CoreExprTypedParam(index, CoreValI32)
+        CpsAtomTypedParam(index, ty) => CoreExprTypedParam(index, core_value_type_from_typed(ty))
+        CpsAtomLocal(name, ty) => CoreExprLocal(name, core_value_type_from_typed(ty))
+        CpsAtomStringLiteral(text) => CoreExprStringLiteral(text)
     }
 
 /// Convert a small resume result into an executable Core atom.
@@ -210,13 +271,7 @@ def core_expr_args_from_cps_terms(args: Array[CpsTermKind], index: usize, out: V
 def core_expr_from_cps_tail_call_arg(target: str, args: Array[CpsAtom]): CoreExprKind =
     if args.len() == 0 { CoreExprTailCall(target) }
     else if args.len() > 1 { CoreExprTailCallArgs(target, core_expr_args_from_cps_atoms(args, 0, Vec[CoreExprKind].new())) }
-    else {
-        match args.get(0) {
-            CpsAtomI32Const(atom) => CoreExprTailCallArgs(target, Vec[CoreExprKind].new().push(CoreExprI32Const(core_i32_const_atom_from_typed(atom))).freeze())
-            CpsAtomParam(index) => CoreExprTailCallArgs(target, Vec[CoreExprKind].new().push(CoreExprParam(index)).freeze())
-            _ => CoreExprBranchJoinPending
-        }
-    }
+    else { CoreExprTailCallArgs(target, Vec[CoreExprKind].new().push(core_expr_from_cps_atom(args.get(0))).freeze()) }
 
 /// Convert a CPS tail term to backend Core expression form.
 def core_expr_from_cps_term(term: CpsTermKind): CoreExprKind =
@@ -224,6 +279,13 @@ def core_expr_from_cps_term(term: CpsTermKind): CoreExprKind =
         CpsTermReturn(atom) => core_expr_from_cps_atom(atom)
         CpsTermTailCall(target, args) => core_expr_from_cps_tail_call_arg(target, args)
         CpsTermTailCallExprs(target, args) => CoreExprTailCallArgs(target, core_expr_args_from_cps_terms(args, 0, Vec[CoreExprKind].new()))
+        CpsTermCast(value, ty) => CoreExprCast(core_expr_from_cps_term(value), core_value_type_from_typed(ty))
+        CpsTermStructNew(layout, fields, args) =>
+            CoreExprStructNew(core_wasm_gc_layout_from_typed(layout, fields), core_expr_args_from_cps_terms(args, 0, Vec[CoreExprKind].new()))
+        CpsTermFieldGet(layout, fields, value, index) =>
+            CoreExprFieldGet(core_wasm_gc_layout_from_typed(layout, fields), core_expr_from_cps_term(value), index)
+        CpsTermCall(target, args, ty) =>
+            CoreExprCall(target, core_expr_args_from_cps_terms(args, 0, Vec[CoreExprKind].new()), core_value_type_from_typed(ty))
         CpsTermPrimitiveBinary(op, left, right) => CoreExprPrimitiveBinary(op, core_expr_from_cps_term(left), core_expr_from_cps_term(right))
         CpsTermBranch(condition, then_term, else_term) =>
             CoreExprIfElse(
@@ -241,7 +303,7 @@ def core_expr_from_stackless_resume_body(body: StacklessResumeBodyKind): CoreExp
         StacklessResumeBodyShift => CoreExprBranchJoinPending
         StacklessResumeBodyReset => CoreExprBranchJoinPending
         StacklessResumeBodyConst(value) => core_expr_from_usize(value)
-        StacklessResumeBodyParam(index) => CoreExprParam(index)
+        StacklessResumeBodyParam(index) => CoreExprTypedParam(index, CoreValI32)
         StacklessResumeBodyMultiResume(_, last) => core_expr_from_usize(last)
         StacklessResumeBodyPending => CoreExprBranchJoinPending
     }
@@ -252,6 +314,11 @@ def core_stackless_resume_param_count(body: StacklessResumeBodyKind): usize =
         StacklessResumeBodyParam(index) => index + 1
         _ => 0
     }
+
+/// Build a typed parameter vector for legacy i32-param function facts.
+def core_i32_param_types(count: usize, out: Vec[CoreValueType]): Array[CoreValueType] =
+    if count == 0 { out.freeze() }
+    else { core_i32_param_types(count - 1, out.push(CoreValI32)) }
 
 /// Return true when two binder ids identify the same owner.
 def core_binder_id_eq(left: BinderId, right: BinderId): bool = left.index == right.index
@@ -270,6 +337,8 @@ def lower_cps_term_fact(term: CpsTermFact, function: TypedFunctionFact): CoreOp 
         export_main: function.is_main,
         function_symbol: Some(CoreFunctionSymbol { name: function.symbol }),
         i32_param_count: function.i32_param_count,
+        param_types: core_value_types_from_typed(function.param_types, 0, Vec[CoreValueType].new()),
+        result_type: core_value_type_from_typed(function.result_type),
         function_body: Some(core_expr_from_cps_term(term.term)),
         adt_tuple_ctor: None,
         layout: None,
@@ -302,6 +371,8 @@ def lower_closure_fact(fact: ClosureLoweringFact): Option[CoreOp] =
                 export_main: false,
                 function_symbol: None,
                 i32_param_count: 0,
+                param_types: Vec[CoreValueType].new().freeze(),
+                result_type: CoreValUnit,
                 function_body: None,
                 adt_tuple_ctor: None,
                 layout: Some(closure_env_layout()),
@@ -348,6 +419,8 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 export_main: false,
                 function_symbol: None,
                 i32_param_count: 0,
+                param_types: Vec[CoreValueType].new().freeze(),
+                result_type: CoreValUnit,
                 function_body: None,
                 adt_tuple_ctor: None,
                 layout: continuation_core_layout(fact.kind),
@@ -362,6 +435,8 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 export_main: false,
                 function_symbol: None,
                 i32_param_count: 0,
+                param_types: Vec[CoreValueType].new().freeze(),
+                result_type: CoreValUnit,
                 function_body: None,
                 adt_tuple_ctor: None,
                 layout: continuation_core_layout(fact.kind),
@@ -376,6 +451,8 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 export_main: false,
                 function_symbol: None,
                 i32_param_count: 0,
+                param_types: Vec[CoreValueType].new().freeze(),
+                result_type: CoreValUnit,
                 function_body: None,
                 adt_tuple_ctor: None,
                 layout: continuation_core_layout(fact.kind),
@@ -397,6 +474,8 @@ def push_continuation_frame_core_ops(out: Vec[CoreOp], frames: Array[Continuatio
                 export_main: false,
                 function_symbol: None,
                 i32_param_count: core_stackless_resume_param_count(frame.resume.body),
+                param_types: core_i32_param_types(core_stackless_resume_param_count(frame.resume.body), Vec[CoreValueType].new()),
+                result_type: CoreValI32,
                 function_body: Some(core_expr_from_stackless_resume_body(frame.resume.body)),
                 adt_tuple_ctor: None,
                 layout: None,
@@ -419,6 +498,8 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     export_main: false,
                     function_symbol: None,
                     i32_param_count: 0,
+                    param_types: Vec[CoreValueType].new().freeze(),
+                    result_type: CoreValUnit,
                     function_body: None,
                     adt_tuple_ctor: None,
                     layout: continuation_frame_chain_layout(fact.kind),
@@ -432,6 +513,8 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     export_main: false,
                     function_symbol: None,
                     i32_param_count: 0,
+                    param_types: Vec[CoreValueType].new().freeze(),
+                    result_type: CoreValUnit,
                     function_body: None,
                     adt_tuple_ctor: None,
                     layout: continuation_core_layout(fact.kind),
@@ -456,6 +539,10 @@ def core_function_body_terminator(body: Option[CoreExprKind]): CoreBlockTerminat
     match body {
         Some(CoreExprTailCall(_)) => CoreBlockTailCall
         Some(CoreExprTailCallArgs(_, _)) => CoreBlockTailCall
+        Some(CoreExprCall(_, _, _)) => CoreBlockReturn
+        Some(CoreExprStructNew(_, _)) => CoreBlockReturn
+        Some(CoreExprFieldGet(_, _, _)) => CoreBlockReturn
+        Some(CoreExprCast(_, _)) => CoreBlockReturn
         Some(CoreExprPrimitiveBinary(_, _, _)) => CoreBlockReturn
         Some(CoreExprBranchJoinPending) => CoreBlockContinue
         None => CoreBlockContinue
@@ -548,6 +635,8 @@ def lower_adt_ctor_helper_op(obligation: CoreAdtCtorLoweringObligation): CoreOp 
         export_main: false,
         function_symbol: Some(CoreFunctionSymbol { name: obligation.helper_name }),
         i32_param_count: obligation.helper_arity,
+        param_types: Vec[CoreValueType].new().freeze(),
+        result_type: CoreValEqRef,
         function_body: None,
         adt_tuple_ctor: Some(obligation),
         layout: None,
@@ -605,6 +694,74 @@ def append_core_ops(out: Vec[CoreOp], ops: Array[CoreOp], index: usize): Vec[Cor
     if index == ops.len() { out }
     else { append_core_ops(out.push(ops.get(index)), ops, index + 1) }
 
+/// Append one layout table to a builder.
+def append_wasm_gc_layouts(out: Vec[WasmGcLayout], layouts: Array[WasmGcLayout], index: usize): Vec[WasmGcLayout] =
+    if index == layouts.len() { out }
+    else { append_wasm_gc_layouts(out.push(layouts.get(index)), layouts, index + 1) }
+
+/// Read a layout key through a typed helper so WAT lowering keeps field ownership.
+def core_layout_key(layout: WasmGcLayout): str = layout.key
+
+/// Classify layout kinds without relying on derived enum equality in active WAT lowering.
+def core_layout_kind_is_struct(kind: WasmGcLayoutKind): bool =
+    match kind {
+        LayoutStruct => true
+        _ => false
+    }
+
+/// Push expression-owned typed layouts so WAT can declare their real fields.
+def core_layouts_push_unique(out: Vec[WasmGcLayout], layout: WasmGcLayout): Vec[WasmGcLayout] =
+    if core_layout_kind_is_struct(layout.kind) && core_layout_key(layout).len() > 0 { out.push(layout) }
+    else { out }
+
+/// Collect layouts referenced by Core expression forms.
+def collect_core_expr_layouts(expr: CoreExprKind, out: Vec[WasmGcLayout]): Vec[WasmGcLayout] =
+    match expr {
+        CoreExprCast(value, _) => collect_core_expr_layouts(value, out)
+        CoreExprStructNew(layout, args) => collect_core_expr_array_layouts(args, 0, core_layouts_push_unique(out, layout))
+        CoreExprFieldGet(layout, value, _) => collect_core_expr_layouts(value, core_layouts_push_unique(out, layout))
+        CoreExprCall(_, args, _) => collect_core_expr_array_layouts(args, 0, out)
+        CoreExprTailCallArgs(_, args) => collect_core_expr_array_layouts(args, 0, out)
+        CoreExprPrimitiveBinary(_, left, right) => collect_core_expr_layouts(right, collect_core_expr_layouts(left, out))
+        CoreExprIfElse(_, then_expr, else_expr) => collect_core_expr_layouts(else_expr, collect_core_expr_layouts(then_expr, out))
+        _ => out
+    }
+
+/// Collect layouts from Core expression arrays.
+def collect_core_expr_array_layouts(args: Array[CoreExprKind], index: usize, out: Vec[WasmGcLayout]): Vec[WasmGcLayout] =
+    if index == args.len() { out }
+    else { collect_core_expr_array_layouts(args, index + 1, collect_core_expr_layouts(args.get(index), out)) }
+
+/// Collect layouts referenced by one Core op.
+def collect_core_op_layouts(op: CoreOp, out: Vec[WasmGcLayout]): Vec[WasmGcLayout] =
+    match op.function_body {
+        Some(body) => collect_core_expr_layouts(body, out)
+        None => out
+    }
+
+/// Collect all typed layouts referenced by executable Core ops.
+def collect_core_ops_layouts(ops: Array[CoreOp], index: usize, out: Vec[WasmGcLayout]): Array[WasmGcLayout] =
+    if index == ops.len() { out.freeze() }
+    else { collect_core_ops_layouts(ops, index + 1, collect_core_op_layouts(ops.get(index), out)) }
+
+/// Return true when a layout key appeared earlier in the collected layout stream.
+def core_layout_key_seen_before(layouts: Array[WasmGcLayout], index: usize, key: str, cursor: usize): bool =
+    if cursor >= index { false }
+    else if core_layout_key(layouts.get(cursor)) == key { true }
+    else { core_layout_key_seen_before(layouts, index, key, cursor + 1) }
+
+/// Deduplicate concrete WAT layout declarations by stable layout key.
+def dedupe_wasm_gc_layouts(layouts: Array[WasmGcLayout], index: usize, out: Vec[WasmGcLayout]): Array[WasmGcLayout] =
+    if index == layouts.len() { out.freeze() }
+    else {
+        let layout = layouts.get(index)
+        if core_layout_key_seen_before(layouts, index, core_layout_key(layout), 0) {
+            dedupe_wasm_gc_layouts(layouts, index + 1, out)
+        } else {
+            dedupe_wasm_gc_layouts(layouts, index + 1, out.push(layout))
+        }
+    }
+
 /// Lower optimized closure Core to Wasm-GC Core.
 def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
     let cps_module = optimized_closure_cps_module(module)
@@ -620,9 +777,14 @@ def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
         |> append_core_ops(closure_ops, 0)
         |> append_core_ops(continuation_ops, 0)
         |> append_core_ops(adt_ctor_ops, 0)
+    let base_layouts = build_wasm_gc_layouts(module)
+    let layout_entries = dedupe_wasm_gc_layouts(
+        collect_core_ops_layouts(ops, 0, append_wasm_gc_layouts(Vec[WasmGcLayout].new(), base_layouts.entries, 0)),
+        0,
+        Vec[WasmGcLayout].new())
     WasmGcCoreModule {
         source: module,
-        layouts: build_wasm_gc_layouts(module),
+        layouts: WasmGcLayoutTable { entries: layout_entries },
         ops: ops,
         block_obligations: core_block_lowering_obligations(ops, 0, Vec[CoreBlockLoweringObligation].new()),
         branch_join_obligations: branch_join_obligations,

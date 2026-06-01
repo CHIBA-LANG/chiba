@@ -83,6 +83,10 @@ const REQUIRED_TEXT = [
   "CpsTermReturn",
   "CpsTermTailCall",
   "CpsTermTailCallExprs",
+  "CpsTermCast",
+  "CpsTermStructNew",
+  "CpsTermFieldGet",
+  "CpsTermCall",
   "CpsTermBranch",
   "CpsTermPrimitiveBinary",
   "CpsTermApplyContinuation",
@@ -255,7 +259,8 @@ function checkAstPrimaryTypedFunctionSource() {
     "def typed_item_skeletons_from_ast_owners",
     "def typed_item_skeletons_from_alpha_primary",
     "let skeleton_functions = typed_function_facts_from_skeletons",
-    "let functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, module.project.facts.ast_expr_nodes)",
+    "let initial_functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, module.project.facts.ast_expr_nodes)",
+    "let functions = typed_function_facts_finalize_result_types(initial_functions, 0, Vec[TypedFunctionFact].new())",
   ];
   for (const needle of required) {
     if (!source.includes(needle)) fail(`semantic AST primary typed function path missing ${needle}`);

@@ -76,8 +76,8 @@ type ConstructorMutationObligation {
 
 /// Direction of checked ADT/tuple conversion.
 data AdtTupleConversionKind {
-    AdtToTuple
-    TupleToAdt
+    AdtToTuple,
+    TupleToAdt,
 }
 
 /// Compiler-owned identity of one ADT tuple bridge intrinsic.

@@ -9,11 +9,11 @@ data Result[T, E] {
 
 /// Return true when a result is `Ok`.
 def Result[T, E].is_ok(self): bool =
-    match self { Ok(_) => true  Err(_) => false }
+    match self { Ok(_) => true, Err(_) => false }
 
 /// Return true when a result is `Err`.
 def Result[T, E].is_err(self): bool = self.is_ok() == false
 
 /// Map the successful value while preserving the error type.
 def Result[T, E].map[U](self, f: (T) => U): Result[U, E] =
-    match self { Ok(value) => Ok(f(value))  Err(error) => Err(error) }
+    match self { Ok(value) => Ok(f(value)), Err(error) => Err(error) }

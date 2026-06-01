@@ -22,7 +22,7 @@ data CoreValidationError {
 }
 
 /// Validated Core module accepted by backend emit.
-type ValidatedCoreModule {
+type BackendValidatedCoreModule {
     core: WasmGcCoreModule,
 }
 
@@ -45,15 +45,15 @@ def WasmGcLayoutTable.contains_layout(self, layout: WasmGcLayout, index: usize):
 /// Compare layout kinds by ADT variant.
 def WasmGcLayoutKind.eq(self, other: WasmGcLayoutKind): bool =
     match self {
-        LayoutStruct => match other { LayoutStruct => true  _ => false }
-        LayoutArray => match other { LayoutArray => true  _ => false }
-        LayoutClosureEnv => match other { LayoutClosureEnv => true  _ => false }
-        LayoutContinuationFrame => match other { LayoutContinuationFrame => true  _ => false }
-        LayoutContinuationFrameChain => match other { LayoutContinuationFrameChain => true  _ => false }
-        LayoutBoxedCont1 => match other { LayoutBoxedCont1 => true  _ => false }
-        LayoutContNPackage => match other { LayoutContNPackage => true  _ => false }
-        LayoutContinuationPackage => match other { LayoutContinuationPackage => true  _ => false }
-        LayoutSliceView => match other { LayoutSliceView => true  _ => false }
+        LayoutStruct => match other { LayoutStruct => true, _ => false }
+        LayoutArray => match other { LayoutArray => true, _ => false }
+        LayoutClosureEnv => match other { LayoutClosureEnv => true, _ => false }
+        LayoutContinuationFrame => match other { LayoutContinuationFrame => true, _ => false }
+        LayoutContinuationFrameChain => match other { LayoutContinuationFrameChain => true, _ => false }
+        LayoutBoxedCont1 => match other { LayoutBoxedCont1 => true, _ => false }
+        LayoutContNPackage => match other { LayoutContNPackage => true, _ => false }
+        LayoutContinuationPackage => match other { LayoutContinuationPackage => true, _ => false }
+        LayoutSliceView => match other { LayoutSliceView => true, _ => false }
     }
 
 /// Return true when a Core kind may appear in tail position.
@@ -97,6 +97,11 @@ def core_branch_condition_reads_param(condition: CoreBranchCondition): bool =
 def core_function_body_reads_param(body: CoreExprKind): bool =
     match body {
         CoreExprParam(_) => true
+        CoreExprTypedParam(_, _) => true
+        CoreExprCast(value, _) => core_function_body_reads_param(value)
+        CoreExprStructNew(_, args) => core_function_body_args_read_param(args, 0)
+        CoreExprFieldGet(_, value, _) => core_function_body_reads_param(value)
+        CoreExprCall(_, args, _) => core_function_body_args_read_param(args, 0)
         CoreExprTailCallArgs(_, args) => core_function_body_args_read_param(args, 0)
         CoreExprPrimitiveBinary(_, left, right) =>
             if core_function_body_reads_param(left) { true }
@@ -115,13 +120,19 @@ def core_function_body_args_read_param(args: Array[CoreExprKind], index: usize):
     else { core_function_body_args_read_param(args, index + 1) }
 
 /// Validate that branch join facts are not emitted as fake function bodies.
+def core_op_param_count(op: CoreOp): usize =
+    if op.param_types.len() > 0 { op.param_types.len() } else { op.i32_param_count }
+
+/// Validate that branch join facts are not emitted as fake function bodies.
 def validate_core_function_body(op: CoreOp): Option[CoreValidationError] =
     match op.function_body {
         Some(CoreExprBranchJoinPending) => Some(CoreMissingBranchBody("branch join function body lowering absent"))
-        Some(body) =>
-            if core_function_body_reads_param(body) && op.i32_param_count == 0 { Some(CoreMissingBranchBody("function body reads missing i32 param")) }
-            else if core_function_body_max_param_index(body, 0) >= op.i32_param_count && op.i32_param_count > 0 { Some(CoreMissingBranchBody("function body reads missing i32 param")) }
+        Some(body) => {
+            let param_count = core_op_param_count(op)
+            if core_function_body_reads_param(body) && param_count == 0 { Some(CoreMissingBranchBody("function body reads missing param")) }
+            else if core_function_body_max_param_index(body, 0) >= param_count && param_count > 0 { Some(CoreMissingBranchBody("function body reads missing param")) }
             else { None }
+        }
         _ => None
     }
 
@@ -129,6 +140,11 @@ def validate_core_function_body(op: CoreOp): Option[CoreValidationError] =
 def core_function_body_max_param_index(body: CoreExprKind, current: usize): usize =
     match body {
         CoreExprParam(index) => if index > current { index } else { current }
+        CoreExprTypedParam(index, _) => if index > current { index } else { current }
+        CoreExprCast(value, _) => core_function_body_max_param_index(value, current)
+        CoreExprStructNew(_, args) => core_function_body_args_max_param_index(args, 0, current)
+        CoreExprFieldGet(_, value, _) => core_function_body_max_param_index(value, current)
+        CoreExprCall(_, args, _) => core_function_body_args_max_param_index(args, 0, current)
         CoreExprTailCallArgs(_, args) => core_function_body_args_max_param_index(args, 0, current)
         CoreExprPrimitiveBinary(_, left, right) =>
             core_function_body_max_param_index(right, core_function_body_max_param_index(left, current))
@@ -199,6 +215,9 @@ def validate_core_duplicate_symbol(module: WasmGcCoreModule, op: CoreOp, next_in
 /// Validate direct symbol references inside Core function bodies.
 def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValidationError] =
     match op.function_body {
+        Some(CoreExprCall(target, args, _)) =>
+            if core_module_contains_symbol(module, target, 0) == false { Some(CoreDanglingSymbol("call target symbol is not defined")) }
+            else { validate_core_expr_arg_symbols(module, args, 0) }
         Some(CoreExprTailCall(target)) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
@@ -221,6 +240,12 @@ def validate_core_symbol(module: WasmGcCoreModule, op: CoreOp): Option[CoreValid
 /// Validate symbol references inside nested Core expressions.
 def validate_core_expr_symbol(module: WasmGcCoreModule, body: CoreExprKind): Option[CoreValidationError] =
     match body {
+        CoreExprCast(value, _) => validate_core_expr_symbol(module, value)
+        CoreExprStructNew(_, args) => validate_core_expr_arg_symbols(module, args, 0)
+        CoreExprFieldGet(_, value, _) => validate_core_expr_symbol(module, value)
+        CoreExprCall(target, args, _) =>
+            if core_module_contains_symbol(module, target, 0) == false { Some(CoreDanglingSymbol("call target symbol is not defined")) }
+            else { validate_core_expr_arg_symbols(module, args, 0) }
         CoreExprTailCall(target) =>
             if core_module_contains_symbol(module, target, 0) { None }
             else { Some(CoreDanglingSymbol("tail-call target symbol is not defined")) }
@@ -478,10 +503,10 @@ def validate_core_intrinsic_bridges(obligations: Array[CoreIntrinsicBridgeLoweri
     }
 
 /// Validate symbols, layouts, tailcall facts, and continuation packages.
-def validate_wasm_gc_core(module: WasmGcCoreModule): Result[ValidatedCoreModule, Array[CoreValidationError]] =
+def validate_wasm_gc_core(module: WasmGcCoreModule): Result[BackendValidatedCoreModule, Array[CoreValidationError]] =
     match validate_core_intrinsic_bridges(module.intrinsic_bridge_obligations, 0, validate_core_utf8_identifier_lowering(module, validate_core_pattern_decisions(module, validate_core_adt_ctor_tuple_nominals(module.adt_ctor_obligations, 0, validate_core_ops(module, 0, Vec[CoreValidationError].new()))))).freeze() {
         errors =>
-            if errors.len() == 0 { Ok(ValidatedCoreModule { core: module }) }
+            if errors.len() == 0 { Ok(BackendValidatedCoreModule { core: module }) }
             else { Err(errors) }
     }
 

@@ -1,8 +1,85 @@
 # Handoff — chiba-level1 bootstrap / level-1b truthfulness cleanup
 
-Date: 2026-05-25
+Date: 2026-06-01
 
 This document is for a fresh agent continuing the work. It intentionally does **not** duplicate the full roadmap/spec text. Use the referenced files as source of truth.
+
+## Current checkpoint: P0 generated-parser WAT
+
+Current status: **P0 is not complete**. Do not claim only chibacc remains.
+
+Latest checkpoint result: `level1b:chibacc-mini` now passes end-to-end with the
+default native generator (`./chibacc.o`). This includes simple/pratt/list/
+continuation/attribute/calculator generated parser WAT execution, full
+`src/frontend/chiba-level1.chibacc` executable parser WAT execution, full
+expression parser WAT execution, and AST evidence emission.
+
+Latest successful command:
+
+```sh
+timeout 360 vp run level1b:chibacc-mini
+```
+
+Important output:
+
+```text
+[PASS] run generated parser wat simple.chibacc
+[PASS] run generated parser wat pratt.chibacc
+[PASS] run generated parser wat list.chibacc
+[PASS] run generated parser wat continuation-type.chibacc
+[PASS] run generated parser wat attribute-args.chibacc
+[PASS] run generated parser wat calculator.chibacc
+[PASS] run full chiba-level1 executable parser wat .scratch/level-1b/chibacc-full/chiba-level1-parser.exec.wat
+[PASS] run full chiba-level1 expression parser wat .scratch/level-1b/chibacc-full/chiba-level1-parser.expr.exec.wat
+[PASS] chibacc mini AST evidence .scratch/level-1b/chibacc-mini/ast-primary-evidence.json
+```
+
+What was fixed in this checkpoint:
+
+- `level-1b/compiler/semantic/type_infer.chiba`: fixed invalid inline match arm
+  separators that caused parsing to stop before `infer_types`, which previously
+  produced WAT with `call $infer_types` but no `(func $infer_types ...)`.
+- `level-1b/compiler/backend/core.chiba`,
+  `level-1b/compiler/backend/wat_emit.chiba`, and
+  `level-1b/compiler/backend/validate_core.chiba`: normalized Core call symbols
+  to `str` and removed an incorrectly lowered helper signature from the WAT
+  emitter path.
+- `src/backend/wasm/wat.chiba`: taught layout field typing that
+  `CoreExprKind__CoreExprCall__a3` field 0 is `(ref $array_u8)`, so pattern
+  payload locals for Core call targets are declared as string refs instead of
+  `eqref`.
+
+Latest rebuild completed:
+
+```sh
+timeout 600 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1c_main.chiba --output level1c.o
+```
+
+It wrote:
+
+```text
+target/debug/level1c.o 18057840 2026-06-01 16:46:53 +0200
+```
+
+Recommended next validation:
+
+```sh
+timeout 120 vp run level1b:c08-semantic
+timeout 120 vp run level1b:c09-control-cps
+timeout 120 vp run level1b:c10-closure-package
+timeout 120 vp run level1b:c11-backend
+git diff --check
+```
+
+Do not use `CHIBACC=/tmp/chibacc-project-clean/target/debug/chibacc.clean.o`
+unless that file exists. In this checkout the runner defaulted to `./chibacc.o`
+and passed.
+
+Next P0 focus is no longer the generated-parser WAT blocker. Continue by making
+level-1b carry primary semantics instead of depending on the active `src` path:
+full typed AST traversal, real CPS/reset/shift/shiftn body lowering, closure and
+ContN capture/frame lowering, Core/block/WAT emission from real AST/CPS inputs,
+and then the actual level-1b self-bootstrap path.
 
 ## Where to look first
 
@@ -64,6 +141,7 @@ pnpm -s run smoke:lexer-compare
 
 Earlier validated state in this conversation:
 
+- `timeout 360 vp run level1b:chibacc-mini` passed after the latest rebuild.
 - `pnpm -s run validate:first-bootstrap` passed.
 - `timeout 5 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1c_main.chiba --output level1c.o` timed out with exit 124 and did not crash before timeout.
 - `level1b:c04-regex`, `level1b:c07-source-driver`, `level1b:c08-semantic`, `level1b:c09-control-cps`, `level1b:c10-closure-package`, and `level1b:c11-backend` passed after the latest level-1b edits.

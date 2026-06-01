@@ -1,4 +1,5 @@
 namespace backend.cir.ir
+use metalstd.mem.*
 use metalstd.str.*
 use parser.chiba_level1.*
 
@@ -19,14 +20,15 @@ data CirPass {
 
 type CirBinder {
     id: i64
+    namespace_name: Str
     name: Str
 }
 
 data CirRef {
     L0RefName(Str),
     L1RefLocal(i64, Str),
-    L1RefGlobal(Str),
-    L1RefUnresolved(Str)
+    L1RefGlobal(Str, Str, i64),
+    L1RefUnresolved(Str, Str)
 }
 
 type CirTyVarId {
@@ -231,6 +233,7 @@ data CirCoreLayoutList {
 }
 
 type CirCoreSymbol {
+    id: i64
     name: Str
 }
 
@@ -478,8 +481,44 @@ data CirExpr {
     L1OpUnsupported(AST, CirUnsupported)
 }
 
+def cir_binder_in(namespace_name: Str, id: i64, name: Str): CirBinder =
+    CirBinder { id: id, namespace_name: namespace_name, name: name }
+
 def cir_binder(id: i64, name: Str): CirBinder =
-    CirBinder { id: id, name: name }
+    cir_binder_in(mk_str("", 0), id, name)
+
+def cir_symbol_name(namespace_name: Str, name: Str): Str =
+    if namespace_name.len == 0 { name }
+    else {
+        let out = str_new()
+        let _ = str_append(out, namespace_name)
+        let _ = str_push(out, 46)
+        let _ = str_append(out, name)
+        out
+    }
+
+def cir_binder_symbol(binder: CirBinder): Str =
+    cir_symbol_name(binder.namespace_name, binder.name)
+
+def cir_ref_symbol(ref: CirRef): Str =
+    match ref {
+        L1RefGlobal(namespace_name, name, _) => cir_symbol_name(namespace_name, name)
+        L1RefUnresolved(namespace_name, name) => cir_symbol_name(namespace_name, name)
+        L1RefLocal(_, name) => name
+        L0RefName(name) => name
+    }
+
+def cir_str_region_eq(value: Str, offset: i64, part: Str, index: i64): i64 =
+    if index >= part.len { 1 }
+    else if load8(value.ptr, offset + index) != load8(part.ptr, index) { 0 }
+    else { cir_str_region_eq(value, offset, part, index + 1) }
+
+def cir_symbol_matches(namespace_name: Str, name: Str, symbol: Str): i64 =
+    if namespace_name.len == 0 { streq(symbol, name) }
+    else if symbol.len != namespace_name.len + 1 + name.len { 0 }
+    else if cir_str_region_eq(symbol, 0, namespace_name, 0) == 0 { 0 }
+    else if load8(symbol.ptr, namespace_name.len) != 46 { 0 }
+    else { cir_str_region_eq(symbol, namespace_name.len + 1, name, 0) }
 
 def cir_extern_import(abi: CirExternAbi, module_name: Str, symbol_name: Str): CirExternImport =
     CirExternImport { abi: abi, module_name: module_name, symbol_name: symbol_name }

@@ -164,8 +164,8 @@ def cir_cont_has_non_replay_expr(expr: CirExpr): i64 =
             let bad_callee = match callee {
                 L1OpRef(ref) =>
                     match ref {
-                        L1RefUnresolved(name) => cir_cont_non_replay_call_name(name)
-                        L1RefGlobal(name) => cir_cont_non_replay_call_name(name)
+                        L1RefUnresolved(_, name) => cir_cont_non_replay_call_name(name)
+                        L1RefGlobal(_, name, _) => cir_cont_non_replay_call_name(name)
                         _ => 0
                     }
                 L1OpField(_, field) => cir_cont_non_replay_call_name(field)

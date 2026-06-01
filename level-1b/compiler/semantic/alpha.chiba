@@ -36,6 +36,8 @@ type AlphaAstOwnerOrigin {
     has_i32_prefix_neg_body: bool,
     has_i32_match_param_body: bool,
     from_chibacc: bool,
+    root_node_id: usize,
+    i32_param_count: usize,
 }
 
 /// Alpha-renamed module.
@@ -119,5 +121,7 @@ def alpha_ast_owner_origins_from_source_facts(items: Array[SourceAstOwnerSymbolF
                 has_i32_prefix_neg_body: item.has_i32_prefix_neg_body,
                 has_i32_match_param_body: item.has_i32_match_param_body,
                 from_chibacc: item.from_chibacc,
+                root_node_id: item.root_node_id,
+                i32_param_count: item.i32_param_count,
             }))
     }

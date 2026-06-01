@@ -59,9 +59,9 @@ imports.
 
 - `src/level1b_main.chiba` remains the fixed smoke entry while C00 is being
   established.
-- `vp run level1b:smoke` compiles this project with the level-0 seed using
-  `timeout 10`, emits WAT through the current level-1 path, and runs the result
-  through the Node WAT harness backed by `binaryen.js`.
+- `vp run level1b:smoke` compiles this entry with the current `level1c.o` seed,
+  writes `.scratch/level-1b/level1b-main.seed.wat`, and assembles that exact WAT.
+  It must not reuse C11 fixture WAT as a substitute for the compiler entry.
 - As C00 grows, the smoke target must be extended with a wasmtime-direct path
   for the same `chibac.wasm` CLI surface.
 

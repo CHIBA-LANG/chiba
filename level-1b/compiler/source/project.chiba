@@ -96,6 +96,15 @@ data SourceAstExprNodeKind {
     SourceAstExprNodePrefixNeg,
     SourceAstExprNodeIfElse,
     SourceAstExprNodeMatch,
+    SourceAstExprNodeCall,
+    SourceAstExprNodeMethodCall,
+    SourceAstExprNodeIndex,
+    SourceAstExprNodeIndexSlice,
+    SourceAstExprNodeLocal,
+    SourceAstExprNodeStringLiteral,
+    SourceAstExprNodeCast,
+    SourceAstExprNodeStructNew,
+    SourceAstExprNodeFieldGet,
 }
 
 /// Parser-owned expression node fact for recursive source AST traversal.
@@ -111,6 +120,13 @@ type SourceAstExprNodeFact {
     right: usize,
     then_node: usize,
     else_node: usize,
+    callee: String,
+    member: String,
+    args: Array[usize],
+    arg0: usize,
+    arg1: usize,
+    arg2: usize,
+    arg_count: usize,
 }
 
 /// Parser-owned owner symbol fact before full SourceItem replacement.
@@ -128,6 +144,8 @@ type SourceAstOwnerSymbolFact {
     namespace_count: usize,
     def_item_count: usize,
     from_chibacc: bool,
+    root_node_id: usize,
+    i32_param_count: usize,
 }
 
 /// Header attributes discovered before item parsing.

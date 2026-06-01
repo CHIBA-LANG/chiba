@@ -41,13 +41,13 @@ def SemType.kind(self): SemanticTypeKind =
 def SemanticTypeKind.eq(self, other: SemanticTypeKind): bool =
     match self {
         SemanticKindValue =>
-            match other { SemanticKindValue => true  _ => false }
+            match other { SemanticKindValue => true, _ => false }
         SemanticKindRow =>
-            match other { SemanticKindRow => true  _ => false }
+            match other { SemanticKindRow => true, _ => false }
         SemanticKindCapability =>
-            match other { SemanticKindCapability => true  _ => false }
+            match other { SemanticKindCapability => true, _ => false }
         SemanticKindContinuation =>
-            match other { SemanticKindContinuation => true  _ => false }
+            match other { SemanticKindContinuation => true, _ => false }
         SemanticKindAbiScalar =>
-            match other { SemanticKindAbiScalar => true  _ => false }
+            match other { SemanticKindAbiScalar => true, _ => false }
     }

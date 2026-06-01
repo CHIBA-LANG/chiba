@@ -20,7 +20,7 @@ def List[T].to_array(self): Array[T] =
 
 /// Return true when the list is empty.
 def List[T].is_empty(self): bool =
-    match self { ListNil => true  ListCons(_, _) => false }
+    match self { ListNil => true, ListCons(_, _) => false }
 
 /// Add a value to the front of a list.
 def List[T].push_front(self, value: T): List[T] = ListCons(value, self)
@@ -43,7 +43,8 @@ def List[T].map[U](self, f: (T) => U): List[U] =
 def List[T].filter(self, keep: (T) => bool): List[T] =
     match self {
         ListNil => ListNil
-        ListCons(head, tail) =>
+        ListCons(head, tail) => {
             if keep(head) { ListCons(head, tail.filter(keep)) }
             else { tail.filter(keep) }
+        }
     }

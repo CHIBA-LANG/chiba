@@ -129,11 +129,11 @@ def cir_cont_boundary_check_boundary_call(callee: CirExpr, args: CirExprList, ac
     match callee {
         L1OpRef(ref) =>
             match ref {
-                L1RefUnresolved(name) =>
+                L1RefUnresolved(_, name) =>
                     if cir_cont_boundary_name(name) != 0 && cir_cont_ref_crosses_boundary_args(args, active) != 0 {
                         CirContBoundaryCheckErr(mk_str("continuation crosses world/thread boundary", 42))
                     } else { CirContBoundaryCheckOk }
-                L1RefGlobal(name) =>
+                L1RefGlobal(_, name, _) =>
                     if cir_cont_boundary_name(name) != 0 && cir_cont_ref_crosses_boundary_args(args, active) != 0 {
                         CirContBoundaryCheckErr(mk_str("continuation crosses world/thread boundary", 42))
                     } else { CirContBoundaryCheckOk }

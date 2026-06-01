@@ -97,6 +97,21 @@ rule path ::=
 
 rule path_name ::= 
     name:Ident => name
+    | KwIf => mk_str("if", 2)
+    ;
+
+rule field_name ::=
+    name:Ident => name
+    | KwNamespace => mk_str("namespace", 9)
+    | KwPrivate => mk_str("private", 7)
+    | KwSelf => mk_str("self", 4)
+    ;
+
+rule value_name ::=
+    name:Ident => name
+    | KwNamespace => mk_str("namespace", 9)
+    | KwPrivate => mk_str("private", 7)
+    | KwSelf => mk_str("self", 4)
     ;
 
 rule path_tail ::= 
@@ -177,8 +192,25 @@ rule def_return_type_opt ::=
     ;
 
 rule def_body ::= 
-    body:block_expr => body
+    body:def_block_expr => body
+    | body:block_expr => body
+    | body:def_stmt_body => body
     | value:expr => value
+    ;
+
+rule def_stmt_body ::=
+    head:block_stmt body:def_block_body => block_prepend_stmt(head, body)
+    ;
+
+rule def_block_expr ::=
+    LBrace body:def_block_body RBrace => body
+    ;
+
+rule def_block_body ::=
+    _:comment_trivia_list _:stmt_separator body:def_block_body => body
+    | _:trivia_list head:block_stmt body:def_block_body => block_prepend_stmt(head, body)
+    | _:trivia_list value:expr rest:block_expr_or_stmt => block_expr_or_stmt(value, rest)
+    | _:trivia_list tail:tail_expr _:trivia_list => Expr_Block(Stmt_End, tail)
     ;
 
 rule type_item ::= 
@@ -186,9 +218,20 @@ rule type_item ::=
     ;
 
 rule type_item_body ::= 
-    LBrace fields:nominal_field_list RBrace => TypeDecl_Record(fields)
+    LBrace fields:nominal_record_body => TypeDecl_Record(fields)
     | Eq ty:type_expr => TypeDecl_Alias(ty)
-    | ty:type_expr => TypeDecl_Alias(ty)
+    ;
+
+rule nominal_record_body ::=
+    _:trivia_list RBrace => NominalField_End
+    | _:trivia_list head:nominal_field tail:nominal_record_tail => NominalField_Cons(head, tail)
+    ;
+
+rule nominal_record_tail ::=
+    Comma _:trivia_list head:nominal_field tail:nominal_record_tail => NominalField_Cons(head, tail)
+    | Comma _:trivia_list RBrace => NominalField_End
+    | _:comment_trivia_list _:stmt_separator head:nominal_field tail:nominal_record_tail => NominalField_Cons(head, tail)
+    | RBrace => NominalField_End
     ;
 
 rule data_item ::= 
@@ -201,18 +244,32 @@ rule data_item_body ::=
     ;
 
 rule data_item_body_after_ident ::=
-    Colon _:trivia_list ty:type_expr tail:nominal_field_tail _:trivia_list => DataAfterFirst_Record(ty, tail)
+    Colon _:trivia_list ty:type_expr tail:nominal_field_tail_opt _:trivia_list => DataAfterFirst_Record(ty, tail)
     | args:data_variant_args tail:data_variant_tail => DataAfterFirst_Variant(args, tail)
     ;
 
-rule nominal_field_list ::= 
-    _:trivia_list head:nominal_field tail:nominal_field_tail => NominalField_Cons(head, tail)
+rule nominal_field_list_opt ::=
+    _:trivia_list fields:nominal_field_list => fields
     | => NominalField_End
     ;
 
-rule nominal_field_tail ::= 
-    _:trivia_list Comma rest:nominal_field_list => rest
+rule nominal_field_list ::=
+    head:nominal_field tail:nominal_field_tail_opt => NominalField_Cons(head, tail)
+    ;
+
+rule nominal_field_tail_opt ::=
+    tail:nominal_field_tail => tail
     | => NominalField_End
+    ;
+
+rule nominal_field_tail ::=
+    Comma rest:nominal_field_after_sep => rest
+    | Comma _:trivia_list => NominalField_End
+    | _:comment_trivia_list _:stmt_separator rest:nominal_field_after_sep => rest
+    ;
+
+rule nominal_field_after_sep ::=
+    _:trivia_list head:nominal_field tail:nominal_field_tail_opt => NominalField_Cons(head, tail)
     ;
 
 rule nominal_field ::= 
@@ -221,7 +278,7 @@ rule nominal_field ::=
     ;
 
 rule nominal_field_core ::= 
-    name:Ident Colon _:trivia_list ty:type_expr => NominalField(name, ty)
+    name:field_name Colon _:trivia_list ty:type_expr => NominalField(name, ty)
     | Underscore Colon _:trivia_list ty:type_expr => NominalPhantomField(ty)
     ;
 
@@ -231,7 +288,7 @@ rule data_variant_list ::=
     ;
 
 rule data_variant_tail ::=
-    _:trivia_list Comma rest:data_variant_list => rest
+    Comma rest:data_variant_list => rest
     | => AdtVariant_End
     ;
 
@@ -258,7 +315,7 @@ rule data_variant_arg_after_ident ::=
     ;
 
 rule data_variant_field_tail ::= 
-    _:trivia_list Comma rest:data_variant_field_after_comma => rest
+    Comma rest:data_variant_field_after_comma => rest
     | => AdtVariantField_End
     ;
 
@@ -277,7 +334,7 @@ rule union_field_list ::=
     ;
 
 rule union_field_tail ::= 
-    _:trivia_list Comma rest:union_field_after_comma => rest
+    Comma rest:union_field_after_comma => rest
     | => UnionField_End
     ;
 
@@ -356,12 +413,13 @@ rule generic_row_field_list_opt ::=
     ;
 
 rule generic_row_field_tail ::= 
-    _:trivia_list Comma rest:generic_row_field_list_opt => rest
+    Comma rest:generic_row_field_list_opt => rest
     | => GenericRowField_End
     ;
 
 rule generic_row_field ::= 
     name:Ident Colon _:trivia_list ty:type_expr => GenericRowField(name, ty)
+    | KwNamespace Colon _:trivia_list ty:type_expr => GenericRowField(mk_str("namespace", 9), ty)
     ;
 
 rule param_list ::= 
@@ -370,7 +428,7 @@ rule param_list ::=
     ;
 
 rule param_tail ::= 
-    _:trivia_list Comma rest:param_list => rest
+    Comma rest:param_list => rest
     | => Param_End
     ;
 
@@ -391,14 +449,48 @@ rule param_type_opt ::=
 rule type_expr ::= 
     KwCont1 LParen input:type_expr RParen ThinArrow answer:type_expr => Type_Cont1(input, answer)
     | KwContN LParen input:type_expr RParen ThinArrow answer:type_expr => Type_ContN(input, answer)
-    | LParen input:type_expr RParen ThinArrow answer:type_expr => Type_Callable(input, answer)
-    | LParen RParen ThinArrow answer:type_expr => Type_Callable(Type_Unit, answer)
+    | LParen body:type_paren_body => body
     | head:Ident tail:type_expr_tail => Type_Path(head, tail)
     | KwSelf => Type_Path(mk_str("Self", 4), Type_Tail_End)
     | LBrace row:generic_row_type RBrace => Type_Row(row)
     | KwDyn contract:dyn_type_contract_list => Type_Dyn(contract)
-    | LParen RParen => Type_Unit
     | atom:Atom => Type_Atom(atom)
+    ;
+
+rule type_paren_body ::=
+    RParen tail:type_paren_empty_tail => tail
+    | input:type_expr rest:type_paren_after_first => type_paren_from_body(input, rest)
+    ;
+
+rule type_paren_after_first ::=
+    RParen tail:type_paren_after_input => TypeParenBody_One(tail)
+    | Comma rest:type_paren_callable_more => TypeParenBody_Many(rest)
+    ;
+
+rule type_paren_callable_more ::=
+    _:trivia_list next:type_expr rest:type_paren_callable_tail => TypeParenMore(next, rest)
+    ;
+
+rule type_paren_callable_tail ::=
+    Comma rest:type_paren_callable_more => rest
+    | RParen arrow:type_callable_arrow => TypeParenMoreReturn(arrow)
+    ;
+
+rule type_callable_arrow ::=
+    ThinArrow answer:type_expr => answer
+    | FatArrow answer:type_expr => answer
+    ;
+
+rule type_paren_empty_tail ::=
+    ThinArrow answer:type_expr => Type_Callable(Type_Unit, answer)
+    | FatArrow answer:type_expr => Type_Callable(Type_Unit, answer)
+    | => Type_Unit
+    ;
+
+rule type_paren_after_input ::=
+    ThinArrow answer:type_expr => TypeParen_Callable(answer)
+    | FatArrow answer:type_expr => TypeParen_Callable(answer)
+    | => TypeParen_Group
     ;
 
 rule dyn_type_contract_list ::= 
@@ -425,12 +517,13 @@ rule dyn_row_field_list_opt ::=
     ;
 
 rule dyn_row_field_tail ::= 
-    _:trivia_list Comma rest:dyn_row_field_list_opt => rest
+    Comma rest:dyn_row_field_list_opt => rest
     | => DynRowField_End
     ;
 
 rule dyn_row_field ::= 
     name:Ident Colon _:trivia_list ty:type_expr => DynRowField(name, ty)
+    | KwNamespace Colon _:trivia_list ty:type_expr => DynRowField(mk_str("namespace", 9), ty)
     ;
 
 rule type_expr_tail ::= 
@@ -444,7 +537,7 @@ rule type_arg_list ::=
     ;
 
 rule type_arg_tail ::= 
-    _:trivia_list Comma rest:type_arg_list => rest
+    Comma rest:type_arg_list => rest
     | => TypeArg_End
     ;
 
@@ -452,16 +545,40 @@ rule block_expr ::=
     LBrace body:block_body RBrace => body
     ;
 
+rule if_then_block_expr ::=
+    LBrace body:if_then_block_body RBrace => body
+    ;
+
+rule if_then_block_body ::=
+    _:comment_trivia_list _:stmt_separator body:if_then_block_body => body
+    | _:trivia_list value:if_expr _:trivia_list => Expr_Block(Stmt_End, TailExpr_Some(value))
+    | _:trivia_list value:match_expr _:trivia_list => Expr_Block(Stmt_End, TailExpr_Some(value))
+    | _:trivia_list value:if_expr rest:block_expr_or_stmt => block_expr_or_stmt(value, rest)
+    | _:trivia_list value:match_expr rest:block_expr_or_stmt => block_expr_or_stmt(value, rest)
+    | _:trivia_list head:block_stmt body:if_then_block_body => block_prepend_stmt(head, body)
+    | _:trivia_list value:expr _:trivia_list => Expr_Block(Stmt_End, TailExpr_Some(value))
+    | _:trivia_list tail:tail_expr _:trivia_list => Expr_Block(Stmt_End, tail)
+    ;
+
 rule block_body ::= 
     _:comment_trivia_list _:stmt_separator body:block_body => body
+    | _:trivia_list value:if_expr _:trivia_list => Expr_Block(Stmt_End, TailExpr_Some(value))
+    | _:trivia_list value:match_expr _:trivia_list => Expr_Block(Stmt_End, TailExpr_Some(value))
+    | _:trivia_list value:if_expr rest:block_expr_or_stmt => block_expr_or_stmt(value, rest)
+    | _:trivia_list value:match_expr rest:block_expr_or_stmt => block_expr_or_stmt(value, rest)
     | _:trivia_list head:block_stmt body:block_body => block_prepend_stmt(head, body)
     | _:trivia_list value:expr rest:block_expr_or_stmt => block_expr_or_stmt(value, rest)
     | _:trivia_list tail:tail_expr _:trivia_list => Expr_Block(Stmt_End, tail)
     ;
 
 rule block_expr_or_stmt ::=
-    _:comment_trivia_list _:stmt_separator body:block_body => BlockExprOrStmt_Stmt(body)
+    trailing:trailing_attr_closure body:block_body => block_trailing_closure_body(trailing, body)
+    | _:comment_trivia_list _:stmt_separator body:block_body => BlockExprOrStmt_Stmt(body)
     | _:trivia_list => BlockExprOrStmt_Tail
+    ;
+
+rule trailing_attr_closure ::=
+    attr:item_attr _:trivia_list c:closure_expr => TrailingAttrClosure(Attr_Cons(attr, Attr_End), c)
     ;
 
 rule block_stmt ::=
@@ -471,6 +588,7 @@ rule block_stmt ::=
 
 rule block_stmt_core ::=
     KwLet pat:pattern ty:let_type_opt Eq value:expr => Stmt_LetPatternTyped(pat, ty, value)
+    | KwUnsafe body:block_expr => Stmt_Expr(Expr_Unsafe(body))
     | KwReturn value:expr => Stmt_Return(value)
     | f:for_stmt => f
     | KwBreak label:loop_label_opt => Stmt_Break(label)
@@ -505,6 +623,7 @@ rule stmt ::=
 
 rule stmt_core ::= 
     Semicolon => Stmt_Empty
+    | KwUnsafe body:block_expr => Stmt_Expr(Expr_Unsafe(body))
     | KwLet pat:pattern ty:let_type_opt Eq value:expr => Stmt_LetPatternTyped(pat, ty, value)
     | KwReturn value:expr => Stmt_Return(value)
     | f:for_stmt => f
@@ -577,14 +696,31 @@ rule closure_param_tail ::=
     ;
 
 rule if_expr ::= 
-    KwIf cond:if_cond then_block:block_expr _:trivia_list else_branch:if_else_branch => Expr_If(cond, then_block, else_branch)
+    KwIf cond:if_cond then_block:if_then_block_expr _:trivia_list KwElse else_branch:if_else_tail => Expr_If(cond, then_block, else_branch)
     ;
 
 rule if_cond ::= 
     KwLet pat:pattern Eq name:Ident LParen args:arg_list RParen => IfCond_Let(pat, Expr_Call(Expr_Name(name), args))
     | KwLet pat:pattern Eq value:expr => IfCond_Let(pat, value)
-    | name:Ident rest:if_cond_ident_rest => IfCond_Expr(Expr_IfCondIdent(name, rest))
-    | value:expr => IfCond_Expr(value)
+    | value:if_cond_expr => IfCond_Expr(value)
+    ;
+
+rule if_cond_expr ::=
+    left:if_cond_cmp tail:if_cond_logic_tail => if_cond_logic(left, tail)
+    ;
+
+rule if_cond_logic_tail ::=
+    AmpAmp rhs:if_cond_expr => IfCondLogicTail(OpAnd, rhs)
+    | PipePipe rhs:if_cond_expr => IfCondLogicTail(OpOr, rhs)
+    | => IfCondLogicTail_None
+    ;
+
+rule if_cond_cmp ::=
+    name:value_name rest:if_cond_ident_rest => Expr_IfCondIdent(name as Str, rest)
+    | Bang value:if_cond_cmp => Expr_Prefix(Prefix_Not, value)
+    | p:paren_expr => p
+    | KwTrue => Expr_Bool(1)
+    | KwFalse => Expr_Bool(0)
     ;
 
 rule if_cond_binary_op ::=
@@ -598,6 +734,9 @@ rule if_cond_binary_op ::=
 
 rule if_cond_ident_rest ::= 
     LParen args:arg_list RParen tail:if_cond_call_tail => if_cond_call_tail(args, tail)
+    | Dot field:field_name tail:if_cond_postfix_tail after:if_cond_postfix_after => if_cond_postfix_after(IfCondPostfix_Field(field as Str, tail), after)
+    | LBracket args:expr_list_opt RBracket tail:if_cond_postfix_tail after:if_cond_postfix_after => if_cond_postfix_after(IfCondPostfix_Index(args, tail), after)
+    | arith:if_cond_arith_tail cmp:if_cond_binary_op right:if_cond_binary_rhs => IfCondIdent_ArithBinary(arith, cmp, right)
     | EqEq rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpEqEq, rhs)
     | BangEq rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpBangEq, rhs)
     | Lt rhs:if_cond_binary_rhs => IfCondIdent_Binary(OpLt, rhs)
@@ -607,37 +746,64 @@ rule if_cond_ident_rest ::=
     | => IfCondIdent_Name
     ;
 
+rule if_cond_arith_op ::=
+    Plus => OpAdd
+    | Minus => OpSub
+    | Star => OpMul
+    | Slash => OpDiv
+    | Percent => OpMod
+    ;
+
+rule if_cond_arith_tail ::=
+    op:if_cond_arith_op rhs:if_cond_arith_rhs => if_cond_arith_tail(op, rhs)
+    ;
+
+rule if_cond_arith_rhs ::=
+    n:IntLit => Expr_Int(n)
+    | name:value_name rest:match_value_ident_rest => expr_from_match_ident_rest(name as Str, rest)
+    | p:paren_expr => p
+    ;
+
 rule if_cond_call_tail ::=
     op:if_cond_binary_op rhs:if_cond_binary_rhs => IfCondCallTail_Binary(op, rhs)
+    | tail:if_cond_postfix_tail => IfCondCallTail_Postfix(tail)
     | => IfCondCallTail_None
     ;
 
+rule if_cond_postfix_tail ::=
+    LParen args:arg_list RParen tail:if_cond_postfix_tail => IfCondPostfix_Call(args, tail)
+    | Dot field:field_name tail:if_cond_postfix_tail => IfCondPostfix_Field(field as Str, tail)
+    | LBracket args:expr_list_opt RBracket tail:if_cond_postfix_tail => IfCondPostfix_Index(args, tail)
+    | => IfCondPostfix_End
+    ;
+
+rule if_cond_postfix_after ::=
+    op:if_cond_binary_op rhs:if_cond_binary_rhs => IfCondPostfixAfter_Binary(op, rhs)
+    | => IfCondPostfixAfter_None
+    ;
+
 rule if_cond_binary_rhs ::=
-    name:Ident rest:match_value_ident_rest => expr_from_match_ident_rest(name, rest)
+    name:value_name rest:match_value_ident_rest => expr_from_match_ident_rest(name as Str, rest)
     | value:expr => value
     ;
 
-rule if_else_branch ::= 
-    KwElse next:if_else_after_else => next
-    ;
-
-rule if_else_after_else ::= 
+rule if_else_tail ::=
     nested:if_expr => nested
     | block:block_expr => block
     ;
 
 rule match_expr ::= 
-    KwMatch value:match_value LBrace arms:match_arm_list => Expr_Match(value, arms)
+    KwMatch value:match_value LBrace arms:match_arm_list RBrace => Expr_Match(value, arms)
     ;
 
 rule match_value ::= 
-    name:Ident rest:match_value_ident_rest => Expr_MatchIdent(name, rest)
+    name:value_name rest:match_value_ident_rest => Expr_MatchIdent(name as Str, rest)
     | value:expr => value
     ;
 
 rule match_value_ident_rest ::= 
     LParen args:arg_list RParen rest:match_value_ident_rest => MatchIdent_Call(args, rest)
-    | Dot field:Ident rest:match_value_ident_rest => MatchIdent_Field(field, rest)
+    | Dot field:field_name rest:match_value_ident_rest => MatchIdent_Field(field as Str, rest)
     | LBracket args:expr_list_opt RBracket rest:match_value_ident_rest => MatchIdent_Index(args, rest)
     | => MatchIdent_Name
     ;
@@ -662,8 +828,14 @@ rule match_arm_list ::=
     ;
 
 rule match_arm_list_after_trivia ::=
-    RBrace => MatchArm_End
-    | arm:match_arm rest:match_arm_list => MatchArm_Cons(arm, rest)
+    arm:match_arm tail:match_arm_tail => MatchArm_Cons(arm, tail)
+    | => MatchArm_End
+    ;
+
+rule match_arm_tail ::=
+    Comma rest:match_arm_list => rest
+    | _:stmt_separator rest:match_arm_list => rest
+    | => MatchArm_End
     ;
 
 rule match_arm ::= 
@@ -672,7 +844,8 @@ rule match_arm ::=
 
 rule match_arm_value ::=
     block:block_expr => block
-    | name:Ident rest:match_value_ident_rest => expr_from_match_ident_rest(name, rest)
+    | value:if_expr => value
+    | value:match_expr => value
     | value:expr => value
     ;
 
@@ -729,7 +902,7 @@ rule asm_string_list ::=
 rule pattern ::= 
     Underscore => Pattern_Wildcard
     | KwSelf => Pattern_IdentStart(mk_str("self", 4), PatternAfterIdent_Atom(PatternIdent_Name))
-    | name:Ident rest:pattern_after_ident => Pattern_IdentStart(name, rest)
+    | name:value_name rest:pattern_after_ident => Pattern_IdentStart(name as Str, rest)
     | atom:pattern_atom_no_ident => atom
     ;
 
@@ -741,12 +914,13 @@ rule pattern_after_ident ::=
 rule pattern_atom ::= 
     Underscore => Pattern_Wildcard
     | KwSelf => Pattern_IdentStart(mk_str("self", 4), PatternAfterIdent_Atom(PatternIdent_Name))
-    | name:Ident rest:pattern_after_ident => Pattern_IdentStart(name, rest)
+    | name:value_name rest:pattern_after_ident => Pattern_IdentStart(name as Str, rest)
     | atom:pattern_atom_no_ident => atom
     ;
 
 rule pattern_atom_no_ident ::= 
     atom:Atom => Pattern_Atom(atom)
+    | Colon name:Ident => Pattern_Atom(name)
     | lit:IntLit => Pattern_Int(lit)
     | KwTrue => Pattern_Bool(1)
     | KwFalse => Pattern_Bool(0)
@@ -790,7 +964,7 @@ rule pattern_record_tail ::=
     ;
 
 rule pattern_record_field ::= 
-    name:Ident value:pattern_record_field_value => PatternRecordField(name, value)
+    name:field_name value:pattern_record_field_value => PatternRecordField(name as Str, value)
     ;
 
 rule pattern_record_field_value ::= 
@@ -804,7 +978,7 @@ rule paren_expr ::=
 
 rule paren_after_lparen ::= 
     RParen tail:paren_empty_tail => tail
-    | first:Ident rest:paren_after_ident => Expr_ParenIdent(first, rest)
+    | first:value_name rest:paren_after_ident => expr_from_paren_ident(first as Str, rest)
     | values:expr_list_opt RParen => Expr_Paren(values)
     ;
 
@@ -816,8 +990,16 @@ rule paren_empty_tail ::=
 rule paren_after_ident ::= 
     Colon ty:type_expr tail:closure_param_tail RParen _:lambda_return_arrow body:lambda_body => ParenIdent_Lambda(ty, tail, body)
     | Comma rest:expr_list_after_comma RParen => ParenIdent_Tuple(rest)
+    | tail:paren_ident_postfix_tail op:paren_binary_op rhs:expr RParen => ParenIdent_PostfixBinary(tail, op, rhs)
     | op:paren_binary_op rhs:expr RParen => ParenIdent_Binary(op, rhs)
     | RParen => ParenIdent_Name
+    ;
+
+rule paren_ident_postfix_tail ::=
+    Dot field:field_name tail:paren_ident_postfix_tail => ParenIdentPostfix_Field(field as Str, tail)
+    | LParen args:arg_list RParen tail:paren_ident_postfix_tail => ParenIdentPostfix_Call(args, tail)
+    | LBracket args:expr_list_opt RBracket tail:paren_ident_postfix_tail => ParenIdentPostfix_Index(args, tail)
+    | => ParenIdentPostfix_End
     ;
 
 rule lambda_return_arrow ::= 
@@ -860,36 +1042,52 @@ rule record_expr ::=
     ;
 
 rule record_body ::= 
-    first:Ident tail:record_body_after_ident => Record_First(first, tail)
-    | KwSelf tail:record_body_after_ident => Record_First(mk_str("self", 4), tail)
+    _:trivia_list first:Ident tail:record_body_after_ident => Record_First(first, tail)
+    | _:trivia_list KwSelf tail:record_body_after_ident => Record_First(mk_str("self", 4), tail)
+    | _:trivia_list head:record_field tail:record_field_tail => Record_Fields(RecordField_Cons(head, tail))
     | => Record_Fields(RecordField_End)
     ;
 
 rule record_body_after_ident ::= 
     Pipe fields:record_field_list_opt => Record_Update(Expr_Name(str_empty()), fields)
     | Comma rest:record_field_after_comma => RecordTail_Shorthand(rest)
-    | Colon value:expr tail:record_field_tail => RecordTail_Field(value, tail)
+    | Colon value:record_field_value tail:record_field_tail => RecordTail_Field(value, tail)
     | => RecordTail_Field(Expr_Name(str_empty()), RecordField_End)
     ;
 
 rule record_field_list_opt ::= 
-    _:trivia_list head:record_field tail:record_field_tail => RecordField_Cons(head, tail)
+    head:record_field tail:record_field_tail => RecordField_Cons(head, tail)
+    | _:trivia_list head:record_field tail:record_field_tail => RecordField_Cons(head, tail)
     | => RecordField_End
     ;
 
 rule record_field_tail ::= 
-    _:trivia_list Comma rest:record_field_after_comma => rest
+    Comma rest:record_field_after_comma => rest
+    | Comma _:trivia_list => RecordField_End
+    | _:trivia_list Comma rest:record_field_after_comma => rest
+    | _:trivia_list Comma _:trivia_list => RecordField_End
+    | _:comment_trivia_list _:stmt_separator rest:record_field_after_comma => rest
     | => RecordField_End
     ;
 
 rule record_field_after_comma ::= 
-    _:trivia_list head:record_field tail:record_field_tail => RecordField_Cons(head, tail)
-    | => RecordField_End
+    head:record_field tail:record_field_tail => RecordField_Cons(head, tail)
+    | _:trivia_list head:record_field tail:record_field_tail => RecordField_Cons(head, tail)
     ;
 
 rule record_field ::= 
-    name:Ident Colon value:expr => RecordField(name, value)
-    | name:Ident => RecordField(name, Expr_Name(str_empty()))
+    name:field_name tail:record_field_after_ident => record_field_from_tail(name as Str, tail)
+    ;
+
+rule record_field_after_ident ::=
+    Colon value:record_field_value => RecordFieldTail_Value(value)
+    | => RecordFieldTail_Shorthand
+    ;
+
+rule record_field_value ::=
+    value:if_expr => value
+    | value:match_expr => value
+    | value:expr => value
     ;
 
 rule expr_list_opt ::= 
@@ -908,7 +1106,7 @@ rule expr_list_after_comma ::=
     ;
 
 rule ident_expr ::= 
-    name:Ident tail:ident_tail => Expr_IdentTail(name, tail)
+    name:value_name tail:ident_tail => Expr_IdentTail(name as Str, tail)
     ;
 
 rule ident_tail ::= 
@@ -949,7 +1147,7 @@ rule expr ::= pratt {
     }
 
     infix(95, 96) {
-        Dot field:Ident => Expr_Field($lhs, field) ;
+        Dot field:field_name => Expr_Field($lhs, field as Str) ;
         DotStar => Expr_Deref($lhs) ;
         LParen args:arg_list RParen => Expr_Call($lhs, args) ;
         LBracket args:expr_list_opt RBracket => Expr_Index($lhs, args) ;
@@ -1026,7 +1224,7 @@ rule arg_list ::=
     ;
 
 rule arg_tail ::= 
-    _:trivia_list Comma rest:arg_list => rest
+    Comma rest:arg_list => rest
     | => Arg_End
     ;
 
@@ -1121,6 +1319,12 @@ rule arg_tail ::=
 
         Type_Path(Str, AST),
         Type_Callable(AST, AST),
+        TypeParen_Callable(AST),
+        TypeParen_Group,
+        TypeParenBody_One(AST),
+        TypeParenBody_Many(AST),
+        TypeParenMore(AST, AST),
+        TypeParenMoreReturn(AST),
         Type_Cont1(AST, AST),
         Type_ContN(AST, AST),
         Type_Row(AST),
@@ -1144,6 +1348,8 @@ rule arg_tail ::=
         Expr_Block(AST, AST),
         BlockExprOrStmt_Stmt(AST),
         BlockExprOrStmt_Tail,
+        BlockExprOrStmt_TrailingClosure(AST, AST, AST),
+        TrailingAttrClosure(AST, AST),
         Expr_Closure(AST, AST),
         Expr_If(AST, AST, AST),
         IfCond_Let(AST, AST),
@@ -1151,10 +1357,23 @@ rule arg_tail ::=
         Expr_IfCondIdent(Str, AST),
         IfCondIdent_Call(AST),
         IfCondIdent_CallBinary(AST, AST, AST),
+        IfCondIdent_Postfix(AST),
+        IfCondIdent_PostfixBinary(AST, AST, AST),
+        IfCondIdent_ArithBinary(AST, AST, AST),
+        IfCondArithTail(AST, AST),
         IfCondIdent_Binary(AST, AST),
         IfCondIdent_Name,
         IfCondCallTail_Binary(AST, AST),
+        IfCondCallTail_Postfix(AST),
         IfCondCallTail_None,
+        IfCondPostfix_Call(AST, AST),
+        IfCondPostfix_Field(Str, AST),
+        IfCondPostfix_Index(AST, AST),
+        IfCondPostfix_End,
+        IfCondPostfixAfter_Binary(AST, AST),
+        IfCondPostfixAfter_None,
+        IfCondLogicTail(AST, AST),
+        IfCondLogicTail_None,
         Expr_Match(AST, AST),
         Expr_MatchIdent(Str, AST),
         MatchIdent_Call(AST, AST),
@@ -1204,6 +1423,11 @@ rule arg_tail ::=
         ParenIdent_Lambda(AST, AST, AST),
         ParenIdent_Tuple(AST),
         ParenIdent_Binary(AST, AST),
+        ParenIdent_PostfixBinary(AST, AST, AST),
+        ParenIdentPostfix_Field(Str, AST),
+        ParenIdentPostfix_Call(AST, AST),
+        ParenIdentPostfix_Index(AST, AST),
+        ParenIdentPostfix_End,
         ParenIdent_Name,
         Expr_List(AST),
         Expr_Record(AST),
@@ -1215,6 +1439,8 @@ rule arg_tail ::=
         RecordField_Cons(AST, AST),
         RecordField_End,
         RecordField(Str, AST),
+        RecordFieldTail_Value(AST),
+        RecordFieldTail_Shorthand,
         ExprList_Cons(AST, AST),
         ExprList_End,
         TailExpr_Some(AST),
@@ -1250,6 +1476,7 @@ rule arg_tail ::=
         Expr_Bool(i64),
         Expr_Name(Str),
         Expr_IdentTail(Str, AST),
+        Expr_IdentTrailingClosure(AST, AST, AST),
         Expr_PipeHole,
         IdentTail_Call(AST, AST),
         IdentTail_GenericCall(AST, AST),
@@ -1301,7 +1528,21 @@ rule arg_tail ::=
     def block_expr_or_stmt(value: AST, rest: AST): AST =
         match rest {
             BlockExprOrStmt_Stmt(body) => block_prepend_stmt(Stmt_Expr(value), body)
+            BlockExprOrStmt_TrailingClosure(attrs, closure, body) =>
+                block_prepend_stmt(Stmt_Expr(Expr_IdentTrailingClosure(value, attrs, closure)), body)
             _ => Expr_Block(Stmt_End, TailExpr_Some(value))
+        }
+
+    def block_trailing_closure_body(trailing: AST, body: AST): AST =
+        match trailing {
+            TrailingAttrClosure(attrs, closure) => BlockExprOrStmt_TrailingClosure(attrs, closure, body)
+            _ => BlockExprOrStmt_Stmt(body)
+        }
+
+    def record_field_from_tail(name: Str, tail: AST): AST =
+        match tail {
+            RecordFieldTail_Value(value) => RecordField(name, value)
+            _ => RecordField(name, Expr_Name(str_empty()))
         }
 
     def expr_apply_match_ident_rest(base: AST, rest: AST): AST =
@@ -1319,7 +1560,60 @@ rule arg_tail ::=
     def if_cond_call_tail(args: AST, tail: AST): AST =
         match tail {
             IfCondCallTail_Binary(op, rhs) => IfCondIdent_CallBinary(args, op, rhs)
+            IfCondCallTail_Postfix(rest) => IfCondIdent_Postfix(IfCondPostfix_Call(args, rest))
             _ => IfCondIdent_Call(args)
+        }
+
+    def if_cond_postfix_after(postfix: AST, after: AST): AST =
+        match after {
+            IfCondPostfixAfter_Binary(op, rhs) => IfCondIdent_PostfixBinary(postfix, op, rhs)
+            _ => IfCondIdent_Postfix(postfix)
+        }
+
+    def if_cond_logic(left: AST, tail: AST): AST =
+        match tail {
+            IfCondLogicTail(op, rhs) => Expr_Binary(op, left, rhs)
+            _ => left
+        }
+
+    def if_cond_arith_tail(op: AST, rhs: AST): AST =
+        IfCondArithTail(op, rhs)
+
+    def expr_apply_paren_ident_postfix(base: AST, tail: AST): AST =
+        match tail {
+            ParenIdentPostfix_Field(field, rest) => expr_apply_paren_ident_postfix(Expr_Field(base, field), rest)
+            ParenIdentPostfix_Call(args, rest) => expr_apply_paren_ident_postfix(Expr_Call(base, args), rest)
+            ParenIdentPostfix_Index(args, rest) => expr_apply_paren_ident_postfix(Expr_Index(base, args), rest)
+            _ => base
+        }
+
+    def expr_from_paren_ident(name: Str, rest: AST): AST =
+        match rest {
+            ParenIdent_Lambda(ty, params, body) => Expr_Closure(Param_Cons(ParamPattern(Pattern_IdentStart(name, PatternAfterIdent_Atom(PatternIdent_Name)), ty), params), body)
+            ParenIdent_Tuple(values) => Expr_Paren(ExprList_Cons(Expr_IdentTail(name, IdentTail_None), values))
+            ParenIdent_Binary(op, rhs) => Expr_Binary(op, Expr_IdentTail(name, IdentTail_None), rhs)
+            ParenIdent_PostfixBinary(tail, op, rhs) => Expr_Binary(op, expr_apply_paren_ident_postfix(Expr_IdentTail(name, IdentTail_None), tail), rhs)
+            _ => Expr_Paren(ExprList_Cons(Expr_IdentTail(name, IdentTail_None), ExprList_End))
+        }
+
+    def type_paren_from_tail(input: AST, tail: AST): AST =
+        match tail {
+            TypeParen_Callable(answer) => Type_Callable(input, answer)
+            _ => input
+        }
+
+    def type_paren_more_return_type(items: AST): AST =
+        match items {
+            TypeParenMore(_, tail) => type_paren_more_return_type(tail)
+            TypeParenMoreReturn(answer) => answer
+            _ => Type_Unit
+        }
+
+    def type_paren_from_body(input: AST, body: AST): AST =
+        match body {
+            TypeParenBody_One(tail) => type_paren_from_tail(input, tail)
+            TypeParenBody_Many(items) => Type_Callable(input, type_paren_more_return_type(items))
+            _ => input
         }
 
     def data_body_from_first(first: Str, rest: AST): AST =

@@ -33,7 +33,7 @@ def cir_show_binder_line(out: Str, depth: i64, name: i64, binder: CirBinder): i6
     let _ = str_push_cstr(out, "(#")
     let _ = str_append_i64(out, binder.id)
     let _ = str_push_cstr(out, " \"")
-    let _ = str_append(out, binder.name)
+    let _ = str_append(out, cir_binder_symbol(binder))
     let _ = str_push_cstr(out, "\")")
     str_push(out, 10)
 }
@@ -50,8 +50,8 @@ def cir_show_ref(out: Str, depth: i64, r: CirRef): i64 =
             let _ = str_push_cstr(out, "\")")
             str_push(out, 10)
         }
-        L1RefGlobal(name) => cir_show_str_line(out, depth, "L1RefGlobal", name)
-        L1RefUnresolved(name) => cir_show_str_line(out, depth, "L1RefUnresolved", name)
+        L1RefGlobal(_, _, _) => cir_show_str_line(out, depth, "L1RefGlobal", cir_ref_symbol(r))
+        L1RefUnresolved(_, _) => cir_show_str_line(out, depth, "L1RefUnresolved", cir_ref_symbol(r))
     }
 
 def cir_show_string_parts(out: Str, depth: i64, parts: CirStringPartList): i64 =

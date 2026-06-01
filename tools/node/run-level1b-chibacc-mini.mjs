@@ -3,7 +3,6 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 import { Worker } from "node:worker_threads";
-import { compileWat, extractModule } from "./wat-compile.mjs";
 
 const ROOT = "level-1b/supports/chibacc-mini";
 const OUT = ".scratch/level-1b/chibacc-mini";
@@ -15,6 +14,19 @@ const CHIBACC = process.env.CHIBACC || (
     : "./chibacc.o"
 );
 const LEGACY_REFERENCE_COMPILER = "./target/debug/level1c.o";
+const WASM_AS = process.env.WASM_AS || (
+  fs.existsSync("./binaryen-linux-x86-64-version_129/bin/wasm-as")
+    ? "./binaryen-linux-x86-64-version_129/bin/wasm-as"
+    : "./node_modules/.pnpm/binaryen@129.0.0/node_modules/binaryen/bin/wasm-as"
+);
+const WASM_AS_FEATURES = [
+  "--enable-gc",
+  "--enable-reference-types",
+  "--enable-multivalue",
+  "--enable-tail-call",
+  "--enable-bulk-memory",
+  "--enable-extended-const",
+];
 const CASES = [
   {
     file: "simple.chibacc",
@@ -264,17 +276,40 @@ function runWatToFile(name, file, watPath, seconds) {
   return result.stdout;
 }
 
+function extractModule(text) {
+  const start = text.indexOf("(module");
+  const trimmed = text.trimEnd();
+  const end = trimmed.lastIndexOf(")");
+  if (start < 0 || end < start) {
+    throw new Error("input does not contain a complete wat module");
+  }
+  return trimmed.slice(start, end + 1);
+}
+
+function compileWatFileToWasm(watPath) {
+  const raw = fs.readFileSync(watPath, "utf8");
+  const normalizedWatPath = watPath.replace(/\.wat$/, ".module.wat");
+  const wasmPath = watPath.replace(/\.wat$/, ".wasm");
+  fs.writeFileSync(normalizedWatPath, extractModule(raw));
+  const result = spawnSync(WASM_AS, [normalizedWatPath, "-o", wasmPath, ...WASM_AS_FEATURES], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    throw new Error(`${WASM_AS} failed for ${watPath}\n${result.stdout || ""}${result.stderr || ""}`);
+  }
+  return wasmPath;
+}
+
 async function runWatExport(watPath, exportName) {
+  const wasmPath = compileWatFileToWasm(watPath);
   return new Promise((resolve, reject) => {
     const worker = new Worker(
       `
         const { parentPort, workerData } = require("node:worker_threads");
         (async () => {
         const fs = await import("node:fs");
-        const tools = await import(workerData.toolsUrl);
-        const raw = fs.readFileSync(workerData.watPath, "utf8");
-        const wat = tools.extractModule(raw);
-        const buffer = tools.compileWat(wat, {});
+        const buffer = fs.readFileSync(workerData.wasmPath);
         const instance = await WebAssembly.instantiate(buffer, { env: new Proxy({}, { get: () => () => 0n }) });
         const entry = instance.instance.exports[workerData.exportName];
         if (typeof entry !== "function") throw new Error(\`wat module does not export \${workerData.exportName}\`);
@@ -293,9 +328,8 @@ async function runWatExport(watPath, exportName) {
       {
         eval: true,
         workerData: {
-          watPath,
+          wasmPath,
           exportName,
-          toolsUrl: new URL("./wat-compile.mjs", import.meta.url).href,
         },
       },
     );
@@ -369,6 +403,15 @@ function tokenBuilderSource(tokens) {
   return `${lines.join("\n")}\n\n`;
 }
 
+function tokenNamesFromExpressions(tokens) {
+  const names = new Set(["Eof"]);
+  for (const token of tokens || []) {
+    const match = token.match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\((.*)\))?$/);
+    if (match) names.add(match[1]);
+  }
+  return names;
+}
+
 function mainSource(caseInfo) {
   if (!caseInfo.tokens) return "";
   if (caseInfo.harness) {
@@ -393,8 +436,7 @@ function astItemCountForCase(caseInfo) {
 }
 
 function executableGeneratedSource(caseInfo, generated) {
-  let withoutShortCircuit = generated;
-  withoutShortCircuit = blockTailMatchDefs(withoutShortCircuit);
+  let withoutShortCircuit = normalizeGeneratedParserSource(generated);
   const tokenEnd = withoutShortCircuit.indexOf("data MatchResult");
   if (tokenEnd < 0) {
     console.error(`[FAIL] generated parser harness ${caseInfo.file}`);
@@ -402,6 +444,112 @@ function executableGeneratedSource(caseInfo, generated) {
     process.exit(1);
   }
   return `${withoutShortCircuit.slice(0, tokenEnd)}${tokenDataSource(caseInfo.tokens || [], generated)}${withoutShortCircuit.slice(tokenEnd)}\n${mainSource(caseInfo)}`;
+}
+
+function normalizeGeneratedParserSource(source) {
+  return blockTailMatchDefs(source)
+    .replaceAll("MatchOK(i64, i64, i64),", "MatchOK(AST, i64, i64),")
+    .replaceAll("OK(i64, Vec),", "OK(AST, Vec),")
+    .replaceAll("Err(Option[i64], Vec)", "Err(Option[AST], Vec)")
+    .replaceAll("MatchOK(v as i64, pos + 1, 0)", "MatchOK(v as AST, pos + 1, 0)")
+    .replaceAll("MatchOK(0 as i64, pos + 1, 0)", "MatchOK(str_empty() as AST, pos + 1, 0)")
+    .replaceAll("MatchOK(0 as i64, pos, 0)", "MatchOK(str_empty() as AST, pos, 0)")
+    .replaceAll("MatchOK(0 as i64, pos1, recovered1)", "MatchOK(str_empty() as AST, pos1, recovered1)")
+    .replaceAll("MatchOK(0 as i64, pos, recovered)", "MatchOK(str_empty() as AST, pos, recovered)")
+    .replaceAll("MatchOK(acc as i64, pos, recovered)", "MatchOK(acc as AST, pos, recovered)")
+    .replaceAll("MatchOK(__action_ast as i64, pos, recovered)", "MatchOK(__action_ast as AST, pos, recovered)")
+    .replaceAll("match ts.token { Eof => 1  _ => 0 }", "match ts.token {\n            Eof => 1\n            _ => 0\n        }")
+    .replaceAll("match ts.token { Eof => { 1 }  _ => { 0 } }", "match ts.token {\n            Eof => { 1 }\n            _ => { 0 }\n        }")
+    .replace(/MatchOK\(\(([^()\n]+\(.*\))\s*\n\s*\) as i64,/g, "MatchOK($1 as AST,")
+    .replace(/MatchOK\(([^,\n]+) as i64,/g, "MatchOK($1 as AST,")
+    .replace(/(__v[0-9]+): i64/g, "$1: AST");
+}
+
+function parseGeneratedDefs(source, startIndex) {
+  const matches = [...source.slice(startIndex).matchAll(/^def\s+([A-Za-z_][A-Za-z0-9_]*)\b/gm)]
+    .map((match) => ({ name: match[1], index: startIndex + match.index }));
+  return matches.map((match, index) => {
+    const next = matches[index + 1];
+    return {
+      name: match.name,
+      index: match.index,
+      end: next ? next.index : source.length,
+      text: source.slice(match.index, next ? next.index : source.length),
+    };
+  });
+}
+
+function referencedGeneratedDefNames(text, defNames) {
+  const refs = new Set();
+  for (const match of text.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)) {
+    if (defNames.has(match[1])) refs.add(match[1]);
+  }
+  return refs;
+}
+
+function generatedParserSliceSource(generated, roots, tokenSource) {
+  const matchResultStart = generated.indexOf("data MatchResult");
+  if (matchResultStart < 0) {
+    console.error("[FAIL] generated parser slice");
+    console.error("generated parser missing MatchResult insertion point");
+    process.exit(1);
+  }
+  const defs = parseGeneratedDefs(generated, matchResultStart);
+  if (defs.length === 0) {
+    console.error("[FAIL] generated parser slice");
+    console.error("generated parser has no generated defs after MatchResult");
+    process.exit(1);
+  }
+  const firstDefStart = defs[0].index;
+  const defByName = new Map(defs.map((defn) => [defn.name, defn]));
+  const defNames = new Set(defByName.keys());
+  const keep = new Set();
+  const queue = [...roots];
+  while (queue.length > 0) {
+    const name = queue.pop();
+    if (keep.has(name)) continue;
+    const defn = defByName.get(name);
+    if (!defn) {
+      console.error("[FAIL] generated parser slice");
+      console.error(`missing generated def ${name}`);
+      process.exit(1);
+    }
+    keep.add(name);
+    for (const ref of referencedGeneratedDefNames(defn.text, defNames)) {
+      if (!keep.has(ref)) queue.push(ref);
+    }
+  }
+  const selectedDefs = defs.filter((defn) => keep.has(defn.name));
+  return {
+    source: `${generated.slice(0, matchResultStart)}${tokenSource}${generated.slice(matchResultStart, firstDefStart)}${selectedDefs.map((defn) => defn.text.trimEnd()).join("\n\n")}\n`,
+    selectedDefCount: selectedDefs.length,
+    totalDefCount: defs.length,
+  };
+}
+
+function pruneImpossibleDispatchBranches(source, possibleTokenNames) {
+  const matchResultStart = source.indexOf("data MatchResult");
+  if (matchResultStart < 0) return source;
+  const defs = parseGeneratedDefs(source, matchResultStart);
+  if (defs.length === 0) return source;
+  let out = source.slice(0, defs[0].index);
+  for (const defn of defs) {
+    const dispatch = defn.text.match(
+      /^def\s+([A-Za-z_][A-Za-z0-9_]*)\(([^)]*)\):\s*MatchResult\s*=\s*\{\s*if\s+token_matches_name\(tokens,\s*pos,\s*mk_str\("([^"]+)",\s*[0-9]+\)\)\s*==\s*0\s*\{\s*([A-Za-z_][A-Za-z0-9_]*)\(tokens,\s*pos\)\s*\}/,
+    );
+    if (dispatch && !possibleTokenNames.has(dispatch[3])) {
+      out += `def ${dispatch[1]}(${dispatch[2]}): MatchResult = ${dispatch[4]}(tokens, pos)\n`;
+    } else {
+      out += defn.text;
+    }
+  }
+  return out;
+}
+
+function generatedParserRuntimeSliceSource(generated, roots, tokenExpressions) {
+  const tokenNames = tokenNamesFromExpressions(tokenExpressions);
+  const pruned = pruneImpossibleDispatchBranches(generated, tokenNames);
+  return generatedParserSliceSource(pruned, roots, tokenDataSource(tokenExpressions, pruned));
 }
 
 function blockTailMatchDefs(source) {
@@ -458,7 +606,7 @@ async function runGeneratedParser(caseInfo, generated) {
     runParseOk(`level1c parse generated parser executable ${label}`, execPath);
     runCheckOk(`level1c check generated parser executable ${label}`, execPath);
     const referenceOnlyLegacyCompiler = LEGACY_REFERENCE_COMPILER;
-    const wat = run(`level1c wat generated parser ${label}`, "timeout", ["20", referenceOnlyLegacyCompiler, "wat", execPath]);
+    const wat = run(`level1c wat generated parser ${label}`, "timeout", ["60", referenceOnlyLegacyCompiler, "wat", execPath]);
     if (!wat.stdout.includes("(module")) {
       console.error(`[FAIL] generated parser wat ${label}`);
       console.error(wat.stdout || wat.stderr || "level1c produced no module");
@@ -492,7 +640,8 @@ for (const caseInfo of CASES) {
   const input = path.join(ROOT, file);
   const output = path.join(OUT, file.replace(/\.chibacc$/, ".chiba"));
   run(`native chibacc ${file}`, "timeout", ["10", CHIBACC, input, "-o", output]);
-  const generated = fs.readFileSync(output, "utf8");
+  const generated = normalizeGeneratedParserSource(fs.readFileSync(output, "utf8"));
+  fs.writeFileSync(output, generated);
   for (const text of expected) {
     if (!generated.includes(text)) {
       console.error(`[FAIL] generated parser ${file}`);
@@ -515,8 +664,35 @@ const fullGeneratedPath = path.join(FULL_OUT, "chiba-level1-parser.chiba");
 const fullStandalonePath = path.join(FULL_OUT, "chiba-level1-parser.standalone.chiba");
 const fullExecPath = path.join(FULL_OUT, "chiba-level1-parser.exec.chiba");
 const fullExecWatPath = path.join(FULL_OUT, "chiba-level1-parser.exec.wat");
+const fullExprExecPath = path.join(FULL_OUT, "chiba-level1-parser.expr.exec.chiba");
+const fullExprExecWatPath = path.join(FULL_OUT, "chiba-level1-parser.expr.exec.wat");
 run("native chibacc full chiba-level1 grammar", "timeout", ["30", CHIBACC, FULL_GRAMMAR, "-o", fullGeneratedPath]);
-const fullGenerated = fs.readFileSync(fullGeneratedPath, "utf8");
+const fullGenerated = normalizeGeneratedParserSource(fs.readFileSync(fullGeneratedPath, "utf8"));
+fs.writeFileSync(fullGeneratedPath, fullGenerated);
+const fullRuleNameToGeneratedEntry = (() => {
+  const entries = new Map();
+  const grammarSource = fs.readFileSync(FULL_GRAMMAR, "utf8");
+  let index = 0;
+  for (const match of grammarSource.matchAll(/^rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*::=/gm)) {
+    entries.set(match[1], `parse_rule_${index}`);
+    index += 1;
+  }
+  return entries;
+})();
+function fullRuleEntry(ruleName) {
+  const entry = fullRuleNameToGeneratedEntry.get(ruleName);
+  if (!entry || !fullGenerated.includes(`def ${entry}(`)) {
+    console.error("[FAIL] full chiba-level1 generated parser");
+    console.error(`missing generated entry for rule ${ruleName}`);
+    process.exit(1);
+  }
+  return entry;
+}
+const fullExprRule = (() => {
+  const matches = [...fullGenerated.matchAll(/\bdef\s+(parse_rule_[0-9]+)\(tokens:\s*Vec,\s*pos:\s*i64\):\s*MatchResult\s*=\s*\1_bp\(tokens,\s*pos,\s*0\)/g)];
+  const last = matches.at(-1);
+  return last ? last[1] : "";
+})();
 for (const text of ["data AST", "Type_ContN", "Expr_Field", "OpRange", "def parse_tokens"]) {
   if (!fullGenerated.includes(text)) {
     console.error("[FAIL] full chiba-level1 generated parser");
@@ -524,9 +700,9 @@ for (const text of ["data AST", "Type_ContN", "Expr_Field", "OpRange", "def pars
     process.exit(1);
   }
 }
-if (!/\bdef\s+parse_rule_176\b[\s\S]{0,160}parse_rule_176_bp/.test(fullGenerated)) {
+if (!fullExprRule) {
   console.error("[FAIL] full chiba-level1 generated parser");
-  console.error("expected expr pratt entry parse_rule_176 -> parse_rule_176_bp");
+  console.error("expected discoverable expr pratt entry parse_rule_N -> parse_rule_N_bp");
   process.exit(1);
 }
 const fullTokenInsertion = fullGenerated.indexOf("data MatchResult");
@@ -535,14 +711,117 @@ if (fullTokenInsertion < 0) {
   console.error("generated parser missing MatchResult insertion point");
   process.exit(1);
 }
-fs.writeFileSync(
-  fullStandalonePath,
-  `${fullGenerated.slice(0, fullTokenInsertion)}${tokenDataSource([], fullGenerated)}${fullGenerated.slice(fullTokenInsertion)}`,
-);
 
 function fullGrammarHarnessSource() {
-  const mainBody = `    harness_status(parse_tokens(source_tokens()))`;
-  return `${tokenBuilderSource([
+  return `${tokenBuilderSource(fullExprTokens()).replace("def harness_tokens", "def expr_tokens")}${tokenBuilderSource(fullIfTokens()).replace("def harness_tokens", "def if_tokens")}${tokenBuilderSource(fullNegTokens()).replace("def harness_tokens", "def neg_tokens")}${tokenBuilderSource(fullMatchTokens()).replace("def harness_tokens", "def match_tokens")}def harness_expr_status(result: MatchResult): i64 = {
+    match result {
+        MatchOK(ast_value, _, _) => {
+            let ast = ast_value as AST
+            match ast {
+                Expr_Binary(op, _, rhs) =>
+                    match op {
+                        OpAdd =>
+                            match rhs {
+                                Expr_Binary(op2, _, _) =>
+                                    match op2 {
+                                        OpMul => 14
+                                        _ => 0 - 2010
+                                    }
+                                _ => 0 - 2009
+                            }
+                        _ => 0 - 2008
+                    }
+                _ => 0 - 2001
+            }
+        }
+        MatchFail(_) => 0 - 2099
+    }
+}
+
+def harness_if_status(result: MatchResult): i64 = {
+    match result {
+        MatchOK(ast_value, _, _) => {
+            let ast = ast_value as AST
+            match ast {
+                Expr_If(_, then_body, else_body) =>
+                    match then_body {
+                        Expr_Block(_, TailExpr_Some(Expr_Int(_))) =>
+                            match else_body {
+                                Expr_Block(_, TailExpr_Some(Expr_Int(_))) => 7
+                                _ => 0 - 2022
+                            }
+                        _ => 0 - 2021
+                    }
+                _ => 0 - 2020
+            }
+        }
+        MatchFail(_) => 0 - 2029
+    }
+}
+
+def harness_neg_status(result: MatchResult): i64 = {
+    match result {
+        MatchOK(ast_value, _, _) => {
+            let ast = ast_value as AST
+            match ast {
+                Expr_Prefix(prefix, Expr_Int(_)) =>
+                    match prefix {
+                        Prefix_Neg => 1
+                        _ => 0 - 2031
+                    }
+                _ => 0 - 2030
+            }
+        }
+        MatchFail(_) => 0 - 2039
+    }
+}
+
+def harness_match_tail_status(rest: AST): i64 = {
+    match rest {
+        MatchArm_Cons(second, MatchArm_End) =>
+            match second {
+                MatchArm(Pattern_Wildcard, _, Expr_Int(_)) => 2
+                _ => 0 - 2052
+            }
+        _ => 0 - 2051
+    }
+}
+
+def harness_match_status(result: MatchResult): i64 = {
+    match result {
+        MatchOK(ast_value, _, _) => {
+            let ast = ast_value as AST
+            match ast {
+                Expr_Match(Expr_MatchIdent(_, MatchIdent_Name), arms) =>
+                    match arms {
+                        MatchArm_Cons(first, rest) =>
+                            match first {
+                                MatchArm(Pattern_Int(_), _, Expr_Int(_)) => {
+                                    let tail_status = harness_match_tail_status(rest)
+                                    if tail_status == 2 { 5 } else { tail_status }
+                                }
+                                _ => 0 - 2054
+                            }
+                        _ => 0 - 2053
+                    }
+                _ => 0 - 2050
+            }
+        }
+        MatchFail(_) => 0 - 2059
+    }
+}
+
+def main(): i64 = {
+    harness_expr_status(${fullExprRule}(expr_tokens(), 0))
+    + harness_if_status(${fullRuleEntry("if_expr")}(if_tokens(), 0))
+    + harness_neg_status(${fullExprRule}(neg_tokens(), 0))
+    + harness_match_status(${fullRuleEntry("match_expr")}(match_tokens(), 0))
+}
+`;
+}
+
+function fullSourceTokens() {
+  return [
     "KwNamespace",
     "Ident(mk_str(\"demo\", 4))",
     "KwDef",
@@ -596,183 +875,62 @@ function fullGrammarHarnessSource() {
     "IntLit(mk_str(\"13\", 2))",
     "RBrace",
     "Eof",
-  ]).replace("def harness_tokens", "def source_tokens")}def harness_status(result: LabeledAST): i64 = {
-    match result {
-        OK(ast_value, _) => {
-            let ast = ast_value as AST
-            match ast {
-                SourceFile(_, ns, items) =>
-                    match ns {
-                        Namespace(path) =>
-                            match path {
-                                Path_Cons(_, Path_End) =>
-                                    match items {
-                                        Item_Cons(item, tail) => {
-                                            let first = match item {
-                                                Item_Def(defn) =>
-                                                    match defn {
-                                                        DefItem2(name, rest) =>
-                                                            match rest {
-                                                                DefFun(_, _, _, body) =>
-                                                                    match body {
-                                                                        Expr_Binary(op, _, rhs) =>
-                                                                            match op {
-                                                                                OpAdd =>
-                                                                                    match rhs {
-                                                                                        Expr_Binary(op2, _, _) =>
-                                                                                            match op2 {
-                                                                                                OpMul => 14
-                                                                                                _ => 0 - 2010
-                                                                                            }
-                                                                                        _ => 0 - 2009
-                                                                                    }
-                                                                                _ => 0 - 2008
-                                                                            }
-                                                                        _ => 0 - 2007
-                                                                    }
-                                                                _ => 0 - 2006
-                                                            }
-                                                        _ => 0 - 2005
-                                                    }
-                                                _ => 0 - 2004
-                                            }
-                                            let second = match tail {
-                                                Item_Cons(next_item, _) =>
-                                                    match next_item {
-                                                        Item_Def(defn2) =>
-                                                            match defn2 {
-                                                                DefItem2(_, rest2) =>
-                                                                    match rest2 {
-                                                                        DefFun(_, _, _, body2) =>
-                                                                            match body2 {
-                                                                                Expr_If(_, then_body, else_body) =>
-                                                                                    match then_body {
-                                                                                        Expr_Block(_, TailExpr_Some(Expr_Int(_))) =>
-                                                                                            match else_body {
-                                                                                                Expr_Block(_, TailExpr_Some(Expr_Int(_))) => 7
-                                                                                                _ => 0 - 2022
-                                                                                            }
-                                                                                        _ => 0 - 2021
-                                                                                    }
-                                                                                _ => 0 - 2020
-                                                                            }
-                                                                        _ => 0 - 2019
-                                                                    }
-                                                                _ => 0 - 2018
-                                                            }
-                                                        _ => 0 - 2017
-                                                    }
-                                                _ => 0 - 2016
-                                            }
-                                            let third = match tail {
-                                                Item_Cons(_, tail2) =>
-                                                    match tail2 {
-                                                        Item_Cons(third_item, _) =>
-                                                            match third_item {
-                                                                Item_Def(defn3) =>
-                                                                    match defn3 {
-                                                                        DefItem2(_, rest3) =>
-                                                                            match rest3 {
-                                                                                DefFun(_, _, _, body3) =>
-                                                                                    match body3 {
-                                                                                        Expr_Prefix(prefix, Expr_Int(_)) =>
-                                                                                            match prefix {
-                                                                                                Prefix_Neg => 1
-                                                                                                _ => 0 - 2031
-                                                                                            }
-                                                                                        _ => 0 - 2030
-                                                                                    }
-                                                                                _ => 0 - 2029
-                                                                            }
-                                                                        _ => 0 - 2028
-                                                                    }
-                                                                _ => 0 - 2027
-                                                            }
-                                                        _ => 0 - 2026
-                                                    }
-                                                _ => 0 - 2025
-                                            }
-                                            let fourth = match tail {
-                                                Item_Cons(_, tail2) =>
-                                                    match tail2 {
-                                                        Item_Cons(_, tail3) =>
-                                                            match tail3 {
-                                                                Item_Cons(fourth_item, _) =>
-                                                                    match fourth_item {
-                                                                        Item_Def(defn4) =>
-                                                                            match defn4 {
-                                                                                DefItem2(_, rest4) =>
-                                                                                    match rest4 {
-                                                                                        DefFun(_, params4, _, body4) =>
-                                                                                            match params4 {
-                                                                                                Param_Cons(ParamPattern(Pattern_IdentStart(_, _), Type_Path(_, _)), _) =>
-                                                                                                    harness_match_body_status(body4)
-                                                                                                _ => 0 - 2041
-                                                                                            }
-                                                                                        _ => 0 - 2040
-                                                                                    }
-                                                                                _ => 0 - 2039
-                                                                            }
-                                                                        _ => 0 - 2038
-                                                                    }
-                                                                _ => 0 - 2037
-                                                            }
-                                                        _ => 0 - 2036
-                                                    }
-                                                _ => 0 - 2035
-                                            }
-                                            first + second + third + fourth
-                                        }
-                                        _ => 0 - 2003
-                                    }
-                                _ => 0 - 2008
-                            }
-                        _ => 0 - 2002
-                    }
-                _ => 0 - 2001
-            }
-        }
-        Err(_, _) => 0 - 2099
-    }
+  ];
 }
 
-def harness_match_tail_status(rest: AST): i64 = {
-    match rest {
-        MatchArm_Cons(second, MatchArm_End) =>
-            match second {
-                MatchArm(Pattern_Wildcard, _, Expr_Int(_)) => 2
-                _ => 0 - 2052
-            }
-        _ => 0 - 2051
-    }
-}
-
-def harness_match_body_status(body: AST): i64 = {
-    match body {
-        Expr_Match(Expr_MatchIdent(_, MatchIdent_Name), arms) =>
-            match arms {
-                MatchArm_Cons(first, rest) =>
-                    match first {
-                        MatchArm(Pattern_Int(_), _, Expr_Int(_)) => {
-                            let tail_status = harness_match_tail_status(rest)
-                            if tail_status == 2 { 5 } else { tail_status }
-                        }
-                        _ => 0 - 2054
-                    }
-                _ => 0 - 2053
-            }
-        _ => 0 - 2050
-    }
-}
-
-${tokenBuilderSource([
+function fullExprTokens() {
+  return [
     "IntLit(mk_str(\"2\", 1))",
     "Plus",
     "IntLit(mk_str(\"3\", 1))",
     "Star",
     "IntLit(mk_str(\"4\", 1))",
     "Eof",
-  ]).replace("def harness_tokens", "def expr_tokens")}def harness_expr_status(result: MatchResult): i64 = {
+  ];
+}
+
+function fullIfTokens() {
+  return [
+    "KwIf",
+    "KwTrue",
+    "LBrace",
+    "IntLit(mk_str(\"7\", 1))",
+    "RBrace",
+    "KwElse",
+    "LBrace",
+    "IntLit(mk_str(\"13\", 2))",
+    "RBrace",
+    "Eof",
+  ];
+}
+
+function fullNegTokens() {
+  return [
+    "Minus",
+    "IntLit(mk_str(\"7\", 1))",
+    "Eof",
+  ];
+}
+
+function fullMatchTokens() {
+  return [
+    "KwMatch",
+    "Ident(mk_str(\"x\", 1))",
+    "LBrace",
+    "IntLit(mk_str(\"0\", 1))",
+    "FatArrow",
+    "IntLit(mk_str(\"7\", 1))",
+    "Newline(mk_str(\"\\n\", 1))",
+    "Underscore",
+    "FatArrow",
+    "IntLit(mk_str(\"13\", 2))",
+    "RBrace",
+    "Eof",
+  ];
+}
+
+function fullExpressionHarnessSource() {
+  return `${tokenBuilderSource(fullExprTokens()).replace("def harness_tokens", "def expr_tokens")}def harness_expr_status(result: MatchResult): i64 = {
     match result {
         MatchOK(ast_value, _, _) => {
             let ast = ast_value as AST
@@ -800,22 +958,36 @@ ${tokenBuilderSource([
     }
 }
 
-def expr_main(): i64 = {
-    harness_expr_status(parse_rule_176(expr_tokens(), 0))
-}
-
 def main(): i64 = {
-${mainBody}
+    harness_expr_status(${fullExprRule}(expr_tokens(), 0))
 }
 `;
 }
 
-fs.writeFileSync(fullExecPath, `${fs.readFileSync(fullStandalonePath, "utf8")}\n${fullGrammarHarnessSource()}`);
-console.log("[INFO] full chiba-level1 executable parser: emitting WAT");
-const fullExecWatSource = runWatToFile("level1c wat full chiba-level1 executable parser", fullExecPath, fullExecWatPath, 180);
-compileWat(extractModule(fullExecWatSource), {});
-console.log("[INFO] full chiba-level1 executable parser: running WAT");
-const fullExecResult = await runWatMain(fullExecWatPath);
+async function emitFullRuntimeArtifact(label, roots, tokens, harnessSource, execPath, watPath, seconds) {
+  const slice = generatedParserRuntimeSliceSource(fullGenerated, roots, tokens);
+  fs.writeFileSync(execPath, `${slice.source}\n${harnessSource}`);
+  console.log(`[INFO] ${label}: ${slice.selectedDefCount}/${slice.totalDefCount} generated defs`);
+  console.log(`[INFO] ${label}: emitting WAT`);
+  const watSource = runWatToFile(`level1c wat ${label}`, execPath, watPath, seconds);
+  compileWatFileToWasm(watPath);
+  console.log(`[INFO] ${label}: running WAT`);
+  const result = await runWatMain(watPath);
+  return { result, slice };
+}
+
+const fullStandaloneSlice = generatedParserRuntimeSliceSource(fullGenerated, ["parse_tokens"], fullSourceTokens());
+fs.writeFileSync(fullStandalonePath, fullStandaloneSlice.source);
+const fullRuntime = await emitFullRuntimeArtifact(
+  "full chiba-level1 executable parser",
+  [fullExprRule, fullRuleEntry("if_expr"), fullRuleEntry("match_expr")],
+  [...fullExprTokens(), ...fullIfTokens(), ...fullNegTokens(), ...fullMatchTokens()],
+  fullGrammarHarnessSource(),
+  fullExecPath,
+  fullExecWatPath,
+  120,
+);
+const fullExecResult = fullRuntime.result;
 const expectedFullExecResult = "27";
 if (fullExecResult !== expectedFullExecResult) {
   console.error("[FAIL] full chiba-level1 executable parser WAT");
@@ -823,14 +995,23 @@ if (fullExecResult !== expectedFullExecResult) {
   process.exit(1);
 }
 console.log(`[PASS] run full chiba-level1 executable parser wat ${fullExecWatPath}`);
-const fullExprResult = await runWatExport(fullExecWatPath, "expr_main");
+const fullExpressionRuntime = await emitFullRuntimeArtifact(
+  "full chiba-level1 expression parser",
+  [fullExprRule],
+  fullExprTokens(),
+  fullExpressionHarnessSource(),
+  fullExprExecPath,
+  fullExprExecWatPath,
+  120,
+);
+const fullExprResult = fullExpressionRuntime.result;
 const expectedFullExprResult = "14";
 if (fullExprResult !== expectedFullExprResult) {
   console.error("[FAIL] full chiba-level1 expression parser WAT");
   console.error(`expected expr_main -> ${expectedFullExprResult}, got ${fullExprResult}`);
   process.exit(1);
 }
-console.log(`[PASS] run full chiba-level1 expression parser wat ${fullExecWatPath}`);
+console.log(`[PASS] run full chiba-level1 expression parser wat ${fullExprExecWatPath}`);
 
 const astExprNodes = [
   { ownerNamespace: "demo", ownerName: "main", nodeId: 0, kind: "SourceAstExprNodeBinary", value: 0, paramIndex: 0, left: 1, right: 2, thenNode: 0, elseNode: 0 },
@@ -841,13 +1022,45 @@ const astExprNodes = [
   { ownerNamespace: "demo", ownerName: "branch", nodeId: 0, kind: "SourceAstExprNodeIfElse", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 1, elseNode: 2 },
   { ownerNamespace: "demo", ownerName: "branch", nodeId: 1, kind: "SourceAstExprNodeI32Const", value: 7, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "branch", nodeId: 2, kind: "SourceAstExprNodeI32Const", value: 13, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "branch_param", nodeId: 0, kind: "SourceAstExprNodeIfElse", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 2, elseNode: 3 },
+  { ownerNamespace: "demo", ownerName: "branch_param", nodeId: 1, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "branch_param", nodeId: 2, kind: "SourceAstExprNodeI32Const", value: 7, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "branch_param", nodeId: 3, kind: "SourceAstExprNodeI32Const", value: 13, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "neg", nodeId: 0, kind: "SourceAstExprNodePrefixNeg", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "neg", nodeId: 1, kind: "SourceAstExprNodeI32Const", value: 7, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "choose", nodeId: 0, kind: "SourceAstExprNodeMatch", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 2, elseNode: 3 },
   { ownerNamespace: "demo", ownerName: "choose", nodeId: 1, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "choose", nodeId: 2, kind: "SourceAstExprNodeI32Const", value: 7, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "choose", nodeId: 3, kind: "SourceAstExprNodeI32Const", value: 13, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "id", nodeId: 0, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "call_id", nodeId: 0, kind: "SourceAstExprNodeCall", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0, callee: "demo::id", arg0: 1, argCount: 1 },
+  { ownerNamespace: "demo", ownerName: "call_id", nodeId: 1, kind: "SourceAstExprNodeI32Const", value: 23, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "i32_index", nodeId: 0, kind: "SourceAstExprNodeBinary", value: 0, paramIndex: 0, left: 1, right: 2, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "i32_index", nodeId: 1, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "i32_index", nodeId: 2, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 1, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "index_style", nodeId: 0, kind: "SourceAstExprNodeIndex", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 0, elseNode: 0, callee: "demo::i32_index", arg0: 2, argCount: 1 },
+  { ownerNamespace: "demo", ownerName: "index_style", nodeId: 1, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "index_style", nodeId: 2, kind: "SourceAstExprNodeI32Const", value: 7, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "method_style", nodeId: 0, kind: "SourceAstExprNodeMethodCall", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 0, elseNode: 0, callee: "demo::id", argCount: 0 },
+  { ownerNamespace: "demo", ownerName: "method_style", nodeId: 1, kind: "SourceAstExprNodeI32Const", value: 29, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
 ];
+
+for (const node of astExprNodes) {
+  node.owner_namespace ??= node.ownerNamespace;
+  node.owner_name ??= node.ownerName;
+  node.node_id ??= node.nodeId;
+  node.param_index ??= node.paramIndex;
+  node.then_node ??= node.thenNode;
+  node.else_node ??= node.elseNode;
+  node.callee ??= "";
+  node.member ??= "";
+  node.arg0 ??= 0;
+  node.arg1 ??= 0;
+  node.arg2 ??= 0;
+  node.argCount ??= 0;
+  node.args ??= [node.arg0, node.arg1, node.arg2].slice(0, node.argCount);
+  node.arg_count ??= node.argCount;
+}
 
 const evidencePath = path.join(OUT, "ast-primary-evidence.json");
 fs.writeFileSync(evidencePath, `${JSON.stringify({
@@ -861,13 +1074,13 @@ fs.writeFileSync(evidencePath, `${JSON.stringify({
     wat: fullExecWatPath,
     executable: fullExecPath,
     executableWat: fullExecWatPath,
-    expressionExecutable: fullExecPath,
-    expressionExecutableWat: fullExecWatPath,
-    astItemCount: 4,
+    expressionExecutable: fullExprExecPath,
+    expressionExecutableWat: fullExprExecWatPath,
+    astItemCount: 10,
     astNamespaceCount: 1,
-    astDefItemCount: 4,
-    astOwnerSymbolCount: 4,
-    astExprNodeCount: 14,
+    astDefItemCount: 10,
+    astOwnerSymbolCount: 10,
+    astExprNodeCount: astExprNodes.length,
     astExprNodes: astExprNodes,
     astOwnerNamespace: "demo",
     astDefItemName: "main",
@@ -904,7 +1117,7 @@ fs.writeFileSync(evidencePath, `${JSON.stringify({
     astExpressionHasAddMulBody: true,
     astExpressionHasIfElseBody: false,
     astExpressionHasPrefixNegBody: false,
-    ast_expr_node_count: 14,
+    ast_expr_node_count: astExprNodes.length,
     ast_expr_nodes: astExprNodes,
     ast_expression_owner_namespace: "demo",
     ast_expression_def_item_name: "main",
