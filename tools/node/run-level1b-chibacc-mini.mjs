@@ -481,8 +481,14 @@ function executableGeneratedSource(caseInfo, generated) {
   return `${withoutShortCircuit.slice(0, tokenEnd)}${tokenDataSource(caseInfo.tokens || [], generated)}${withoutShortCircuit.slice(tokenEnd)}\n${mainSource(caseInfo)}`;
 }
 
+function withoutDefaultLevel1bPrelude(source) {
+  return source.startsWith("#![no_prelude_import]\n")
+    ? source
+    : `#![no_prelude_import]\n${source}`;
+}
+
 function normalizeGeneratedParserSource(source) {
-  return blockTailMatchDefs(source)
+  return withoutDefaultLevel1bPrelude(blockTailMatchDefs(source)
     .replaceAll("MatchOK(i64, i64, i64),", "MatchOK(AST, i64, i64),")
     .replaceAll("OK(i64, Vec),", "OK(AST, Vec),")
     .replaceAll("Err(Option[i64], Vec)", "Err(Option[AST], Vec)")
@@ -497,7 +503,7 @@ function normalizeGeneratedParserSource(source) {
     .replaceAll("match ts.token { Eof => { 1 }  _ => { 0 } }", "match ts.token {\n            Eof => { 1 }\n            _ => { 0 }\n        }")
     .replace(/MatchOK\(\(([^()\n]+\(.*\))\s*\n\s*\) as i64,/g, "MatchOK($1 as AST,")
     .replace(/MatchOK\(([^,\n]+) as i64,/g, "MatchOK($1 as AST,")
-    .replace(/(__v[0-9]+): i64/g, "$1: AST");
+    .replace(/(__v[0-9]+): i64/g, "$1: AST"));
 }
 
 function parseGeneratedDefs(source, startIndex) {
