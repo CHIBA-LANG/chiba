@@ -4,8 +4,30 @@ use compiler.cli.*
 use compiler.driver.nanopass_pipeline.*
 use compiler.source.project.*
 
-def main_error_code(cli: ChibacCliConfig): i64 =
-    1
+def main_error_code(cli: ChibacCliConfig, request: CompileRequest): i64 =
+    source_stage_error_code(cli, request)
+
+def source_stage_error_code(cli: ChibacCliConfig, request: CompileRequest): i64 =
+    match run_source_driver(DriverInput {
+        cli: cli,
+        project: load_project(request.inputs, request.includes),
+        target_facts: request.target_facts,
+    }) {
+        Ok(project) => semantic_stage_error_code(project)
+        Err(_) => 2
+    }
+
+def semantic_stage_error_code(project: ProjectSurface): i64 =
+    match run_typed_semantics(project) {
+        Ok(typed) => backend_stage_error_code(typed)
+        Err(_) => 3
+    }
+
+def backend_stage_error_code(typed: TypedModule): i64 =
+    match run_wasm_gc_wat(typed) {
+        Ok(_) => 9
+        Err(_) => 4
+    }
 
 /// Seed entry until level-1b owns parser, semantic checker, and WAT emission.
 def main(): i64 = {
@@ -30,6 +52,6 @@ def main(): i64 = {
     }
     match compile_request_to_wat(request) {
         Ok(_) => 0,
-        Err(_) => main_error_code(cli)
+        Err(_) => main_error_code(cli, request)
     }
 }

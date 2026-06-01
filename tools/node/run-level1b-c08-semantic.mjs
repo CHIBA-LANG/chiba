@@ -32,8 +32,8 @@ const REQUIRED_TEXT = [
   "type AlphaAstOwnerOrigin",
   "ast_owner_origins: Array[AlphaAstOwnerOrigin]",
   "def alpha_ast_owner_origins_from_source_facts",
-  "alpha_binders_from_source_items_and_ast_owners(project.facts.items, project.facts.ast_owner_symbols)",
-  "alpha_ast_owner_origins_from_source_facts(project.facts.ast_owner_symbols, project.facts.items.len()",
+  "alpha_binders_from_source_items_and_ast_owners(items, ast_items)",
+  "alpha_ast_owner_origins_from_source_facts(ast_items, items.len()",
   "has_i32_const_body: item.has_i32_const_body",
   "i32_const_body: item.i32_const_body",
   "uses: Array[SourceUseScanResult]",
@@ -167,9 +167,10 @@ const REQUIRED_TEXT = [
   "def typed_expr_from_ast_call_node",
   "def typed_expr_from_ast_method_node",
   "def typed_expr_from_ast_index_node",
+  "def typed_ast_index_has_target(node: SourceAstExprNodeFact): bool",
   "SourceAstExprNodeCall => typed_expr_from_ast_call_node",
   "SourceAstExprNodeMethodCall => typed_expr_from_ast_method_node",
-  "SourceAstExprNodeIndex => typed_expr_from_ast_index_node",
+  "SourceAstExprNodeIndex =>",
   "SourceAstExprNodeLocal => Some(TypedExprLocal",
   "SourceAstExprNodeStringLiteral => Some(TypedExprStringLiteral",
   "SourceAstExprNodeCast =>",
@@ -177,10 +178,15 @@ const REQUIRED_TEXT = [
   "SourceAstExprNodeFieldGet => typed_expr_from_ast_field_get_node",
   "def typed_primitive_binary_op_from_ast_value",
   "Some(TypedExprPrimitiveBinary(actual_op, left, right))",
+  "SourceAstExprNodePrefixNeg =>",
+  "Some(TypedExprPrimitiveBinary(",
+  "SourceAstExprNodeBinary =>",
+  "match typed_branch_condition_from_ast_node(nodes, origin, node.left)",
   "if origin.from_chibacc { None }",
   "ast_expr_nodes: Array[SourceAstExprNodeFact]",
   "let skeleton_functions = typed_function_facts_from_skeletons",
-  "let initial_functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, module.project.facts.ast_expr_nodes)",
+  "let ast_expr_nodes = source_project_ast_expr_nodes(project)",
+  "let initial_functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, ast_expr_nodes)",
   "let functions = typed_function_facts_finalize_result_types(initial_functions, 0, Vec[TypedFunctionFact].new())",
   "def typed_expr_result_type_with_functions",
   "def typed_function_facts_finalize_result_types",
@@ -329,7 +335,7 @@ const REQUIRED_TEXT = [
   "ast_owner_symbols: Array[TypedAstOwnerSymbolFact]",
   "def ast_owner_symbol_fact_from_alpha",
   "def ast_owner_symbol_facts_from_alpha",
-  "ast_owner_symbol_facts_from_alpha(module.ast_owner_origins",
+  "ast_owner_symbol_facts_from_alpha(ast_owner_origins",
   "has_i32_const_body: origin.has_i32_const_body",
   "i32_const_body: origin.i32_const_body",
   "has_i32_add_mul_body: origin.has_i32_add_mul_body",
@@ -365,7 +371,7 @@ const REQUIRED_TEXT = [
   "def namespace_resolution_fact_from_ast_owner",
   "def namespace_resolution_facts_append_ast_owners",
   "def namespace_resolution_facts_from_primary_items",
-  "has_owner_namespace: origin.owner_namespace.len() > 0",
+  "has_owner_namespace: true",
   "def namespace_resolution_facts_from_skeletons",
   "def namespace_resolution_facts_policy_valid",
   "missing-facts: namespace ownership fact generation absent",
@@ -658,6 +664,12 @@ function checkSource(file, source) {
   }
   if (file.endsWith("method_operator.chiba") && /\bdef\s+build_method_operator_index\b[\s\S]*Ok\s*\(\s*MethodOperatorIndex\s*\(\s*Vec\s*\[\s*MethodKey\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*,\s*Vec\s*\[\s*OperatorKey\s*\]\s*\.\s*new\s*\(\s*\)\s*\.\s*freeze\s*\(\s*\)\s*\)\s*\)/.test(code)) {
     errors.push(`${file}: method/operator index must not return an empty success`);
+  }
+  if (file.endsWith("type_infer.chiba") && /typed_ast_index_(?:target|has_target)\s*\(\s*node\s*,\s*"i32\.op_index/.test(code)) {
+    errors.push(`${file}: parser-owned index nodes must carry resolved callee instead of defaulting to i32.op_index`);
+  }
+  if (file.endsWith("type_infer.chiba") && !/SourceAstExprNodeIndex\s*=>\s*[\s\S]{0,180}typed_ast_index_has_target\s*\(\s*node\s*\)[\s\S]{0,180}typed_expr_from_ast_index_node\s*\(\s*nodes\s*,\s*origin\s*,\s*node\s*,\s*node\.callee\s*\)/.test(code)) {
+    errors.push(`${file}: parser-owned index lowering must require an explicit resolved callee`);
   }
   if (file.endsWith("method_operator.chiba") && /\brequires_operand_matching:\s*operator_obligation_requires_operand_matching\s*\(\s*obligation\s*\)/.test(code)) {
     errors.push(`${file}: operator candidate sets must not leave receiver-typed operator uses pending operand matching`);

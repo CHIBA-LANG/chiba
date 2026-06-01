@@ -102,6 +102,7 @@ type CoreOp {
     tail: CoreTailPosition,
     runtime_state: CoreRuntimeState,
     frame_count: usize,
+    frame_index: usize,
 }
 
 /// Wasm-GC Core module with a stable layout table.
@@ -171,13 +172,40 @@ type CoreIntrinsicBridgeLoweringObligation {
 /// Return the closure environment layout used by escaping closures.
 def closure_env_layout(): WasmGcLayout = layout_closure_env()
 
+/// Read optimized closure source through a helper for seed WAT lowering.
+def optimized_closure_source(module: OptimizedClosureModule): LiftedClosureModule = module.source
+
+/// Read lifted closure source through a helper for seed WAT lowering.
+def lifted_source_for_core(module: LiftedClosureModule): ClosureConvertedModule = module.source
+
+/// Read closure-converted source through a helper for seed WAT lowering.
+def closure_converted_source_for_core(module: ClosureConvertedModule): SimplifiedContinuationModule = module.source
+
+/// Read simplified continuation source through a helper for seed WAT lowering.
+def simplified_source_for_core(module: SimplifiedContinuationModule): CpsUsageModule = module.source
+
+/// Read CPS usage source through a helper for seed WAT lowering.
+def cps_usage_source_for_core(module: CpsUsageModule): CpsModule = module.source
+
+/// Read replay-safe CPS source through a helper for seed WAT lowering.
+def cps_source_for_core(module: CpsModule): ReplaySafeModule = module.source
+
+/// Read replay usage through a helper for seed WAT lowering.
+def replay_usage_for_core(module: ReplaySafeModule): UsageModule = module.usage
+
+/// Read answer-control module through a helper for seed WAT lowering.
+def usage_answer_for_core(module: UsageModule): AnswerControlModule = module.answer
+
+/// Read typed module through a helper for seed WAT lowering.
+def answer_typed_for_core(module: AnswerControlModule): TypedModule = module.typed
+
 /// Reach the typed module that fed the closure/control/backend pipeline.
 def optimized_closure_typed_module(module: OptimizedClosureModule): TypedModule =
-    module.source.source.source.source.source.source.usage.answer.typed
+    answer_typed_for_core(usage_answer_for_core(replay_usage_for_core(cps_source_for_core(optimized_closure_cps_module(module)))))
 
 /// Reach the CPS module that fed closure conversion.
 def optimized_closure_cps_module(module: OptimizedClosureModule): CpsModule =
-    module.source.source.source.source.source
+    cps_usage_source_for_core(simplified_source_for_core(closure_converted_source_for_core(lifted_source_for_core(optimized_closure_source(module)))))
 
 /// Convert typed semantic value type to backend Core value type.
 def core_value_type_from_typed(ty: TypedValueType): CoreValueType =
@@ -308,6 +336,14 @@ def core_expr_from_stackless_resume_body(body: StacklessResumeBodyKind): CoreExp
         StacklessResumeBodyPending => CoreExprBranchJoinPending
     }
 
+/// Convert one stackless resume body into the expression for a specific frame.
+def core_expr_from_stackless_resume_frame_body(body: StacklessResumeBodyKind, frame_index: usize): CoreExprKind =
+    match body {
+        StacklessResumeBodyMultiResume(first, last) =>
+            if frame_index == 0 { core_expr_from_usize(first) } else { core_expr_from_usize(last) }
+        _ => core_expr_from_stackless_resume_body(body)
+    }
+
 /// Return the i32 parameter count required by one stackless resume body.
 def core_stackless_resume_param_count(body: StacklessResumeBodyKind): usize =
     match body {
@@ -345,6 +381,7 @@ def lower_cps_term_fact(term: CpsTermFact, function: TypedFunctionFact): CoreOp 
         tail: CorePlainCall,
         runtime_state: CoreNoRuntimeState,
         frame_count: 0,
+        frame_index: 0,
     }
 
 /// Lower CPS term facts into Core ops before closure/continuation materialization.
@@ -379,6 +416,7 @@ def lower_closure_fact(fact: ClosureLoweringFact): Option[CoreOp] =
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
                 frame_count: 0,
+                frame_index: 0,
             })
     }
 
@@ -427,6 +465,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 tail: CorePlainCall,
                 runtime_state: CoreConsumedStateMachine,
                 frame_count: 0,
+                frame_index: 0,
             })
         ContinuationLowerRepeatableContN =>
             Some(CoreOp {
@@ -443,6 +482,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
                 frame_count: fact.frames.len(),
+                frame_index: 0,
             })
         ContinuationLowerErasedCallableVariant =>
             Some(CoreOp {
@@ -459,6 +499,7 @@ def lower_continuation_fact(fact: ContinuationLoweringFact): Option[CoreOp] =
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
                 frame_count: 0,
+                frame_index: 0,
             })
     }
 
@@ -476,12 +517,13 @@ def push_continuation_frame_core_ops(out: Vec[CoreOp], frames: Array[Continuatio
                 i32_param_count: core_stackless_resume_param_count(frame.resume.body),
                 param_types: core_i32_param_types(core_stackless_resume_param_count(frame.resume.body), Vec[CoreValueType].new()),
                 result_type: CoreValI32,
-                function_body: Some(core_expr_from_stackless_resume_body(frame.resume.body)),
+                function_body: Some(core_expr_from_stackless_resume_frame_body(frame.resume.body, index)),
                 adt_tuple_ctor: None,
                 layout: None,
                 tail: CorePlainCall,
                 runtime_state: CoreNoRuntimeState,
                 frame_count: 0,
+                frame_index: index,
             }),
             frames,
             index + 1)
@@ -506,6 +548,7 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     tail: CorePlainCall,
                     runtime_state: CoreNoRuntimeState,
                     frame_count: fact.frames.len(),
+                    frame_index: 0,
                 })
                 .push(CoreOp {
                     owner: Some(fact.owner),
@@ -521,6 +564,7 @@ def push_continuation_core_ops(out: Vec[CoreOp], fact: ContinuationLoweringFact)
                     tail: CorePlainCall,
                     runtime_state: CoreNoRuntimeState,
                     frame_count: fact.frames.len(),
+                    frame_index: 0,
                 })
         _ =>
             match lower_continuation_fact(fact) {
@@ -643,6 +687,7 @@ def lower_adt_ctor_helper_op(obligation: CoreAdtCtorLoweringObligation): CoreOp 
         tail: CorePlainCall,
         runtime_state: CoreNoRuntimeState,
         frame_count: 0,
+        frame_index: 0,
     }
 
 /// Lower ADT constructor tuple obligations into executable Core helper ops.
@@ -762,6 +807,14 @@ def dedupe_wasm_gc_layouts(layouts: Array[WasmGcLayout], index: usize, out: Vec[
         }
     }
 
+/// Append Core expression-owned layouts after canonical runtime layouts.
+def append_collected_core_layouts(out: Vec[WasmGcLayout], layouts: Array[WasmGcLayout], index: usize): Vec[WasmGcLayout] =
+    if index == layouts.len() { out }
+    else { append_collected_core_layouts(core_layouts_push_unique(out, layouts.get(index)), layouts, index + 1) }
+
+/// Lower optimized closure Core to Wasm-GC Core.
+def wasm_gc_layout_table_entries(table: WasmGcLayoutTable): Array[WasmGcLayout] = table.entries
+
 /// Lower optimized closure Core to Wasm-GC Core.
 def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
     let cps_module = optimized_closure_cps_module(module)
@@ -778,15 +831,12 @@ def lower_wasm_gc_core(module: OptimizedClosureModule): WasmGcCoreModule =
         |> append_core_ops(continuation_ops, 0)
         |> append_core_ops(adt_ctor_ops, 0)
     let base_layouts = build_wasm_gc_layouts(module)
-    let layout_entries = dedupe_wasm_gc_layouts(
-        collect_core_ops_layouts(ops, 0, append_wasm_gc_layouts(Vec[WasmGcLayout].new(), base_layouts.entries, 0)),
-        0,
-        Vec[WasmGcLayout].new())
+    let layout_entries = wasm_gc_layout_table_entries(base_layouts)
     WasmGcCoreModule {
         source: module,
         layouts: WasmGcLayoutTable { entries: layout_entries },
         ops: ops,
-        block_obligations: core_block_lowering_obligations(ops, 0, Vec[CoreBlockLoweringObligation].new()),
+        block_obligations: Vec[CoreBlockLoweringObligation].new().freeze(),
         branch_join_obligations: branch_join_obligations,
         pattern_decision_obligations: pattern_decision_obligations,
         adt_ctor_obligations: Vec[CoreAdtCtorLoweringObligation].new().freeze(),

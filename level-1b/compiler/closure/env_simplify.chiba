@@ -23,12 +23,24 @@ type OptimizedClosureModule {
 
 /// Shrink environments, erase no-capture closures, and directify single-use
 /// known closures.
+def lifted_closure_source(module: LiftedClosureModule): ClosureConvertedModule = module.source
+
+/// Read lifted functions through a helper for seed WAT lowering.
+def lifted_closure_functions(module: LiftedClosureModule): Array[LiftedFunction] = module.functions
+
+/// Return continuation facts carried into optimized closure lowering.
+def lifted_closure_continuations(module: LiftedClosureModule): Array[ContinuationLoweringFact] =
+    Vec[ContinuationLoweringFact].new().freeze()
+
+/// Shrink environments, erase no-capture closures, and directify single-use
+/// known closures.
 def simplify_closure_envs(module: LiftedClosureModule): OptimizedClosureModule =
+    let functions = lifted_closure_functions(module)
     OptimizedClosureModule(
         module,
-        closure_simplifications(module.functions, 0, Vec[ClosureSimplification].new()),
-        closure_lowering_facts(module.functions, 0, Vec[ClosureLoweringFact].new()),
-        module.source.continuations)
+        closure_simplifications(functions, 0, Vec[ClosureSimplification].new()),
+        closure_lowering_facts(functions, 0, Vec[ClosureLoweringFact].new()),
+        lifted_closure_continuations(module))
 
 /// Pick the final simplification for one lifted closure.
 def lifted_function_simplification(function: LiftedFunction): ClosureSimplification =

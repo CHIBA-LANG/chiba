@@ -251,15 +251,22 @@ def control_body_facts_from_control_surface(module: TypedModule, facts: Array[Co
     else { control_body_facts_from_control_surface(module, facts, index + 1, control_body_facts_from_surface_fact(module, facts.get(index), out)) }
 
 /// Check `reset` and `shift` answer consistency.
+def typed_module_control_surface(module: TypedModule): Array[ControlSurfaceFact] = module.control_surface
+
+/// Read typed item skeletons through a helper for seed WAT lowering.
+def typed_module_items_for_control(module: TypedModule): Array[TypedItemSkeleton] = module.items
+
+/// Check `reset` and `shift` answer consistency.
 def check_answer_control(module: TypedModule): Result[AnswerControlModule, SemanticDiagnostics] =
-    let obligations = answer_control_obligations(module.control_surface, 0, Vec[AnswerControlObligation].new())
-    if module.control_surface.len() > 0 && obligations.len() > 0 {
+    let control_surface = typed_module_control_surface(module)
+    let obligations = answer_control_obligations(control_surface, 0, Vec[AnswerControlObligation].new())
+    if control_surface.len() > 0 && obligations.len() > 0 {
             Ok(AnswerControlModule(
                 module,
-                answer_facts_from_control_surface(module.control_surface, 0, Vec[AnswerFact].new()),
-                control_body_facts_from_control_surface(module, module.control_surface, 0, Vec[ControlBodyFact].new())))
+                answer_facts_from_control_surface(control_surface, 0, Vec[AnswerFact].new()),
+                control_body_facts_from_control_surface(module, control_surface, 0, Vec[ControlBodyFact].new())))
     } else {
-        Ok(AnswerControlModule(module, answer_facts_none(), control_body_facts_from_no_control_items(module.items, 0, Vec[ControlBodyFact].new())))
+        Ok(AnswerControlModule(module, answer_facts_none(), control_body_facts_from_no_control_items(typed_module_items_for_control(module), 0, Vec[ControlBodyFact].new())))
     }
 
 /// Convert one control surface fact into answer/control obligations.

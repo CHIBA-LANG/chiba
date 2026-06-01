@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import { runWatPath } from "./run-wat.mjs";
 
 const PROJECT = "level-1b";
 const ENTRY = "level1b_main.chiba";
@@ -63,3 +64,14 @@ if (compile.status !== 0) {
   fail("level-1b seed WAT assemble", `${compile.stdout}${compile.stderr}`.split("\n").slice(0, 80).join("\n"));
 }
 pass(`level-1b seed WASM ${WASM}`);
+
+try {
+  const result = await runWatPath(WAT, { invoke: "main" });
+  if (result !== "0") {
+    fail("level-1b seed WAT run", `expected parser-owned demo project compile to return 0, got ${result}`);
+  }
+  pass("level-1b seed WAT runs main");
+} catch (error) {
+  const message = error && error.message ? error.message : String(error);
+  fail("level-1b seed WAT run", message.split("\n").slice(0, 40).join("\n"));
+}

@@ -79,6 +79,7 @@ const REQUIRED_TEXT = [
   "StacklessResumeBodyShiftN",
   "def stackless_resume_body_from_control",
   "def stackless_resume_body_for_owner",
+  "def continuation_contn_frames_for_owner",
   "type ContinuationFrame",
   "ContinuationLowerBoxedCont1",
   "ContinuationLowerRepeatableContN",
@@ -220,6 +221,9 @@ function main() {
     [UNSAFE_FIXTURE, "unsafe"],
   ]) {
     if (!read(file).includes(needle)) fail(`C10 fixture missing ${needle}: ${file}`);
+  }
+  if (!read(MULTISHOT_FIXTURE).includes("multishot_param_package") || !read(MULTISHOT_FIXTURE).includes("k(x)")) {
+    fail("C10 multishot fixture must cover parameter resume frame body");
   }
 
   if (!joined.includes("ContinuationCapturePlan") || !joined.includes("requires_frame_body_extraction: bool")) {

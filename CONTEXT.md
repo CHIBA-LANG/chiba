@@ -137,15 +137,29 @@ Domain expert: "No. It is a feedback loop for known false-green paths; failure m
 ## Current Working Context — 2026-06-01
 
 **Active P0 checkpoint**:
-Current work has cleared the generated ChibaCC parser WAT execution checkpoint.
-This is still not P0 complete and not level-1b self-bootstrap. The active task
-now moves back to making level-1b carry primary semantics instead of depending
-on the active `src` path.
+Current work has cleared the generated ChibaCC parser WAT execution checkpoint
+and the level-1b smoke now runs its emitted seed WAT `main`. This is still not
+P0 complete and not level-1b self-bootstrap. The active task now moves back to
+making level-1b carry primary semantics instead of depending on the active
+`src` path.
+
+**User-defined bootstrap target**:
+P0 bootstrap means level-1b can compile enough of itself through Wasm to replace
+the `src` level-1c seed path and level-0 bootstrap path. Narrow C07-C11 runnable
+fixtures, generated parser WAT, or Node-only runner success are useful evidence,
+but they are not that target.
 
 **Latest successful command**:
 
 ```sh
+timeout 120 vp run level1b:smoke
 timeout 360 vp run level1b:chibacc-mini
+timeout 120 vp run level1b:c07-source-driver
+timeout 120 vp run level1b:c08-semantic
+timeout 120 vp run level1b:c09-control-cps
+timeout 120 vp run level1b:c10-closure-package
+timeout 120 vp run level1b:c11-backend
+git diff --check
 ```
 
 **Checkpoint result**:
@@ -158,6 +172,16 @@ timeout 360 vp run level1b:chibacc-mini
   `.scratch/level-1b/chibacc-full/chiba-level1-parser.expr.exec.wat`.
 - AST evidence was emitted:
   `.scratch/level-1b/chibacc-mini/ast-primary-evidence.json`.
+- `level1b:smoke` now emits and runs `.scratch/level-1b/level1b-main.seed.wat`
+  through the WAT runner; the current empty-request result is still `1`, so this
+  proves invocation and runtime reachability, not successful compilation.
+- C07 source facts, C08 typed facts, C09 CPS facts, C10 closure/continuation
+  package facts, and C11 backend runner currently pass for the narrow slices in
+  this checkout.
+- C11 writes inspectable/runnable WAT artifacts, including:
+  `.scratch/level-1b/c11-backend/contn-multiframe-spine.wat`,
+  `.scratch/level-1b/c11-backend/contn-param-resume.wat`, and
+  `.scratch/level-1b/c11-backend/ast-primary-typed-main.wat`.
 
 **Latest fixes that matter**:
 
@@ -169,12 +193,31 @@ timeout 360 vp run level1b:chibacc-mini
 - Active `src/backend/wasm/wat.chiba` now knows
   `CoreExprKind__CoreExprCall__a3` field 0 is `(ref $array_u8)`, fixing the
   pattern payload local type used by generated level-1b backend WAT.
+- Parser-owned AST arithmetic lowers through `TypedExprPrimitiveBinary`, not
+  helper calls like `i32.op_add`; prefix `-x` lowers as primitive `0 - x`.
+- ContN Core ops carry `frame_index` / `frame_count`; stackless resume WAT names
+  include the frame index, and frame-chain WAT materializes one spine node per
+  frame.
+- Continuation parameter resume is covered by the C11 `contn-param-resume`
+  artifact, currently validating `resume_param(37) -> 37`.
+- Empty source project loading no longer calls the host import path; it returns
+  an internal empty project surface. Non-empty project loading still imports
+  `env::std.source_load_project`, so direct `wasmtime` instantiation without the
+  runner's proxy import still fails on that import.
+- The source/pass-driver entrance path now uses helper accessors for common
+  `project.facts.*` and source gate fields to avoid active seed lowering hitting
+  unsupported chained field/method access on the smoke path.
 
 **Key files for continuation**:
 
 - `tools/node/run-level1b-chibacc-mini.mjs`: mini ChibaCC generated parser runner and executable WAT harness.
-- `src/backend/wasm/wat.chiba`: active WAT emitter/runtime currently failing type correctness for generated parser execution.
-- `src/backend/cir/typed.chiba`: active CIR typing pass; may need stronger local/cast/pattern type propagation.
+- `tools/node/run-level1b-smoke.mjs`: seed level-1b smoke; now requires the
+  emitted seed WAT `main` to run, not only compile.
+- `src/backend/wasm/wat.chiba`: active seed WAT emitter/runtime used by
+  `level1c.o`; treat as a reference and bootstrap dependency, not the future
+  level-1b semantic provider.
+- `src/backend/cir/typed.chiba`: active seed CIR typing pass; use for algorithm
+  shape when porting typed traversal into level-1b.
 - `level0/src/chibacc/codegen.chiba`: native generator source used by the current temp chibacc build.
 - `level-1b/std/chibacc/codegen.chiba`: level-1b chibacc generator model, not yet the full primary path.
 
@@ -185,22 +228,83 @@ these back to `i64` just to satisfy a narrow WAT validator issue.
 
 **Immediate implementation direction**:
 
+- The first active problem is `AST -> typed AST` and `typed AST/CPS -> level-1b
+  Core/WAT` lowering. Before writing more chibacc surface, inspect how the
+  active `src` path lowers AST/type/CIR/WAT, then port the algorithmic shape into
+  level-1b with cleaner nanopass boundaries.
+- The immediate smoke-path problem is to stop treating the empty request as the
+  runnable seed. Empty input should construct a small parser-owned internal demo
+  project, for example `demo::main = 2 + 3 * 4`, so
+  `compile_request_to_wat -> run_nanopass_wat -> source -> semantic -> CPS ->
+  closure -> backend -> WAT` returns `Ok` and `level-1b/src/level1b_main.chiba`
+  can return `0`.
+- Concretely, read these seed-path files before the next implementation slice:
+  `src/backend/cir/typed.chiba`, `src/backend/cir/lower.chiba`,
+  `src/backend/wasm/wat.chiba`, and `src/chiba_level1c_main.chiba`. They show
+  the working ownership flow today; level-1b must re-own the behavior, not call
+  back into it.
+- Treat the current `src` path as a working reference for algorithm shape only:
+  parser AST ownership, typed expression traversal, CIR block construction, and
+  WAT layout emission should be understood there before changing level-1b. The
+  final level-1b path must not call back into `src` for semantic success.
 - Full typed AST traversal must feed real expression bodies, not source-slice or
   narrow body facts.
 - CPS/reset/shift/shiftn must lower real bodies and preserve tail form after CPS.
 - Closure and ContN lowering must extract captures, envs, frame bodies, and
   stackless frame-chain functions for real inputs.
+- Pattern/match lowering must become an executable decision tree over tests,
+  field extraction, and `if`/`else` joins, including deep patterns and
+  exhaustiveness. Current obligations/smokes do not yet equal full lowering.
 - Core/block/WAT must consume real AST/CPS-derived inputs, not only narrow
   fixtures.
-- Keep `src` as a reference and active seed path only; level-1b must own the
-  final semantics.
+- Branching is part of the primary path, not a follow-up: `if`, `else if`,
+  `if let`, `match`, fallback/default arms, short-circuiting, and nested branch
+  joins must all survive typed traversal, CPS join planning, and Core/WAT
+  lowering.
+- Keep `src` as a reference and active seed path only. Copying behavior is
+  acceptable only after re-owning it in level-1b; `src` must not remain the
+  semantic provider for a claimed level-1b success.
+- Preserve the CIR/backend split while porting: CIR is backend-neutral; WAT,
+  Wasm-GC layout ids, `funcref`/`eqref`, Binaryen details, and target ABI details
+  belong below the backend boundary.
 - Do not edit generated `.scratch` artifacts.
+
+**Current remaining P0 blocks**:
+
+- **Typed AST primary path**: C07/C08 still rely on parser evidence plus many
+  source-slice/scanner facts. Replace `scan.chiba` facts with chibalex token
+  stream + chibacc AST item/body facts, including namespace-qualified symbols,
+  attributes, tuple/ADT nodes, method/operator/index calls, branch nodes, and
+  reset/shift/shiftn expressions.
+- **Seed smoke primary input**: empty request currently avoids host loading but
+  still returns a diagnostic result. Replace the empty surface with a minimal
+  parser-owned AST project so the smoke path proves real source/semantic/backend
+  flow and can expect `main -> 0`.
+- **CPS/control path**: one-pass CPS + beta must run on real typed expressions.
+  Ordinary calls should be tail-form after CPS; `if`/`match`/short-circuit joins
+  must become explicit continuations; `ContN` materialized frames are the
+  explicit non-tail exception.
+- **Closure/continuation path**: closure capture/env extraction, call-site
+  rewrite, boxed `Cont1` consumed-state lowering, and `ContN` stackless frame
+  body/capture projection must be derived from real CPS inputs, not shell facts.
+- **Core/WAT executable path**: C11 must lower real AST/CPS-derived Core blocks
+  into runnable WAT. Existing WAT artifacts prove slices such as arithmetic,
+  branch, tuple-field, closure call_ref, boxed Cont1, and ContN shells; they do
+  not yet prove arbitrary compiler bodies or self-bootstrap.
+
+**Current collaboration invariant**:
+Documentation must not re-label narrow runnable slices as P0 completion. When a
+slice is executable but still fixture-shaped, say so directly. The next useful
+engineering move is not more gate surface; it is replacing source-slice facts
+with real AST-owned typed/CPS/Core inputs and keeping the generated WAT runnable.
 
 **Validation ladder for this checkpoint**:
 
 ```sh
 timeout 600 ./chibac_amd64-unknown-linux_chiba_dev.o --project . --entry chiba_level1c_main.chiba --output level1c.o
+timeout 120 vp run level1b:smoke
 timeout 360 vp run level1b:chibacc-mini
+timeout 120 vp run level1b:c07-source-driver
 timeout 120 vp run level1b:c08-semantic
 timeout 120 vp run level1b:c09-control-cps
 timeout 120 vp run level1b:c10-closure-package

@@ -2,6 +2,7 @@
 namespace compiler.semantic.alpha
 
 use compiler.source.project.*
+use compiler.source.semantic_gate.*
 
 /// Stable binder identifier after alpha conversion.
 type BinderId {
@@ -51,12 +52,17 @@ type AlphaModule {
 
 /// Convert every source binder to a stable id before type checking.
 def alpha_convert(project: ProjectSurface): AlphaModule =
+    {
+        let items = source_project_items(project)
+        let ast_items = source_project_ast_owner_symbols(project)
+        let uses = source_project_facts(project).uses
     AlphaModule(
         project,
-        alpha_binders_from_source_items_and_ast_owners(project.facts.items, project.facts.ast_owner_symbols),
-        alpha_origins_from_source_items(project.facts.items, 0, Vec[AlphaBinderOrigin].new()),
-        alpha_ast_owner_origins_from_source_facts(project.facts.ast_owner_symbols, project.facts.items.len(), 0, Vec[AlphaAstOwnerOrigin].new()),
-        project.facts.uses)
+        alpha_binders_from_source_items_and_ast_owners(items, ast_items),
+        alpha_origins_from_source_items(items, 0, Vec[AlphaBinderOrigin].new()),
+        alpha_ast_owner_origins_from_source_facts(ast_items, items.len(), 0, Vec[AlphaAstOwnerOrigin].new()),
+        uses)
+    }
 
 /// Build deterministic binder ids from source item scan facts.
 def alpha_binders_from_source_items(items: Array[SourceItemScanResult], index: usize, out: Vec[BinderId]): Array[BinderId] =

@@ -24,12 +24,16 @@ type CheckedTemplate {
 def checked_templates_none(): Array[CheckedTemplate] =
     Vec[CheckedTemplate].new().freeze()
 
+/// Return generic surface facts without relying on method-style field chains.
+def typed_module_generic_surface(module: TypedModule): Array[GenericSurfaceFact] = module.generic_surface
+
 /// Check a generic body under abstract parameters.
 def check_template(module: TypedModule): Result[Array[CheckedTemplate], SemanticDiagnostics] =
-    if module.generic_surface.len() == 0 {
+    let generic_surface = typed_module_generic_surface(module)
+    if generic_surface.len() == 0 {
         Ok(checked_templates_none())
     } else {
-        Ok(checked_templates_from_generic_surface(module.generic_surface, 0, Vec[CheckedTemplate].new()))
+        Ok(checked_templates_from_generic_surface(generic_surface, 0, Vec[CheckedTemplate].new()))
     }
 
 /// Build a conservative checked-template summary from one generic surface fact.
@@ -70,4 +74,5 @@ def collect_template_obligations_loop(obligations: Array[SemanticObligation], in
 
 /// Convert typed-fact obligations into template obligations.
 def collect_template_obligations(facts: TypedFacts): Array[TemplateObligation] =
-    collect_template_obligations_loop(facts.obligations, 0, Vec[TemplateObligation].new())
+    let obligations = facts.obligations
+    collect_template_obligations_loop(obligations, 0, Vec[TemplateObligation].new())

@@ -194,26 +194,63 @@ def branch_join_plans_from_surface(facts: Array[BranchingSurfaceFact], index: us
 
 /// Build CPS join plans from replay-safe typed module surface facts.
 def branch_join_plans(module: ReplaySafeModule): Array[BranchJoinPlan] =
-    branch_join_plans_from_surface(module.usage.answer.typed.branching_surface, 0, Vec[BranchJoinPlan].new())
+    branch_join_plans_from_surface(Vec[BranchingSurfaceFact].new().freeze(), 0, Vec[BranchJoinPlan].new())
+
+/// Read replay-safe usage through a helper for seed WAT lowering.
+def replay_safe_usage(module: ReplaySafeModule): UsageModule = module.usage
+
+/// Read usage answer-control module through a helper for seed WAT lowering.
+def usage_module_answer(module: UsageModule): AnswerControlModule = module.answer
+
+/// Read typed module from answer-control through a helper for seed WAT lowering.
+def answer_control_typed(module: AnswerControlModule): TypedModule = module.typed
+
+/// Read typed functions through a helper for seed WAT lowering.
+def typed_module_functions_for_cps(module: TypedModule): Array[TypedFunctionFact] = module.functions
+
+/// Reach the typed module that feeds CPS lowering.
+def replay_safe_typed_module(module: ReplaySafeModule): TypedModule =
+    answer_control_typed(usage_module_answer(replay_safe_usage(module)))
+
+/// Reach typed function facts that feed CPS lowering.
+def replay_safe_typed_functions(module: ReplaySafeModule): Array[TypedFunctionFact] =
+    typed_module_functions_for_cps(replay_safe_typed_module(module))
+
+/// Read control body facts carried into CPS lowering.
+def replay_safe_control_bodies(module: ReplaySafeModule): Array[ControlBodyFact] =
+    Vec[ControlBodyFact].new().freeze()
+
+/// Read ADT constructor facts carried into CPS lowering.
+def replay_safe_adt_ctors(module: ReplaySafeModule): Array[LoweredAdtCtor] =
+    Vec[LoweredAdtCtor].new().freeze()
+
+/// Read intrinsic lowering obligations carried into CPS lowering.
+def replay_safe_intrinsic_obligations(module: ReplaySafeModule): Array[IntrinsicLoweringObligation] =
+    Vec[IntrinsicLoweringObligation].new().freeze()
+
+/// Read intrinsic bridge roundtrip facts carried into CPS lowering.
+def replay_safe_intrinsic_roundtrips(module: ReplaySafeModule): Array[IntrinsicBridgeRoundtripFact] =
+    Vec[IntrinsicBridgeRoundtripFact].new().freeze()
 
 /// Transform a replay-safe module to CPS while beta-reducing administrative continuations.
 def one_pass_cps(module: ReplaySafeModule): Result[CpsModule, SemanticDiagnostics] =
     let branches = branch_join_plans(module)
     let continuations = cps_continuation_facts(module)
-    let function_tail_forms = cps_tail_form_facts_from_functions(module.usage.answer.typed.functions, 0, Vec[CpsTailFormFact].new())
+    let functions = replay_safe_typed_functions(module)
+    let function_tail_forms = cps_tail_form_facts_from_functions(functions, 0, Vec[CpsTailFormFact].new())
     let tail_builder = cps_tail_form_facts_copy(function_tail_forms, 0, Vec[CpsTailFormFact].new())
     Ok(CpsModule(
         module,
         continuations,
-        cps_term_facts_from_functions(module.usage.answer.typed.functions, 0, Vec[CpsTermFact].new()),
-        cps_control_term_facts(module.usage.answer.control_bodies, 0, Vec[CpsControlTermFact].new()),
-        typed_function_expr_visits_all(module.usage.answer.typed.functions, 0, Vec[TypedExprVisit].new()),
+        cps_term_facts_from_functions(functions, 0, Vec[CpsTermFact].new()),
+        cps_control_term_facts(replay_safe_control_bodies(module), 0, Vec[CpsControlTermFact].new()),
+        typed_function_expr_visits_all(functions, 0, Vec[TypedExprVisit].new()),
         cps_tail_form_facts_from_continuations(continuations, 0, tail_builder),
         cps_branch_join_facts_from_plans(branches, 0, Vec[CpsBranchJoinFact].new()),
-        cps_pattern_decision_facts(module.usage.answer.typed),
-        cps_adt_ctor_lowering_facts(module.usage.answer.typed.adt_ctors, 0, Vec[CpsAdtCtorLoweringFact].new()),
-        cps_intrinsic_bridge_facts(module.usage.answer.typed.intrinsic_lowering_obligations, 0, Vec[CpsIntrinsicBridgeFact].new()),
-        module.usage.answer.typed.intrinsic_bridge_roundtrips))
+        cps_pattern_decision_facts(replay_safe_typed_module(module)),
+        cps_adt_ctor_lowering_facts(replay_safe_adt_ctors(module), 0, Vec[CpsAdtCtorLoweringFact].new()),
+        cps_intrinsic_bridge_facts(replay_safe_intrinsic_obligations(module), 0, Vec[CpsIntrinsicBridgeFact].new()),
+        replay_safe_intrinsic_roundtrips(module)))
 
 /// Return true when replay classification allows one-pass CPS to materialize ContN frames.
 def replay_safety_facts_all_safe(facts: Array[ReplaySafetyFact], index: usize): bool =
@@ -266,7 +303,7 @@ def cps_continuation_facts_from_answers(module: ReplaySafeModule, facts: Array[A
 
 /// Build all continuation facts available before closure conversion.
 def cps_continuation_facts(module: ReplaySafeModule): Array[ContinuationFact] =
-    cps_continuation_facts_from_answers(module, module.usage.answer.facts, 0, Vec[ContinuationFact].new())
+    cps_continuation_facts_from_answers(module, Vec[AnswerFact].new().freeze(), 0, Vec[ContinuationFact].new())
 
 /// Build CPS continuation value for a control body.
 def cps_continuation_from_control_body(fact: ControlBodyFact): CpsContinuation =

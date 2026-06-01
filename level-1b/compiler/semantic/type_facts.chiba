@@ -57,10 +57,14 @@ def typed_facts_from_functions(functions: Array[TypedFunctionFact], index: usize
     if index == functions.len() { out.freeze() }
     else { typed_facts_from_functions(functions, index + 1, out.push(typed_fact_from_function(functions.get(index)))) }
 
+/// Return typed function facts without relying on method-style field chains.
+def typed_module_functions(module: TypedModule): Array[TypedFunctionFact] = module.functions
+
 /// Build typed facts after inference.
 def build_typed_facts(module: TypedModule): Result[Array[TypedFacts], SemanticDiagnostics] =
-    if module.functions.len() > 0 {
-        Ok(typed_facts_from_functions(module.functions, 0, Vec[TypedFacts].new()))
+    let functions = typed_module_functions(module)
+    if functions.len() > 0 {
+        Ok(typed_facts_from_functions(functions, 0, Vec[TypedFacts].new()))
     } else {
         Ok(Vec[TypedFacts].new().push(typed_fact_module_baseline()).freeze())
     }

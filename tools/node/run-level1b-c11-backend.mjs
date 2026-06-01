@@ -97,6 +97,7 @@ const REQUIRED_TEXT = [
   "def emit_core_function_params",
   "def emit_core_op_function_params",
   "frame_count: usize",
+  "frame_index: usize",
   "CoreOpFunction",
   "CoreOpStacklessFunction",
   "CoreOpBoxedCont1",
@@ -210,6 +211,7 @@ const REQUIRED_TEXT = [
   "def emit_core_stackless_function",
   "def emit_core_owner_suffix",
   "def emit_contn_resume_function_name",
+  "def emit_contn_resume_frame_function_name",
   "def emit_contn_frame_chain_function_name",
   "def emit_contn_package_function_name",
   "def emit_core_expr_instruction",
@@ -222,6 +224,7 @@ const REQUIRED_TEXT = [
   "CoreExprTailCallArgs(target, args)",
   "CoreExprPrimitiveBinary(op, left, right)",
   "def core_expr_from_stackless_resume_body",
+  "def core_expr_from_stackless_resume_frame_body",
   "CoreOpStacklessFunction => Ok(emit_core_stackless_function(ops, op))",
   "def emit_boxed_cont1_resume_function",
   "def emit_contn_frame_chain_function",
@@ -317,6 +320,21 @@ function checkWatArtifactRunnable(name, wat, invokes) {
   pass(`artifact ${watPath}`);
 }
 
+function checkAstPrimaryWatShape(wat) {
+  if (!wat.includes("(func $chiba.demo::main (export \"main\") (result i32) (i32.const 2) (i32.const 3) (i32.const 4) i32.mul i32.add)")) {
+    fail("AST primary main must lower parser-owned binary nodes directly to primitive arithmetic");
+  }
+  if (!wat.includes("(func $chiba.demo::neg (export \"neg\") (result i32) (i32.const 0) (i32.const 7) i32.sub)")) {
+    fail("AST primary prefix neg must lower directly to primitive subtraction");
+  }
+  const mainStart = wat.indexOf("(func $chiba.demo::main ");
+  const branchStart = wat.indexOf("(func $chiba.demo::branch ");
+  const mainBody = mainStart >= 0 && branchStart > mainStart ? wat.slice(mainStart, branchStart) : "";
+  if (mainBody.includes("return_call $chiba.i32.op_") || mainBody.includes("call $chiba.i32.op_")) {
+    fail("AST primary arithmetic body must not route through i32.op_* helper calls");
+  }
+}
+
 function checkWatArtifactRunnableAndTraps(name, wat, invokes, traps) {
   const { watPath, wasmPath } = writeWatArtifact(name, wat);
   for (const invoke of invokes) {
@@ -409,6 +427,18 @@ function checkSource(file, source) {
   }
   if (path.basename(file) === "wat_emit.chiba" && /\bCoreOpContinuationFrameChain\s*=>\s*Ok\s*\(\s*"\(func \(param/.test(code)) {
     errors.push(`${file}: ContN frame-chain WAT must allocate a frame-chain object, not emit an empty param stub`);
+  }
+  if (path.basename(file) === "wat_emit.chiba" && !/\bdef\s+emit_contn_frame_chain_nodes\b[\s\S]{0,620}remaining\s*-\s*1[\s\S]{0,620}struct\.new \$chiba\.layout\.continuation_frame_chain/.test(code)) {
+    errors.push(`${file}: ContN frame-chain WAT must materialize one spine node per Core frame_count`);
+  }
+  if (path.basename(file) === "wat_emit.chiba" && !/\bdef\s+emit_contn_resume_frame_function_name\b[\s\S]{0,260}frame_index/.test(code)) {
+    errors.push(`${file}: ContN stackless resume names must include frame index for multi-frame packages`);
+  }
+  if (path.basename(file) === "wat_emit.chiba" && !/\bemit_core_stackless_function\b[\s\S]{0,420}emit_contn_resume_frame_function_name\s*\(\s*op\.owner\s*,\s*op\.frame_index\s*\)/.test(code)) {
+    errors.push(`${file}: stackless resume emission must use Core frame_index, not owner-only names`);
+  }
+  if (path.basename(file) === "core.chiba" && !/\bpush_continuation_frame_core_ops\b[\s\S]{0,900}frame_index:\s*index/.test(code)) {
+    errors.push(`${file}: Core stackless resume ops must preserve per-frame index provenance`);
   }
   if (path.basename(file) === "wat_emit.chiba" && /\bCoreOpContNPackage\s*=>\s*Ok\s*\(\s*"\(func \(param/.test(code)) {
     errors.push(`${file}: ContN package WAT must allocate a repeatable package object, not emit an empty param stub`);
@@ -599,11 +629,11 @@ function astExprNode(nodes, ownerOrName, nodeId) {
   return node;
 }
 
-function astBinaryTarget(value) {
-  if (value === 0) return "i32.op_add";
-  if (value === 1) return "i32.op_sub";
-  if (value === 2) return "i32.op_mul";
-  if (value === 3) return "i32.op_div";
+function astBinaryInstruction(value) {
+  if (value === 0) return "i32.add";
+  if (value === 1) return "i32.sub";
+  if (value === 2) return "i32.mul";
+  if (value === 3) return "i32.div_s";
   fail(`unsupported AST primitive binary ordinal ${value}`);
 }
 
@@ -614,16 +644,18 @@ function coreExprFromAstNode(nodes, ownerName, nodeId) {
   if (node.kind === "SourceAstExprNodeParam") return { kind: "param", index: node.paramIndex };
   if (node.kind === "SourceAstExprNodePrefixNeg") {
     return {
-      kind: "tailcall_args",
-      target: "i32.op_sub",
-      args: [{ kind: "const", value: 0 }, coreExprFromAstNode(nodes, owner, node.left)],
+      kind: "binary",
+      instruction: "i32.sub",
+      left: { kind: "const", value: 0 },
+      right: coreExprFromAstNode(nodes, owner, node.left),
     };
   }
   if (node.kind === "SourceAstExprNodeBinary") {
     return {
-      kind: "tailcall_args",
-      target: astBinaryTarget(node.value),
-      args: [coreExprFromAstNode(nodes, owner, node.left), coreExprFromAstNode(nodes, owner, node.right)],
+      kind: "binary",
+      instruction: astBinaryInstruction(node.value),
+      left: coreExprFromAstNode(nodes, owner, node.left),
+      right: coreExprFromAstNode(nodes, owner, node.right),
     };
   }
   if (node.kind === "SourceAstExprNodeIfElse") {
@@ -655,17 +687,36 @@ function coreExprFromAstNode(nodes, ownerName, nodeId) {
     };
   }
   if (node.kind === "SourceAstExprNodeIndex") {
+    if (typeof node.callee !== "string" || node.callee.length === 0) {
+      fail("AST primary index node must carry resolved callee; backend fixture must not invent i32.op_index");
+    }
     return {
       kind: "tailcall_args",
-      target: astNodeTarget(node, "i32.op_index"),
+      target: astNodeTarget(node),
       args: [coreExprFromAstNode(nodes, owner, node.left), ...astNodeArgs(nodes, owner, node)],
     };
   }
   if (node.kind === "SourceAstExprNodeIndexSlice") {
+    if (typeof node.callee !== "string" || node.callee.length === 0) {
+      fail("AST primary index-slice node must carry resolved callee; backend fixture must not invent i32.op_index_slice");
+    }
     return {
       kind: "tailcall_args",
-      target: astNodeTarget(node, "i32.op_index_slice"),
+      target: astNodeTarget(node),
       args: [coreExprFromAstNode(nodes, owner, node.left), ...astNodeArgs(nodes, owner, node)],
+    };
+  }
+  if (node.kind === "SourceAstExprNodeStructNew") {
+    return {
+      kind: "tuple_value",
+      values: astNodeArgs(nodes, owner, node),
+    };
+  }
+  if (node.kind === "SourceAstExprNodeFieldGet") {
+    return {
+      kind: "tuple_field",
+      values: coreExprFromAstNode(nodes, owner, node.left).values,
+      index: node.paramIndex,
     };
   }
   fail(`unsupported AST expression node kind ${node.kind}`);
@@ -1068,9 +1119,10 @@ function sourceExprToCore(expr, fn) {
   }
   if (text.startsWith("-") && text.slice(1).trim().length > 0) {
     return {
-      kind: "tailcall_args",
-      target: "i32.op_sub",
-      args: [{ kind: "const", value: 0 }, sourceExprToCore(text.slice(1), fn)],
+      kind: "binary",
+      instruction: "i32.sub",
+      left: { kind: "const", value: 0 },
+      right: sourceExprToCore(text.slice(1), fn),
     };
   }
   const lowOpAt = findTopLevelBinaryRightmost(text, ["+", "-"]);
@@ -1304,6 +1356,75 @@ function checkContNPackageWatSmoke() {
   checkWatArtifactRunnable("contn-package", wat, [
     { exportName: "resume_package", expectedStdout: "42" },
     { exportName: "resume_twice", expectedStdout: "84" },
+  ]);
+}
+
+function checkContNMultiFrameSpineWatSmoke() {
+  const wat = `(module
+(type $chiba.layout.continuation_frame (struct (field (ref null func)) (field eqref)))
+(type $chiba.layout.continuation_frame_chain (struct (field (ref $chiba.layout.continuation_frame)) (field (ref null $chiba.layout.continuation_frame_chain))))
+(type $chiba.layout.contN_package (struct (field (ref $chiba.layout.continuation_frame_chain)) (field i32)))
+(func $chiba.contn.resume.7.frame.0 (result i32) i32.const 21)
+(func $chiba.contn.resume.7.frame.1 (result i32) i32.const 22)
+(func $chiba.contn.frame_chain.7 (result (ref $chiba.layout.continuation_frame_chain))
+  ref.func $chiba.contn.resume.7.frame.0
+  ref.null any
+  struct.new $chiba.layout.continuation_frame
+  ref.func $chiba.contn.resume.7.frame.1
+  ref.null any
+  struct.new $chiba.layout.continuation_frame
+  ref.null $chiba.layout.continuation_frame_chain
+  struct.new $chiba.layout.continuation_frame_chain
+  struct.new $chiba.layout.continuation_frame_chain)
+(func $chiba.contn.package.7 (result (ref $chiba.layout.contN_package))
+  call $chiba.contn.frame_chain.7
+  i32.const 1
+  struct.new $chiba.layout.contN_package)
+(func (export "head_resume") (result i32)
+  call $chiba.contn.resume.7.frame.0)
+(func (export "tail_resume") (result i32)
+  call $chiba.contn.resume.7.frame.1)
+(func (export "frame_count") (result i32)
+  (local $chain (ref $chiba.layout.continuation_frame_chain))
+  (local $next (ref null $chiba.layout.continuation_frame_chain))
+  (local.set $chain (struct.get $chiba.layout.contN_package 0 (call $chiba.contn.package.7)))
+  (local.set $next (struct.get $chiba.layout.continuation_frame_chain 1 (local.get $chain)))
+  (if (result i32)
+    (ref.is_null (local.get $next))
+    (then i32.const 1)
+    (else i32.const 2)))
+)`;
+  checkWatArtifactRunnable("contn-multiframe-spine", wat, [
+    { exportName: "head_resume", expectedStdout: "21" },
+    { exportName: "tail_resume", expectedStdout: "22" },
+    { exportName: "frame_count", expectedStdout: "2" },
+  ]);
+}
+
+function checkContNParamResumeWatSmoke() {
+  const wat = `(module
+(type $chiba.layout.continuation_frame (struct (field (ref null func)) (field eqref)))
+(type $chiba.layout.continuation_frame_chain (struct (field (ref $chiba.layout.continuation_frame)) (field (ref null $chiba.layout.continuation_frame_chain))))
+(type $chiba.layout.contN_package (struct (field (ref $chiba.layout.continuation_frame_chain)) (field i32)))
+(func $chiba.contn.resume.8.frame.0 (param i32) (result i32) local.get 0)
+(func $chiba.contn.frame_chain.8 (result (ref $chiba.layout.continuation_frame_chain))
+  ref.func $chiba.contn.resume.8.frame.0
+  ref.null any
+  struct.new $chiba.layout.continuation_frame
+  ref.null $chiba.layout.continuation_frame_chain
+  struct.new $chiba.layout.continuation_frame_chain)
+(func $chiba.contn.package.8 (result (ref $chiba.layout.contN_package))
+  call $chiba.contn.frame_chain.8
+  i32.const 1
+  struct.new $chiba.layout.contN_package)
+(func (export "resume_param") (param i32) (result i32)
+  call $chiba.contn.package.8
+  drop
+  local.get 0
+  call $chiba.contn.resume.8.frame.0)
+)`;
+  checkWatArtifactRunnable("contn-param-resume", wat, [
+    { exportName: "resume_param", args: [37], expectedStdout: "37" },
   ]);
 }
 
@@ -1770,7 +1891,13 @@ function checkAstPrimaryTypedMainWat() {
       exportName: "method_style",
       body: coreExprFromAstNode(nodes, "method_style", 0),
     },
+    {
+      symbol: "demo::tuple_field_ast",
+      exportName: "tuple_field_ast",
+      body: coreExprFromAstNode(nodes, "tuple_field_ast", 0),
+    },
   ]);
+  checkAstPrimaryWatShape(wat);
   checkWatArtifactRunnable("ast-primary-typed-main", wat, [
     { exportName: "main", expectedStdout: "14" },
     { exportName: "branch", expectedStdout: "7" },
@@ -1784,6 +1911,7 @@ function checkAstPrimaryTypedMainWat() {
     { exportName: "i32_index", args: [20, 7], expectedStdout: "27" },
     { exportName: "index_style", args: [20], expectedStdout: "27" },
     { exportName: "method_style", expectedStdout: "29" },
+    { exportName: "tuple_field_ast", expectedStdout: "2" },
   ]);
 }
 
@@ -1794,6 +1922,32 @@ function checkArtifactsExist() {
     fail(`C11 must emit viewable/runnable artifact set, got ${watFiles.length} wat and ${wasmFiles.length} wasm`);
   }
   pass(`C11 artifacts ${ARTIFACT_DIR}: ${watFiles.length} wat, ${wasmFiles.length} wasm`);
+}
+
+function checkAstPrimaryLevel1bLoweringChain() {
+  const semantic = read("level-1b/compiler/semantic/type_infer.chiba");
+  const cps = read("level-1b/compiler/control/cps.chiba");
+  const core = read("level-1b/compiler/backend/core.chiba");
+  const required = [
+    [semantic, "SourceAstExprNodeStructNew => typed_expr_from_ast_struct_new_node"],
+    [semantic, "SourceAstExprNodeFieldGet => typed_expr_from_ast_field_get_node"],
+    [semantic, "SourceAstExprNodeMethodCall => typed_expr_from_ast_method_node"],
+    [semantic, "SourceAstExprNodeIndex =>"],
+    [semantic, "typed_ast_arg_ids_from_node(node)"],
+    [cps, "TypedExprStructNew(layout, fields, args)"],
+    [cps, "TypedExprFieldGet(layout, fields, value, index)"],
+    [cps, "TypedExprTailCallArgs(target, args)"],
+    [cps, "CpsTermStructNew(layout as str, fields"],
+    [cps, "CpsTermFieldGet(layout as str, fields"],
+    [cps, "CpsTermTailCallExprs(target"],
+    [core, "CpsTermStructNew(layout, fields, args)"],
+    [core, "CpsTermFieldGet(layout, fields, value, index)"],
+    [core, "CoreExprStructNew(core_wasm_gc_layout_from_typed(layout, fields)"],
+    [core, "CoreExprFieldGet(core_wasm_gc_layout_from_typed(layout, fields)"],
+    [core, "CoreExprTailCallArgs(target, core_expr_args_from_cps_terms"],
+  ];
+  const missing = required.filter(([source, needle]) => !source.includes(needle)).map(([, needle]) => needle);
+  if (missing.length !== 0) fail(`AST primary executable WAT must be backed by level-1b typed/CPS/Core lowering, missing:\n${missing.join("\n")}`);
 }
 
 function main() {
@@ -1809,6 +1963,7 @@ function main() {
 
   const errors = files.flatMap((file) => checkSource(file, read(file)));
   if (errors.length !== 0) fail(errors.join("\n"));
+  checkAstPrimaryLevel1bLoweringChain();
   pass("backend source contract");
   checkMinimalFunctionWatSmoke();
   checkTailcallWatSmoke();
@@ -1821,6 +1976,8 @@ function main() {
   checkBranchTailcallWatSmoke();
   checkParamConditionBranchTailcallWatSmoke();
   checkContNPackageWatSmoke();
+  checkContNMultiFrameSpineWatSmoke();
+  checkContNParamResumeWatSmoke();
   checkAdtTupleCtorWatSmoke();
   checkAdtTupleCtorSharedNominalWatSmoke();
   checkTupleNominalOrderDistinctWatSmoke();

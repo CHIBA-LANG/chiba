@@ -82,12 +82,19 @@ def usage_facts_from_control_bodies(facts: Array[ControlBodyFact], index: usize,
 def usage_facts_none(): Array[UsageFact] =
     Vec[UsageFact].new().freeze()
 
+/// Read answer-control body facts through a helper for seed WAT lowering.
+def answer_control_module_control_bodies(module: AnswerControlModule): Array[ControlBodyFact] = module.control_bodies
+
+/// Read callable storage facts through a helper for seed WAT lowering.
+def answer_control_module_callable_storage(module: AnswerControlModule): Array[CallableStorageFact] =
+    Vec[CallableStorageFact].new().freeze()
+
 /// Build all usage facts available before full expression traversal.
 def usage_facts_from_module(module: AnswerControlModule): Array[UsageFact] =
     usage_facts_from_control_bodies(
-        module.control_bodies,
+        answer_control_module_control_bodies(module),
         0,
-        usage_facts_from_callable_storage_to_vec(module.typed.callable_storage, 0, Vec[UsageFact].new()))
+        usage_facts_from_callable_storage_to_vec(answer_control_module_callable_storage(module), 0, Vec[UsageFact].new()))
 
 /// Analyze binder, lambda, closure, and continuation usage.
 def analyze_usage(module: AnswerControlModule): Result[UsageModule, SemanticDiagnostics] =

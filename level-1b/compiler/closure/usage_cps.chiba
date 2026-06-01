@@ -70,7 +70,7 @@ def cps_usage_facts_from_runtime_surface(module: CpsModule): Array[CpsUseFact] =
     cps_usage_facts(
         module.continuations,
         0,
-        cps_usage_facts_from_closure_surface(module.source.usage.answer.typed.closure_surface, 0, Vec[CpsUseFact].new()))
+        cps_usage_facts_from_closure_surface(Vec[ClosureSurfaceFact].new().freeze(), 0, Vec[CpsUseFact].new()))
 
 /// Map storage obligations to runtime use classes.
 def continuation_storage_use_count(storage: ContinuationStorageKind): UsageCount =

@@ -8,3 +8,10 @@ def multishot_package(): i64 = reset {
         k(2)
     }
 }
+
+/// A continuation resume can pass through an existing function parameter.
+def multishot_param_package(x: i64): i64 = reset {
+    shiftn k {
+        k(x)
+    }
+}

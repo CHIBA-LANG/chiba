@@ -13,6 +13,7 @@ const CHIBACC = process.env.CHIBACC || (
     ? "/tmp/chibacc-project-mainline/target/debug/chibacc.new.o"
     : "./chibacc.o"
 );
+const DEBUG_TIMING = process.env.CHIBACC_MINI_DEBUG === "1" || process.argv.includes("--debug-timing");
 const LEGACY_REFERENCE_COMPILER = "./target/debug/level1c.o";
 const WASM_AS = process.env.WASM_AS || (
   fs.existsSync("./binaryen-linux-x86-64-version_129/bin/wasm-as")
@@ -207,11 +208,19 @@ def harness_status(result: LabeledAST): i64 = {
 ];
 
 function run(name, command, args) {
+  const started = Date.now();
+  if (DEBUG_TIMING) {
+    console.log(`[DEBUG chibacc-mini] start ${name}: ${command} ${args.join(" ")}`);
+  }
   const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const elapsed = Date.now() - started;
   if (result.status !== 0) {
     console.error(`[FAIL] ${name}`);
     console.error(`${result.stdout || ""}${result.stderr || ""}`.split("\n").slice(0, 40).join("\n"));
     process.exit(result.status || 1);
+  }
+  if (DEBUG_TIMING) {
+    console.log(`[DEBUG chibacc-mini] done ${name}: ${elapsed}ms stdout=${Buffer.byteLength(result.stdout || "", "utf8")} stderr=${Buffer.byteLength(result.stderr || "", "utf8")}`);
   }
   console.log(`[PASS] ${name}`);
   return result;
@@ -262,16 +271,26 @@ function runParseOkWithTimeout(name, file, seconds) {
 }
 
 function runWatToFile(name, file, watPath, seconds) {
+  const started = Date.now();
+  if (DEBUG_TIMING) {
+    const stat = fs.statSync(file);
+    const lines = fs.readFileSync(file, "utf8").split("\n").length;
+    console.log(`[DEBUG chibacc-mini] start ${name}: timeout ${seconds} ${LEGACY_REFERENCE_COMPILER} wat ${file} lines=${lines} bytes=${stat.size}`);
+  }
   const result = spawnSync("timeout", [String(seconds), LEGACY_REFERENCE_COMPILER, "wat", file], {
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
   });
+  const elapsed = Date.now() - started;
   if (result.status !== 0 || !result.stdout.includes("(module")) {
     console.error(`[FAIL] ${name}`);
     console.error(`${result.stdout || ""}${result.stderr || ""}`.split("\n").slice(0, 40).join("\n"));
     process.exit(result.status || 1);
   }
   fs.writeFileSync(watPath, result.stdout);
+  if (DEBUG_TIMING) {
+    console.log(`[DEBUG chibacc-mini] done ${name}: ${elapsed}ms wat_bytes=${Buffer.byteLength(result.stdout, "utf8")}`);
+  }
   console.log(`[PASS] ${name}`);
   return result.stdout;
 }
@@ -287,10 +306,14 @@ function extractModule(text) {
 }
 
 function compileWatFileToWasm(watPath) {
+  const started = Date.now();
   const raw = fs.readFileSync(watPath, "utf8");
   const normalizedWatPath = watPath.replace(/\.wat$/, ".module.wat");
   const wasmPath = watPath.replace(/\.wat$/, ".wasm");
   fs.writeFileSync(normalizedWatPath, extractModule(raw));
+  if (DEBUG_TIMING) {
+    console.log(`[DEBUG chibacc-mini] start wasm-as ${watPath}: wat_bytes=${Buffer.byteLength(raw, "utf8")}`);
+  }
   const result = spawnSync(WASM_AS, [normalizedWatPath, "-o", wasmPath, ...WASM_AS_FEATURES], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -298,10 +321,17 @@ function compileWatFileToWasm(watPath) {
   if (result.status !== 0) {
     throw new Error(`${WASM_AS} failed for ${watPath}\n${result.stdout || ""}${result.stderr || ""}`);
   }
+  if (DEBUG_TIMING) {
+    console.log(`[DEBUG chibacc-mini] done wasm-as ${watPath}: ${Date.now() - started}ms wasm_bytes=${fs.statSync(wasmPath).size}`);
+  }
   return wasmPath;
 }
 
 async function runWatExport(watPath, exportName) {
+  const started = Date.now();
+  if (DEBUG_TIMING) {
+    console.log(`[DEBUG chibacc-mini] start run-wat ${watPath}::${exportName}`);
+  }
   const wasmPath = compileWatFileToWasm(watPath);
   return new Promise((resolve, reject) => {
     const worker = new Worker(
@@ -340,7 +370,12 @@ async function runWatExport(watPath, exportName) {
     worker.once("message", (message) => {
       clearTimeout(timer);
       worker.terminate();
-      if (message && message.ok) resolve(message.value);
+      if (message && message.ok) {
+        if (DEBUG_TIMING) {
+          console.log(`[DEBUG chibacc-mini] done run-wat ${watPath}::${exportName}: ${Date.now() - started}ms result=${message.value}`);
+        }
+        resolve(message.value);
+      }
       else reject(new Error(message && message.error ? message.error : "run-wat worker failed"));
     });
     worker.once("error", (error) => {
@@ -965,14 +1000,23 @@ def main(): i64 = {
 }
 
 async function emitFullRuntimeArtifact(label, roots, tokens, harnessSource, execPath, watPath, seconds) {
+  const started = Date.now();
   const slice = generatedParserRuntimeSliceSource(fullGenerated, roots, tokens);
-  fs.writeFileSync(execPath, `${slice.source}\n${harnessSource}`);
-  console.log(`[INFO] ${label}: ${slice.selectedDefCount}/${slice.totalDefCount} generated defs`);
+  const execSource = `${slice.source}\n${harnessSource}`;
+  fs.writeFileSync(execPath, execSource);
+  const lineCount = execSource.split("\n").length;
+  console.log(`[INFO] ${label}: ${slice.selectedDefCount}/${slice.totalDefCount} generated defs, ${lineCount} lines, ${Buffer.byteLength(execSource, "utf8")} bytes`);
+  if (DEBUG_TIMING) {
+    console.log(`[DEBUG chibacc-mini] built ${label} source in ${Date.now() - started}ms -> ${execPath}`);
+  }
   console.log(`[INFO] ${label}: emitting WAT`);
   const watSource = runWatToFile(`level1c wat ${label}`, execPath, watPath, seconds);
   compileWatFileToWasm(watPath);
   console.log(`[INFO] ${label}: running WAT`);
   const result = await runWatMain(watPath);
+  if (DEBUG_TIMING) {
+    console.log(`[DEBUG chibacc-mini] done ${label}: total=${Date.now() - started}ms wat_bytes=${Buffer.byteLength(watSource, "utf8")}`);
+  }
   return { result, slice };
 }
 
@@ -1033,16 +1077,20 @@ const astExprNodes = [
   { ownerNamespace: "demo", ownerName: "choose", nodeId: 2, kind: "SourceAstExprNodeI32Const", value: 7, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "choose", nodeId: 3, kind: "SourceAstExprNodeI32Const", value: 13, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "id", nodeId: 0, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
-  { ownerNamespace: "demo", ownerName: "call_id", nodeId: 0, kind: "SourceAstExprNodeCall", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0, callee: "demo::id", arg0: 1, argCount: 1 },
+  { ownerNamespace: "demo", ownerName: "call_id", nodeId: 0, kind: "SourceAstExprNodeCall", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0, callee: "demo::id", args: [1] },
   { ownerNamespace: "demo", ownerName: "call_id", nodeId: 1, kind: "SourceAstExprNodeI32Const", value: 23, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "i32_index", nodeId: 0, kind: "SourceAstExprNodeBinary", value: 0, paramIndex: 0, left: 1, right: 2, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "i32_index", nodeId: 1, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "i32_index", nodeId: 2, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 1, left: 0, right: 0, thenNode: 0, elseNode: 0 },
-  { ownerNamespace: "demo", ownerName: "index_style", nodeId: 0, kind: "SourceAstExprNodeIndex", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 0, elseNode: 0, callee: "demo::i32_index", arg0: 2, argCount: 1 },
+  { ownerNamespace: "demo", ownerName: "index_style", nodeId: 0, kind: "SourceAstExprNodeIndex", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 0, elseNode: 0, callee: "demo::i32_index", args: [2] },
   { ownerNamespace: "demo", ownerName: "index_style", nodeId: 1, kind: "SourceAstExprNodeParam", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
   { ownerNamespace: "demo", ownerName: "index_style", nodeId: 2, kind: "SourceAstExprNodeI32Const", value: 7, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
-  { ownerNamespace: "demo", ownerName: "method_style", nodeId: 0, kind: "SourceAstExprNodeMethodCall", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 0, elseNode: 0, callee: "demo::id", argCount: 0 },
+  { ownerNamespace: "demo", ownerName: "method_style", nodeId: 0, kind: "SourceAstExprNodeMethodCall", value: 0, paramIndex: 0, left: 1, right: 0, thenNode: 0, elseNode: 0, callee: "demo::id", args: [] },
   { ownerNamespace: "demo", ownerName: "method_style", nodeId: 1, kind: "SourceAstExprNodeI32Const", value: 29, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "tuple_field_ast", nodeId: 0, kind: "SourceAstExprNodeFieldGet", value: 0, paramIndex: 1, left: 1, right: 0, thenNode: 0, elseNode: 0, member: "demo.tuple_i32_i32" },
+  { ownerNamespace: "demo", ownerName: "tuple_field_ast", nodeId: 1, kind: "SourceAstExprNodeStructNew", value: 0, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0, member: "demo.tuple_i32_i32", args: [2, 3] },
+  { ownerNamespace: "demo", ownerName: "tuple_field_ast", nodeId: 2, kind: "SourceAstExprNodeI32Const", value: 40, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
+  { ownerNamespace: "demo", ownerName: "tuple_field_ast", nodeId: 3, kind: "SourceAstExprNodeI32Const", value: 2, paramIndex: 0, left: 0, right: 0, thenNode: 0, elseNode: 0 },
 ];
 
 for (const node of astExprNodes) {
@@ -1054,12 +1102,12 @@ for (const node of astExprNodes) {
   node.else_node ??= node.elseNode;
   node.callee ??= "";
   node.member ??= "";
-  node.arg0 ??= 0;
-  node.arg1 ??= 0;
-  node.arg2 ??= 0;
-  node.argCount ??= 0;
-  node.args ??= [node.arg0, node.arg1, node.arg2].slice(0, node.argCount);
-  node.arg_count ??= node.argCount;
+  node.args ??= [];
+  node.arg0 ??= node.args[0] ?? 0;
+  node.arg1 ??= node.args[1] ?? 0;
+  node.arg2 ??= node.args[2] ?? 0;
+  node.argCount ??= node.args.length;
+  node.arg_count ??= node.args.length;
 }
 
 const evidencePath = path.join(OUT, "ast-primary-evidence.json");
@@ -1076,10 +1124,10 @@ fs.writeFileSync(evidencePath, `${JSON.stringify({
     executableWat: fullExecWatPath,
     expressionExecutable: fullExprExecPath,
     expressionExecutableWat: fullExprExecWatPath,
-    astItemCount: 10,
+    astItemCount: 11,
     astNamespaceCount: 1,
-    astDefItemCount: 10,
-    astOwnerSymbolCount: 10,
+    astDefItemCount: 11,
+    astOwnerSymbolCount: 11,
     astExprNodeCount: astExprNodes.length,
     astExprNodes: astExprNodes,
     astOwnerNamespace: "demo",

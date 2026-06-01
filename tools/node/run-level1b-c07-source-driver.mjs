@@ -277,11 +277,13 @@ const REQUIRED_TEXT = [
   "def source_project_has_ast_item",
   "def source_project_has_ast_primary_items",
   "if source_project_has_ast_primary_items(project) { false }",
-  "source_project_has_namespace(project) == false && source_project_has_ast_namespace(project) == false",
-  "source_project_has_item(project) == false && source_project_has_ast_item(project) == false",
+  "if source_project_has_namespace(project) { false }",
+  "source_project_has_ast_namespace(project)",
+  "if source_project_has_item(project) { false }",
+  "source_project_has_ast_item(project)",
   "SourceGateRefArrayDirectAssignment",
   "source_project_parser_primary_blocked(project)",
-  "project.facts.parser.diagnostic",
+  "source_project_parser(project).diagnostic",
   "missing-facts: source item scan absent",
   "missing-facts: UTF-8 aware source scanner absent",
   "missing-facts: unknown compile_if predicate shape",
@@ -593,14 +595,14 @@ function main() {
   if (fullGrammar.expressionMainResult !== "14" || fullGrammar.expectedExpressionMainResult !== "14") {
     fail("full chiba-level1 expression parser WAT must execute add/mul expression to 14");
   }
-  if (fullGrammar.astNamespaceCount !== 1 || fullGrammar.astDefItemCount < 9 || fullGrammar.astItemCount < 9 || fullGrammar.astOwnerSymbolCount < 9) {
+  if (fullGrammar.astNamespaceCount !== 1 || fullGrammar.astDefItemCount < 10 || fullGrammar.astItemCount < 10 || fullGrammar.astOwnerSymbolCount < 10) {
     fail("full chiba-level1 executable parser evidence must expose namespace, def item, and owner symbol AST counts");
   }
-  if (fullGrammar.astExprNodeCount < 26 || fullGrammar.ast_expr_node_count < 26) {
+  if (fullGrammar.astExprNodeCount < 30 || fullGrammar.ast_expr_node_count < 30) {
     fail("full chiba-level1 executable parser evidence must expose recursive AST expression node facts");
   }
   const astExprNodes = Array.isArray(fullGrammar.astExprNodes) ? fullGrammar.astExprNodes : [];
-  if (astExprNodes.length < 26 || !Array.isArray(fullGrammar.ast_expr_nodes) || fullGrammar.ast_expr_nodes.length < 26) {
+  if (astExprNodes.length < 30 || !Array.isArray(fullGrammar.ast_expr_nodes) || fullGrammar.ast_expr_nodes.length < 30) {
     fail("full chiba-level1 executable parser evidence must expose direct AST expression node list");
   }
   const missingSnakeCaseNode = astExprNodes.find((node) =>
@@ -609,10 +611,15 @@ function main() {
     node.node_id !== node.nodeId ||
     node.param_index !== node.paramIndex ||
     node.then_node !== node.thenNode ||
-    node.else_node !== node.elseNode ||
-    node.arg_count !== node.argCount);
+    node.else_node !== node.elseNode);
   if (missingSnakeCaseNode != null) {
     fail("full chiba-level1 executable parser AST nodes must expose snake_case aliases consumed by level-1b records");
+  }
+  const missingPrimaryArgsNode = astExprNodes.find((node) =>
+    (node.kind === "SourceAstExprNodeCall" || node.kind === "SourceAstExprNodeMethodCall" || node.kind === "SourceAstExprNodeIndex" || node.kind === "SourceAstExprNodeIndexSlice" || node.kind === "SourceAstExprNodeStructNew") &&
+    (!Array.isArray(node.args) || node.arg_count !== node.args.length || node.argCount !== node.args.length));
+  if (missingPrimaryArgsNode != null) {
+    fail("full chiba-level1 executable parser AST call/tuple nodes must expose args as the primary unbounded argument vector");
   }
   const hasNode = (ownerName, nodeId, kind) => astExprNodes.some((node) => node.ownerNamespace === "demo" && node.ownerName === ownerName && node.nodeId === nodeId && node.kind === kind);
   if (!hasNode("main", 0, "SourceAstExprNodeBinary") || !hasNode("branch", 0, "SourceAstExprNodeIfElse") || !hasNode("neg", 0, "SourceAstExprNodePrefixNeg") || !hasNode("choose", 0, "SourceAstExprNodeMatch")) {
@@ -620,6 +627,9 @@ function main() {
   }
   if (!hasNode("call_id", 0, "SourceAstExprNodeCall") || !hasNode("index_style", 0, "SourceAstExprNodeIndex") || !hasNode("method_style", 0, "SourceAstExprNodeMethodCall")) {
     fail("full chiba-level1 executable parser direct AST nodes must include call/index/method roots");
+  }
+  if (!hasNode("tuple_field_ast", 0, "SourceAstExprNodeFieldGet") || !hasNode("tuple_field_ast", 1, "SourceAstExprNodeStructNew")) {
+    fail("full chiba-level1 executable parser direct AST nodes must include tuple/field roots");
   }
   if (fullGrammar.astOwnerNamespace !== "demo" || fullGrammar.astDefItemName !== "main") {
     fail("full chiba-level1 executable parser evidence must expose parser-owned demo::main symbol");

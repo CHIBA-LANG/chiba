@@ -718,13 +718,25 @@ def method_operator_index_with_candidates(project: ProjectSurface, facts: Array[
     }
 
 /// Build the nominal method/operator index.
+def typed_module_method_surface(module: TypedModule): Array[MethodSurfaceFact] = module.method_surface
+
+/// Read method use surface facts through a helper for seed WAT lowering.
+def typed_module_method_use_surface(module: TypedModule): Array[MethodUseSurfaceFact] = module.method_use_surface
+
+/// Read operator use surface facts through a helper for seed WAT lowering.
+def typed_module_operator_use_surface(module: TypedModule): Array[OperatorUseSurfaceFact] = module.operator_use_surface
+
+/// Build the nominal method/operator index.
 def build_method_operator_index(module: TypedModule): Result[MethodOperatorIndex, SemanticDiagnostics] =
-    if module.method_surface.len() == 0 && module.method_use_surface.len() == 0 && module.operator_use_surface.len() == 0 {
+    let method_surface = typed_module_method_surface(module)
+    let method_use_surface = typed_module_method_use_surface(module)
+    let operator_use_surface = typed_module_operator_use_surface(module)
+    if method_surface.len() == 0 && method_use_surface.len() == 0 && operator_use_surface.len() == 0 {
         Ok(method_operator_index_empty())
     } else {
         let obligations = build_operator_resolution_obligations(module)
-        let index = method_operator_index_with_candidates(module.alpha.project, module.method_surface, obligations)
-        let method_candidates = method_candidate_sets(module.alpha.project, index, module.method_use_surface, 0, Vec[MethodCandidateSet].new())
+        let index = method_operator_index_with_candidates(module.alpha.project, method_surface, obligations)
+        let method_candidates = method_candidate_sets(module.alpha.project, index, method_use_surface, 0, Vec[MethodCandidateSet].new())
         let index_with_methods = MethodOperatorIndex {
             methods: index.methods,
             operators: index.operators,

@@ -50,37 +50,80 @@ def check_source_semantic_gates(project: ProjectSurface): SourceGateResult =
         project,
         source_gate_errors(project))
 
+/// Return source facts without relying on chained field lowering.
+def source_project_facts(project: ProjectSurface): SourceProjectFacts = project.facts
+
+/// Return parser facts without relying on chained field lowering.
+def source_project_parser(project: ProjectSurface): SourceParserFacts = source_project_facts(project).parser
+
+/// Return scanner namespace facts without relying on chained field lowering.
+def source_project_namespaces(project: ProjectSurface): Array[NamespaceScanResult] = source_project_facts(project).namespaces
+
+/// Return scanner item facts without relying on chained field lowering.
+def source_project_items(project: ProjectSurface): Array[SourceItemScanResult] = source_project_facts(project).items
+
+/// Return AST owner facts without relying on chained field lowering.
+def source_project_ast_owner_symbols(project: ProjectSurface): Array[SourceAstOwnerSymbolFact] = source_project_facts(project).ast_owner_symbols
+
+/// Return AST expression node facts without relying on chained field lowering.
+def source_project_ast_expr_nodes(project: ProjectSurface): Array[SourceAstExprNodeFact] = source_project_facts(project).ast_expr_nodes
+
+/// Return UTF-8 scanner warnings without relying on chained field lowering.
+def source_project_utf8_warnings(project: ProjectSurface): Array[SourceUtf8ScanWarning] = source_project_facts(project).utf8_warnings
+
+/// Return compile_if facts without relying on chained field lowering.
+def source_project_compile_if(project: ProjectSurface): Array[SourceCompileIfFacts] = source_project_facts(project).compile_if
+
+/// Return namespace warnings without relying on chained field lowering.
+def source_project_namespace_warnings(project: ProjectSurface): Array[SourceNamespaceScanWarning] = source_project_facts(project).namespace_warnings
+
 /// Return true when project source facts contain at least one namespace.
 def source_project_has_namespace(project: ProjectSurface): bool =
-    project.facts.namespaces.len() > 0
+    source_project_namespaces(project).len() > 0
 
 /// Return true when project source facts contain at least one item declaration.
 def source_project_has_item(project: ProjectSurface): bool =
-    project.facts.items.len() > 0
+    source_project_items(project).len() > 0
 
 /// Return true when parser-owned AST facts contain namespace evidence.
 def source_project_has_ast_namespace(project: ProjectSurface): bool =
-    project.facts.ast_owner_symbols.len() > 0
+    source_project_ast_owner_symbols(project).len() > 0
 
 /// Return true when parser-owned AST facts contain item evidence.
 def source_project_has_ast_item(project: ProjectSurface): bool =
-    project.facts.ast_owner_symbols.len() > 0
+    source_project_ast_owner_symbols(project).len() > 0
 
 /// Return true when byte-level scanner saw non-ASCII source before UTF-8 scanner support exists.
 def source_project_has_utf8_warning(project: ProjectSurface): bool =
-    project.facts.utf8_warnings.len() > 0
+    source_project_utf8_warnings(project).len() > 0
 
 /// Return true when project facts still come from scanner fallback.
 def source_project_parser_primary_blocked(project: ProjectSurface): bool =
-    project.facts.parser.ast_primary_path_blocked
+    source_project_parser(project).ast_primary_path_blocked
 
 /// Return true when parser-owned AST item facts are the source primary path.
 def source_project_has_ast_primary_items(project: ProjectSurface): bool =
-    source_project_parser_primary_blocked(project) == false && project.facts.ast_owner_symbols.len() > 0
+    source_project_parser_primary_blocked(project) == false && source_project_ast_owner_symbols(project).len() > 0
+
+/// Return true when neither scanner nor parser-owned AST facts prove a namespace.
+def source_project_missing_namespace_presence(project: ProjectSurface): bool =
+    if source_project_has_namespace(project) { false }
+    else {
+        if source_project_has_ast_namespace(project) { false }
+        else { true }
+    }
+
+/// Return true when neither scanner nor parser-owned AST facts prove an item.
+def source_project_missing_item_presence(project: ProjectSurface): bool =
+    if source_project_has_item(project) { false }
+    else {
+        if source_project_has_ast_item(project) { false }
+        else { true }
+    }
 
 /// Return true when project source facts contain namespace forms needing full parser assembly.
 def source_project_has_namespace_warning(project: ProjectSurface): bool =
-    project.facts.namespace_warnings.len() > 0
+    source_project_namespace_warnings(project).len() > 0
 
 /// Return true when any compile_if fact contains an unknown predicate shape.
 def source_compile_if_has_unknown(facts: Array[SourceCompileIfFacts], index: usize): bool =
@@ -95,13 +138,13 @@ def source_compile_if_has_unknown(facts: Array[SourceCompileIfFacts], index: usi
 
 /// Return true when project source facts contain an unsupported compile_if predicate.
 def source_project_has_unknown_compile_if(project: ProjectSurface): bool =
-    source_compile_if_has_unknown(project.facts.compile_if, 0)
+    source_compile_if_has_unknown(source_project_compile_if(project), 0)
 
 /// Return true when item scan has compile_if attributes that have not been filtered.
 def source_items_have_compile_if(items: Array[SourceItemScanResult], index: usize): bool =
     if index == items.len() { false }
     else {
-        match items.get(index).attributes.compile_if {
+        match source_item_compile_if(items.get(index)) {
             Some(_) => true
             None => source_items_have_compile_if(items, index + 1)
         }
@@ -110,7 +153,7 @@ def source_items_have_compile_if(items: Array[SourceItemScanResult], index: usiz
 /// Return true when project items still need compile_if filtering.
 def source_project_has_unfiltered_compile_if_items(project: ProjectSurface): bool =
     if source_project_has_ast_primary_items(project) { false }
-    else { source_items_have_compile_if(project.facts.items, 0) }
+    else { source_items_have_compile_if(source_project_items(project), 0) }
 
 /// Return true when an extern item lacks any scanned ABI type annotation.
 def source_items_have_extern_without_type_annotation(items: Array[SourceItemScanResult], index: usize): bool =
@@ -119,7 +162,7 @@ def source_items_have_extern_without_type_annotation(items: Array[SourceItemScan
         let item = items.get(index)
         match item.kind {
             SourceItemExtern => {
-                if item.surface.has_type_annotation { source_items_have_extern_without_type_annotation(items, index + 1) }
+                if source_item_surface_has_type_annotation(item) { source_items_have_extern_without_type_annotation(items, index + 1) }
                 else { true }
             }
             _ => source_items_have_extern_without_type_annotation(items, index + 1)
@@ -129,7 +172,7 @@ def source_items_have_extern_without_type_annotation(items: Array[SourceItemScan
 /// Return true when project source facts contain an extern requiring ABI signature parsing.
 def source_project_has_extern_without_type_annotation(project: ProjectSurface): bool =
     if source_project_has_ast_primary_items(project) { false }
-    else { source_items_have_extern_without_type_annotation(project.facts.items, 0) }
+    else { source_items_have_extern_without_type_annotation(source_project_items(project), 0) }
 
 /// Return true when a top-level static Ref lacks the required world-local marker.
 def source_items_have_static_ref_without_world_local(items: Array[SourceItemScanResult], index: usize): bool =
@@ -138,9 +181,9 @@ def source_items_have_static_ref_without_world_local(items: Array[SourceItemScan
         let item = items.get(index)
         match item.kind {
             SourceItemDef => {
-                if item.surface.has_params {
+                if source_item_surface_has_params(item) {
                     source_items_have_static_ref_without_world_local(items, index + 1)
-                } else if item.surface.has_ref_type && item.attributes.world_local == false {
+                } else if source_item_surface_has_ref_type(item) && source_item_world_local(item) == false {
                     true
                 } else {
                     source_items_have_static_ref_without_world_local(items, index + 1)
@@ -153,7 +196,7 @@ def source_items_have_static_ref_without_world_local(items: Array[SourceItemScan
 /// Return true when project source facts contain a static Ref missing world-local.
 def source_project_has_static_ref_without_world_local(project: ProjectSurface): bool =
     if source_project_has_ast_primary_items(project) { false }
-    else { source_items_have_static_ref_without_world_local(project.facts.items, 0) }
+    else { source_items_have_static_ref_without_world_local(source_project_items(project), 0) }
 
 /// Return true when a source def lacks a scanned body or initializer marker.
 def source_items_have_def_without_body(items: Array[SourceItemScanResult], index: usize): bool =
@@ -162,7 +205,7 @@ def source_items_have_def_without_body(items: Array[SourceItemScanResult], index
         let item = items.get(index)
         match item.kind {
             SourceItemDef => {
-                if item.surface.has_body { source_items_have_def_without_body(items, index + 1) }
+                if source_item_surface_has_body(item) { source_items_have_def_without_body(items, index + 1) }
                 else { true }
             }
             _ => source_items_have_def_without_body(items, index + 1)
@@ -172,7 +215,7 @@ def source_items_have_def_without_body(items: Array[SourceItemScanResult], index
 /// Return true when project source facts contain a def needing body parsing.
 def source_project_has_def_without_body(project: ProjectSurface): bool =
     if source_project_has_ast_primary_items(project) { false }
-    else { source_items_have_def_without_body(project.facts.items, 0) }
+    else { source_items_have_def_without_body(source_project_items(project), 0) }
 
 /// Return true when a source item mentions `Self` outside method receiver scope.
 def source_items_have_self_outside_method(items: Array[SourceItemScanResult], index: usize): bool =
@@ -186,7 +229,7 @@ def source_items_have_self_outside_method(items: Array[SourceItemScanResult], in
 /// Return true when project source facts contain illegal `Self` use.
 def source_project_has_self_outside_method(project: ProjectSurface): bool =
     if source_project_has_ast_primary_items(project) { false }
-    else { source_items_have_self_outside_method(project.facts.items, 0) }
+    else { source_items_have_self_outside_method(source_project_items(project), 0) }
 
 /// Return the source text for a scanned file id.
 def source_project_file_text(files: Array[SourceFile], file: SourceFileId, index: usize): String =
@@ -277,13 +320,18 @@ def source_items_have_duplicate_item(project: ProjectSurface, items: Array[Sourc
 /// Return true when project source facts contain duplicate item names.
 def source_project_has_duplicate_item(project: ProjectSurface): bool =
     if source_project_has_ast_primary_items(project) { false }
-    else { source_items_have_duplicate_item(project, project.facts.items, 0) }
+    else { source_items_have_duplicate_item(project, source_project_items(project), 0) }
 
 /// Return the first source import/name resolution diagnostic.
 def source_project_import_resolution_message(project: ProjectSurface): String =
     let resolution = resolve_source_imports(project)
     if resolution.blockers.len() == 0 { "" }
     else { resolution.blockers.get(0).message }
+
+/// Return true when scanner import policy still blocks source semantics.
+def source_project_import_resolution_blocked(project: ProjectSurface): bool =
+    if source_project_has_ast_primary_items(project) { false }
+    else { source_project_needs_import_resolution(project) }
 
 /// Build fail-closed source gate diagnostics from source scan facts.
 def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
@@ -292,7 +340,7 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
             .push(SourceGateError(
                 SourceFileId { index: 0 },
                 SourceGateParserPrimaryPathAbsent,
-                project.facts.parser.diagnostic))
+                source_project_parser(project).diagnostic))
             .freeze()
     } else if source_project_has_utf8_warning(project) {
         Vec[SourceGateError].new()
@@ -315,14 +363,14 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceGateInlineNamespaceUnsupported,
                 "missing-lowering: inline namespace block assembly absent"))
             .freeze()
-    } else if source_project_has_namespace(project) == false && source_project_has_ast_namespace(project) == false {
+    } else if source_project_missing_namespace_presence(project) {
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },
                 SourceGateMissingNamespace,
                 "missing-facts: namespace scan found no namespace"))
             .freeze()
-    } else if source_project_has_item(project) == false && source_project_has_ast_item(project) == false {
+    } else if source_project_missing_item_presence(project) {
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },
@@ -371,7 +419,7 @@ def source_gate_errors(project: ProjectSurface): Array[SourceGateError] =
                 SourceGateDuplicateItem,
                 "invalid-surface: duplicate item in namespace"))
             .freeze()
-    } else if source_project_needs_import_resolution(project) {
+    } else if source_project_import_resolution_blocked(project) {
         Vec[SourceGateError].new()
             .push(SourceGateError(
                 SourceFileId { index: 0 },

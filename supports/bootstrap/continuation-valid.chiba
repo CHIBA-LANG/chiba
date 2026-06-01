@@ -5,3 +5,9 @@ def valid_shift(): i64 = reset {
         k(7)
     }
 }
+
+def valid_shift_param(x: i64): i64 = reset {
+    shift k {
+        k(x)
+    }
+}

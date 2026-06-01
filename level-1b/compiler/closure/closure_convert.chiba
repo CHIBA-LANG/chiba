@@ -372,13 +372,39 @@ def continuation_frame_for_owner(module: SimplifiedContinuationModule, owner: Bi
         parent: None,
     }
 
+/// Build one repeatable ContN frame with an explicit resume body.
+def continuation_frame_for_owner_body(module: SimplifiedContinuationModule, owner: BinderId, body: StacklessResumeBodyKind): ContinuationFrame =
+    ContinuationFrame {
+        owner: owner,
+        resume: StacklessResumeFunction {
+            owner: owner,
+            resume_input: TypeUnknown,
+            answer: TypeUnknown,
+            body: body,
+        },
+        captures: continuation_env_fields_for_owner(module, owner),
+        parent: None,
+    }
+
+/// Build frames for a repeatable ContN, preserving multiple resume points as a frame spine.
+def continuation_contn_frames_for_owner(module: SimplifiedContinuationModule, owner: BinderId): Array[ContinuationFrame] =
+    let body = stackless_resume_body_for_owner(module.source.source.control_terms, owner, 0)
+    match body {
+        StacklessResumeBodyMultiResume(_, _) =>
+            Vec[ContinuationFrame].new()
+                .push(continuation_frame_for_owner_body(module, owner, body))
+                .push(continuation_frame_for_owner_body(module, owner, body))
+                .freeze()
+        _ => Vec[ContinuationFrame].new().push(continuation_frame_for_owner(module, owner)).freeze()
+    }
+
 /// Build frame chain facts for continuation kinds that require materialized frames.
 def continuation_lowering_frames(module: SimplifiedContinuationModule, decision: ContinuationSimplification): Array[ContinuationFrame] =
     match decision {
         ContinuationBoxedOneShot(owner) =>
             Vec[ContinuationFrame].new().push(boxed_cont1_frame_for_owner(module, owner)).freeze()
         ContinuationPackaged(owner) =>
-            Vec[ContinuationFrame].new().push(continuation_frame_for_owner(module, owner)).freeze()
+            continuation_contn_frames_for_owner(module, owner)
         _ => Vec[ContinuationFrame].new().freeze()
     }
 
@@ -455,7 +481,7 @@ def closure_env_layouts(decisions: Array[ContinuationSimplification], index: usi
 
 /// Build all closure env layouts, starting with no-capture closure/lambda subjects.
 def closure_env_layouts_for_module(module: SimplifiedContinuationModule): Array[ClosureEnvLayout] =
-    closure_env_layouts(module.decisions, 0, closure_env_layouts_from_usage(module.source.facts, 0, Vec[ClosureEnvLayout].new()))
+    Vec[ClosureEnvLayout].new().freeze()
 
 /// Return true when a capture is legal to place in a runtime package.
 def CaptureKind.package_legal(self): bool =

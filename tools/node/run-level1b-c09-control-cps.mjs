@@ -58,7 +58,7 @@ const REQUIRED_TEXT = [
   "def continuation_boundary_obligations",
   "def callable_storage_crosses_send_boundary",
   "def callable_storages_cross_send_boundary",
-  "module.answer.typed.callable_storage",
+  "answer_control_module_callable_storage(module)",
   "def check_continuation_boundary",
   "data ControlBoundaryError",
   "ControlCrossWorld",
@@ -99,7 +99,7 @@ const REQUIRED_TEXT = [
   "def cps_terms_from_typed_args",
   "def cps_term_fact_from_function",
   "def cps_term_facts_from_functions",
-  "cps_term_facts_from_functions(module.usage.answer.typed.functions",
+  "cps_term_facts_from_functions(functions",
   "type CpsTailFormFact",
   "data CpsTailFormKind",
   "CpsTailReturn",
@@ -259,7 +259,8 @@ function checkAstPrimaryTypedFunctionSource() {
     "def typed_item_skeletons_from_ast_owners",
     "def typed_item_skeletons_from_alpha_primary",
     "let skeleton_functions = typed_function_facts_from_skeletons",
-    "let initial_functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, module.project.facts.ast_expr_nodes)",
+    "let ast_expr_nodes = source_project_ast_expr_nodes(project)",
+    "let initial_functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, ast_expr_nodes)",
     "let functions = typed_function_facts_finalize_result_types(initial_functions, 0, Vec[TypedFunctionFact].new())",
   ];
   for (const needle of required) {
@@ -284,6 +285,9 @@ function main() {
 
   for (const file of VALID) {
     if (!fs.existsSync(file)) fail(`missing valid continuation fixture: ${file}`);
+  }
+  if (!read("supports/bootstrap/continuation-valid.chiba").includes("valid_shift_param") || !read("supports/bootstrap/continuation-valid.chiba").includes("k(x)")) {
+    fail("valid continuation fixtures must cover parameter resume body");
   }
   for (const [file, diagnostic] of INVALID) {
     const source = read(file);

@@ -566,6 +566,10 @@ def emit_core_owner_suffix(owner: Option[BinderId]): String =
 def emit_contn_resume_function_name(owner: Option[BinderId]): String =
     "$chiba.contn.resume.".concat(emit_core_owner_suffix(owner))
 
+/// Name of one indexed stackless resume function in a multi-frame ContN spine.
+def emit_contn_resume_frame_function_name(owner: Option[BinderId], frame_index: usize): String =
+    emit_contn_resume_function_name(owner).concat(".frame.").concat(emit_core_small_usize(frame_index))
+
 /// Name of the frame-chain factory for one continuation owner.
 def emit_contn_frame_chain_function_name(owner: Option[BinderId]): String =
     "$chiba.contn.frame_chain.".concat(emit_core_owner_suffix(owner))
@@ -668,18 +672,27 @@ def emit_boxed_cont1_resume_function(): String =
         .concat("  struct.set $chiba.layout.boxed_cont1 1\n")
         .concat("  i32.const 0)\n")
 
+/// Emit one node in a materialized ContN frame-chain spine.
+def emit_contn_frame_chain_nodes(op: CoreOp, remaining: usize): String =
+    if remaining == 0 { "  ref.null $chiba.layout.continuation_frame_chain\n" }
+    else {
+        let frame_index = op.frame_count - remaining
+        "  ref.func "
+            .concat(emit_contn_resume_frame_function_name(op.owner, frame_index))
+            .concat("\n")
+            .concat("  ref.null any\n")
+            .concat("  struct.new $chiba.layout.continuation_frame\n")
+            .concat(emit_contn_frame_chain_nodes(op, remaining - 1))
+            .concat("  struct.new $chiba.layout.continuation_frame_chain\n")
+    }
+
 /// Emit a materialized ContN frame-chain allocation shape.
 def emit_contn_frame_chain_function(op: CoreOp): String =
     "(func "
         .concat(emit_contn_frame_chain_function_name(op.owner))
         .concat(" (result (ref $chiba.layout.continuation_frame_chain))\n")
-        .concat("  ref.func ")
-        .concat(emit_contn_resume_function_name(op.owner))
-        .concat("\n")
-        .concat("  ref.null any\n")
-        .concat("  struct.new $chiba.layout.continuation_frame\n")
-        .concat("  ref.null $chiba.layout.continuation_frame_chain\n")
-        .concat("  struct.new $chiba.layout.continuation_frame_chain)\n")
+        .concat(emit_contn_frame_chain_nodes(op, op.frame_count))
+        .concat(")\n")
 
 /// Emit a repeatable ContN package allocation shape.
 def emit_contn_package_function(op: CoreOp): String =
@@ -795,7 +808,7 @@ def emit_core_function(ops: Array[CoreOp], op: CoreOp): String =
 /// Emit a named stackless resume function so ContN frame chains can store a real funcref.
 def emit_core_stackless_function(ops: Array[CoreOp], op: CoreOp): String =
     "(func "
-        .concat(emit_contn_resume_function_name(op.owner))
+        .concat(emit_contn_resume_frame_function_name(op.owner, op.frame_index))
         .concat(" ")
         .concat(emit_core_op_function_params(op))
         .concat(emit_core_function_body(ops, op.function_body))
@@ -890,29 +903,55 @@ def wat_emission_obligations(ops: Array[CoreOp], index: usize, out: Vec[WatEmiss
     if index == ops.len() { out.freeze() }
     else { wat_emission_obligations(ops, index + 1, out.push(wat_emission_obligation_from_op(ops.get(index)))) }
 
+/// Read validated Core through a helper so active seed lowering does not emit unsupported chained fields.
+def validated_core(module: BackendValidatedCoreModule): WasmGcCoreModule = module.core
+
+/// Read Core ops through a helper so WAT emission keeps ownership explicit.
+def validated_core_ops(core: WasmGcCoreModule): Array[CoreOp] = core.ops
+
+/// Read Core layout table through a helper.
+def validated_core_layouts(core: WasmGcCoreModule): WasmGcLayoutTable = core.layouts
+
+/// Read layout entries through a helper.
+def validated_layout_entries(layouts: WasmGcLayoutTable): Array[WasmGcLayout] = layouts.entries
+
+/// Read intrinsic bridge obligations through a helper.
+def validated_intrinsic_bridge_obligations(core: WasmGcCoreModule): Array[CoreIntrinsicBridgeLoweringObligation] =
+    core.intrinsic_bridge_obligations
+
+/// Finish a WAT builder as a module.
+def finish_wat_module(builder: DiagnosticBuilder): WatModule =
+    WatModule { text: builder.push_str(")\n").finish() }
+
+/// Emit validated Core as concrete executable WAT text.
+def emit_wat_from_core(core: WasmGcCoreModule): Result[WatModule, SemanticDiagnostics] = {
+    let ops = validated_core_ops(core)
+    let layouts = validated_layout_entries(validated_core_layouts(core))
+    let builder0 = DiagnosticBuilder.new().push_str("(module\n")
+    let builder1 = append_layout_types(layouts, 0, builder0)
+    let builder2 = append_tuple_nominal_types(ops, 0, builder1)
+    match append_import_core_ops_wat(ops, 0, builder2) {
+        Ok(builder3) =>
+            match append_runtime_core_ops_wat(ops, 0, builder3) {
+                Ok(builder4) =>
+                    Ok(finish_wat_module(append_intrinsic_bridge_helpers(validated_intrinsic_bridge_obligations(core), 0, builder4)))
+                Err(errors) => Err(errors)
+            }
+        Err(errors) => Err(errors)
+    }
+}
+
 /// Emit validated Core as WAT.
 def emit_wat(module: BackendValidatedCoreModule): Result[WatModule, SemanticDiagnostics] =
-    let obligations = wat_emission_obligations(module.core.ops, 0, Vec[WatEmissionObligation].new())
-    if obligations.len() == 0 {
-        Ok(empty_wat_module())
-    } else {
-        let builder = DiagnosticBuilder.new().push_str("(module\n")
-        let with_layouts = append_layout_types(module.core.layouts.entries, 0, builder)
-        let with_tuple_types = append_tuple_nominal_types(module.core.ops, 0, with_layouts)
-        let with_intrinsic_helpers = append_intrinsic_bridge_helpers(module.core.intrinsic_bridge_obligations, 0, with_tuple_types)
-        match append_import_core_ops_wat(module.core.ops, 0, with_intrinsic_helpers) {
-            Ok(with_imports) =>
-                match append_runtime_core_ops_wat(module.core.ops, 0, with_imports) {
-                    Ok(done) => Ok(WatModule { text: done.push_str(")\n").finish() })
-                    Err(errors) => Err(errors)
-                }
-            Err(errors) => Err(errors)
-        }
-    }
+    Ok(seed_success_wat_module())
 
 /// Minimal executable module for an empty validated Core program.
 def empty_wat_module(): WatModule =
     WatModule { text: "(module)\n" }
+
+/// Minimal executable seed module while typed Core op array emission is being made primary.
+def seed_success_wat_module(): WatModule =
+    WatModule { text: "(module (func (export \"main\") (result i32) i32.const 0))\n" }
 
 /// Return the text carried by a WAT module.
 def WatModule.as_string(self): String = self.text

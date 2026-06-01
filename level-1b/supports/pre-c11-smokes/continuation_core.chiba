@@ -8,3 +8,10 @@ def continuation_core(): i64 = reset {
         k(2)
     }
 }
+
+/// Parameter resume bodies should lower to stackless functions with typed params.
+def continuation_core_param(x: i64): i64 = reset {
+    shiftn k {
+        k(x)
+    }
+}

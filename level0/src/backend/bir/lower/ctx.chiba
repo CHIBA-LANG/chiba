@@ -172,43 +172,38 @@ def lower_fun_map_get(ctx: BirLowerCtx, key: i64): Option[i64] =
 	i64_assoc_get(load64(ctx.fun_map, 0) as List[I64Binding[i64]], key)
 
 def lower_fun_map_put(ctx: BirLowerCtx, key: i64, val: i64): i64 =
-	store64(ctx.fun_map, 0,
-		i64_assoc_put(load64(ctx.fun_map, 0) as List[I64Binding[i64]], key, val) as i64)
+	store64(ctx.fun_map, 0, Cons(I64Binding(key, val), load64(ctx.fun_map, 0) as List[I64Binding[i64]]) as i64)
 
 def lower_fun_map_has(ctx: BirLowerCtx, key: i64): i64 =
 	i64_assoc_has(load64(ctx.fun_map, 0) as List[I64Binding[i64]], key)
 
 def lower_push_fun(ctx: BirLowerCtx, fun: BirFun): i64 =
-	store64(ctx.funs, 0, snoc(load64(ctx.funs, 0) as List[BirFun], fun) as i64)
+	store64(ctx.funs, 0, Cons(fun, load64(ctx.funs, 0) as List[BirFun]) as i64)
 
-def lower_get_funs(ctx: BirLowerCtx): List[BirFun] = load64(ctx.funs, 0) as List[BirFun]
+def lower_get_funs(ctx: BirLowerCtx): List[BirFun] = rev(load64(ctx.funs, 0) as List[BirFun])
 
 def lower_push_frame_desc(ctx: BirLowerCtx, desc: FrameDesc): i64 =
-	store64(ctx.frame_descs, 0,
-		snoc(load64(ctx.frame_descs, 0) as List[FrameDesc], desc) as i64)
+	store64(ctx.frame_descs, 0, Cons(desc, load64(ctx.frame_descs, 0) as List[FrameDesc]) as i64)
 
 def lower_get_frame_descs(ctx: BirLowerCtx): List[FrameDesc] =
-	load64(ctx.frame_descs, 0) as List[FrameDesc]
+	rev(load64(ctx.frame_descs, 0) as List[FrameDesc])
 
 // ── Per-function mutable state ─────────────────────────────────────────────
 
 def fun_ctx_map_var(fctx: BirFunCtx, cps_var: i64, vreg: i64): i64 =
-	store64(fctx.var_map, 0,
-		i64_assoc_put(load64(fctx.var_map, 0) as List[I64Binding[i64]], cps_var, vreg) as i64)
+	store64(fctx.var_map, 0, Cons(I64Binding(cps_var, vreg), load64(fctx.var_map, 0) as List[I64Binding[i64]]) as i64)
 
 def fun_ctx_get_var(fctx: BirFunCtx, cps_var: i64): Option[i64] =
 	i64_assoc_get(load64(fctx.var_map, 0) as List[I64Binding[i64]], cps_var)
 
 def fun_ctx_map_cont(fctx: BirFunCtx, cid: i64, target: ContTarget): i64 =
-	store64(fctx.cont_map, 0,
-		i64_assoc_put(load64(fctx.cont_map, 0) as List[I64Binding[ContTarget]], cid, target) as i64)
+	store64(fctx.cont_map, 0, Cons(I64Binding(cid, target), load64(fctx.cont_map, 0) as List[I64Binding[ContTarget]]) as i64)
 
 def fun_ctx_get_cont(fctx: BirFunCtx, cid: i64): Option[ContTarget] =
 	i64_assoc_get(load64(fctx.cont_map, 0) as List[I64Binding[ContTarget]], cid)
 
 def fun_ctx_set_cont_params(fctx: BirFunCtx, cid: i64, params: List[i64]): i64 =
-	store64(fctx.cont_params, 0,
-		i64_assoc_put(load64(fctx.cont_params, 0) as List[I64Binding[List[i64]]], cid, params) as i64)
+	store64(fctx.cont_params, 0, Cons(I64Binding(cid, params), load64(fctx.cont_params, 0) as List[I64Binding[List[i64]]]) as i64)
 
 def fun_ctx_get_cont_params(fctx: BirFunCtx, cid: i64): Option[List[i64]] =
 	i64_assoc_get(load64(fctx.cont_params, 0) as List[I64Binding[List[i64]]], cid)
@@ -221,7 +216,7 @@ def fun_ctx_is_cont_var(fctx: BirFunCtx, cps_var: i64): i64 =
 	i64_list_has(load64(fctx.cont_vars, 0) as List[i64], cps_var)
 
 def fun_ctx_emit(fctx: BirFunCtx, inst: Inst): i64 =
-	store64(fctx.cur_insts, 0, snoc(load64(fctx.cur_insts, 0) as List[Inst], inst) as i64)
+	store64(fctx.cur_insts, 0, Cons(inst, load64(fctx.cur_insts, 0) as List[Inst]) as i64)
 
 def fun_ctx_start_block(fctx: BirFunCtx, id: i64, params: List[i64]): i64 = {
 	let _ = store64(fctx.cur_block_id, 0, id)
@@ -242,7 +237,7 @@ def fun_ctx_finish_block(fctx: BirFunCtx, term: Terminator): i64 = {
 	let block = Block {
 		id: cur_block,
 		params: load64(fctx.cur_block_params, 0) as List[i64],
-		insts: load64(fctx.cur_insts, 0) as List[Inst],
+		insts: rev(load64(fctx.cur_insts, 0) as List[Inst]),
 		term: term
 	}
 	store64(fctx.blocks, 0, Cons(block, load64(fctx.blocks, 0) as List[Block]) as i64)
@@ -357,4 +352,3 @@ def fun_defs_may_capture(defs: List[FunDef]): i64 =
 			if expr_may_capture(fdef.body) != 0 { 1 }
 			else { fun_defs_may_capture(rest) }
 	}
-

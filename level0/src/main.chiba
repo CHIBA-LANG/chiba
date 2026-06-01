@@ -130,8 +130,7 @@ def compile_project(project_dir: Str, entry: Option[Str], output: Option[Str]): 
             let _ = write_fd(1, "[2/5] resolving...\n", 19)
             let merged = match entry {
                 Some(entry_path) => {
-                    let full_entry = path_join_raw(str_from_cstr(path_join(project_dir, c"src")), str_to_cstr(entry_path).ptr)
-                    merge_program_with_entry(files, str_from_cptr(full_entry))
+                    merge_program_with_entry(files, entry_path)
                 }
                 None => merge_program(files)
             }

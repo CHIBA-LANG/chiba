@@ -281,6 +281,38 @@ type SourceItemScanResult {
     column: usize,
 }
 
+/// Access item attributes through a helper so seed WAT lowering does not need chained fields.
+def source_item_attributes(item: SourceItemScanResult): SourceItemAttributeFacts =
+    item.attributes
+
+/// Access item surface through a helper so seed WAT lowering does not need chained fields.
+def source_item_surface(item: SourceItemScanResult): SourceItemSurfaceFacts =
+    item.surface
+
+/// Return item compile_if facts through a helper.
+def source_item_compile_if(item: SourceItemScanResult): Option[SourceCompileIfFacts] =
+    source_item_attributes(item).compile_if
+
+/// Return item world-local marker through a helper.
+def source_item_world_local(item: SourceItemScanResult): bool =
+    source_item_attributes(item).world_local
+
+/// Return whether the item surface has params.
+def source_item_surface_has_params(item: SourceItemScanResult): bool =
+    source_item_surface(item).has_params
+
+/// Return whether the item surface has a type annotation.
+def source_item_surface_has_type_annotation(item: SourceItemScanResult): bool =
+    source_item_surface(item).has_type_annotation
+
+/// Return whether the item surface has a body.
+def source_item_surface_has_body(item: SourceItemScanResult): bool =
+    source_item_surface(item).has_body
+
+/// Return whether the item surface contains a Ref type.
+def source_item_surface_has_ref_type(item: SourceItemScanResult): bool =
+    source_item_surface(item).has_ref_type
+
 /// Non-ASCII byte discovered by the transition scanner before UTF-8 support lands.
 type SourceUtf8ScanWarning {
     file: SourceFileId,
@@ -383,8 +415,171 @@ type ProjectSurface {
     facts: SourceProjectFacts,
 }
 
+/// Synthetic file id used by the internal seed smoke project.
+def bootstrap_demo_file_id(): SourceFileId =
+    SourceFileId { index: 0 }
+
+/// Internal source file used when the seed smoke request has no host inputs.
+def bootstrap_demo_source_file(): SourceFile =
+    SourceFile {
+        id: bootstrap_demo_file_id(),
+        path: "<bootstrap-demo>",
+        text: "namespace demo\ndef main(): i32 = 2 + 3 * 4",
+    }
+
+/// Parser module fact for the internal seed smoke project.
+def bootstrap_demo_parsed_module(): SourceParsedModuleFacts =
+    SourceParsedModuleFacts {
+        file: bootstrap_demo_file_id(),
+        has_token_stream: true,
+        has_ast: true,
+        ast_primary_path: true,
+        ast_item_count: 1,
+        ast_namespace_count: 1,
+        ast_def_item_count: 1,
+        ast_owner_symbol_count: 1,
+        ast_from_chibacc: true,
+        has_recoverable_errors: false,
+    }
+
+/// Parser facts for the internal seed smoke project.
+def bootstrap_demo_parser_facts(): SourceParserFacts =
+    SourceParserFacts {
+        mode: SourceFrontendChibalexChibaccPrimary,
+        modules: Vec[SourceParsedModuleFacts].new().push(bootstrap_demo_parsed_module()).freeze(),
+        chibalex_spec: "src/frontend/chiba-level1.chibalex",
+        chibacc_spec: "src/frontend/chiba-level1.chibacc",
+        token_primary_path_ready: true,
+        ast_primary_path_blocked: false,
+        diagnostic: "",
+    }
+
+/// Parser-owned owner symbol for the internal `demo::main` seed smoke body.
+def bootstrap_demo_ast_owner_symbol(): SourceAstOwnerSymbolFact =
+    SourceAstOwnerSymbolFact {
+        file: bootstrap_demo_file_id(),
+        owner_namespace: "demo",
+        name: "main",
+        body_shape: SourceAstExprUnknown,
+        has_i32_const_body: false,
+        i32_const_body: 0,
+        has_i32_add_mul_body: false,
+        has_i32_if_else_body: false,
+        has_i32_prefix_neg_body: false,
+        has_i32_match_param_body: false,
+        namespace_count: 1,
+        def_item_count: 1,
+        from_chibacc: true,
+        root_node_id: 0,
+        i32_param_count: 0,
+    }
+
+/// Build one parser-owned AST node for the internal seed smoke body.
+def bootstrap_demo_ast_node(node_id: usize, kind: SourceAstExprNodeKind, value: usize, left: usize, right: usize): SourceAstExprNodeFact =
+    SourceAstExprNodeFact {
+        file: bootstrap_demo_file_id(),
+        owner_namespace: "demo",
+        owner_name: "main",
+        node_id: node_id,
+        kind: kind,
+        value: value,
+        param_index: 0,
+        left: left,
+        right: right,
+        then_node: 0,
+        else_node: 0,
+        callee: "",
+        member: "",
+        args: Vec[usize].new().freeze(),
+        arg0: 0,
+        arg1: 0,
+        arg2: 0,
+        arg_count: 0,
+    }
+
+/// Parser-owned AST nodes for `2 + 3 * 4`.
+def bootstrap_demo_ast_expr_nodes(): Array[SourceAstExprNodeFact] =
+    Vec[SourceAstExprNodeFact].new()
+        .push(bootstrap_demo_ast_node(0, SourceAstExprNodeBinary, 0, 1, 2))
+        .push(bootstrap_demo_ast_node(1, SourceAstExprNodeI32Const, 2, 0, 0))
+        .push(bootstrap_demo_ast_node(2, SourceAstExprNodeBinary, 2, 3, 4))
+        .push(bootstrap_demo_ast_node(3, SourceAstExprNodeI32Const, 3, 0, 0))
+        .push(bootstrap_demo_ast_node(4, SourceAstExprNodeI32Const, 4, 0, 0))
+        .freeze()
+
+/// Source facts for the internal parser-owned seed smoke project.
+def bootstrap_demo_source_project_facts(): SourceProjectFacts =
+    SourceProjectFacts {
+        parser: bootstrap_demo_parser_facts(),
+        headers: Vec[SourceHeaderFacts].new().freeze(),
+        docs: Vec[SourceDocFacts].new().freeze(),
+        compile_if: Vec[SourceCompileIfFacts].new().freeze(),
+        namespaces: Vec[NamespaceScanResult].new().freeze(),
+        namespace_warnings: Vec[SourceNamespaceScanWarning].new().freeze(),
+        uses: Vec[SourceUseScanResult].new().freeze(),
+        items: Vec[SourceItemScanResult].new().freeze(),
+        owner_symbols: Vec[SourceOwnerSymbolFact].new().freeze(),
+        ast_owner_symbols: Vec[SourceAstOwnerSymbolFact].new().push(bootstrap_demo_ast_owner_symbol()).freeze(),
+        ast_expr_nodes: bootstrap_demo_ast_expr_nodes(),
+        utf8_warnings: Vec[SourceUtf8ScanWarning].new().freeze(),
+    }
+
+/// Internal parser-owned demo project used by the seed smoke path.
+def bootstrap_demo_project_surface(): ProjectSurface =
+    ProjectSurface {
+        files: Vec[SourceFile].new().push(bootstrap_demo_source_file()).freeze(),
+        namespaces: Vec[NamespaceSurface].new().freeze(),
+        facts: bootstrap_demo_source_project_facts(),
+    }
+
+/// Empty parser facts used by the self-hosted empty-project bootstrap path.
+def empty_source_parser_facts(): SourceParserFacts =
+    SourceParserFacts {
+        mode: SourceFrontendChibalexChibaccPrimary,
+        modules: Vec[SourceParsedModuleFacts].new().freeze(),
+        chibalex_spec: "src/frontend/chiba-level1.chibalex",
+        chibacc_spec: "src/frontend/chiba-level1.chibacc",
+        token_primary_path_ready: true,
+        ast_primary_path_blocked: false,
+        diagnostic: "",
+    }
+
+/// Empty source facts for an empty compile request.
+def empty_source_project_facts(): SourceProjectFacts =
+    SourceProjectFacts {
+        parser: empty_source_parser_facts(),
+        headers: Vec[SourceHeaderFacts].new().freeze(),
+        docs: Vec[SourceDocFacts].new().freeze(),
+        compile_if: Vec[SourceCompileIfFacts].new().freeze(),
+        namespaces: Vec[NamespaceScanResult].new().freeze(),
+        namespace_warnings: Vec[SourceNamespaceScanWarning].new().freeze(),
+        uses: Vec[SourceUseScanResult].new().freeze(),
+        items: Vec[SourceItemScanResult].new().freeze(),
+        owner_symbols: Vec[SourceOwnerSymbolFact].new().freeze(),
+        ast_owner_symbols: Vec[SourceAstOwnerSymbolFact].new().freeze(),
+        ast_expr_nodes: Vec[SourceAstExprNodeFact].new().freeze(),
+        utf8_warnings: Vec[SourceUtf8ScanWarning].new().freeze(),
+    }
+
+/// Empty project value constructed inside Wasm without host project-loading imports.
+def empty_project_surface(): ProjectSurface =
+    ProjectSurface {
+        files: Vec[SourceFile].new().freeze(),
+        namespaces: Vec[NamespaceSurface].new().freeze(),
+        facts: empty_source_project_facts(),
+    }
+
+/// Return true when a compile request has no project inputs to load.
+def load_project_is_empty_request(inputs: Array[String], includes: Array[IncludeDir]): bool =
+    inputs.len() == 0 && includes.len() == 0
+
+/// Host-backed project loading for non-empty requests.
+def load_project_host(inputs: Array[String], includes: Array[IncludeDir]): ProjectSurface = __compiler_builtin("std.source_load_project")
+
 /// Load project files in deterministic path order.
-def load_project(inputs: Array[String], includes: Array[IncludeDir]): ProjectSurface = __compiler_builtin("std.source_load_project")
+def load_project(inputs: Array[String], includes: Array[IncludeDir]): ProjectSurface =
+    if load_project_is_empty_request(inputs, includes) { bootstrap_demo_project_surface() }
+    else { load_project_host(inputs, includes) }
 
 /// Return namespaces sorted by file path and source span.
 def ProjectSurface.sorted_namespaces(self): Array[NamespaceSurface] = self.namespaces

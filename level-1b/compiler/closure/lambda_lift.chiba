@@ -17,8 +17,11 @@ type LiftedClosureModule {
 }
 
 /// Lift nested functions into stable function symbols.
+def closure_converted_layouts(module: ClosureConvertedModule): Array[ClosureEnvLayout] = module.layouts
+
+/// Lift nested functions into stable function symbols.
 def lift_lambdas(module: ClosureConvertedModule): LiftedClosureModule =
-    LiftedClosureModule(module, lifted_functions_from_layouts(module.layouts, 0, Vec[LiftedFunction].new()))
+    LiftedClosureModule(module, lifted_functions_from_layouts(closure_converted_layouts(module), 0, Vec[LiftedFunction].new()))
 
 /// Each closure environment owner becomes a stable lifted function symbol.
 def lifted_functions_from_layouts(layouts: Array[ClosureEnvLayout], index: usize, out: Vec[LiftedFunction]): Array[LiftedFunction] =

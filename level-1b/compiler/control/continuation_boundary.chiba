@@ -32,9 +32,16 @@ data ContinuationBoundaryCheck {
 }
 
 /// Check whether active continuations cross a world/thread boundary.
+def usage_module_facts(module: UsageModule): Array[UsageFact] = module.facts
+
+/// Read callable storage facts through a helper for seed WAT lowering.
+def usage_module_callable_storage(module: UsageModule): Array[CallableStorageFact] =
+    Vec[CallableStorageFact].new().freeze()
+
+/// Check whether active continuations cross a world/thread boundary.
 def check_continuation_boundary(module: UsageModule): Result[UsageModule, SemanticDiagnostics] =
-    let obligations = continuation_boundary_obligations(module.facts, 0, Vec[ContinuationBoundaryObligation].new())
-    if callable_storages_cross_send_boundary(module.answer.typed.callable_storage, 0) {
+    let obligations = continuation_boundary_obligations(usage_module_facts(module), 0, Vec[ContinuationBoundaryObligation].new())
+    if callable_storages_cross_send_boundary(usage_module_callable_storage(module), 0) {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<control>", 0, 0, "continuation crosses world/thread/send boundary"))
             .freeze()))

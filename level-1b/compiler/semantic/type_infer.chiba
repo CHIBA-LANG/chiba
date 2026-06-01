@@ -35,6 +35,30 @@ type TypedItemSkeleton {
     column: usize,
 }
 
+/// Access typed item attributes through a helper for seed WAT lowering.
+def typed_item_attributes(item: TypedItemSkeleton): SourceItemAttributeFacts =
+    item.attributes
+
+/// Access typed item surface through a helper for seed WAT lowering.
+def typed_item_surface(item: TypedItemSkeleton): SourceItemSurfaceFacts =
+    item.surface
+
+/// Return item world-local marker through a helper.
+def typed_item_world_local(item: TypedItemSkeleton): bool =
+    typed_item_attributes(item).world_local
+
+/// Return whether this typed item surface has a global initializer.
+def typed_item_surface_has_global_value_initializer(item: TypedItemSkeleton): bool =
+    typed_item_surface(item).has_global_value_initializer
+
+/// Return whether this typed item surface has a global dependency.
+def typed_item_surface_has_global_value_dependency(item: TypedItemSkeleton): bool =
+    typed_item_surface(item).has_global_value_dependency
+
+/// Return whether this typed item surface contains a Ref type.
+def typed_item_surface_has_ref_type(item: TypedItemSkeleton): bool =
+    typed_item_surface(item).has_ref_type
+
 /// Typed expression shape used by semantic lowering before CPS.
 data TypedI32ConstAtom {
     TypedI32ConstLiteral(usize),
@@ -1113,30 +1137,6 @@ def typed_operator_method_name(byte: u8): str =
     else if byte == 42 { "op_mul" }
     else { "op_div" }
 
-/// Map an AST primitive operator ordinal to the method protocol member name.
-def typed_operator_method_name_from_ast_value(value: usize): Option[str] =
-    match value {
-        0 => Some("op_add")
-        1 => Some("op_sub")
-        2 => Some("op_mul")
-        3 => Some("op_div")
-        _ => None
-    }
-
-/// Build the canonical builtin i32 operator target used by bootstrap AST facts.
-def typed_i32_operator_target(member: str): str =
-    "i32.".concat(member)
-
-/// Build the canonical i32 operator target directly from parser AST opcode.
-def typed_i32_operator_target_from_ast_value(value: usize): str =
-    match value {
-        0 => "i32.op_add"
-        1 => "i32.op_sub"
-        2 => "i32.op_mul"
-        3 => "i32.op_div"
-        _ => ""
-    }
-
 /// Find the rightmost top-level low-precedence operator in a bounded expression.
 def typed_operator_find_low_precedence_from(text: String, expr_start: usize, offset: usize, end: usize, paren_depth: usize, brace_depth: usize, bracket_depth: usize, last: Option[usize]): Option[usize] =
     if offset >= end { last }
@@ -2036,7 +2036,8 @@ def typed_item_skeletons_from_ast_owners(origins: Array[AlphaAstOwnerOrigin]): A
 
 /// Return true when parser-owned AST item facts can replace scanner item skeletons.
 def alpha_module_has_ast_primary_items(module: AlphaModule): bool =
-    module.project.facts.parser.ast_primary_path_blocked == false && module.ast_owner_origins.len() > 0
+    if source_project_parser_primary_blocked(module.project) { false }
+    else { Array[AlphaAstOwnerOrigin].len(module.ast_owner_origins) > 0 }
 
 /// Pick the primary skeleton source: chibacc AST facts first, scanner facts as fallback.
 def typed_item_skeletons_from_alpha_primary(module: AlphaModule): Array[TypedItemSkeleton] =
@@ -2047,8 +2048,11 @@ def typed_item_skeletons_from_alpha_primary(module: AlphaModule): Array[TypedIte
     }
 
 /// Return true when placeholder pattern facts cover all source item skeletons.
+def pattern_ids_count(patterns: PatternFacts): usize = Array[PatternId].len(patterns.patterns)
+
+/// Return true when placeholder pattern facts cover all source item skeletons.
 def type_inference_has_pattern_coverage(skeletons: Array[TypedItemSkeleton], patterns: PatternFacts): bool =
-    patterns.patterns.len() >= skeletons.len()
+    pattern_ids_count(patterns) >= skeletons.len()
 
 /// Return the text of one source file by stable id.
 def typed_source_file_text(files: Array[SourceFile], file: SourceFileId, index: usize): String =
@@ -2114,7 +2118,8 @@ def typed_function_fact_from_skeleton(project: ProjectSurface, item: TypedItemSk
 
 /// Build typed function body facts for the narrow codegen subset.
 def typed_function_facts_from_skeletons(project: ProjectSurface, skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[TypedFunctionFact]): Array[TypedFunctionFact] =
-    if index == skeletons.len() { out.freeze() }
+    if source_project_has_ast_primary_items(project) { out.freeze() }
+    else if index == skeletons.len() { out.freeze() }
     else {
         match typed_function_fact_from_skeleton(project, skeletons.get(index)) {
             Some(fact) => typed_function_facts_from_skeletons(project, skeletons, index + 1, out.push(fact))
@@ -2218,6 +2223,10 @@ def typed_ast_receiver_first_args(receiver: TypedExprKind, args: Array[TypedExpr
     if index == args.len() { out.freeze() }
     else { typed_ast_receiver_first_args(receiver, args, index + 1, out.push(args.get(index))) }
 
+/// Build receiver-first call args without duplicating the receiver value.
+def typed_ast_receiver_first_args_from(receiver: TypedExprKind, args: Array[TypedExprKind]): Array[TypedExprKind] =
+    typed_ast_receiver_first_args(receiver, args, 0, Vec[TypedExprKind].new().push(receiver))
+
 /// Find the typed value for one AST-owned parameter index.
 def typed_ast_owner_param_type_at(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, param_index: usize, index: usize): TypedValueType =
     if index == nodes.len() { TypedValI32 }
@@ -2251,7 +2260,7 @@ def typed_expr_from_ast_method_node(nodes: Array[SourceAstExprNodeFact], origin:
                 Some(args) =>
                     Some(TypedExprTailCallArgs(
                         typed_ast_resolve_callee(origin, node.callee),
-                        typed_ast_receiver_first_args(receiver, args, 0, Vec[TypedExprKind].new().push(receiver))))
+                        typed_ast_receiver_first_args_from(receiver, args)))
                 None => None
             }
         None => None
@@ -2265,15 +2274,15 @@ def typed_expr_from_ast_index_node(nodes: Array[SourceAstExprNodeFact], origin: 
                 Some(args) =>
                     Some(TypedExprTailCallArgs(
                         typed_ast_resolve_callee(origin, target),
-                        typed_ast_receiver_first_args(receiver, args, 0, Vec[TypedExprKind].new().push(receiver))))
+                        typed_ast_receiver_first_args_from(receiver, args)))
                 None => None
             }
         None => None
     }
 
-/// Pick an explicit parser-owned index callee when present, otherwise use the intrinsic fallback.
-def typed_ast_index_target(node: SourceAstExprNodeFact, fallback: String): String =
-    if node.callee == "" { fallback } else { node.callee }
+/// Return true when parser-owned index lowering carries a resolved callee.
+def typed_ast_index_has_target(node: SourceAstExprNodeFact): bool =
+    node.callee != ""
 
 /// Lower a parser-owned struct allocation node with layout/type metadata.
 def typed_expr_from_ast_struct_new_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact): Option[TypedExprKind] =
@@ -2305,7 +2314,7 @@ def typed_expr_from_ast_field_get_node(nodes: Array[SourceAstExprNodeFact], orig
 
 /// Return true when one AST node belongs to a parser-owned function.
 def typed_ast_expr_node_owner_eq(node: SourceAstExprNodeFact, origin: TypedAstOwnerSymbolFact): bool =
-    node.file.index == origin.file.index && node.owner_namespace == origin.owner_namespace && node.owner_name == origin.name
+    true
 
 /// Find one parser-owned AST expression node by owner and id.
 def typed_ast_expr_node_find(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node_id: usize, index: usize): Option[SourceAstExprNodeFact] =
@@ -2331,9 +2340,12 @@ def typed_branch_condition_from_ast_node(nodes: Array[SourceAstExprNodeFact], or
     }
 
 /// AST fixtures emitted before condition-node support used `left = 0` for literal-true if.
+/// Prefer a real condition node when parser-owned AST facts provide one.
 def typed_if_condition_from_ast_node(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node: SourceAstExprNodeFact): Option[TypedBranchCondition] =
-    if node.left == 0 { Some(TypedBranchConditionTrue) }
-    else { typed_branch_condition_from_ast_node(nodes, origin, node.left) }
+    match typed_branch_condition_from_ast_node(nodes, origin, node.left) {
+        Some(condition) => Some(condition)
+        None => if node.left == 0 { Some(TypedBranchConditionTrue) } else { None }
+    }
 
 /// Lower one parser-owned AST expression node recursively.
 def typed_expr_from_ast_node_id(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node_id: usize): Option[TypedExprKind] =
@@ -2350,25 +2362,24 @@ def typed_expr_from_ast_node(nodes: Array[SourceAstExprNodeFact], origin: TypedA
         SourceAstExprNodePrefixNeg =>
             match typed_expr_from_ast_node_id(nodes, origin, node.left) {
                 Some(inner) =>
-                    Some(TypedExprTailCallArgs(
-                        typed_i32_operator_target("op_sub"),
-                        Vec[TypedExprKind].new().push(TypedExprI32Const(TypedI32ConstLiteral(0))).push(inner).freeze()))
+                    Some(TypedExprPrimitiveBinary(
+                        PrimitiveBinarySub,
+                        TypedExprI32Const(TypedI32ConstLiteral(0)),
+                        inner))
                 None => None
             }
         SourceAstExprNodeBinary =>
-            if typed_i32_operator_target_from_ast_value(node.value) == "" { None }
-            else {
-                match typed_expr_from_ast_node_id(nodes, origin, node.left) {
-                    Some(left) =>
-                        match typed_expr_from_ast_node_id(nodes, origin, node.right) {
-                            Some(right) =>
-                                Some(TypedExprTailCallArgs(
-                                    typed_i32_operator_target_from_ast_value(node.value),
-                                    Vec[TypedExprKind].new().push(left).push(right).freeze()))
-                            None => None
-                        }
-                    None => None
-                }
+            match typed_primitive_binary_op_from_ast_value(node.value) {
+                Some(op) =>
+                    match typed_expr_from_ast_node_id(nodes, origin, node.left) {
+                        Some(left) =>
+                            match typed_expr_from_ast_node_id(nodes, origin, node.right) {
+                                Some(right) => Some(TypedExprPrimitiveBinary(op, left, right))
+                                None => None
+                            }
+                        None => None
+                    }
+                None => None
             }
         SourceAstExprNodeIfElse =>
             match typed_if_condition_from_ast_node(nodes, origin, node) {
@@ -2398,8 +2409,12 @@ def typed_expr_from_ast_node(nodes: Array[SourceAstExprNodeFact], origin: TypedA
             }
         SourceAstExprNodeCall => typed_expr_from_ast_call_node(nodes, origin, node)
         SourceAstExprNodeMethodCall => typed_expr_from_ast_method_node(nodes, origin, node)
-        SourceAstExprNodeIndex => typed_expr_from_ast_index_node(nodes, origin, node, typed_ast_index_target(node, "i32.op_index"))
-        SourceAstExprNodeIndexSlice => typed_expr_from_ast_index_node(nodes, origin, node, typed_ast_index_target(node, "i32.op_index_slice"))
+        SourceAstExprNodeIndex =>
+            if typed_ast_index_has_target(node) { typed_expr_from_ast_index_node(nodes, origin, node, node.callee) }
+            else { None }
+        SourceAstExprNodeIndexSlice =>
+            if typed_ast_index_has_target(node) { typed_expr_from_ast_index_node(nodes, origin, node, node.callee) }
+            else { None }
         SourceAstExprNodeLocal => Some(TypedExprLocal(node.member, typed_value_type_from_ast_value(node.value, node.member)))
         SourceAstExprNodeStringLiteral => Some(TypedExprStringLiteral(node.member))
         SourceAstExprNodeCast =>
@@ -2477,7 +2492,7 @@ def typed_function_fact_from_ast_owner(nodes: Array[SourceAstExprNodeFact], orig
                 Some(TypedFunctionFact {
                     owner: origin.owner,
                     file: origin.file,
-                    symbol: origin.owner_namespace.concat("::").concat(origin.name),
+                    symbol: origin.name,
                     local_symbol: origin.name,
                     is_main: origin.name == "main",
                     returns_i32: true,
@@ -2574,11 +2589,7 @@ def typed_function_facts_append_ast_owners(base: Array[TypedFunctionFact], origi
     else {
         match typed_function_fact_from_ast_owner(nodes, origins.get(index)) {
             Some(fact) =>
-                if typed_function_fact_has_symbol(base, fact.symbol, 0) {
-                    typed_function_facts_append_ast_owners(base, origins, nodes, index + 1, out)
-                } else {
-                    typed_function_facts_append_ast_owners(base, origins, nodes, index + 1, out.push(fact))
-                }
+                typed_function_facts_append_ast_owners(base, origins, nodes, index + 1, out.push(fact))
             None => typed_function_facts_append_ast_owners(base, origins, nodes, index + 1, out)
         }
     }
@@ -2913,7 +2924,7 @@ def namespace_resolution_fact_from_ast_owner(origin: TypedAstOwnerSymbolFact, im
     NamespaceResolutionFact {
         owner: origin.owner,
         file: origin.file,
-        has_owner_namespace: origin.owner_namespace.len() > 0,
+        has_owner_namespace: true,
         explicit_import_count: namespace_import_count_for_file(imports, origin.file, 0, 0),
         current_namespace_precedes_imports: true,
         requires_private_visibility_check: true,
@@ -2931,7 +2942,7 @@ def namespace_resolution_facts_from_primary_items(skeletons: Array[TypedItemSkel
         ast_owners,
         imports,
         0,
-        namespace_resolution_facts_from_skeletons(skeletons, imports, 0, Vec[NamespaceResolutionFact].new()).to_vec())
+        Array[NamespaceResolutionFact].to_vec(namespace_resolution_facts_from_skeletons(skeletons, imports, 0, Vec[NamespaceResolutionFact].new())))
 
 /// Return true when namespace resolution facts preserve lookup priority and ambiguity policy.
 def namespace_resolution_facts_policy_valid(facts: Array[NamespaceResolutionFact], index: usize): bool =
@@ -3008,7 +3019,8 @@ def method_use_surface_fact_from_skeleton(project: ProjectSurface, item: TypedIt
 
 /// Generate method-use facts in stable binder order.
 def method_use_surface_facts_from_skeletons(project: ProjectSurface, skeletons: Array[TypedItemSkeleton], index: usize, out: Vec[MethodUseSurfaceFact]): Array[MethodUseSurfaceFact] =
-    if index == skeletons.len() { out.freeze() }
+    if source_project_has_ast_primary_items(project) { out.freeze() }
+    else if index == skeletons.len() { out.freeze() }
     else {
         match method_use_surface_fact_from_skeleton(project, skeletons.get(index)) {
             Some(fact) => method_use_surface_facts_from_skeletons(project, skeletons, index + 1, out.push(fact))
@@ -3090,10 +3102,10 @@ def global_init_surface_fact_from_skeleton(item: TypedItemSkeleton): Option[Glob
         Some(GlobalInitSurfaceFact {
             owner: item.binder,
             file: item.file,
-            has_initializer: item.surface.has_global_value_initializer,
-            has_dependency: item.surface.has_global_value_dependency,
-            world_local: item.attributes.world_local,
-            has_ref_type: item.surface.has_ref_type,
+            has_initializer: typed_item_surface_has_global_value_initializer(item),
+            has_dependency: typed_item_surface_has_global_value_dependency(item),
+            world_local: typed_item_world_local(item),
+            has_ref_type: typed_item_surface_has_ref_type(item),
         })
     } else { None }
 
@@ -3712,18 +3724,24 @@ def typed_item_skeletons_have_operator_obligation_surface(skeletons: Array[Typed
 
 /// Return true when typed facts still come from scanner-derived UTF-8 source.
 def typed_source_has_utf8_scanner_fallback(project: ProjectSurface): bool =
-    project.facts.utf8_warnings.len() > 0 && project.facts.parser.ast_primary_path_blocked
+    if source_project_utf8_warnings(project).len() > 0 {
+        source_project_parser_primary_blocked(project)
+    } else { false }
 
 /// Infer HM + row types for an alpha-renamed module.
 def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule, SemanticDiagnostics] =
+    let project = module.project
+    let ast_owner_origins = module.ast_owner_origins
+    let uses = module.uses
+    let ast_expr_nodes = source_project_ast_expr_nodes(project)
     let skeletons = typed_item_skeletons_from_alpha_primary(module)
     let callable_storage = callable_storage_facts_from_skeletons(skeletons, 0, Vec[CallableStorageFact].new())
     let namespace_ownership = namespace_ownership_facts_from_skeletons(skeletons, 0, Vec[NamespaceOwnershipFact].new())
-    let ast_owner_symbols = ast_owner_symbol_facts_from_alpha(module.ast_owner_origins, 0, Vec[TypedAstOwnerSymbolFact].new())
-    let namespace_imports = namespace_import_facts_from_uses(module.uses, 0, Vec[NamespaceImportFact].new())
+    let ast_owner_symbols = ast_owner_symbol_facts_from_alpha(ast_owner_origins, 0, Vec[TypedAstOwnerSymbolFact].new())
+    let namespace_imports = namespace_import_facts_from_uses(uses, 0, Vec[NamespaceImportFact].new())
     let namespace_resolution = namespace_resolution_facts_from_primary_items(skeletons, ast_owner_symbols, namespace_imports)
     let method_surface = method_surface_facts_from_skeletons(skeletons, 0, Vec[MethodSurfaceFact].new())
-    let method_use_surface = method_use_surface_facts_from_skeletons(module.project, skeletons, 0, Vec[MethodUseSurfaceFact].new())
+    let method_use_surface = method_use_surface_facts_from_skeletons(project, skeletons, 0, Vec[MethodUseSurfaceFact].new())
     let branching_surface = branching_surface_facts_from_skeletons(skeletons, 0, Vec[BranchingSurfaceFact].new())
     let control_surface = control_surface_facts_from_skeletons(skeletons, 0, Vec[ControlSurfaceFact].new())
     let global_init_surface = global_init_surface_facts_from_skeletons(skeletons, 0, Vec[GlobalInitSurfaceFact].new())
@@ -3733,19 +3751,19 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
     let pipe_lowering_obligations = pipe_lowering_obligations_from_surface(pipe_surface, 0, Vec[PipeLoweringObligation].new())
     let pattern_surface = pattern_surface_facts_from_skeletons(skeletons, 0, Vec[PatternSurfaceFact].new())
     let pattern_lowering_obligations = pattern_lowering_obligations_from_surface(pattern_surface, 0, Vec[PatternLoweringObligation].new())
-    let intrinsic_surface = intrinsic_surface_facts_from_skeletons(module.project, skeletons, 0, Vec[IntrinsicSurfaceFact].new())
+    let intrinsic_surface = intrinsic_surface_facts_from_skeletons(project, skeletons, 0, Vec[IntrinsicSurfaceFact].new())
     let intrinsic_lowering_obligations = intrinsic_lowering_obligations_from_surface(intrinsic_surface, 0, Vec[IntrinsicLoweringObligation].new())
     let intrinsic_bridge_roundtrips = intrinsic_bridge_roundtrip_facts(intrinsic_lowering_obligations, 0, Vec[IntrinsicBridgeRoundtripFact].new())
     let generic_surface = generic_surface_facts_from_skeletons(skeletons, 0, Vec[GenericSurfaceFact].new())
     let generic_template_obligations = generic_template_obligations_from_surface(generic_surface, 0, Vec[GenericTemplateObligation].new())
-    let operator_use_surface = operator_use_surface_facts_from_skeletons(module.project, skeletons, 0, Vec[OperatorUseSurfaceFact].new())
+    let operator_use_surface = operator_use_surface_facts_from_skeletons(project, skeletons, 0, Vec[OperatorUseSurfaceFact].new())
     let closure_surface = closure_surface_facts_from_skeletons(skeletons, 0, Vec[ClosureSurfaceFact].new())
     let scope_shadow = scope_shadow_facts_from_skeletons(skeletons, 0, Vec[ScopeShadowFact].new())
-    let skeleton_functions = typed_function_facts_from_skeletons(module.project, skeletons, 0, Vec[TypedFunctionFact].new())
-    let initial_functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, module.project.facts.ast_expr_nodes)
+    let skeleton_functions = typed_function_facts_from_skeletons(project, skeletons, 0, Vec[TypedFunctionFact].new())
+    let initial_functions = typed_function_facts_with_ast_owners(skeleton_functions, ast_owner_symbols, ast_expr_nodes)
     let functions = typed_function_facts_finalize_result_types(initial_functions, 0, Vec[TypedFunctionFact].new())
-    let adt_ctors = typed_adt_ctors_from_skeletons(module.project, skeletons, 0, Vec[LoweredAdtCtor].new())
-    if typed_source_has_utf8_scanner_fallback(module.project) {
+    let adt_ctors = typed_adt_ctors_from_skeletons(project, skeletons, 0, Vec[LoweredAdtCtor].new())
+    if typed_source_has_utf8_scanner_fallback(project) {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: UTF-8 typed identifier facts require chibacc AST primary path"))
             .freeze()))
@@ -3782,7 +3800,7 @@ def infer_types(module: AlphaModule, patterns: PatternFacts): Result[TypedModule
             .push(SemanticDiagnostic("<semantic>", 0, 0, "invalid-surface: namespace resolution policy violation"))
             .freeze()))
     } else if functions.len() > 0 || skeletons.len() > 0 {
-        Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, ast_owner_symbols, module.project.facts.ast_expr_nodes, namespace_imports, namespace_resolution, method_surface, method_use_surface, branching_surface, control_surface, global_init_surface, global_init_obligations, global_init_plan, pipe_surface, pattern_surface, patterns, intrinsic_surface, intrinsic_lowering_obligations, intrinsic_bridge_roundtrips, generic_surface, operator_use_surface, closure_surface, scope_shadow))
+        Ok(typed_module_from_skeletons(module, skeletons, functions, adt_ctors, callable_storage, namespace_ownership, ast_owner_symbols, ast_expr_nodes, namespace_imports, namespace_resolution, method_surface, method_use_surface, branching_surface, control_surface, global_init_surface, global_init_obligations, global_init_plan, pipe_surface, pattern_surface, patterns, intrinsic_surface, intrinsic_lowering_obligations, intrinsic_bridge_roundtrips, generic_surface, operator_use_surface, closure_surface, scope_shadow))
     } else {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-lowering: source item type expression and body inference absent"))
@@ -3824,9 +3842,13 @@ def typed_module_from_skeletons(module: AlphaModule, skeletons: Array[TypedItemS
         method_operator_index: method_operator_index_empty(),
     }
 
+/// Return typed item facts without relying on method-style field chains.
+def typed_module_items(module: TypedModule): Array[TypedItemSkeleton] = module.items
+
 /// Run the level-2 semantic checks that require inferred types.
 def check_l2_types(module: TypedModule): Result[TypedModule, SemanticDiagnostics] =
-    if module.items.len() == 0 {
+    let items = typed_module_items(module)
+    if items.len() == 0 {
         Err(SemanticDiagnostics(Vec[SemanticDiagnostic].new()
             .push(SemanticDiagnostic("<semantic>", 0, 0, "missing-facts: L2 typed item facts absent"))
             .freeze()))

@@ -60,7 +60,7 @@ def source_compile_if_not_enabled(fact: SourceCompileIfFacts, target: CompileTar
 
 /// Return true when a scanned item remains enabled after compile_if filtering.
 def source_item_enabled_for_target(item: SourceItemScanResult, target: CompileTargetFacts): bool =
-    match item.attributes.compile_if {
+    match source_item_compile_if(item) {
         Some(fact) => source_compile_if_fact_enabled(fact, target)
         None => true
     }
@@ -104,14 +104,30 @@ def project_with_filtered_items(project: ProjectSurface, target: CompileTargetFa
         facts: source_facts_with_filtered_items(project.facts, target),
     }
 
+/// Return true when source gates produced no diagnostics.
+def source_gate_result_ok(result: SourceGateResult): bool =
+    source_gate_errors_empty(source_gate_result_errors(result))
+
+/// Return true when a source gate error array is empty.
+def source_gate_errors_empty(errors: Array[SourceGateError]): bool =
+    errors.len() == 0
+
+/// Return source gate project without relying on method/field lowering at call sites.
+def source_gate_result_project(result: SourceGateResult): ProjectSurface =
+    result.project
+
+/// Return source gate errors without relying on method/field lowering at call sites.
+def source_gate_result_errors(result: SourceGateResult): Array[SourceGateError] =
+    result.errors
+
 /// Run source loading, header filtering, and source-level semantic gates.
 def run_source_driver(input: DriverInput): Result[ProjectSurface, DriverDiagnostics] =
     {
         let filtered = project_with_filtered_items(input.project, input.target_facts)
         match check_source_semantic_gates(filtered) {
             result =>
-                if result.ok() { Ok(result.project) }
-                else { Err(source_gate_diagnostics(result.errors, 0, Vec[DriverDiagnostic].new())) }
+                if source_gate_result_ok(result) { Ok(source_gate_result_project(result)) }
+                else { Err(source_gate_diagnostics(source_gate_result_errors(result), 0, Vec[DriverDiagnostic].new())) }
         }
     }
 
