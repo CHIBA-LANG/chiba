@@ -578,8 +578,13 @@ function pruneImpossibleDispatchBranches(source, possibleTokenNames) {
     const dispatch = defn.text.match(
       /^def\s+([A-Za-z_][A-Za-z0-9_]*)\(([^)]*)\):\s*MatchResult\s*=\s*\{\s*if\s+token_matches_name\(tokens,\s*pos,\s*mk_str\("([^"]+)",\s*[0-9]+\)\)\s*==\s*0\s*\{\s*([A-Za-z_][A-Za-z0-9_]*)\(tokens,\s*pos\)\s*\}/,
     );
+    const terminalDispatch = defn.text.match(
+      /^def\s+([A-Za-z_][A-Za-z0-9_]*)\(([^)]*)\):\s*MatchResult\s*=\s*\{\s*if\s+token_matches_name\(tokens,\s*pos,\s*mk_str\("([^"]+)",\s*[0-9]+\)\)\s*==\s*0\s*\{\s*MatchFail\(pos\)\s*\}/,
+    );
     if (dispatch && !possibleTokenNames.has(dispatch[3])) {
       out += `def ${dispatch[1]}(${dispatch[2]}): MatchResult = ${dispatch[4]}(tokens, pos)\n`;
+    } else if (terminalDispatch && !possibleTokenNames.has(terminalDispatch[3])) {
+      out += `def ${terminalDispatch[1]}(${terminalDispatch[2]}): MatchResult = MatchFail(pos)\n`;
     } else {
       out += defn.text;
     }
