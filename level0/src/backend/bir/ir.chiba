@@ -208,7 +208,7 @@ def bir_count_frames(descs: List[FrameDesc]): i64 =
 
 def bir_validate_summary(prog: BirProgram): i64 = {
     let _ = prog
-    write_fd(2, "[bir-validate] summary=skipped\n", 31)
+    0
 }
 
 def bir_validate_fun_marker(fun_id: i64): i64 = {
@@ -357,17 +357,13 @@ def bir_validate_frame_descs(prog: BirProgram, descs: List[FrameDesc]): i64 =
     }
 
 def bir_validate_program(prog: BirProgram): i64 = {
-    let _ = write_fd(2, "[bir-validate] phase=summary\n", 29)
     let _ = bir_validate_summary(prog)
-    let _ = write_fd(2, "[bir-validate] phase=entry\n", 27)
     let entry_fun = prog.entry_fun
     let entry_errs = if is_none(bir_program_fun(prog, entry_fun)) != 0 {
         let _ = bir_report_missing_fun("missing entry fun", entry_fun)
         1
     } else { 0 }
-    let _ = write_fd(2, "[bir-validate] phase=funs\n", 26)
     let fun_errs = bir_validate_funs(prog, prog.funs)
-    let _ = write_fd(2, "[bir-validate] phase=frames\n", 28)
     entry_errs + fun_errs + bir_validate_frame_descs(prog, prog.frame_descs)
 }
 
