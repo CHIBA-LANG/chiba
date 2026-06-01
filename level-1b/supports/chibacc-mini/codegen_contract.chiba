@@ -3,15 +3,11 @@ namespace supports.chibaccmini.codegen_contract
 use std.chibacc.ast.*
 use std.chibacc.codegen.*
 use std.chibacc.ir.*
+use std.chibacc.parser.*
 use std.option.*
 use std.result.*
 use std.string.*
 use std.vec.*
-
-type ChibaccParseError {
-    offset: usize,
-    message: String,
-}
 
 def mk_name(text: str): GrammarName = GrammarName { text: text }
 
@@ -35,12 +31,6 @@ def local_chibacc_spec(): ChibaccSpec =
 }
 "#
     }
-
-def parse_chibacc(source: String): Result[ChibaccSpec, ChibaccParseError] =
-    Ok(local_chibacc_spec())
-
-def chibacc_find_text(source: String, offset: usize, text: str): usize =
-    0
 
 def mk_alternative(index: usize, recovery: RecoveryAction): LoweredAlternative =
     LoweredAlternative {
@@ -124,7 +114,10 @@ def check_source_codegen_spec(spec: ChibaccSpec): i64 =
     check_source_codegen_lowered(lower_chibacc(spec))
 
 def check_source_codegen(): i64 =
-    check_source_codegen_spec(local_chibacc_spec())
+    match parse_chibacc(source_spec()) {
+        Ok(spec) => check_source_codegen_spec(spec)
+        Err(_) => 30
+    }
 
 #[entry]
 def main(argc: i64, argv: i64): i64 = {

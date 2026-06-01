@@ -2314,7 +2314,7 @@ def typed_expr_from_ast_field_get_node(nodes: Array[SourceAstExprNodeFact], orig
 
 /// Return true when one AST node belongs to a parser-owned function.
 def typed_ast_expr_node_owner_eq(node: SourceAstExprNodeFact, origin: TypedAstOwnerSymbolFact): bool =
-    true
+    node.file.index == origin.file.index && node.owner_namespace == origin.owner_namespace && node.owner_name == origin.name
 
 /// Find one parser-owned AST expression node by owner and id.
 def typed_ast_expr_node_find(nodes: Array[SourceAstExprNodeFact], origin: TypedAstOwnerSymbolFact, node_id: usize, index: usize): Option[SourceAstExprNodeFact] =

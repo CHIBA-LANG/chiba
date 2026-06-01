@@ -305,11 +305,7 @@ def level1c_collect_level1b_use_line(src: Str, line_start: i64, line_end: i64, o
         else {
             let resolved = str_new()
             let _ = str_push_cstr(resolved, "level-1b/")
-            let _ = if level1c_use_path_is_std_chibacc_codegen(src, path_start, path_end - 2) != 0 {
-                str_push_cstr(resolved, "std/chibacc/codegen_bootstrap")
-            } else if level1c_use_path_is_std_chibacc_ir(src, path_start, path_end - 2) != 0 {
-                str_push_cstr(resolved, "std/chibacc/ir_bootstrap")
-            } else if level1c_use_path_is_compiler_cli(src, path_start, path_end - 2) != 0 {
+            let _ = if level1c_use_path_is_compiler_cli(src, path_start, path_end - 2) != 0 {
                 str_push_cstr(resolved, "compiler/cli/contract")
             } else {
                 level1c_append_level1b_use_module_path(resolved, src, path_start, path_end - 2)

@@ -171,8 +171,15 @@ function main() {
     if (!contSource.includes(needle)) fail(`chibacc continuation smoke missing ${needle}`);
   }
   pass("chibacc continuation smoke source");
-  if (!read("level-1b/supports/chibacc-mini/codegen_contract.chiba").includes("generated_parser_text(generate_parser(mk_parser()))")) {
+  const codegenContract = read("level-1b/supports/chibacc-mini/codegen_contract.chiba");
+  if (!codegenContract.includes("generated_parser_text(generate_parser(mk_parser()))")) {
     fail("chibacc codegen contract fixture must keep executable main");
+  }
+  if (/def\s+parse_chibacc\s*\(/.test(codegenContract)) {
+    fail("chibacc codegen contract fixture must not shadow std.chibacc.parser.parse_chibacc");
+  }
+  if (!/parse_chibacc\s*\(\s*source_spec\s*\(\s*\)\s*\)/.test(codegenContract) || !codegenContract.includes("check_source_codegen_spec(spec)")) {
+    fail("chibacc codegen contract fixture must run source_spec through real parse_chibacc -> lower_chibacc -> generate_parser");
   }
   pass("chibacc codegen contract fixture");
 
