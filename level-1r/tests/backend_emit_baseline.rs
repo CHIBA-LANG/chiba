@@ -85,7 +85,7 @@ fn backend_emits_exported_main_for_return_atom_core() {
     let output = compile_expr(&Expr::i64(7));
 
     assert_eq!(output.backend.diagnostics, vec![]);
-    assert!(output.backend.wat.contains(";; core-return atom=I64(7)"));
+    assert!(output.backend.wat.contains(";; core-return atom=7"));
     assert!(output.backend.wat.contains("(func $main (export \"main\") (result i32)"));
     assert!(output.backend.wat.contains("i32.const 7"));
 }

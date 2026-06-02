@@ -48,7 +48,7 @@ fn adt_constructor_reaches_cps_core_and_target_neutral_layout() {
         data: "Option".to_string(),
         ctor: "Some".to_string(),
         variants: vec!["None".to_string(), "Some".to_string()],
-        args: vec!["I64(1)".to_string()],
+        args: vec!["1".to_string()],
     }));
     assert!(output.core.layouts.iter().any(|layout| {
         matches!(

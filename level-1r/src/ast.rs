@@ -175,7 +175,7 @@ pub enum Expr {
     MethodCall {
         receiver: Box<Expr>,
         name: String,
-        arg: Box<Expr>,
+        args: Vec<Expr>,
     },
     Binary {
         op: BinaryOp,
@@ -343,10 +343,14 @@ impl Expr {
     }
 
     pub fn method_call(receiver: Expr, name: impl Into<String>, arg: Expr) -> Self {
+        Self::method_call_args(receiver, name, vec![arg])
+    }
+
+    pub fn method_call_args(receiver: Expr, name: impl Into<String>, args: Vec<Expr>) -> Self {
         Self::MethodCall {
             receiver: Box::new(receiver),
             name: name.into(),
-            arg: Box::new(arg),
+            args,
         }
     }
 

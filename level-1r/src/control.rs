@@ -70,9 +70,11 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
             }
         }
         TypedExprKind::Field { receiver, .. } => visit(receiver, stack, facts),
-        TypedExprKind::MethodCall { receiver, arg, .. } => {
+        TypedExprKind::MethodCall { receiver, args, .. } => {
             visit(receiver, stack, facts);
-            visit(arg, stack, facts);
+            for arg in args {
+                visit(arg, stack, facts);
+            }
         }
         TypedExprKind::Binary { lhs, rhs, .. } => {
             visit(lhs, stack, facts);

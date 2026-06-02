@@ -19,3 +19,15 @@ fn single_variable_is_one() {
     assert_eq!(UseCount::One.color(), UsageColor::One);
 }
 
+#[test]
+fn method_call_usage_visits_receiver_and_all_arguments() {
+    let output = compile_expr(&Expr::method_call_args(
+        Expr::var("receiver"),
+        "put",
+        vec![Expr::var("key"), Expr::var("value")],
+    ));
+
+    assert_eq!(output.usage.vars.get("receiver").copied(), Some(UseCount::One));
+    assert_eq!(output.usage.vars.get("key").copied(), Some(UseCount::One));
+    assert_eq!(output.usage.vars.get("value").copied(), Some(UseCount::One));
+}

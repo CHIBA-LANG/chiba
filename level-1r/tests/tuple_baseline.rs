@@ -34,7 +34,7 @@ fn tuple_expression_reaches_target_neutral_core_with_tuple_layout() {
 
     assert!(output.core.ops.contains(&CoreOp::TupleConstruct {
         layout: "tuple::Tuple2_I64_I64".to_string(),
-        fields: vec!["I64(1)".to_string(), "I64(2)".to_string()],
+        fields: vec!["1".to_string(), "2".to_string()],
     }));
     assert!(output.core.layouts.iter().any(|layout| {
         matches!(

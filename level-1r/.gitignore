@@ -1,0 +1,15 @@
+/target
+/runtime
+/docs
+/CHIBA-SPEC
+/blog
+*.o
+*.S
+/tmp
+/working
+/.scratch
+node_modules
+*.bak
+session*.md
+binaryen-*/
+.agents/

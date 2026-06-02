@@ -193,31 +193,14 @@ fn transform(
         TypedExprKind::MethodCall {
             receiver,
             name,
-            arg,
+            args,
         } => {
             let receiver_controls = controls.clone();
-            let arg_controls = controls;
             transform(
                 receiver,
                 Box::new(|receiver, ctx| {
-                    let arg_controls = arg_controls.clone();
-                    transform(
-                        arg,
-                        Box::new(|arg, ctx| {
-                            let w = ctx.fresh("w");
-                            let kont_body = k(CpsAtom::Var(w.clone()), ctx);
-                            CpsTerm::AppFun {
-                                func: CpsAtom::Var(format!("{receiver}.{name}")),
-                                args: vec![arg],
-                                kont: CpsAtom::ContLambda {
-                                    param: w,
-                                    body: Box::new(kont_body),
-                                },
-                            }
-                        }),
-                        arg_controls,
-                        ctx,
-                    )
+                    let func = CpsAtom::Var(format!("{receiver}.{name}"));
+                    transform_call_args(args, 0, Vec::new(), func, k, controls, ctx)
                 }),
                 receiver_controls,
                 ctx,

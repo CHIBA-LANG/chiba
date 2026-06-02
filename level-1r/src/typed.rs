@@ -45,7 +45,7 @@ pub enum TypedExprKind {
     MethodCall {
         receiver: Box<TypedExpr>,
         name: String,
-        arg: Box<TypedExpr>,
+        args: Vec<TypedExpr>,
     },
     Binary {
         op: BinaryOp,
@@ -240,15 +240,15 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
         Expr::MethodCall {
             receiver,
             name,
-            arg,
+            args,
         } => {
             let receiver = type_expr(receiver);
-            let arg = type_expr(arg);
+            let args = args.iter().map(type_expr).collect();
             typed(
                 TypedExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     name: name.clone(),
-                    arg: Box::new(arg),
+                    args,
                 },
                 Type::Unknown,
             )

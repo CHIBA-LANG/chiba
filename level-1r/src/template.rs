@@ -170,9 +170,11 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
             });
             collect_expr_obligations(receiver, facts);
         }
-        AlphaExprKind::MethodCall { receiver, arg, .. } => {
+        AlphaExprKind::MethodCall { receiver, args, .. } => {
             collect_expr_obligations(receiver, facts);
-            collect_expr_obligations(arg, facts);
+            for arg in args {
+                collect_expr_obligations(arg, facts);
+            }
         }
         AlphaExprKind::Binary { lhs, rhs, .. } => {
             collect_expr_obligations(lhs, facts);

@@ -48,7 +48,7 @@ pub enum AlphaExprKind {
     MethodCall {
         receiver: Box<AlphaExpr>,
         name: String,
-        arg: Box<AlphaExpr>,
+        args: Vec<AlphaExpr>,
     },
     Binary {
         op: BinaryOp,
@@ -253,12 +253,12 @@ impl AlphaCtx {
             Expr::MethodCall {
                 receiver,
                 name,
-                arg,
+                args,
             } => AlphaExpr {
                 kind: AlphaExprKind::MethodCall {
                     receiver: Box::new(self.alpha(receiver)),
                     name: name.clone(),
-                    arg: Box::new(self.alpha(arg)),
+                    args: args.iter().map(|arg| self.alpha(arg)).collect(),
                 },
             },
             Expr::Binary { op, lhs, rhs } => AlphaExpr {

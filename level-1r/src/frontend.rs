@@ -390,16 +390,7 @@ impl FrontendParser {
                                 let variants = self.known_variants(&data, &name);
                                 Expr::adt_ctor(data, name.clone(), variants, args)
                             }
-                            receiver => {
-                                if args.len() != 1 {
-                                    return Err(FrontendError::UnexpectedToken {
-                                        found: "RParen".to_string(),
-                                        lexeme: ")".to_string(),
-                                        expected: vec!["single method argument".to_string()],
-                                    });
-                                }
-                                Expr::method_call(receiver, name, args.into_iter().next().unwrap())
-                            }
+                            receiver => Expr::method_call_args(receiver, name, args),
                         };
                     } else {
                         expr = match expr {
@@ -928,11 +919,13 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
         Expr::MethodCall {
             receiver,
             name,
-            arg,
-        } => Expr::method_call(
+            args,
+        } => Expr::method_call_args(
             enrich_expr_with_data_variants(*receiver, variants),
             name,
-            enrich_expr_with_data_variants(*arg, variants),
+            args.into_iter()
+                .map(|arg| enrich_expr_with_data_variants(arg, variants))
+                .collect(),
         ),
         Expr::Binary { op, lhs, rhs } => Expr::binary(
             op,

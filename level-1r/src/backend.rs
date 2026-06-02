@@ -314,6 +314,8 @@ fn atom_i32_result(atom: &str) -> i32 {
         .and_then(|digits| digits.parse::<i64>().ok())
     {
         value as i32
+    } else if let Ok(value) = atom.parse::<i64>() {
+        value as i32
     } else {
         0
     }

@@ -297,11 +297,13 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
         AlphaExprKind::MethodCall {
             receiver,
             name,
-            arg,
+            args,
         } => {
             resolve_method_call(receiver, name, facts);
             visit(receiver, facts);
-            visit(arg, facts);
+            for arg in args {
+                visit(arg, facts);
+            }
         }
         AlphaExprKind::Binary { op, lhs, rhs } => {
             let receiver = nominal_name(lhs);

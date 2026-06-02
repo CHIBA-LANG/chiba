@@ -148,7 +148,7 @@ fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
     let output = compile_source_program_bundle("def helper(x) = f(1) def main() = helper(2)")
         .expect("compile source");
 
-    assert_eq!(output.frontend.tokens.len(), 20);
+    assert_eq!(output.frontend.tokens.len(), 19);
     assert_eq!(output.frontend.program.items.len(), 2);
     assert_eq!(output.program.entry, Some("main".to_string()));
     assert!(output.program.backend_link.diagnostics.is_empty());
@@ -196,7 +196,7 @@ fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
 
     let summary = output.render_summary();
     assert!(summary.contains("source-program:"));
-    assert!(summary.contains("tokens=20"));
+    assert!(summary.contains("tokens=19"));
     assert!(summary.contains("items=2"));
     assert!(summary.contains("data=0"));
     assert!(summary.contains("P1ProjectSurface"));
@@ -243,7 +243,7 @@ fn frontend_parses_data_decl_and_uses_variants_for_qualified_ctors() {
             } if data == "Option"
                 && ctor == "Some"
                 && variants == &vec!["None".to_string(), "Some".to_string()]
-                && args == &vec!["I64(1)".to_string()]
+                && args == &vec!["1".to_string()]
         )
     }));
     assert!(main.resolve.resolved_names.contains(&ResolvedName::Constructor {
@@ -310,7 +310,8 @@ fn frontend_data_decl_allows_zero_arg_qualified_ctor_and_exhaustive_match() {
     }
 
     assert_eq!(main.pattern.diagnostics, vec![]);
-    assert!(main.cps.to_string().contains("halt match Option.None"));
+    assert!(main.cps.to_string().contains("match Option.None"));
+    assert!(main.cps.to_string().contains("halt join"));
     assert!(main.cps.to_string().contains("Option.Some(value) =>"));
     assert!(main.cps.to_string().contains("Option.None =>"));
 }
@@ -438,9 +439,15 @@ fn frontend_parses_call_before_infix_and_reaches_cps_shape() {
         matches!(
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
-                if func.contains("operator::Add")
-                    && func.contains("f(x,")
-                    && args == &vec!["I64(1)".to_string()]
+                if func == "f" && args == &vec!["x".to_string()]
+        )
+    }));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func.starts_with("operator::Add(")
+                    && args == &vec!["1".to_string()]
         )
     }));
     assert!(bundle.backend_link.linked_wat.contains(";; tailcall"));
@@ -471,16 +478,16 @@ fn frontend_preserves_multi_argument_calls_through_cps_and_core() {
             chiba_level1r::core::CoreOp::TailCall { func, args }
                 if func == "f"
                     && args == &vec![
-                        "I64(1)".to_string(),
-                        "I64(2)".to_string(),
-                        "I64(3)".to_string()
+                        "1".to_string(),
+                        "2".to_string(),
+                        "3".to_string()
                     ]
         )
     }));
     assert!(bundle
         .backend_link
         .linked_wat
-        .contains(";; tailcall f args=[I64(1), I64(2), I64(3)]"));
+        .contains(";; tailcall f args=[1, 2, 3]"));
 }
 
 #[test]
@@ -510,7 +517,7 @@ fn frontend_parses_if_then_else_through_branch_cps_and_wat() {
             chiba_level1r::core::CoreOp::Branch { cond } if cond == "flag"
         )
     }));
-    assert!(output.program.backend_link.linked_wat.contains(";; branch flag"));
+    assert!(output.program.backend_link.linked_wat.contains(";; branch cond=flag"));
 }
 
 #[test]
@@ -545,7 +552,11 @@ fn frontend_parses_match_with_literal_and_wildcard_through_cps_core() {
                     && patterns == &vec!["Lit(I64(0))".to_string(), "Wildcard".to_string()]
         )
     }));
-    assert!(output.program.backend_link.linked_wat.contains(";; match tag"));
+    assert!(output
+        .program
+        .backend_link
+        .linked_wat
+        .contains(";; match scrutinee=tag"));
 }
 
 #[test]
@@ -615,7 +626,7 @@ fn frontend_parses_qualified_adt_constructor_expression() {
             } if data == "Option"
                 && ctor == "Some"
                 && variants == &vec!["Some".to_string()]
-                && args == &vec!["I64(1)".to_string()]
+                && args == &vec!["1".to_string()]
         )
     }));
 }
@@ -810,9 +821,40 @@ fn frontend_parses_dot_method_call_as_method_call_ast() {
         matches!(
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
-                if func == "receiver.show" && args == &vec!["I64(0)".to_string()]
+                if func == "receiver.show" && args == &vec!["0".to_string()]
         )
     }));
+}
+
+#[test]
+fn frontend_preserves_multi_argument_method_calls_through_cps_and_core() {
+    let output = compile_source_program_bundle("def main() = receiver.put(1, 2)")
+        .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::method_call_args(
+                    Expr::var("receiver"),
+                    "put",
+                    vec![Expr::i64(1), Expr::i64(2)]
+                )
+            );
+        }
+    }
+
+    assert!(main.cps.to_string().contains("receiver.put(1, 2,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "receiver.put"
+                    && args == &vec!["1".to_string(), "2".to_string()]
+        )
+    }));
+    assert!(main.backend.wat.contains(";; tailcall receiver_put args=[1, 2]"));
 }
 
 #[test]
@@ -901,7 +943,7 @@ fn frontend_reports_unexpected_token_without_scanner_fallback() {
 
 #[test]
 fn frontend_reports_lexer_errors_for_unknown_characters() {
-    let err = parse_source_program("def main() = @").unwrap_err();
+    let err = parse_source_program("def main() = $").unwrap_err();
 
     assert!(matches!(err, FrontendError::Lex(_)));
 }

@@ -275,10 +275,13 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
     match term {
         CpsTerm::Halt(atom) => lower_atom_value(atom, ops),
         CpsTerm::AppCont { value, .. } => lower_atom_value(value, ops),
-        CpsTerm::AppFun { func, args, .. } => ops.push(CoreOp::TailCall {
-            func: render_atom(func),
-            args: args.iter().map(render_atom).collect(),
-        }),
+        CpsTerm::AppFun { func, args, kont } => {
+            ops.push(CoreOp::TailCall {
+                func: render_atom(func),
+                args: args.iter().map(render_atom).collect(),
+            });
+            lower_continuation_atom(kont, continuations, ops);
+        }
         CpsTerm::Prompt { multi, body } => {
             ops.push(CoreOp::Prompt {
                 kind: if *multi {
@@ -325,6 +328,16 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                 lower_term(&arm.body, continuations, ops);
             }
         }
+    }
+}
+
+fn lower_continuation_atom(
+    atom: &CpsAtom,
+    continuations: &[ContinuationFact],
+    ops: &mut Vec<CoreOp>,
+) {
+    if let CpsAtom::ContLambda { body, .. } = atom {
+        lower_term(body, continuations, ops);
     }
 }
 
@@ -521,8 +534,42 @@ fn validate_record_field_access(program: &CoreProgram, diagnostics: &mut Vec<Cor
 }
 
 fn is_dynamic_callable_value(func: &str) -> bool {
-    func.chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    is_simple_callable_ident(func)
+        || is_field_callable_value(func)
+        || is_operator_callable_value(func)
+}
+
+fn is_simple_callable_ident(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+}
+
+fn is_field_callable_value(value: &str) -> bool {
+    let Some((receiver, method)) = value.rsplit_once('.') else {
+        return false;
+    };
+    !receiver.contains("::")
+        && is_receiver_path(receiver)
+        && is_simple_callable_ident(method)
+}
+
+fn is_receiver_path(value: &str) -> bool {
+    !value.is_empty() && value.split('.').all(is_simple_callable_ident)
+}
+
+fn is_operator_callable_value(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("operator::") else {
+        return false;
+    };
+    let Some((protocol, receiver)) = rest.split_once('(') else {
+        return false;
+    };
+    let Some(receiver) = receiver.strip_suffix(')') else {
+        return false;
+    };
+    is_simple_callable_ident(protocol) && is_simple_callable_ident(receiver)
 }
 
 fn validate_static_row_access(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
@@ -657,15 +704,50 @@ fn validate_ownership(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnosti
 fn render_atom(atom: &CpsAtom) -> String {
     match atom {
         CpsAtom::Var(name) => name.clone(),
-        CpsAtom::Lit(lit) => format!("{lit:?}"),
+        CpsAtom::Lit(crate::ast::Literal::I64(value)) => value.to_string(),
+        CpsAtom::Lit(crate::ast::Literal::Bool(value)) => value.to_string(),
         CpsAtom::FunLambda { param, .. } => format!("lambda#{param}"),
         CpsAtom::ContLambda { param, .. } => format!("cont#{param}"),
-        CpsAtom::Tuple { nominal, .. } => format!("tuple#{nominal}"),
+        CpsAtom::Tuple { nominal, fields } => format!(
+            "{nominal}({})",
+            fields
+                .iter()
+                .map(render_atom)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         CpsAtom::TupleField { tuple, field } => format!("{}.{}", render_atom(tuple), field),
-        CpsAtom::Record { layout, .. } => format!("record#{layout}"),
+        CpsAtom::Record { layout, fields } => format!(
+            "{layout}{{{}}}",
+            fields
+                .iter()
+                .map(|field| format!("{}={}", field.name, render_atom(&field.value)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         CpsAtom::RecordField { record, field } => format!("{}.{}", render_atom(record), field),
-        CpsAtom::RecordUpdate { layout, .. } => format!("record-update#{layout}"),
-        CpsAtom::AdtCtor { data, ctor, .. } => format!("adt#{data}.{ctor}"),
+        CpsAtom::RecordUpdate {
+            base,
+            layout,
+            fields,
+        } => format!(
+            "{layout}{{base={}, {}}}",
+            render_atom(base),
+            fields
+                .iter()
+                .map(|field| format!("{}={}", field.name, render_atom(&field.value)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        CpsAtom::AdtCtor {
+            data, ctor, args, ..
+        } => format!(
+            "{data}.{ctor}({})",
+            args.iter()
+                .map(render_atom)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     }
 }
 

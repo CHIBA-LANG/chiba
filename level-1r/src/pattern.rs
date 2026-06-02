@@ -76,9 +76,11 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             }
         }
         TypedExprKind::Field { receiver, .. } => visit(receiver, facts),
-        TypedExprKind::MethodCall { receiver, arg, .. } => {
+        TypedExprKind::MethodCall { receiver, args, .. } => {
             visit(receiver, facts);
-            visit(arg, facts);
+            for arg in args {
+                visit(arg, facts);
+            }
         }
         TypedExprKind::Binary { lhs, rhs, .. } => {
             visit(lhs, facts);
@@ -116,6 +118,14 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
                 visit(&arm.body, facts);
                 diagnose_duplicate_bindings(&arm.pattern, facts);
                 diagnose_chained_at_patterns(&arm.pattern, facts);
+                let bindings = pattern_bindings(&arm.pattern);
+                if !bindings.is_empty() {
+                    facts.envs.push(PatternEnvFact {
+                        bindings,
+                        success_branch_binds: true,
+                        failure_branch_binds: false,
+                    });
+                }
             }
             let fact = exhaustiveness(scrutinee, arms);
             if !fact.exhaustive {
@@ -206,7 +216,7 @@ fn missing_patterns(fact: &MatchExhaustivenessFact) -> Vec<Pattern> {
     if fact.has_wildcard {
         return vec![];
     }
-    match fact.scrutinee_type {
+    match &fact.scrutinee_type {
         Type::Bool => {
             let mut missing = Vec::new();
             if !fact.covered_literals.contains(&Literal::Bool(true)) {

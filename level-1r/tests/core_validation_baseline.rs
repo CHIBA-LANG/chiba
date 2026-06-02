@@ -186,6 +186,28 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
         callable_storage: vec![],
     };
     assert_eq!(validate_core(&dynamic).diagnostics, vec![]);
+
+    let dynamic_method = CoreProgram {
+        ops: vec![CoreOp::TailCall {
+            func: "receiver.put".to_string(),
+            args: vec!["1".to_string(), "2".to_string()],
+        }],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+    assert_eq!(validate_core(&dynamic_method).diagnostics, vec![]);
+
+    let dynamic_operator = CoreProgram {
+        ops: vec![CoreOp::TailCall {
+            func: "operator::Add(w0)".to_string(),
+            args: vec!["1".to_string()],
+        }],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+    assert_eq!(validate_core(&dynamic_operator).diagnostics, vec![]);
 }
 
 #[test]
