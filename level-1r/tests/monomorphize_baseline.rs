@@ -5,7 +5,8 @@ use chiba_level1r::specialize::{
     plan_specialization, specialization_key, SpecializationFacts, SpecializationWorkItem,
 };
 use chiba_level1r::template::{
-    canonical_open_row, dyn_row_contract, ShapeType, TemplateFacts, TemplateObligation,
+    canonical_open_row, dyn_row_contract, ShapeType, TemplateFacts, TemplateInstantiation,
+    TemplateObligation, TemplateParam, TemplateParamSource,
 };
 use chiba_level1r::{compile_expr, Expr};
 
@@ -59,6 +60,28 @@ fn scheduler_artifact_name_is_stable_and_keeps_shape_dyn_abi_dimensions() {
     assert!(artifact.contains("::dyn="));
     assert!(artifact.ends_with("::abi=Chiba"));
     assert_eq!(plan.jobs[0].definition_note, "definition-site::render");
+}
+
+#[test]
+fn scheduler_artifact_name_keeps_explicit_template_dimensions() {
+    let mut template = TemplateFacts::default();
+    template.explicit_params.push(TemplateParam {
+        name: "T".to_string(),
+        source: TemplateParamSource::ExplicitHeader,
+    });
+    template
+        .explicit_instantiations
+        .push(TemplateInstantiation {
+            callee: "id".to_string(),
+            type_args: vec!["i64".to_string()],
+        });
+
+    let plan = schedule_monomorphization(&plan_specialization("id", &template));
+    let artifact = &plan.jobs[0].artifact;
+
+    assert!(artifact.starts_with("mono::id::params="));
+    assert!(artifact.contains("::typeargs="));
+    assert!(artifact.ends_with("::abi=Chiba"));
 }
 
 #[test]

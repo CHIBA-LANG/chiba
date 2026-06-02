@@ -35,11 +35,13 @@ fn frontend_lexes_and_parses_def_source_to_program() {
     match &output.program.items[0] {
         SourceItem::Def {
             name,
+            generics,
             params,
             return_type,
             body,
         } => {
             assert_eq!(name, "main");
+            assert_eq!(generics, &Vec::<String>::new());
             assert_eq!(params, &Vec::<ParamDecl>::new());
             assert_eq!(return_type, &None);
             assert_eq!(
@@ -361,6 +363,7 @@ fn frontend_supports_parameters_and_variables() {
             params,
             return_type,
             body,
+            ..
         } => {
             assert_eq!(name, "id");
             assert_eq!(params, &vec![ParamDecl::untyped("x")]);
@@ -406,11 +409,60 @@ fn frontend_consumes_parameter_and_return_type_annotations() {
             params,
             return_type,
             body,
+            ..
         } => {
             assert_eq!(name, "id");
             assert_eq!(params, &vec![ParamDecl::new("x", Some("I64".to_string()))]);
             assert_eq!(return_type, &Some("I64".to_string()));
             assert_eq!(body, &Expr::var("x"));
+        }
+        other => panic!("expected function def, got {other:?}"),
+    }
+}
+
+#[test]
+fn frontend_parses_explicit_checked_template_def_header() {
+    let parsed = parse_source_program("def id[T](x: T): T = x").expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def {
+            name,
+            generics,
+            params,
+            return_type,
+            body,
+        } => {
+            assert_eq!(name, "id");
+            assert_eq!(generics, &vec!["T".to_string()]);
+            assert_eq!(params, &vec![ParamDecl::new("x", Some("T".to_string()))]);
+            assert_eq!(return_type, &Some("T".to_string()));
+            assert_eq!(body, &Expr::var("x"));
+        }
+        other => panic!("expected function def, got {other:?}"),
+    }
+}
+
+#[test]
+fn frontend_parses_explicit_call_site_instantiation_without_breaking_index() {
+    let parsed =
+        parse_source_program("def main() = id[T](value) def at(values, i) = values[i]")
+            .expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::call_args(
+                    Expr::instantiate(Expr::var("id"), vec!["T".to_string()]),
+                    vec![Expr::var("value")]
+                )
+            );
+        }
+        other => panic!("expected function def, got {other:?}"),
+    }
+    match &parsed.program.items[1] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(body, &Expr::index(Expr::var("values"), Expr::var("i")));
         }
         other => panic!("expected function def, got {other:?}"),
     }
@@ -1034,6 +1086,71 @@ fn frontend_accepts_greek_chinese_and_emoji_symbols() {
                 && ctor == "🚀Ok"
                 && variants == &vec!["失败".to_string(), "🚀Ok".to_string()]
                 && args == &vec!["1".to_string()]
+        )
+    }));
+}
+
+#[test]
+fn frontend_accepts_utf8_function_scalar_and_adt_constructor_names_together() {
+    let output = compile_source_program_bundle(
+        "data 结果α = { 🚀成功(i64), 失败中文 } def 计算🚀(值α: i64) = match 结果α.🚀成功(值α) { 结果α.🚀成功(内值) => 内值, 结果α.失败中文 => 0 }",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def {
+            name,
+            params,
+            body,
+            ..
+        } => {
+            assert_eq!(name, "计算🚀");
+            assert_eq!(params, &vec![ParamDecl::new("值α", Some("i64".to_string()))]);
+            assert_eq!(
+                body,
+                &Expr::match_expr(
+                    Expr::adt_ctor(
+                        "结果α",
+                        "🚀成功",
+                        vec!["🚀成功", "失败中文"],
+                        vec![Expr::var("值α")]
+                    ),
+                    vec![
+                        (
+                            Pattern::qualified_ctor(
+                                "结果α",
+                                "🚀成功",
+                                vec![Pattern::bind("内值")]
+                            ),
+                            Expr::var("内值"),
+                        ),
+                        (
+                            Pattern::qualified_ctor("结果α", "失败中文", Vec::<Pattern>::new()),
+                            Expr::i64(0),
+                        ),
+                    ],
+                )
+            );
+        }
+        other => panic!("expected function def, got {other:?}"),
+    }
+
+    assert!(main.resolve.resolved_names.contains(&ResolvedName::Constructor {
+        data: "结果α".to_string(),
+        ctor: "🚀成功".to_string(),
+        symbol: "root::结果α.🚀成功".to_string(),
+        arity: 1,
+    }));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::Match { scrutinee, patterns }
+                if scrutinee == "结果α.🚀成功(值α)"
+                    && patterns == &vec![
+                        "Constructor { data: Some(\"结果α\"), ctor: \"🚀成功\", args: [Bind(\"内值\")] }".to_string(),
+                        "Constructor { data: Some(\"结果α\"), ctor: \"失败中文\", args: [] }".to_string(),
+                    ]
         )
     }));
 }

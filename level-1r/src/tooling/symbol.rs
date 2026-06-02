@@ -102,3 +102,32 @@ fn is_unicode_mark(ch: char) -> bool {
             | 0xFE20..=0xFE2F
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{encode_debug_symbol, is_chiba_identifier};
+
+    #[test]
+    fn chiba_identifier_accepts_chinese_greek_emoji_and_combining_marks() {
+        for ident in ["函数α", "标量名", "🚀Ctor", "Ωmega", "e\u{301}"] {
+            assert!(is_chiba_identifier(ident), "{ident} should be a Chiba identifier");
+        }
+    }
+
+    #[test]
+    fn chiba_identifier_rejects_delimiters_whitespace_and_leading_marks() {
+        for ident in ["a+b", "a.b", "a b", "，name", "\u{301}e"] {
+            assert!(
+                !is_chiba_identifier(ident),
+                "{ident:?} should not be a single Chiba identifier"
+            );
+        }
+    }
+
+    #[test]
+    fn debug_symbol_encoding_keeps_unicode_names_collision_free() {
+        assert_eq!(encode_debug_symbol("模块::函数α"), "_u6A21__u5757____u51FD__u6570__u3B1_");
+        assert_eq!(encode_debug_symbol("模块::函数β"), "_u6A21__u5757____u51FD__u6570__u3B2_");
+        assert_eq!(encode_debug_symbol("结果.🚀Ok"), "_u7ED3__u679C___u1F680_Ok");
+    }
+}

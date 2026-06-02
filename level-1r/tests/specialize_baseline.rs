@@ -2,7 +2,8 @@ use chiba_level1r::specialize::{
     plan_specialization, specialization_key, InstantiationRegistry, InstantiationStatus,
 };
 use chiba_level1r::template::{
-    canonical_open_row, dyn_row_contract, ShapeType, TemplateFacts, TemplateObligation,
+    canonical_open_row, dyn_row_contract, ShapeType, TemplateFacts, TemplateInstantiation,
+    TemplateObligation, TemplateParam, TemplateParamSource,
 };
 use chiba_level1r::typed::{SendColor, UsageColor};
 use chiba_level1r::{compile_expr, Expr};
@@ -66,6 +67,27 @@ fn dyn_contract_enters_specialization_key_and_capability_facts() {
     assert_eq!(key.dyn_contracts.len(), 1);
     assert_eq!(key.capabilities.usage, vec![UsageColor::Many]);
     assert_eq!(key.capabilities.send, vec![SendColor::Obligation]);
+}
+
+#[test]
+fn explicit_template_params_and_instantiations_enter_specialization_key() {
+    let mut template = TemplateFacts::default();
+    template.explicit_params.push(TemplateParam {
+        name: "T".to_string(),
+        source: TemplateParamSource::ExplicitHeader,
+    });
+    template
+        .explicit_instantiations
+        .push(TemplateInstantiation {
+            callee: "id".to_string(),
+            type_args: vec!["i64".to_string()],
+        });
+
+    let key = specialization_key("id", &template);
+
+    assert_eq!(key.template_params, template.explicit_params);
+    assert_eq!(key.explicit_instantiations, template.explicit_instantiations);
+    assert_ne!(key, specialization_key("id", &TemplateFacts::default()));
 }
 
 #[test]

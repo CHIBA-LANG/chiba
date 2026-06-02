@@ -238,6 +238,13 @@ impl FrontendParser {
     fn parse_def(&mut self) -> Result<SourceItem, FrontendError> {
         self.expect("KwDef")?;
         let name = self.expect_lexeme("Ident")?;
+        let generics = if self.peek_name() == Some("LBracket")
+            && self.peek_type_list_then(&["LParen"])
+        {
+            self.parse_generic_params()?
+        } else {
+            Vec::new()
+        };
         if self.peek_name() == Some("Colon") {
             self.pos += 1;
             let ty = Some(self.expect_type_name()?);
@@ -263,6 +270,7 @@ impl FrontendParser {
         let body = self.parse_expr_bp(0)?;
         Ok(SourceItem::Def {
             name,
+            generics,
             params,
             return_type,
             body,
@@ -308,6 +316,71 @@ impl FrontendParser {
         }
         self.expect("RBracket")?;
         Ok(params)
+    }
+
+    fn parse_type_args(&mut self) -> Result<Vec<String>, FrontendError> {
+        self.expect("LBracket")?;
+        let mut args = Vec::new();
+        if self.peek_name() == Some("RBracket") {
+            self.pos += 1;
+            return Ok(args);
+        }
+        loop {
+            args.push(self.expect_type_name()?);
+            if self.peek_name() != Some("Comma") {
+                break;
+            }
+            self.pos += 1;
+        }
+        self.expect("RBracket")?;
+        Ok(args)
+    }
+
+    fn peek_type_list_then(&self, next: &[&str]) -> bool {
+        let mut pos = self.pos;
+        if self.tokens.get(pos).map(|token| token.name.as_str()) != Some("LBracket") {
+            return false;
+        }
+        pos += 1;
+        if self.tokens.get(pos).map(|token| token.name.as_str()) == Some("RBracket") {
+            pos += 1;
+            return self
+                .tokens
+                .get(pos)
+                .is_some_and(|token| next.contains(&token.name.as_str()));
+        }
+        loop {
+            if !matches!(
+                self.tokens.get(pos).map(|token| token.name.as_str()),
+                Some(
+                    "Ident"
+                        | "KwReset"
+                        | "KwResetn"
+                        | "KwShift"
+                        | "KwMatch"
+                        | "KwIf"
+                        | "KwLet"
+                        | "KwThen"
+                        | "KwElse"
+                        | "True"
+                        | "False"
+                )
+            ) {
+                return false;
+            }
+            pos += 1;
+            match self.tokens.get(pos).map(|token| token.name.as_str()) {
+                Some("Comma") => pos += 1,
+                Some("RBracket") => {
+                    pos += 1;
+                    return self
+                        .tokens
+                        .get(pos)
+                        .is_some_and(|token| next.contains(&token.name.as_str()));
+                }
+                _ => return false,
+            }
+        }
     }
 
     fn parse_data_variant(&mut self) -> Result<DataVariant, FrontendError> {
@@ -401,10 +474,15 @@ impl FrontendParser {
                     expr = Expr::call_args(expr, args);
                 }
                 Some("LBracket") => {
-                    self.pos += 1;
-                    let index = self.parse_expr_bp(0)?;
-                    self.expect("RBracket")?;
-                    expr = Expr::index(expr, index);
+                    if self.peek_type_list_then(&["LParen"]) && is_instantiable_callee(&expr) {
+                        let type_args = self.parse_type_args()?;
+                        expr = Expr::instantiate(expr, type_args);
+                    } else {
+                        self.pos += 1;
+                        let index = self.parse_expr_bp(0)?;
+                        self.expect("RBracket")?;
+                        expr = Expr::index(expr, index);
+                    }
                 }
                 Some("Dot") => {
                     self.pos += 1;
@@ -917,6 +995,10 @@ fn replace_pipe_placeholders(expr: Expr, input: &Expr) -> (Expr, bool) {
             let (args, args_used) = replace_pipe_placeholders_in_vec(args, input);
             (Expr::call_args(callee, args), callee_used || args_used)
         }
+        Expr::Instantiate { callee, type_args } => {
+            let (callee, used) = replace_pipe_placeholders(*callee, input);
+            (Expr::instantiate(callee, type_args), used)
+        }
         Expr::Tuple(fields) => {
             let (fields, used) = replace_pipe_placeholders_in_vec(fields, input);
             (Expr::tuple(fields), used)
@@ -1098,6 +1180,10 @@ fn is_type_or_namespace_path(expr: &Expr) -> bool {
     }
 }
 
+fn is_instantiable_callee(expr: &Expr) -> bool {
+    matches!(expr, Expr::Var(_) | Expr::Field { .. } | Expr::MethodCall { .. })
+}
+
 fn data_variant_map(data: &[DataDecl]) -> BTreeMap<String, Vec<String>> {
     data.iter()
         .map(|decl| (decl.name.clone(), decl.variant_names()))
@@ -1108,24 +1194,26 @@ fn enrich_item_with_data_variants(
     item: SourceItem,
     variants: &BTreeMap<String, Vec<String>>,
 ) -> SourceItem {
-        match item {
-            SourceItem::Def {
-                name,
-                params,
-                return_type,
-                body,
-            } => SourceItem::Def {
-                name,
-                params,
-                return_type,
-                body: enrich_expr_with_data_variants(body, variants),
-            },
-            SourceItem::StaticValue { name, ty, body } => SourceItem::StaticValue {
-                name,
-                ty,
-                body: enrich_expr_with_data_variants(body, variants),
-            },
-        }
+    match item {
+        SourceItem::Def {
+            name,
+            generics,
+            params,
+            return_type,
+            body,
+        } => SourceItem::Def {
+            name,
+            generics,
+            params,
+            return_type,
+            body: enrich_expr_with_data_variants(body, variants),
+        },
+        SourceItem::StaticValue { name, ty, body } => SourceItem::StaticValue {
+            name,
+            ty,
+            body: enrich_expr_with_data_variants(body, variants),
+        },
+    }
 }
 
 fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<String>>) -> Expr {
@@ -1151,6 +1239,10 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
             args.into_iter()
                 .map(|arg| enrich_expr_with_data_variants(arg, variants))
                 .collect(),
+        ),
+        Expr::Instantiate { callee, type_args } => Expr::instantiate(
+            enrich_expr_with_data_variants(*callee, variants),
+            type_args,
         ),
         Expr::Tuple(fields) => Expr::tuple(
             fields

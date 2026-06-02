@@ -21,6 +21,7 @@ pub struct UseDecl {
 pub enum SourceItem {
     Def {
         name: String,
+        generics: Vec<String>,
         params: Vec<ParamDecl>,
         return_type: Option<String>,
         body: Expr,
@@ -152,12 +153,14 @@ impl ParamDecl {
 impl SourceItem {
     pub fn def(
         name: impl Into<String>,
+        generics: Vec<String>,
         params: Vec<ParamDecl>,
         return_type: Option<String>,
         body: Expr,
     ) -> Self {
         Self::Def {
             name: name.into(),
+            generics,
             params,
             return_type,
             body,
@@ -185,6 +188,10 @@ pub enum Expr {
     Call {
         callee: Box<Expr>,
         args: Vec<Expr>,
+    },
+    Instantiate {
+        callee: Box<Expr>,
+        type_args: Vec<String>,
     },
     Tuple(Vec<Expr>),
     Record(Vec<RecordField>),
@@ -327,6 +334,13 @@ impl Expr {
         Self::Call {
             callee: Box::new(callee),
             args,
+        }
+    }
+
+    pub fn instantiate(callee: Expr, type_args: Vec<String>) -> Self {
+        Self::Instantiate {
+            callee: Box::new(callee),
+            type_args,
         }
     }
 

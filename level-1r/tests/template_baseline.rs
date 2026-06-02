@@ -1,7 +1,8 @@
 use chiba_level1r::ast::BinaryOp;
 use chiba_level1r::resolve::ResolveDiagnostic;
 use chiba_level1r::template::{
-    canonical_open_row, dyn_row_contract, ShapeType, TemplateObligation,
+    canonical_open_row, dyn_row_contract, ShapeType, TemplateInstantiation, TemplateObligation,
+    TemplateParam, TemplateParamSource,
 };
 use chiba_level1r::typed::{SendColor, UsageColor};
 use chiba_level1r::{compile_expr, Expr};
@@ -97,4 +98,37 @@ fn visual_report_contains_template_layer() {
 
     assert!(visual.contains("template:"));
     assert!(visual.contains("L3Template: AlphaExpr+ResolveFacts -> TemplateFacts"));
+}
+
+#[test]
+fn explicit_call_site_instantiation_enters_template_facts() {
+    let output = compile_expr(&Expr::call_args(
+        Expr::instantiate(Expr::var("id"), vec!["T".to_string()]),
+        vec![Expr::var("value")],
+    ));
+
+    assert_eq!(
+        output.template.explicit_instantiations,
+        vec![TemplateInstantiation {
+            callee: "id".to_string(),
+            type_args: vec!["T".to_string()],
+        }]
+    );
+    assert!(output.render_visual().contains("explicit_instantiations"));
+}
+
+#[test]
+fn explicit_template_header_enters_program_template_facts() {
+    let output = chiba_level1r::compile_source_program_bundle("def id[T](x: T): T = x")
+        .expect("compile source");
+    let def = &output.program.defs[0].output;
+
+    assert_eq!(
+        def.template.explicit_params,
+        vec![TemplateParam {
+            name: "T".to_string(),
+            source: TemplateParamSource::ExplicitHeader,
+        }]
+    );
+    assert!(def.render_visual().contains("explicit_params"));
 }

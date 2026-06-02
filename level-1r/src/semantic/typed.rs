@@ -170,6 +170,7 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                 Type::Unknown,
             )
         }
+        Expr::Instantiate { callee, .. } => type_expr(callee),
         Expr::Tuple(fields) => {
             let fields: Vec<_> = fields.iter().map(type_expr).collect();
             let field_types = fields

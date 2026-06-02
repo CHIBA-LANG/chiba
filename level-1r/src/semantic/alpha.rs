@@ -211,6 +211,7 @@ impl AlphaCtx {
                     args: args.iter().map(|arg| self.alpha(arg)).collect(),
                 },
             },
+            Expr::Instantiate { callee, .. } => self.alpha(callee),
             Expr::Tuple(fields) => AlphaExpr {
                 kind: AlphaExprKind::Tuple(
                     fields.iter().map(|field| self.alpha(field)).collect(),

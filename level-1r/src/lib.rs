@@ -76,5 +76,8 @@ pub use surface::{
     build_interface_summary, project_surface, InterfaceSummary, ProjectSurface, SurfaceConstructor,
     SurfaceData, SurfaceDef,
 };
-pub use template::{analyze_template, TemplateFacts};
+pub use template::{
+    analyze_template, analyze_template_with_source, TemplateFacts, TemplateInstantiation,
+    TemplateParam, TemplateParamSource,
+};
 pub use template_audit::{audit_checked_templates, TemplateAuditReport};

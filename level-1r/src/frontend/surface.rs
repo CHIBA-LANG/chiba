@@ -16,6 +16,7 @@ pub struct ProjectSurface {
 pub struct SurfaceDef {
     pub owner: String,
     pub name: String,
+    pub generics: Vec<String>,
     pub arity: usize,
     pub param_types: Vec<Option<String>>,
     pub return_type: Option<String>,
@@ -58,6 +59,7 @@ pub struct InterfaceSummary {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterfaceFunction {
     pub symbol: String,
+    pub generics: Vec<String>,
     pub arity: usize,
     pub param_types: Vec<Option<String>>,
     pub return_type: Option<String>,
@@ -96,12 +98,14 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .filter_map(|item| match item {
             SourceItem::Def {
                 name,
+                generics,
                 params,
                 return_type,
                 ..
             } => Some(SurfaceDef {
                 owner: namespace.clone(),
                 name: name.clone(),
+                generics: generics.clone(),
                 arity: params.len(),
                 param_types: params.iter().map(|param| param.ty.clone()).collect(),
                 return_type: return_type.clone(),
@@ -147,6 +151,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .iter()
         .map(|def| InterfaceFunction {
             symbol: owned_symbol(&def.owner, &def.name),
+            generics: def.generics.clone(),
             arity: def.arity,
             param_types: def.param_types.clone(),
             return_type: def.return_type.clone(),
@@ -254,6 +259,9 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
     for def in &surface.defs {
         text.push_str("|def:");
         text.push_str(&def.name);
+        text.push('[');
+        text.push_str(&def.generics.join(","));
+        text.push(']');
         text.push(':');
         text.push_str(&def.arity.to_string());
         text.push('(');

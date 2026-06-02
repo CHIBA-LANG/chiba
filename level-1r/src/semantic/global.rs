@@ -159,6 +159,7 @@ fn collect_expr_vars(expr: &Expr, refs: &mut BTreeSet<String>) {
             collect_expr_vars(callee, refs);
             collect_exprs(args, refs);
         }
+        Expr::Instantiate { callee, .. } => collect_expr_vars(callee, refs),
         Expr::Tuple(fields) => collect_exprs(fields, refs),
         Expr::Record(fields) => collect_record_fields(fields, refs),
         Expr::RecordUpdate { base, fields } => {

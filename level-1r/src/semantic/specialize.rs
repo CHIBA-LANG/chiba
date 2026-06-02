@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 
 use crate::control::ContinuationKind;
-use crate::template::{DynRowContract, RowShape, TemplateFacts, TemplateObligation};
+use crate::template::{
+    DynRowContract, RowShape, TemplateFacts, TemplateInstantiation, TemplateObligation,
+    TemplateParam,
+};
 use crate::typed::{SendColor, UsageColor};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -13,6 +16,8 @@ pub struct SpecializationFacts {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SpecializationKey {
     pub generic_symbol: String,
+    pub template_params: Vec<TemplateParam>,
+    pub explicit_instantiations: Vec<TemplateInstantiation>,
     pub concrete_nominals: Vec<String>,
     pub normalized_shapes: Vec<RowShape>,
     pub capabilities: CapabilityFacts,
@@ -110,6 +115,8 @@ pub fn specialization_key(generic_symbol: impl Into<String>, template: &Template
 
     SpecializationKey {
         generic_symbol: generic_symbol.into(),
+        template_params: template.explicit_params.clone(),
+        explicit_instantiations: template.explicit_instantiations.clone(),
         concrete_nominals,
         normalized_shapes,
         capabilities: CapabilityFacts {

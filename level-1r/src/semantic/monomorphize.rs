@@ -95,6 +95,14 @@ pub fn fail_job(
 
 fn artifact_name(key: &SpecializationKey) -> String {
     let mut text = format!("mono::{}", key.generic_symbol);
+    if !key.template_params.is_empty() {
+        text.push_str("::params=");
+        text.push_str(&stable_hash(&format!("{:?}", key.template_params)).to_string());
+    }
+    if !key.explicit_instantiations.is_empty() {
+        text.push_str("::typeargs=");
+        text.push_str(&stable_hash(&format!("{:?}", key.explicit_instantiations)).to_string());
+    }
     if !key.concrete_nominals.is_empty() {
         text.push_str("::nominal=");
         text.push_str(&key.concrete_nominals.join("+"));

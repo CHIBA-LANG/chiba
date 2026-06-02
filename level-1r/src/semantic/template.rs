@@ -1,4 +1,5 @@
 use crate::alpha::{AlphaExpr, AlphaExprKind};
+use crate::ast::Expr;
 use crate::resolve::{
     OperatorObligation, OperatorSurface, ResolveFacts, ResolvedCall, ResolvedName,
 };
@@ -6,9 +7,29 @@ use crate::typed::{SendColor, UsageColor};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TemplateFacts {
+    pub explicit_params: Vec<TemplateParam>,
+    pub explicit_instantiations: Vec<TemplateInstantiation>,
     pub row_shapes: Vec<RowShape>,
     pub obligations: Vec<TemplateObligation>,
     pub dyn_contracts: Vec<DynRowContract>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TemplateParam {
+    pub name: String,
+    pub source: TemplateParamSource,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TemplateParamSource {
+    ExplicitHeader,
+    SyntheticAutoGeneric,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TemplateInstantiation {
+    pub callee: String,
+    pub type_args: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -85,6 +106,126 @@ pub fn analyze_template(expr: &AlphaExpr, resolve: &ResolveFacts) -> TemplateFac
     collect_expr_obligations(expr, &mut facts);
     collect_resolve_obligations(resolve, &mut facts);
     facts
+}
+
+pub fn analyze_template_with_source(
+    source: &Expr,
+    explicit_params: &[String],
+    expr: &AlphaExpr,
+    resolve: &ResolveFacts,
+) -> TemplateFacts {
+    let mut facts = analyze_template(expr, resolve);
+    facts.explicit_params = explicit_params
+        .iter()
+        .map(|name| TemplateParam {
+            name: name.clone(),
+            source: TemplateParamSource::ExplicitHeader,
+        })
+        .collect();
+    collect_source_instantiations(source, &mut facts);
+    facts
+}
+
+fn collect_source_instantiations(expr: &Expr, facts: &mut TemplateFacts) {
+    match expr {
+        Expr::Var(_) | Expr::Lit(_) => {}
+        Expr::Lambda { body, .. } => collect_source_instantiations(body, facts),
+        Expr::Call { callee, args } => {
+            collect_source_instantiations(callee, facts);
+            for arg in args {
+                collect_source_instantiations(arg, facts);
+            }
+        }
+        Expr::Instantiate { callee, type_args } => {
+            facts.explicit_instantiations.push(TemplateInstantiation {
+                callee: source_callee_name(callee),
+                type_args: type_args.clone(),
+            });
+            collect_source_instantiations(callee, facts);
+        }
+        Expr::Tuple(fields) => {
+            for field in fields {
+                collect_source_instantiations(field, facts);
+            }
+        }
+        Expr::Record(fields) => {
+            for field in fields {
+                collect_source_instantiations(&field.value, facts);
+            }
+        }
+        Expr::RecordUpdate { base, fields } => {
+            collect_source_instantiations(base, facts);
+            for field in fields {
+                collect_source_instantiations(&field.value, facts);
+            }
+        }
+        Expr::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_source_instantiations(arg, facts);
+            }
+        }
+        Expr::Field { receiver, .. } => collect_source_instantiations(receiver, facts),
+        Expr::MethodCall { receiver, args, .. } => {
+            collect_source_instantiations(receiver, facts);
+            for arg in args {
+                collect_source_instantiations(arg, facts);
+            }
+        }
+        Expr::Index { receiver, index } => {
+            collect_source_instantiations(receiver, facts);
+            collect_source_instantiations(index, facts);
+        }
+        Expr::Range { start, end } => {
+            collect_source_instantiations(start, facts);
+            collect_source_instantiations(end, facts);
+        }
+        Expr::Binary { lhs, rhs, .. } => {
+            collect_source_instantiations(lhs, facts);
+            collect_source_instantiations(rhs, facts);
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_source_instantiations(cond, facts);
+            collect_source_instantiations(then_branch, facts);
+            collect_source_instantiations(else_branch, facts);
+        }
+        Expr::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_source_instantiations(scrutinee, facts);
+            collect_source_instantiations(then_branch, facts);
+            collect_source_instantiations(else_branch, facts);
+        }
+        Expr::Match { scrutinee, arms } => {
+            collect_source_instantiations(scrutinee, facts);
+            for arm in arms {
+                collect_source_instantiations(&arm.body, facts);
+            }
+        }
+        Expr::Nominal { expr, .. } => collect_source_instantiations(expr, facts),
+        Expr::Reset { body, .. } | Expr::Shift { body, .. } => {
+            collect_source_instantiations(body, facts);
+        }
+    }
+}
+
+fn source_callee_name(expr: &Expr) -> String {
+    match expr {
+        Expr::Var(name) => name.clone(),
+        Expr::Field { receiver, name } | Expr::MethodCall { receiver, name, .. } => {
+            format!("{}.{}", source_callee_name(receiver), name)
+        }
+        Expr::Instantiate { callee, type_args } => {
+            format!("{}[{}]", source_callee_name(callee), type_args.join(","))
+        }
+        other => format!("{other:?}"),
+    }
 }
 
 pub fn canonical_open_row(fields: Vec<(&str, ShapeType)>) -> RowShape {

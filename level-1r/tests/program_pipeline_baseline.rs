@@ -5,6 +5,7 @@ use chiba_level1r::{compile_program, compile_program_bundle, Expr, ProgramDiagno
 
 fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
     SourceItem::Def {
+        generics: Vec::new(),
         name: name.to_string(),
         params: params.into_iter().map(ParamDecl::untyped).collect(),
         return_type: None,
@@ -133,6 +134,7 @@ fn interface_summary_preserves_function_signature_types() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            generics: Vec::new(),
             name: "id".to_string(),
             params: vec![ParamDecl::new("x", Some("I64".to_string()))],
             return_type: Some("I64".to_string()),
@@ -159,6 +161,46 @@ fn interface_summary_preserves_function_signature_types() {
     );
     assert!(bundle.render_summary().contains("param_types"));
     assert!(bundle.render_summary().contains("return_type"));
+}
+
+#[test]
+fn interface_summary_preserves_explicit_checked_template_params() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            generics: vec!["T".to_string()],
+            name: "id".to_string(),
+            params: vec![ParamDecl::new("x", Some("T".to_string()))],
+            return_type: Some("T".to_string()),
+            body: Expr::var("x"),
+        }],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.surface.defs[0].generics, vec!["T".to_string()]);
+    assert_eq!(
+        bundle.interface.functions[0].generics,
+        vec!["T".to_string()]
+    );
+    assert_eq!(
+        bundle.defs[0].output.template.explicit_params,
+        vec![chiba_level1r::TemplateParam {
+            name: "T".to_string(),
+            source: chiba_level1r::TemplateParamSource::ExplicitHeader,
+        }]
+    );
+    assert_eq!(
+        bundle.defs[0]
+            .output
+            .specialize
+            .work_items[0]
+            .key
+            .template_params,
+        bundle.defs[0].output.template.explicit_params
+    );
 }
 
 #[test]
