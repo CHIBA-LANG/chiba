@@ -33,8 +33,8 @@ pub use cps::{cps_program, CpsProgram};
 pub use debug::{render_visual_report, VisualReport};
 pub use frontend::{parse_source_program, FrontendError, FrontendOutput};
 pub use pipeline::{
-    compile_expr, compile_program, compile_program_bundle, CompileOutput, ProgramCompileOutput,
-    ProgramDefOutput, ProgramDiagnostic,
+    compile_expr, compile_program, compile_program_bundle, compile_source_program_bundle,
+    CompileOutput, ProgramCompileOutput, ProgramDefOutput, ProgramDiagnostic, SourceCompileOutput,
 };
 pub use resolve::{resolve_expr, MethodIndex, ResolveFacts};
 pub use specialize::{plan_specialization, SpecializationFacts};

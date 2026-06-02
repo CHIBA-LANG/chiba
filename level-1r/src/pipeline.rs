@@ -16,6 +16,7 @@ use crate::cps_usage::{
     analyze_cps_usage, simplify_continuations, ContinuationSimplificationFacts, CpsUsageFacts,
 };
 use crate::debug::{render_visual_report, visual_report, VisualReport};
+use crate::frontend::{parse_source_program, FrontendError, FrontendOutput};
 use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
 use crate::monomorphize::{schedule_monomorphization, MonomorphizationPlan};
 use crate::nanopass::PassReport;
@@ -67,6 +68,12 @@ pub struct ProgramCompileOutput {
     pub backend_link: BackendLinkedBundle,
     pub backend_cache_key: BackendCacheKey,
     pub passes: PassReport,
+}
+
+#[derive(Clone, Debug)]
+pub struct SourceCompileOutput {
+    pub frontend: FrontendOutput,
+    pub program: ProgramCompileOutput,
 }
 
 #[derive(Clone, Debug)]
@@ -253,6 +260,12 @@ pub fn compile_program(program: &SourceProgram) -> Vec<CompileOutput> {
         .collect()
 }
 
+pub fn compile_source_program_bundle(source: &str) -> Result<SourceCompileOutput, FrontendError> {
+    let frontend = parse_source_program(source)?;
+    let program = compile_program_bundle(&frontend.program);
+    Ok(SourceCompileOutput { frontend, program })
+}
+
 pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     let mut passes = PassReport::default();
     let diagnostics = passes.record(
@@ -418,6 +431,17 @@ impl ProgramCompileOutput {
                 event.name, event.input, event.output
             ));
         }
+        out
+    }
+}
+
+impl SourceCompileOutput {
+    pub fn render_summary(&self) -> String {
+        let mut out = String::new();
+        out.push_str("source-program:\n");
+        out.push_str(&format!("  tokens={}\n", self.frontend.tokens.len()));
+        out.push_str(&format!("  items={}\n", self.frontend.program.items.len()));
+        out.push_str(&self.program.render_summary());
         out
     }
 }

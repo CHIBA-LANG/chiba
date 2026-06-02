@@ -1,5 +1,7 @@
 use chiba_level1r::ast::{BinaryOp, Expr, SourceItem};
-use chiba_level1r::{compile_program_bundle, parse_source_program, FrontendError};
+use chiba_level1r::{
+    compile_program_bundle, compile_source_program_bundle, parse_source_program, FrontendError,
+};
 
 #[test]
 fn frontend_lexes_and_parses_def_source_to_program() {
@@ -55,6 +57,34 @@ fn frontend_source_program_enters_program_bundle_pipeline() {
         .contains("(func $main__def1 (export \"main\") (result i32)"));
     assert!(bundle.backend_link.linked_wat.contains("i32.const 1"));
     assert!(bundle.backend_link.linked_wat.contains("i32.const 7"));
+}
+
+#[test]
+fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
+    let output = compile_source_program_bundle("def helper() = f(1) def main() = helper(2)")
+        .expect("compile source");
+
+    assert_eq!(output.frontend.tokens.len(), 18);
+    assert_eq!(output.frontend.program.items.len(), 2);
+    assert_eq!(output.program.entry, Some("main".to_string()));
+    assert!(output.program.backend_link.diagnostics.is_empty());
+    assert!(output
+        .program
+        .backend_link
+        .linked_wat
+        .contains("(func $main__def1 (export \"main\") (result i32)"));
+    assert!(output.program.defs[0].output.cps.to_string().contains("f(1,"));
+    assert!(output.program.defs[1]
+        .output
+        .cps
+        .to_string()
+        .contains("helper(2,"));
+
+    let summary = output.render_summary();
+    assert!(summary.contains("source-program:"));
+    assert!(summary.contains("tokens=18"));
+    assert!(summary.contains("items=2"));
+    assert!(summary.contains("P1ProgramSurface"));
 }
 
 #[test]
