@@ -1,6 +1,7 @@
 use crate::alpha::{alpha_expr, AlphaFacts};
 use crate::ast::{Expr, SourceItem, SourceProgram};
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
+use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
 use crate::control::{analyze_control, ControlFacts};
 use crate::core::{lower_core_with_facts, validate_core, CoreProgram, CoreValidation};
 use crate::cps::{cps_program, CpsProgram};
@@ -31,6 +32,7 @@ pub struct CompileOutput {
     pub closure: ClosureFacts,
     pub lambda_lift: LambdaLiftFacts,
     pub core: CoreProgram,
+    pub closure_core_usage: ClosureCoreUsageFacts,
     pub core_validation: CoreValidation,
     pub passes: PassReport,
     pub visual: VisualReport,
@@ -83,7 +85,13 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
             &usage,
         )
     });
-    let core_validation = passes.record("L14CoreValidate", "CoreProgram", "CoreValidation", || {
+    let closure_core_usage = passes.record(
+        "L14ClosureCoreUsage",
+        "CoreProgram",
+        "ClosureCoreUsageFacts",
+        || analyze_closure_core_usage(&core),
+    );
+    let core_validation = passes.record("L15CoreValidate", "CoreProgram", "CoreValidation", || {
         validate_core(&core)
     });
     let visual = visual_report(
@@ -101,6 +109,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &closure,
         &lambda_lift,
         &core,
+        &closure_core_usage,
         &core_validation,
         &passes,
     );
@@ -118,6 +127,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         closure,
         lambda_lift,
         core,
+        closure_core_usage,
         core_validation,
         passes,
         visual,

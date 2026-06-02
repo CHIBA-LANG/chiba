@@ -49,7 +49,8 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
             "L11Closure",
             "L12LambdaLift",
             "L13Core",
-            "L14CoreValidate"
+            "L14ClosureCoreUsage",
+            "L15CoreValidate"
         ]
     );
 
@@ -63,6 +64,7 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("closure:"));
     assert!(visual.contains("lambda-lift:"));
     assert!(visual.contains("core:"));
+    assert!(visual.contains("closure-core-usage:"));
     assert!(visual.contains("core-validation:"));
     assert!(visual.contains("nanopass:"));
     assert!(visual.contains("L1Alpha: SourceExpr -> AlphaFacts"));
@@ -74,7 +76,8 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
         "L10ContSimplify: CpsUsageFacts -> ContinuationSimplificationFacts"
     ));
     assert!(visual.contains("L12LambdaLift: ClosureFacts -> LambdaLiftFacts"));
-    assert!(visual.contains("L14CoreValidate: CoreProgram -> CoreValidation"));
+    assert!(visual.contains("L14ClosureCoreUsage: CoreProgram -> ClosureCoreUsageFacts"));
+    assert!(visual.contains("L15CoreValidate: CoreProgram -> CoreValidation"));
 }
 
 #[test]

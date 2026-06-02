@@ -3,6 +3,7 @@ use std::fmt::Write;
 use crate::alpha::AlphaFacts;
 use crate::ast::Expr;
 use crate::closure::ClosureFacts;
+use crate::closure_core_usage::ClosureCoreUsageFacts;
 use crate::control::ControlFacts;
 use crate::core::{CoreProgram, CoreValidation};
 use crate::cps::CpsProgram;
@@ -31,6 +32,7 @@ pub struct VisualReport {
     pub closure: String,
     pub lambda_lift: String,
     pub core: String,
+    pub closure_core_usage: String,
     pub core_validation: String,
     pub nanopass: String,
 }
@@ -65,6 +67,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.lambda_lift).unwrap();
     writeln!(out, "core:").unwrap();
     writeln!(out, "  {}", report.core).unwrap();
+    writeln!(out, "closure-core-usage:").unwrap();
+    writeln!(out, "  {}", report.closure_core_usage).unwrap();
     writeln!(out, "core-validation:").unwrap();
     writeln!(out, "  {}", report.core_validation).unwrap();
     writeln!(out, "nanopass:").unwrap();
@@ -89,6 +93,7 @@ pub fn visual_report(
     closure: &ClosureFacts,
     lambda_lift: &LambdaLiftFacts,
     core: &CoreProgram,
+    closure_core_usage: &ClosureCoreUsageFacts,
     core_validation: &CoreValidation,
     passes: &PassReport,
 ) -> VisualReport {
@@ -107,6 +112,7 @@ pub fn visual_report(
         closure: format!("{closure:#?}"),
         lambda_lift: format!("{lambda_lift:#?}"),
         core: format!("{core:#?}"),
+        closure_core_usage: format!("{closure_core_usage:#?}"),
         core_validation: format!("{core_validation:#?}"),
         nanopass: render_pass_report(passes),
     }
