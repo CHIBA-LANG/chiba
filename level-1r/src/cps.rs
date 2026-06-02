@@ -43,6 +43,12 @@ pub enum CpsAtom {
         layout: String,
         fields: Vec<CpsRecordField>,
     },
+    AdtCtor {
+        data: String,
+        ctor: String,
+        variants: Vec<String>,
+        args: Vec<CpsAtom>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -157,6 +163,12 @@ fn transform(
         TypedExprKind::RecordUpdate { base, fields } => {
             transform_record_update(base, fields, k, controls, ctx)
         }
+        TypedExprKind::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => transform_adt_ctor(data, ctor, variants, args, k, controls, ctx),
         TypedExprKind::Field { receiver, name } => transform(
             receiver,
             Box::new(|value, ctx| {
@@ -599,6 +611,54 @@ fn transform_call(
     )
 }
 
+fn transform_adt_ctor(
+    data: &str,
+    ctor: &str,
+    variants: &[String],
+    args: &[TypedExpr],
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    transform_adt_ctor_args(data, ctor, variants, args, 0, Vec::new(), k, controls, ctx)
+}
+
+fn transform_adt_ctor_args(
+    data: &str,
+    ctor: &str,
+    variants: &[String],
+    args: &[TypedExpr],
+    index: usize,
+    values: Vec<CpsAtom>,
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    if index == args.len() {
+        return k(
+            CpsAtom::AdtCtor {
+                data: data.to_string(),
+                ctor: ctor.to_string(),
+                variants: variants.to_vec(),
+                args: values,
+            },
+            ctx,
+        );
+    }
+
+    let arg_controls = controls.clone();
+    transform(
+        &args[index],
+        Box::new(move |value, ctx| {
+            let mut values = values;
+            values.push(value);
+            transform_adt_ctor_args(data, ctor, variants, args, index + 1, values, k, controls, ctx)
+        }),
+        arg_controls,
+        ctx,
+    )
+}
+
 fn nominal_atom_type(expr: &TypedExpr) -> Option<&String> {
     match &expr.ty {
         Type::Nominal(name) => Some(name),
@@ -660,6 +720,22 @@ impl fmt::Display for CpsAtom {
                     write!(f, "{}={}", field.name, field.value)?;
                 }
                 write!(f, "}}")
+            }
+            CpsAtom::AdtCtor {
+                data, ctor, args, ..
+            } => {
+                write!(f, "{data}.{ctor}")?;
+                if !args.is_empty() {
+                    write!(f, "(")?;
+                    for (index, arg) in args.iter().enumerate() {
+                        if index > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{arg}")?;
+                    }
+                    write!(f, ")")?;
+                }
+                Ok(())
             }
         }
     }
@@ -731,6 +807,22 @@ fn display_pattern(pattern: &Pattern) -> String {
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("{{{fields}}}")
+        }
+        Pattern::Constructor { data, ctor, args } => {
+            let head = match data {
+                Some(data) => format!("{data}.{ctor}"),
+                None => ctor.clone(),
+            };
+            if args.is_empty() {
+                head
+            } else {
+                let args = args
+                    .iter()
+                    .map(display_pattern)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{head}({args})")
+            }
         }
         Pattern::At { name, pattern } => {
             format!("{name} @ {}", display_pattern(pattern))

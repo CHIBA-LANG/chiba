@@ -30,6 +30,12 @@ pub enum Expr {
         base: Box<Expr>,
         fields: Vec<RecordField>,
     },
+    AdtCtor {
+        data: String,
+        ctor: String,
+        variants: Vec<String>,
+        args: Vec<Expr>,
+    },
     Field {
         receiver: Box<Expr>,
         name: String,
@@ -91,6 +97,11 @@ pub enum Pattern {
     Bind(String),
     Tuple(Vec<Pattern>),
     Record(Vec<RecordPatternField>),
+    Constructor {
+        data: Option<String>,
+        ctor: String,
+        args: Vec<Pattern>,
+    },
     At {
         name: String,
         pattern: Box<Pattern>,
@@ -171,6 +182,20 @@ impl Expr {
                     value,
                 })
                 .collect(),
+        }
+    }
+
+    pub fn adt_ctor(
+        data: impl Into<String>,
+        ctor: impl Into<String>,
+        variants: Vec<impl Into<String>>,
+        args: Vec<Expr>,
+    ) -> Self {
+        Self::AdtCtor {
+            data: data.into(),
+            ctor: ctor.into(),
+            variants: variants.into_iter().map(Into::into).collect(),
+            args,
         }
     }
 
@@ -276,6 +301,22 @@ impl Pattern {
                 })
                 .collect(),
         )
+    }
+
+    pub fn ctor(ctor: impl Into<String>, args: Vec<Pattern>) -> Self {
+        Self::Constructor {
+            data: None,
+            ctor: ctor.into(),
+            args,
+        }
+    }
+
+    pub fn qualified_ctor(data: impl Into<String>, ctor: impl Into<String>, args: Vec<Pattern>) -> Self {
+        Self::Constructor {
+            data: Some(data.into()),
+            ctor: ctor.into(),
+            args,
+        }
     }
 
     pub fn at(name: impl Into<String>, pattern: Pattern) -> Self {

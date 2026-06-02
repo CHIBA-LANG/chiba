@@ -35,6 +35,12 @@ pub enum AlphaExprKind {
         base: Box<AlphaExpr>,
         fields: Vec<AlphaRecordField>,
     },
+    AdtCtor {
+        data: String,
+        ctor: String,
+        variants: Vec<String>,
+        args: Vec<AlphaExpr>,
+    },
     Field {
         receiver: Box<AlphaExpr>,
         name: String,
@@ -96,6 +102,11 @@ pub enum AlphaPattern {
     Bind(AlphaBinder),
     Tuple(Vec<AlphaPattern>),
     Record(Vec<AlphaRecordPatternField>),
+    Constructor {
+        data: Option<String>,
+        ctor: String,
+        args: Vec<AlphaPattern>,
+    },
     At {
         binder: AlphaBinder,
         pattern: Box<AlphaPattern>,
@@ -218,6 +229,19 @@ impl AlphaCtx {
                             value: self.alpha(&field.value),
                         })
                         .collect(),
+                },
+            },
+            Expr::AdtCtor {
+                data,
+                ctor,
+                variants,
+                args,
+            } => AlphaExpr {
+                kind: AlphaExprKind::AdtCtor {
+                    data: data.clone(),
+                    ctor: ctor.clone(),
+                    variants: variants.clone(),
+                    args: args.iter().map(|arg| self.alpha(arg)).collect(),
                 },
             },
             Expr::Field { receiver, name } => AlphaExpr {
@@ -363,6 +387,11 @@ impl AlphaCtx {
                     })
                     .collect(),
             ),
+            Pattern::Constructor { data, ctor, args } => AlphaPattern::Constructor {
+                data: data.clone(),
+                ctor: ctor.clone(),
+                args: args.iter().map(|arg| self.alpha_pattern(arg)).collect(),
+            },
             Pattern::At { name, pattern } => {
                 let pattern = Box::new(self.alpha_pattern(pattern));
                 let binder = self.bind(name);

@@ -73,6 +73,12 @@ pub enum CoreOp {
         layout: String,
         field: String,
     },
+    AdtConstruct {
+        data: String,
+        ctor: String,
+        variants: Vec<String>,
+        args: Vec<String>,
+    },
     LiftedFunction {
         source: String,
         symbol: String,
@@ -96,6 +102,7 @@ pub enum LayoutKind {
     ClosureEnv(ClosureEnvLayout),
     TupleStruct(TupleLayout),
     RecordStruct(RecordLayout),
+    AdtShape(AdtLayout),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -107,6 +114,12 @@ pub struct TupleLayout {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RecordLayout {
     pub fields: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdtLayout {
+    pub data: String,
+    pub variants: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -472,6 +485,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         | CoreOp::RecordConstruct { .. }
         | CoreOp::RecordUpdate { .. }
         | CoreOp::RecordFieldGet { .. }
+        | CoreOp::AdtConstruct { .. }
         | CoreOp::TailCall { .. }
         | CoreOp::Prompt { .. }
         | CoreOp::CaptureContinuation { .. }
@@ -649,6 +663,7 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::Record { layout, .. } => format!("record#{layout}"),
         CpsAtom::RecordField { record, field } => format!("{}.{}", render_atom(record), field),
         CpsAtom::RecordUpdate { layout, .. } => format!("record-update#{layout}"),
+        CpsAtom::AdtCtor { data, ctor, .. } => format!("adt#{data}.{ctor}"),
     }
 }
 
@@ -702,6 +717,20 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             lower_atom_value(record, ops);
             ops.push(CoreOp::ReturnAtom(render_atom(atom)));
         }
+        CpsAtom::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => {
+            ops.push(CoreOp::AdtConstruct {
+                data: data.clone(),
+                ctor: ctor.clone(),
+                variants: variants.clone(),
+                args: args.iter().map(render_atom).collect(),
+            });
+            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+        }
         _ => ops.push(CoreOp::ReturnAtom(render_atom(atom))),
     }
 }
@@ -743,6 +772,7 @@ fn lower_layouts(
     }
     collect_tuple_layouts(&mut layouts, ops);
     collect_record_layouts(&mut layouts, ops);
+    collect_adt_layouts(&mut layouts, ops);
     for closure in &closures.closures {
         if closure.storage == ClosureStorageKind::EnvClosure {
             let env = closure_env_layout(&closure.param, &closure.captures);
@@ -755,6 +785,29 @@ fn lower_layouts(
         }
     }
     layouts
+}
+
+fn collect_adt_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
+    for op in ops {
+        let CoreOp::AdtConstruct {
+            data, variants, ..
+        } = op
+        else {
+            continue;
+        };
+        let key = format!("adt::{data}");
+        if layouts.iter().any(|fact| fact.key == key) {
+            continue;
+        }
+        layouts.push(LayoutFact {
+            key: key.clone(),
+            hash: stable_hash(&key),
+            kind: LayoutKind::AdtShape(AdtLayout {
+                data: data.clone(),
+                variants: variants.clone(),
+            }),
+        });
+    }
 }
 
 fn collect_record_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {

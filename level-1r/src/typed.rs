@@ -32,6 +32,12 @@ pub enum TypedExprKind {
         base: Box<TypedExpr>,
         fields: Vec<TypedRecordField>,
     },
+    AdtCtor {
+        data: String,
+        ctor: String,
+        variants: Vec<String>,
+        args: Vec<TypedExpr>,
+    },
     Field {
         receiver: Box<TypedExpr>,
         name: String,
@@ -94,6 +100,10 @@ pub enum Type {
     Bool,
     Tuple(Vec<Type>),
     Record(Vec<RecordTypeField>),
+    Adt {
+        name: String,
+        variants: Vec<String>,
+    },
     Nominal(String),
     Func(Box<Type>, Box<Type>),
 }
@@ -192,6 +202,26 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                     fields,
                 },
                 ty,
+            )
+        }
+        Expr::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => {
+            let args = args.iter().map(type_expr).collect::<Vec<_>>();
+            typed(
+                TypedExprKind::AdtCtor {
+                    data: data.clone(),
+                    ctor: ctor.clone(),
+                    variants: canonical_variants(variants),
+                    args,
+                },
+                Type::Adt {
+                    name: data.clone(),
+                    variants: canonical_variants(variants),
+                },
             )
         }
         Expr::Field { receiver, name } => {
@@ -421,6 +451,14 @@ fn type_stable_name(ty: &Type) -> String {
         Type::I64 => "I64".to_string(),
         Type::Bool => "Bool".to_string(),
         Type::Tuple(fields) => tuple_nominal_name(fields),
+        Type::Adt { name, variants } => {
+            let mut stable = format!("Adt{}", sanitize_type_name(name));
+            for variant in variants {
+                stable.push('_');
+                stable.push_str(&sanitize_type_name(variant));
+            }
+            stable
+        }
         Type::Record(fields) => {
             let mut name = "Record".to_string();
             for field in fields {
@@ -446,4 +484,11 @@ fn sanitize_type_name(name: &str) -> String {
             }
         })
         .collect()
+}
+
+fn canonical_variants(variants: &[String]) -> Vec<String> {
+    let mut variants = variants.to_vec();
+    variants.sort();
+    variants.dedup();
+    variants
 }

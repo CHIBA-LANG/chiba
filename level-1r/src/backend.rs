@@ -152,6 +152,7 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
             | CoreOp::RecordConstruct { .. }
             | CoreOp::RecordUpdate { .. }
             | CoreOp::RecordFieldGet { .. }
+            | CoreOp::AdtConstruct { .. }
             | CoreOp::TailCall { .. }
             | CoreOp::Prompt { .. }
             | CoreOp::CaptureContinuation { .. }

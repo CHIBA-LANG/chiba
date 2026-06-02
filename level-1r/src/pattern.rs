@@ -12,6 +12,7 @@ pub struct PatternFacts {
 pub struct MatchExhaustivenessFact {
     pub scrutinee_type: Type,
     pub covered_literals: Vec<Literal>,
+    pub covered_constructors: Vec<String>,
     pub has_wildcard: bool,
     pub exhaustive: bool,
 }
@@ -65,6 +66,11 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             visit(base, facts);
             for field in fields {
                 visit(&field.value, facts);
+            }
+        }
+        TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                visit(arg, facts);
             }
         }
         TypedExprKind::Field { receiver, .. } => visit(receiver, facts),
@@ -129,19 +135,31 @@ fn exhaustiveness(
     arms: &[crate::typed::TypedMatchArm],
 ) -> MatchExhaustivenessFact {
     let mut covered_literals = Vec::new();
+    let mut covered_constructors = Vec::new();
     let mut has_wildcard = false;
     for arm in arms {
-        match &arm.pattern {
+        match coverage_pattern(&arm.pattern) {
             Pattern::Wildcard => has_wildcard = true,
             Pattern::Bind(_) => has_wildcard = true,
             Pattern::Tuple(_) => {}
             Pattern::Record(_) => {}
+            Pattern::Constructor { ctor, .. } if !covered_constructors.contains(ctor) => {
+                covered_constructors.push(ctor.clone());
+            }
+            Pattern::Constructor { .. } => {}
             Pattern::At { pattern, .. } => match pattern.as_ref() {
                 Pattern::Wildcard | Pattern::Bind(_) => has_wildcard = true,
+                Pattern::Constructor { ctor, .. } if !covered_constructors.contains(ctor) => {
+                    covered_constructors.push(ctor.clone());
+                }
                 Pattern::Lit(lit) if !covered_literals.contains(lit) => {
                     covered_literals.push(lit.clone());
                 }
-                Pattern::Lit(_) | Pattern::Tuple(_) | Pattern::Record(_) | Pattern::At { .. } => {}
+                Pattern::Lit(_)
+                | Pattern::Tuple(_)
+                | Pattern::Record(_)
+                | Pattern::Constructor { .. }
+                | Pattern::At { .. } => {}
             },
             Pattern::Lit(lit) if !covered_literals.contains(lit) => {
                 covered_literals.push(lit.clone());
@@ -149,12 +167,22 @@ fn exhaustiveness(
             Pattern::Lit(_) => {}
         }
     }
-    let exhaustive = has_wildcard || bool_is_exhaustive(&scrutinee.ty, &covered_literals);
+    let exhaustive = has_wildcard
+        || bool_is_exhaustive(&scrutinee.ty, &covered_literals)
+        || adt_is_exhaustive(&scrutinee.ty, &covered_constructors);
     MatchExhaustivenessFact {
         scrutinee_type: scrutinee.ty.clone(),
         covered_literals,
+        covered_constructors,
         has_wildcard,
         exhaustive,
+    }
+}
+
+fn coverage_pattern(pattern: &Pattern) -> &Pattern {
+    match pattern {
+        Pattern::At { pattern, .. } => coverage_pattern(pattern),
+        _ => pattern,
     }
 }
 
@@ -163,6 +191,13 @@ fn bool_is_exhaustive(ty: &Type, covered: &[Literal]) -> bool {
         return false;
     }
     covered.contains(&Literal::Bool(true)) && covered.contains(&Literal::Bool(false))
+}
+
+fn adt_is_exhaustive(ty: &Type, covered: &[String]) -> bool {
+    let Type::Adt { variants, .. } = ty else {
+        return false;
+    };
+    variants.iter().all(|variant| covered.contains(variant))
 }
 
 fn missing_patterns(fact: &MatchExhaustivenessFact) -> Vec<Pattern> {
@@ -180,6 +215,11 @@ fn missing_patterns(fact: &MatchExhaustivenessFact) -> Vec<Pattern> {
             }
             missing
         }
+        Type::Adt { name, variants } => variants
+            .iter()
+            .filter(|variant| !fact.covered_constructors.contains(variant))
+            .map(|variant| Pattern::qualified_ctor(name.clone(), variant.clone(), vec![]))
+            .collect(),
         _ => vec![Pattern::Wildcard],
     }
 }
@@ -194,6 +234,10 @@ fn pattern_bindings(pattern: &Pattern) -> Vec<String> {
         Pattern::Record(fields) => fields
             .iter()
             .flat_map(|field| pattern_bindings(&field.pattern))
+            .collect::<Vec<_>>(),
+        Pattern::Constructor { args, .. } => args
+            .iter()
+            .flat_map(pattern_bindings)
             .collect::<Vec<_>>(),
         Pattern::At { name, pattern } => {
             let mut bindings = pattern_bindings(pattern);
@@ -238,6 +282,11 @@ fn collect_duplicate_bindings(
                 collect_duplicate_bindings(&field.pattern, seen, duplicates);
             }
         }
+        Pattern::Constructor { args, .. } => {
+            for arg in args {
+                collect_duplicate_bindings(arg, seen, duplicates);
+            }
+        }
         Pattern::At { name, pattern } => {
             collect_duplicate_bindings(pattern, seen, duplicates);
             if seen.contains(name) && !duplicates.contains(name) {
@@ -263,6 +312,11 @@ fn diagnose_chained_at_patterns(pattern: &Pattern, facts: &mut PatternFacts) {
         Pattern::Tuple(fields) => {
             for field in fields {
                 diagnose_chained_at_patterns(field, facts);
+            }
+        }
+        Pattern::Constructor { args, .. } => {
+            for arg in args {
+                diagnose_chained_at_patterns(arg, facts);
             }
         }
         Pattern::Record(fields) => {

@@ -72,6 +72,11 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
                 visit(&field.value, facts);
             }
         }
+        TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                visit(arg, facts);
+            }
+        }
         TypedExprKind::Field { receiver, .. } => visit(receiver, facts),
         TypedExprKind::MethodCall { receiver, arg, .. } => {
             visit(receiver, facts);
@@ -151,6 +156,11 @@ fn visit_alpha(expr: &AlphaExpr, facts: &mut UsageFacts) {
             visit_alpha(base, facts);
             for field in fields {
                 visit_alpha(&field.value, facts);
+            }
+        }
+        AlphaExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                visit_alpha(arg, facts);
             }
         }
         AlphaExprKind::Field { receiver, .. } => visit_alpha(receiver, facts),

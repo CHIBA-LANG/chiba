@@ -126,6 +126,11 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
                 visit(&field.value, facts);
             }
         }
+        AlphaExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                visit(arg, facts);
+            }
+        }
         AlphaExprKind::Field { receiver, .. } => visit(receiver, facts),
         AlphaExprKind::MethodCall {
             receiver,

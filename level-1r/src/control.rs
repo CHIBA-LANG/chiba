@@ -62,6 +62,11 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
                 visit(&field.value, stack, facts);
             }
         }
+        TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                visit(arg, stack, facts);
+            }
+        }
         TypedExprKind::Field { receiver, .. } => visit(receiver, stack, facts),
         TypedExprKind::MethodCall { receiver, arg, .. } => {
             visit(receiver, stack, facts);

@@ -144,6 +144,11 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
                 collect_expr_obligations(&field.value, facts);
             }
         }
+        AlphaExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_expr_obligations(arg, facts);
+            }
+        }
         AlphaExprKind::Field { receiver, name } => {
             let shape = canonical_open_row(vec![(name.as_str(), ShapeType::Unknown)]);
             facts.row_shapes.push(shape.clone());
