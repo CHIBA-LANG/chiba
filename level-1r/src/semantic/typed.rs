@@ -462,6 +462,9 @@ fn record_type_fields(fields: &[TypedRecordField]) -> Vec<RecordTypeField> {
 }
 
 fn record_update_type(base: &Type, fields: &[TypedRecordField]) -> Type {
+    if matches!(base, Type::Nominal(_)) {
+        return base.clone();
+    }
     let mut merged = match base {
         Type::Record(fields) => fields.clone(),
         _ => Vec::new(),

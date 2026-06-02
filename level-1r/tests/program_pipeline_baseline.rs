@@ -275,6 +275,38 @@ fn interface_summary_preserves_method_style_receiver_and_self_surface() {
 }
 
 #[test]
+fn method_self_record_update_preserves_nominal_receiver_type_in_body() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::method_def(
+            MethodReceiver::new("Box", vec!["T".to_string()]),
+            "update",
+            vec![
+                ParamDecl::new("self", Some("Self".to_string())),
+                ParamDecl::new("value", Some("T".to_string())),
+            ],
+            Some("Self".to_string()),
+            Expr::record_update(Expr::var("self"), vec![("value", Expr::var("value"))]),
+        )],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let typed = &bundle.defs[0].output.typed;
+
+    assert_eq!(typed.ty, Type::Nominal("Box[T]".to_string()));
+    match &typed.kind {
+        TypedExprKind::RecordUpdate { base, fields } => {
+            assert_eq!(base.ty, Type::Nominal("Box[T]".to_string()));
+            assert_eq!(fields[0].name, "value");
+            assert_eq!(fields[0].value.ty, Type::Nominal("T".to_string()));
+        }
+        other => panic!("expected typed record update, got {other:?}"),
+    }
+}
+
+#[test]
 fn auto_generic_is_lowering_fact_not_source_surface_generic() {
     let program = SourceProgram::new(vec![def("id", vec!["x"], Expr::var("x"))]);
 
