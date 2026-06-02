@@ -21,6 +21,10 @@ pub enum TypedExprKind {
         callee: Box<TypedExpr>,
         arg: Box<TypedExpr>,
     },
+    Tuple {
+        fields: Vec<TypedExpr>,
+        nominal: String,
+    },
     Field {
         receiver: Box<TypedExpr>,
         name: String,
@@ -75,6 +79,7 @@ pub enum Type {
     Unknown,
     I64,
     Bool,
+    Tuple(Vec<Type>),
     Nominal(String),
     Func(Box<Type>, Box<Type>),
 }
@@ -124,6 +129,20 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                     arg: Box::new(arg),
                 },
                 Type::Unknown,
+            )
+        }
+        Expr::Tuple(fields) => {
+            let fields: Vec<_> = fields.iter().map(type_expr).collect();
+            let field_types = fields
+                .iter()
+                .map(|field| field.ty.clone())
+                .collect::<Vec<_>>();
+            typed(
+                TypedExprKind::Tuple {
+                    nominal: tuple_nominal_name(&field_types),
+                    fields,
+                },
+                Type::Tuple(field_types),
             )
         }
         Expr::Field { receiver, name } => {
@@ -272,4 +291,36 @@ fn typed(kind: TypedExprKind, ty: Type) -> TypedExpr {
         usage: UsageColor::Obligation,
         send: SendColor::Obligation,
     }
+}
+
+pub fn tuple_nominal_name(fields: &[Type]) -> String {
+    let mut name = format!("Tuple{}", fields.len());
+    for field in fields {
+        name.push('_');
+        name.push_str(&type_stable_name(field));
+    }
+    name
+}
+
+fn type_stable_name(ty: &Type) -> String {
+    match ty {
+        Type::Unknown => "Unknown".to_string(),
+        Type::I64 => "I64".to_string(),
+        Type::Bool => "Bool".to_string(),
+        Type::Tuple(fields) => tuple_nominal_name(fields),
+        Type::Nominal(name) => format!("Nominal{}", sanitize_type_name(name)),
+        Type::Func(arg, ret) => format!("Fn_{}_{}", type_stable_name(arg), type_stable_name(ret)),
+    }
+}
+
+fn sanitize_type_name(name: &str) -> String {
+    name.chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }

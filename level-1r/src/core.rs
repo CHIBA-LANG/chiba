@@ -52,6 +52,10 @@ pub enum CoreOp {
         scrutinee: String,
         patterns: Vec<String>,
     },
+    TupleConstruct {
+        layout: String,
+        fields: Vec<String>,
+    },
     LiftedFunction {
         source: String,
         symbol: String,
@@ -73,6 +77,13 @@ pub enum LayoutKind {
     DynRowPackage(DynRowContract),
     ContinuationPackage(ContinuationKind),
     ClosureEnv(ClosureEnvLayout),
+    TupleStruct(TupleLayout),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TupleLayout {
+    pub nominal: String,
+    pub fields: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -177,7 +188,7 @@ pub fn lower_core_with_facts(
 ) -> CoreProgram {
     let mut ops = Vec::new();
     lower_term(&cps.term, continuations, &mut ops);
-    let layouts = lower_layouts(continuations, closures, specialize);
+    let layouts = lower_layouts(&ops, continuations, closures, specialize);
     let ownership = lower_ownership(continuations, specialize, usage);
     let callable_storage = lower_callable_storage(continuations, closures);
     lower_specialization_ops(specialize, &layouts, &mut ops);
@@ -212,8 +223,8 @@ impl CoreValidation {
 
 fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<CoreOp>) {
     match term {
-        CpsTerm::Halt(atom) => ops.push(CoreOp::ReturnAtom(render_atom(atom))),
-        CpsTerm::AppCont { value, .. } => ops.push(CoreOp::ReturnAtom(render_atom(value))),
+        CpsTerm::Halt(atom) => lower_atom_value(atom, ops),
+        CpsTerm::AppCont { value, .. } => lower_atom_value(value, ops),
         CpsTerm::AppFun { func, arg, .. } => ops.push(CoreOp::TailCall {
             func: render_atom(func),
             arg: render_atom(arg),
@@ -419,6 +430,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         CoreOp::OperatorTarget { target, .. } => target == func,
         CoreOp::LiftedFunction { symbol, .. } => symbol == func,
         CoreOp::ReturnAtom(_)
+        | CoreOp::TupleConstruct { .. }
         | CoreOp::TailCall { .. }
         | CoreOp::Prompt { .. }
         | CoreOp::CaptureContinuation { .. }
@@ -547,10 +559,26 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::Lit(lit) => format!("{lit:?}"),
         CpsAtom::FunLambda { param, .. } => format!("lambda#{param}"),
         CpsAtom::ContLambda { param, .. } => format!("cont#{param}"),
+        CpsAtom::Tuple { nominal, .. } => format!("tuple#{nominal}"),
+    }
+}
+
+fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
+    match atom {
+        CpsAtom::Tuple { nominal, fields } => {
+            let layout = format!("tuple::{nominal}");
+            ops.push(CoreOp::TupleConstruct {
+                layout,
+                fields: fields.iter().map(render_atom).collect(),
+            });
+            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+        }
+        _ => ops.push(CoreOp::ReturnAtom(render_atom(atom))),
     }
 }
 
 fn lower_layouts(
+    ops: &[CoreOp],
     continuations: &[ContinuationFact],
     closures: &ClosureFacts,
     specialize: &SpecializationFacts,
@@ -584,6 +612,7 @@ fn lower_layouts(
             });
         }
     }
+    collect_tuple_layouts(&mut layouts, ops);
     for closure in &closures.closures {
         if closure.storage == ClosureStorageKind::EnvClosure {
             let env = closure_env_layout(&closure.param, &closure.captures);
@@ -596,6 +625,32 @@ fn lower_layouts(
         }
     }
     layouts
+}
+
+fn collect_tuple_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
+    for op in ops {
+        let CoreOp::TupleConstruct { layout, fields } = op else {
+            continue;
+        };
+        if layouts.iter().any(|fact| fact.key == *layout) {
+            continue;
+        }
+        let nominal = layout
+            .strip_prefix("tuple::")
+            .unwrap_or(layout)
+            .to_string();
+        let field_names = (1..=fields.len())
+            .map(|index| format!("_{index}"))
+            .collect::<Vec<_>>();
+        layouts.push(LayoutFact {
+            key: layout.clone(),
+            hash: stable_hash(layout),
+            kind: LayoutKind::TupleStruct(TupleLayout {
+                nominal,
+                fields: field_names,
+            }),
+        });
+    }
 }
 
 fn lower_ownership(

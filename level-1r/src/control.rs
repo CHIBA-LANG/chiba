@@ -46,6 +46,11 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
             visit(callee, stack, facts);
             visit(arg, stack, facts);
         }
+        TypedExprKind::Tuple { fields, .. } => {
+            for field in fields {
+                visit(field, stack, facts);
+            }
+        }
         TypedExprKind::Field { receiver, .. } => visit(receiver, stack, facts),
         TypedExprKind::MethodCall { receiver, arg, .. } => {
             visit(receiver, stack, facts);

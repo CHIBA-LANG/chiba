@@ -45,6 +45,11 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             visit(callee, facts);
             visit(arg, facts);
         }
+        TypedExprKind::Tuple { fields, .. } => {
+            for field in fields {
+                visit(field, facts);
+            }
+        }
         TypedExprKind::Field { receiver, .. } => visit(receiver, facts),
         TypedExprKind::MethodCall { receiver, arg, .. } => {
             visit(receiver, facts);

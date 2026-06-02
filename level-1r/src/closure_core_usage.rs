@@ -99,7 +99,7 @@ fn collect_layout_usage(core: &CoreProgram, facts: &mut ClosureCoreUsageFacts) {
                     },
                 );
             }
-            LayoutKind::RowShape(_) | LayoutKind::DynRowPackage(_) => {}
+            LayoutKind::RowShape(_) | LayoutKind::DynRowPackage(_) | LayoutKind::TupleStruct(_) => {}
         }
     }
 }

@@ -110,6 +110,11 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
             visit(callee, facts);
             visit(arg, facts);
         }
+        AlphaExprKind::Tuple(fields) => {
+            for field in fields {
+                visit(field, facts);
+            }
+        }
         AlphaExprKind::Field { receiver, .. } => visit(receiver, facts),
         AlphaExprKind::MethodCall {
             receiver,

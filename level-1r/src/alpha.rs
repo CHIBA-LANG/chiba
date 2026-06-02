@@ -29,6 +29,7 @@ pub enum AlphaExprKind {
         callee: Box<AlphaExpr>,
         arg: Box<AlphaExpr>,
     },
+    Tuple(Vec<AlphaExpr>),
     Field {
         receiver: Box<AlphaExpr>,
         name: String,
@@ -168,6 +169,11 @@ impl AlphaCtx {
                     callee: Box::new(self.alpha(callee)),
                     arg: Box::new(self.alpha(arg)),
                 },
+            },
+            Expr::Tuple(fields) => AlphaExpr {
+                kind: AlphaExprKind::Tuple(
+                    fields.iter().map(|field| self.alpha(field)).collect(),
+                ),
             },
             Expr::Field { receiver, name } => AlphaExpr {
                 kind: AlphaExprKind::Field {

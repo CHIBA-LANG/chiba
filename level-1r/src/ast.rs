@@ -24,6 +24,7 @@ pub enum Expr {
         callee: Box<Expr>,
         arg: Box<Expr>,
     },
+    Tuple(Vec<Expr>),
     Field {
         receiver: Box<Expr>,
         name: String,
@@ -120,6 +121,10 @@ impl Expr {
             callee: Box::new(callee),
             arg: Box::new(arg),
         }
+    }
+
+    pub fn tuple(fields: Vec<Expr>) -> Self {
+        Self::Tuple(fields)
     }
 
     pub fn field(receiver: Expr, name: impl Into<String>) -> Self {

@@ -117,6 +117,11 @@ fn visit_atom(atom: &CpsAtom, facts: &mut CpsUsageFacts) {
             bump(&mut facts.continuation_lambdas, param);
             visit_term(body, facts);
         }
+        CpsAtom::Tuple { fields, .. } => {
+            for field in fields {
+                visit_atom(field, facts);
+            }
+        }
     }
 }
 
@@ -171,6 +176,11 @@ fn count_atom_refs(atom: &CpsAtom, binder: &str, count: &mut UseCount) {
         CpsAtom::Var(_) | CpsAtom::Lit(_) => {}
         CpsAtom::FunLambda { body, .. } | CpsAtom::ContLambda { body, .. } => {
             count_term_refs(body, binder, count);
+        }
+        CpsAtom::Tuple { fields, .. } => {
+            for field in fields {
+                count_atom_refs(field, binder, count);
+            }
         }
     }
 }

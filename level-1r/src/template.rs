@@ -114,6 +114,11 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
             collect_expr_obligations(callee, facts);
             collect_expr_obligations(arg, facts);
         }
+        AlphaExprKind::Tuple(fields) => {
+            for field in fields {
+                collect_expr_obligations(field, facts);
+            }
+        }
         AlphaExprKind::Field { receiver, name } => {
             let shape = canonical_open_row(vec![(name.as_str(), ShapeType::Unknown)]);
             facts.row_shapes.push(shape.clone());

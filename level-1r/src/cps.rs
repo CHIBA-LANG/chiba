@@ -22,6 +22,10 @@ pub enum CpsAtom {
         param: String,
         body: Box<CpsTerm>,
     },
+    Tuple {
+        nominal: String,
+        fields: Vec<CpsAtom>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -122,6 +126,9 @@ fn transform(
         }
         TypedExprKind::Call { callee, arg } => {
             transform_call(callee, arg, k, controls, ctx)
+        }
+        TypedExprKind::Tuple { fields, nominal } => {
+            transform_tuple(fields, nominal, k, controls, ctx)
         }
         TypedExprKind::Field { receiver, name } => transform(
             receiver,
@@ -342,6 +349,56 @@ fn transform_match(
     )
 }
 
+fn transform_tuple(
+    fields: &[TypedExpr],
+    nominal: &str,
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    transform_tuple_fields(
+        fields,
+        nominal,
+        0,
+        Vec::new(),
+        k,
+        controls,
+        ctx,
+    )
+}
+
+fn transform_tuple_fields(
+    fields: &[TypedExpr],
+    nominal: &str,
+    index: usize,
+    values: Vec<CpsAtom>,
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    if index == fields.len() {
+        return k(
+            CpsAtom::Tuple {
+                nominal: nominal.to_string(),
+                fields: values,
+            },
+            ctx,
+        );
+    }
+
+    let field_controls = controls.clone();
+    transform(
+        &fields[index],
+        Box::new(move |value, ctx| {
+            let mut values = values;
+            values.push(value);
+            transform_tuple_fields(fields, nominal, index + 1, values, k, controls, ctx)
+        }),
+        field_controls,
+        ctx,
+    )
+}
+
 fn transform_call(
     callee: &TypedExpr,
     arg: &TypedExpr,
@@ -406,6 +463,16 @@ impl fmt::Display for CpsAtom {
             }
             CpsAtom::ContLambda { param, body } => {
                 write!(f, "(cont {param}. {body})")
+            }
+            CpsAtom::Tuple { nominal, fields } => {
+                write!(f, "{nominal}(")?;
+                for (index, field) in fields.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "_{}={field}", index + 1)?;
+                }
+                write!(f, ")")
             }
         }
     }

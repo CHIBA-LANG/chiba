@@ -49,6 +49,11 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
             collect(callee, scope, facts);
             collect(arg, scope, facts);
         }
+        TypedExprKind::Tuple { fields, .. } => {
+            for field in fields {
+                collect(field, scope, facts);
+            }
+        }
         TypedExprKind::Field { receiver, .. } => collect(receiver, scope, facts),
         TypedExprKind::MethodCall { receiver, arg, .. } => {
             collect(receiver, scope, facts);
@@ -123,6 +128,11 @@ fn collect_alpha(expr: &AlphaExpr, scope: &mut BTreeSet<BinderId>, facts: &mut C
         AlphaExprKind::Call { callee, arg } => {
             collect_alpha(callee, scope, facts);
             collect_alpha(arg, scope, facts);
+        }
+        AlphaExprKind::Tuple(fields) => {
+            for field in fields {
+                collect_alpha(field, scope, facts);
+            }
         }
         AlphaExprKind::Field { receiver, .. } => collect_alpha(receiver, scope, facts),
         AlphaExprKind::MethodCall { receiver, arg, .. } => {
@@ -210,6 +220,11 @@ fn collect_alpha_free_vars(
             collect_alpha_free_vars(callee, locals, free);
             collect_alpha_free_vars(arg, locals, free);
         }
+        AlphaExprKind::Tuple(fields) => {
+            for field in fields {
+                collect_alpha_free_vars(field, locals, free);
+            }
+        }
         AlphaExprKind::Field { receiver, .. } => collect_alpha_free_vars(receiver, locals, free),
         AlphaExprKind::MethodCall { receiver, arg, .. } => {
             collect_alpha_free_vars(receiver, locals, free);
@@ -271,6 +286,11 @@ fn collect_free_vars(
         TypedExprKind::Call { callee, arg } => {
             collect_free_vars(callee, locals, free);
             collect_free_vars(arg, locals, free);
+        }
+        TypedExprKind::Tuple { fields, .. } => {
+            for field in fields {
+                collect_free_vars(field, locals, free);
+            }
         }
         TypedExprKind::Field { receiver, .. } => collect_free_vars(receiver, locals, free),
         TypedExprKind::MethodCall { receiver, arg, .. } => {

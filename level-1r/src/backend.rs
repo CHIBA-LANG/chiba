@@ -147,6 +147,7 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
                 ownership: ownership_for_subject(core, target),
             }),
             CoreOp::ReturnAtom(_)
+            | CoreOp::TupleConstruct { .. }
             | CoreOp::TailCall { .. }
             | CoreOp::Prompt { .. }
             | CoreOp::CaptureContinuation { .. }
