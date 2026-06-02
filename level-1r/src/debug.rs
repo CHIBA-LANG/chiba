@@ -14,10 +14,10 @@ use crate::lambda_lift::LambdaLiftFacts;
 use crate::monomorphize::MonomorphizationPlan;
 use crate::nanopass::PassReport;
 use crate::pattern::PatternFacts;
-use crate::resolve::ResolveFacts;
-use crate::specialize::SpecializationFacts;
+use crate::resolve::{ResolveFacts, ResolvedName};
+use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::std_audit::StdAuditReport;
-use crate::template::TemplateFacts;
+use crate::template::{TemplateFacts, TemplateObligation};
 use crate::template_audit::TemplateAuditReport;
 use crate::typed::TypedExpr;
 use crate::usage::UsageFacts;
@@ -30,6 +30,7 @@ pub struct VisualReport {
     pub resolve: String,
     pub template: String,
     pub specialize: String,
+    pub symbol_lineage: String,
     pub monomorphize: String,
     pub template_audit: String,
     pub typed: String,
@@ -65,6 +66,10 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.template).unwrap();
     writeln!(out, "specialize:").unwrap();
     writeln!(out, "  {}", report.specialize).unwrap();
+    writeln!(out, "symbol-lineage:").unwrap();
+    for line in report.symbol_lineage.lines() {
+        writeln!(out, "  {line}").unwrap();
+    }
     writeln!(out, "monomorphize:").unwrap();
     writeln!(out, "  {}", report.monomorphize).unwrap();
     writeln!(out, "template-audit:").unwrap();
@@ -146,6 +151,7 @@ pub fn visual_report(
         resolve: format!("{resolve:#?}"),
         template: format!("{template:#?}"),
         specialize: format!("{specialize:#?}"),
+        symbol_lineage: render_symbol_lineage(resolve, template, specialize),
         monomorphize: format!("{monomorphize:#?}"),
         template_audit: format!("{template_audit:#?}"),
         typed: format!("{typed:#?}"),
@@ -168,6 +174,88 @@ pub fn visual_report(
         backend_cache_key: format!("{backend_cache_key:#?}"),
         nanopass: render_pass_report(passes),
     }
+}
+
+fn render_symbol_lineage(
+    resolve: &ResolveFacts,
+    template: &TemplateFacts,
+    specialize: &SpecializationFacts,
+) -> String {
+    let mut out = String::new();
+    for name in &resolve.resolved_names {
+        match name {
+            ResolvedName::Function { name, symbol } => {
+                writeln!(out, "resolve function {name} -> {symbol}").unwrap();
+            }
+            ResolvedName::Constructor {
+                data,
+                ctor,
+                symbol,
+                arity,
+            } => {
+                writeln!(out, "resolve constructor {data}.{ctor}/{arity} -> {symbol}").unwrap();
+            }
+        }
+    }
+    for obligation in &template.obligations {
+        match obligation {
+            TemplateObligation::Function { name, resolved } => {
+                writeln!(out, "template function {name} -> {resolved}").unwrap();
+            }
+            TemplateObligation::Constructor {
+                data,
+                ctor,
+                resolved,
+                arity,
+            } => {
+                writeln!(
+                    out,
+                    "template constructor {data}.{ctor}/{arity} -> {resolved}"
+                )
+                .unwrap();
+            }
+            TemplateObligation::Method {
+                name,
+                resolved: Some(resolved),
+                ..
+            } => {
+                writeln!(out, "template method {name} -> {resolved}").unwrap();
+            }
+            _ => {}
+        }
+    }
+    for work_item in &specialize.work_items {
+        for obligation in &work_item.obligations {
+            match obligation {
+                DischargedObligation::Function { name, target } => {
+                    writeln!(out, "specialize function {name} -> {target}").unwrap();
+                }
+                DischargedObligation::Constructor {
+                    data,
+                    ctor,
+                    target,
+                    arity,
+                } => {
+                    writeln!(
+                        out,
+                        "specialize constructor {data}.{ctor}/{arity} -> {target}"
+                    )
+                    .unwrap();
+                }
+                DischargedObligation::Method {
+                    name,
+                    target: Some(target),
+                } => {
+                    writeln!(out, "specialize method {name} -> {target}").unwrap();
+                }
+                _ => {}
+            }
+        }
+    }
+    if out.is_empty() {
+        out.push_str("<empty>\n");
+    }
+    out
 }
 
 fn render_pass_report(report: &PassReport) -> String {

@@ -182,6 +182,11 @@ fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
             name: "helper".to_string(),
             target: "root::helper".to_string(),
         }));
+    let main_visual = output.program.defs[1].output.render_visual();
+    assert!(main_visual.contains("symbol-lineage:"));
+    assert!(main_visual.contains("resolve function helper -> root::helper"));
+    assert!(main_visual.contains("template function helper -> root::helper"));
+    assert!(main_visual.contains("specialize function helper -> root::helper"));
 
     let summary = output.render_summary();
     assert!(summary.contains("source-program:"));
@@ -258,6 +263,10 @@ fn frontend_parses_data_decl_and_uses_variants_for_qualified_ctors() {
             target: "root::Option.Some".to_string(),
             arity: 1,
         }));
+    let visual = main.render_visual();
+    assert!(visual.contains("resolve constructor Option.Some/1 -> root::Option.Some"));
+    assert!(visual.contains("template constructor Option.Some/1 -> root::Option.Some"));
+    assert!(visual.contains("specialize constructor Option.Some/1 -> root::Option.Some"));
     assert!(output.render_summary().contains("data=1"));
 }
 
