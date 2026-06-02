@@ -87,6 +87,8 @@ pub enum CoreDiagnostic {
     DuplicateLayoutKey { key: String },
     MissingContNPackage { binder: String },
     Cont1HasPackageLayout { key: String },
+    MissingDynRowLayout { layout: String },
+    DynRowLayoutKindMismatch { layout: String },
     SharedSendSubjectUsesRc { subject: String },
     DynPayloadMustUseDynPackage { subject: String },
 }
@@ -123,6 +125,7 @@ pub fn validate_core(program: &CoreProgram) -> CoreValidation {
     validate_target_neutral(program, &mut diagnostics);
     validate_layouts(program, &mut diagnostics);
     validate_continuation_packages(program, &mut diagnostics);
+    validate_dyn_adapter_layouts(program, &mut diagnostics);
     validate_ownership(program, &mut diagnostics);
     CoreValidation { diagnostics }
 }
@@ -264,6 +267,22 @@ fn validate_continuation_packages(program: &CoreProgram, diagnostics: &mut Vec<C
                 diagnostics.push(CoreDiagnostic::MissingContNPackage {
                     binder: binder.clone(),
                 });
+            }
+        }
+    }
+}
+
+fn validate_dyn_adapter_layouts(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    for op in &program.ops {
+        if let CoreOp::DynRowAdapterAccess { layout, .. } = op {
+            match program.layouts.iter().find(|fact| fact.key == *layout) {
+                Some(fact) if matches!(fact.kind, LayoutKind::DynRowPackage(_)) => {}
+                Some(_) => diagnostics.push(CoreDiagnostic::DynRowLayoutKindMismatch {
+                    layout: layout.clone(),
+                }),
+                None => diagnostics.push(CoreDiagnostic::MissingDynRowLayout {
+                    layout: layout.clone(),
+                }),
             }
         }
     }

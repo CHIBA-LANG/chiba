@@ -3,6 +3,7 @@ use chiba_level1r::core::{
     validate_core, CoreDiagnostic, CoreOp, CoreProgram, LayoutFact, LayoutKind, OwnershipDecision,
     OwnershipFact,
 };
+use chiba_level1r::template::{canonical_open_row, ShapeType};
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -128,6 +129,49 @@ fn validator_rejects_cont1_package_and_send_rc_contradiction() {
             .diagnostics
             .contains(&CoreDiagnostic::DynPayloadMustUseDynPackage {
                 subject: "dyn::user".to_string()
+            })
+    );
+}
+
+#[test]
+fn validator_rejects_dyn_adapter_missing_or_wrong_layout_ref() {
+    let missing = CoreProgram {
+        ops: vec![CoreOp::DynRowAdapterAccess {
+            subject: "user".to_string(),
+            layout: "dyn-row::missing".to_string(),
+        }],
+        layouts: vec![],
+        ownership: vec![],
+    };
+
+    assert_eq!(
+        validate_core(&missing).diagnostics,
+        vec![CoreDiagnostic::MissingDynRowLayout {
+            layout: "dyn-row::missing".to_string()
+        }]
+    );
+
+    let wrong_kind = CoreProgram {
+        ops: vec![CoreOp::DynRowAdapterAccess {
+            subject: "user".to_string(),
+            layout: "row::user".to_string(),
+        }],
+        layouts: vec![LayoutFact {
+            key: "row::user".to_string(),
+            hash: 0,
+            kind: LayoutKind::RowShape(canonical_open_row(vec![(
+                "name",
+                ShapeType::Unknown,
+            )])),
+        }],
+        ownership: vec![],
+    };
+
+    assert!(
+        validate_core(&wrong_kind)
+            .diagnostics
+            .contains(&CoreDiagnostic::DynRowLayoutKindMismatch {
+                layout: "row::user".to_string()
             })
     );
 }
