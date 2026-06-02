@@ -133,6 +133,36 @@ fn frontend_parses_call_before_infix_and_reaches_cps_shape() {
 }
 
 #[test]
+fn frontend_parses_if_then_else_through_branch_cps_and_wat() {
+    let output = compile_source_program_bundle("def main() = if flag then f(1) else 2")
+        .expect("compile source");
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::if_else(
+                    Expr::var("flag"),
+                    Expr::call(Expr::var("f"), Expr::i64(1)),
+                    Expr::i64(2),
+                )
+            );
+        }
+    }
+
+    let main = &output.program.defs[0].output;
+    assert!(main.cps.to_string().contains("if flag"));
+    assert!(main.cps.to_string().contains("then f(1,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::Branch { cond } if cond == "flag"
+        )
+    }));
+    assert!(output.program.backend_link.linked_wat.contains(";; branch flag"));
+}
+
+#[test]
 fn frontend_rejects_empty_call_argument() {
     let err = parse_source_program("def main() = f()").unwrap_err();
 

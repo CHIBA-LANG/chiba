@@ -52,6 +52,21 @@ fn chiba_lexer_spec() -> LexerSpec {
                 skip: false,
             },
             LexerRule {
+                name: "KwIf".to_string(),
+                pattern: "if".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "KwThen".to_string(),
+                pattern: "then".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "KwElse".to_string(),
+                pattern: "else".to_string(),
+                skip: false,
+            },
+            LexerRule {
                 name: "Ident".to_string(),
                 pattern: "[a-zA-Z_][a-zA-Z0-9_]*".to_string(),
                 skip: false,
@@ -169,6 +184,7 @@ impl FrontendParser {
                 self.pos += 1;
                 Ok(Expr::bool(false))
             }
+            Some("KwIf") => self.parse_if(),
             Some("Ident") => self.expect_lexeme("Ident").map(Expr::var),
             Some("LParen") => {
                 self.pos += 1;
@@ -185,6 +201,7 @@ impl FrontendParser {
                         "Number".to_string(),
                         "True".to_string(),
                         "False".to_string(),
+                        "KwIf".to_string(),
                         "Ident".to_string(),
                         "LParen".to_string(),
                     ],
@@ -194,6 +211,16 @@ impl FrontendParser {
                 expected: vec!["expr".to_string()],
             }),
         }
+    }
+
+    fn parse_if(&mut self) -> Result<Expr, FrontendError> {
+        self.expect("KwIf")?;
+        let cond = self.parse_expr_bp(0)?;
+        self.expect("KwThen")?;
+        let then_branch = self.parse_expr_bp(0)?;
+        self.expect("KwElse")?;
+        let else_branch = self.parse_expr_bp(0)?;
+        Ok(Expr::if_else(cond, then_branch, else_branch))
     }
 
     fn peek_infix(&self) -> Option<(BinaryOp, u32, u32)> {
