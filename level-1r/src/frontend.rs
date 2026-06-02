@@ -205,7 +205,12 @@ impl FrontendParser {
                         self.pos += 1;
                         let arg = self.parse_expr_bp(0)?;
                         self.expect("RParen")?;
-                        expr = Expr::method_call(expr, name, arg);
+                        expr = match expr {
+                            Expr::Var(data) if is_big_camel(&name) => {
+                                Expr::adt_ctor(data, name.clone(), vec![name], vec![arg])
+                            }
+                            receiver => Expr::method_call(receiver, name, arg),
+                        };
                     } else {
                         expr = Expr::field(expr, name);
                     }
@@ -430,6 +435,14 @@ impl FrontendParser {
                 let name = self.expect_lexeme("Ident")?;
                 if name == "_" {
                     Ok(Pattern::wildcard())
+                } else if self.peek_name() == Some("Dot") {
+                    self.pos += 1;
+                    let ctor = self.expect_lexeme("Ident")?;
+                    let args = self.parse_constructor_pattern_args()?;
+                    Ok(Pattern::qualified_ctor(name, ctor, args))
+                } else if is_big_camel(&name) {
+                    let args = self.parse_constructor_pattern_args()?;
+                    Ok(Pattern::ctor(name, args))
                 } else {
                     Ok(Pattern::bind(name))
                 }
@@ -494,6 +507,27 @@ impl FrontendParser {
         Ok(Pattern::record(fields))
     }
 
+    fn parse_constructor_pattern_args(&mut self) -> Result<Vec<Pattern>, FrontendError> {
+        if self.peek_name() != Some("LParen") {
+            return Ok(Vec::new());
+        }
+        self.pos += 1;
+        let mut args = Vec::new();
+        if self.peek_name() == Some("RParen") {
+            self.pos += 1;
+            return Ok(args);
+        }
+        loop {
+            args.push(self.parse_pattern()?);
+            if self.peek_name() != Some("Comma") {
+                break;
+            }
+            self.pos += 1;
+        }
+        self.expect("RParen")?;
+        Ok(args)
+    }
+
     fn peek_infix(&self) -> Option<(BinaryOp, u32, u32)> {
         match self.peek_name()? {
             "Plus" => Some((BinaryOp::Add, 10, 11)),
@@ -536,4 +570,11 @@ impl FrontendParser {
     fn is_eof(&self) -> bool {
         self.pos == self.tokens.len()
     }
+}
+
+fn is_big_camel(name: &str) -> bool {
+    name.chars()
+        .next()
+        .map(|ch| ch.is_ascii_uppercase())
+        .unwrap_or(false)
 }

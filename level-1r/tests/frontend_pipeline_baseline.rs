@@ -240,6 +240,76 @@ fn frontend_parses_nested_tuple_record_and_at_patterns() {
 }
 
 #[test]
+fn frontend_parses_qualified_adt_constructor_expression() {
+    let output =
+        compile_source_program_bundle("def main() = Option.Some(1)").expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::adt_ctor("Option", "Some", vec!["Some"], vec![Expr::i64(1)])
+            );
+        }
+    }
+
+    assert_eq!(main.cps.to_string(), "halt Option.Some(1)");
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::AdtConstruct {
+                data,
+                ctor,
+                variants,
+                args
+            } if data == "Option"
+                && ctor == "Some"
+                && variants == &vec!["Some".to_string()]
+                && args == &vec!["I64(1)".to_string()]
+        )
+    }));
+}
+
+#[test]
+fn frontend_parses_qualified_constructor_patterns() {
+    let output = compile_source_program_bundle(
+        "def main() = match Option.Some(1) { Option.Some(value) => value, Option.None => 0 }",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::match_expr(
+                    Expr::adt_ctor("Option", "Some", vec!["Some"], vec![Expr::i64(1)]),
+                    vec![
+                        (
+                            Pattern::qualified_ctor(
+                                "Option",
+                                "Some",
+                                vec![Pattern::bind("value")]
+                            ),
+                            Expr::var("value"),
+                        ),
+                        (
+                            Pattern::qualified_ctor("Option", "None", Vec::<Pattern>::new()),
+                            Expr::i64(0),
+                        ),
+                    ],
+                )
+            );
+        }
+    }
+
+    assert!(main.cps.to_string().contains("Option.Some(value) =>"));
+    assert!(main.cps.to_string().contains("Option.None =>"));
+    assert_eq!(main.pattern.envs[0].bindings, vec!["value".to_string()]);
+}
+
+#[test]
 fn frontend_parses_if_let_block_form_through_pattern_env_and_cps() {
     let output = compile_source_program_bundle("def main() = if let value = maybe { value } else { 0 }")
         .expect("compile source");
