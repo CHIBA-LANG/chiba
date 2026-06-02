@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::alpha::{AlphaExpr, AlphaExprKind};
-use crate::ast::BinaryOp;
+use crate::ast::{BinaryOp, Visibility};
 use crate::surface::InterfaceSummary;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -24,6 +24,8 @@ pub struct NameIndex {
 pub struct NameCandidate {
     pub name: String,
     pub symbol: String,
+    pub owner: String,
+    pub visibility: Visibility,
     pub arity: usize,
 }
 
@@ -46,6 +48,8 @@ pub struct MethodCandidate {
     pub receiver: String,
     pub name: String,
     pub symbol: String,
+    pub owner: String,
+    pub visibility: Visibility,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,12 +159,22 @@ pub fn resolve_expr_with_names(
 
 impl NameIndex {
     pub fn from_interface(interface: &InterfaceSummary) -> Self {
+        Self::from_interface_for_namespace(interface, &interface.namespace)
+    }
+
+    pub fn from_interface_for_namespace(interface: &InterfaceSummary, current_namespace: &str) -> Self {
         let mut index = Self::default();
         for function in &interface.functions {
             if function.receiver.is_none() {
+                let owner = owner_from_symbol(&function.symbol);
+                if !is_visible_from(function.visibility, &owner, current_namespace) {
+                    continue;
+                }
                 index.add_function_with_arity(
                     &function.source_name,
                     &function.symbol,
+                    &owner,
+                    function.visibility,
                     function.arity,
                 );
             }
@@ -174,21 +188,32 @@ impl NameIndex {
     }
 
     pub fn add_function(&mut self, name: impl Into<String>, symbol: impl Into<String>) {
-        self.add_function_with_arity(name, symbol, 0);
+        let symbol = symbol.into();
+        let owner = owner_from_symbol(&symbol);
+        self.add_function_with_arity(name, symbol, owner, Visibility::Public, 0);
     }
 
     pub fn add_function_with_arity(
         &mut self,
         name: impl Into<String>,
         symbol: impl Into<String>,
+        owner: impl Into<String>,
+        visibility: Visibility,
         arity: usize,
     ) {
         let name = name.into();
         let symbol = symbol.into();
+        let owner = owner.into();
         self.functions
             .entry(name.clone())
             .or_default()
-            .push(NameCandidate { name, symbol, arity });
+            .push(NameCandidate {
+                name,
+                symbol,
+                owner,
+                visibility,
+                arity,
+            });
     }
 
     pub fn add_constructor(
@@ -226,15 +251,28 @@ impl NameIndex {
 
 impl MethodIndex {
     pub fn from_interface(interface: &InterfaceSummary) -> Self {
+        Self::from_interface_for_namespace(interface, &interface.namespace)
+    }
+
+    pub fn from_interface_for_namespace(
+        interface: &InterfaceSummary,
+        current_namespace: &str,
+    ) -> Self {
         let mut index = Self::default();
         for function in &interface.functions {
             let Some(receiver) = &function.receiver else {
                 continue;
             };
+            let owner = owner_from_symbol(&function.symbol);
+            if !is_visible_from(function.visibility, &owner, current_namespace) {
+                continue;
+            }
             index.add_candidate(MethodCandidate {
                 receiver: receiver.display_name(),
                 name: function.source_name.clone(),
                 symbol: function.symbol.clone(),
+                owner,
+                visibility: function.visibility,
             });
         }
         index
@@ -248,6 +286,8 @@ impl MethodIndex {
             receiver,
             name,
             symbol,
+            owner: "root".to_string(),
+            visibility: Visibility::Public,
         });
     }
 
@@ -566,4 +606,15 @@ fn operator_protocol(op: &BinaryOp) -> String {
 fn data_ctor_from_symbol(symbol: &str) -> Option<(&str, &str)> {
     let (_, tail) = symbol.rsplit_once("::")?;
     tail.split_once('.')
+}
+
+fn owner_from_symbol(symbol: &str) -> String {
+    symbol
+        .split_once("::")
+        .map(|(owner, _)| owner.to_string())
+        .unwrap_or_else(|| "root".to_string())
+}
+
+fn is_visible_from(visibility: Visibility, owner: &str, current_namespace: &str) -> bool {
+    matches!(visibility, Visibility::Public) || owner == current_namespace
 }

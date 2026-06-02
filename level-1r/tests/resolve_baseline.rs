@@ -115,11 +115,15 @@ fn duplicate_nominal_method_candidates_are_ambiguous_not_order_dependent() {
         receiver: "Vec2".to_string(),
         name: "show".to_string(),
         symbol: "math.Vec2.show".to_string(),
+        owner: "math".to_string(),
+        visibility: Visibility::Public,
     });
     methods.add_candidate(MethodCandidate {
         receiver: "Vec2".to_string(),
         name: "show".to_string(),
         symbol: "debug.Vec2.show".to_string(),
+        owner: "debug".to_string(),
+        visibility: Visibility::Public,
     });
 
     let facts = resolve_expr(&alpha.expr, methods);
@@ -166,6 +170,133 @@ fn interface_summary_resolves_global_function_owner_symbol() {
         vec![ResolvedName::Function {
             name: "helper".to_string(),
             symbol: "parser::helper".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn name_index_filters_private_functions_by_namespace_visibility() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["demo".to_string(), "math".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![
+            SourceItem::def("public_value", Vec::new(), Vec::new(), None, Expr::i64(1)),
+            SourceItem::def("hidden", Vec::new(), Vec::new(), None, Expr::i64(0))
+                .with_visibility(Visibility::Private),
+        ],
+    );
+    let interface = build_interface_summary(&project_surface(&program));
+    let public_alpha = alpha_expr(&Expr::var("public_value"));
+    let hidden_alpha = alpha_expr(&Expr::var("hidden"));
+
+    let external_names = NameIndex::from_interface_for_namespace(&interface, "demo.app");
+    let public_external = resolve_expr_with_names(
+        &public_alpha.expr,
+        MethodIndex::default(),
+        external_names.clone(),
+    );
+    let hidden_external =
+        resolve_expr_with_names(&hidden_alpha.expr, MethodIndex::default(), external_names);
+    let hidden_internal = resolve_expr_with_names(
+        &hidden_alpha.expr,
+        MethodIndex::default(),
+        NameIndex::from_interface_for_namespace(&interface, "demo.math"),
+    );
+
+    assert_eq!(public_external.diagnostics, vec![]);
+    assert_eq!(
+        public_external.resolved_names,
+        vec![ResolvedName::Function {
+            name: "public_value".to_string(),
+            symbol: "demo.math::public_value".to_string(),
+        }]
+    );
+    assert_eq!(hidden_external.diagnostics, vec![]);
+    assert_eq!(hidden_external.resolved_names, vec![]);
+    assert_eq!(
+        hidden_internal.resolved_names,
+        vec![ResolvedName::Function {
+            name: "hidden".to_string(),
+            symbol: "demo.math::hidden".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn method_index_filters_private_methods_by_namespace_visibility() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["demo".to_string(), "math".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("Box", Vec::new()),
+                "show",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                None,
+                Expr::var("self"),
+            ),
+            SourceItem::method_def(
+                MethodReceiver::new("Box", Vec::new()),
+                "hidden",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                None,
+                Expr::var("self"),
+            )
+            .with_visibility(Visibility::Private),
+        ],
+    );
+    let interface = build_interface_summary(&project_surface(&program));
+    let public_alpha = alpha_expr(&Expr::method_call(
+        Expr::nominal("Box", Expr::var("box")),
+        "show",
+        Expr::i64(0),
+    ));
+    let hidden_alpha = alpha_expr(&Expr::method_call(
+        Expr::nominal("Box", Expr::var("box")),
+        "hidden",
+        Expr::i64(0),
+    ));
+
+    let external_methods = MethodIndex::from_interface_for_namespace(&interface, "demo.app");
+    let public_external = resolve_expr_with_names(
+        &public_alpha.expr,
+        external_methods.clone(),
+        NameIndex::default(),
+    );
+    let hidden_external =
+        resolve_expr_with_names(&hidden_alpha.expr, external_methods, NameIndex::default());
+    let hidden_internal = resolve_expr_with_names(
+        &hidden_alpha.expr,
+        MethodIndex::from_interface_for_namespace(&interface, "demo.math"),
+        NameIndex::default(),
+    );
+
+    assert_eq!(public_external.diagnostics, vec![]);
+    assert_eq!(
+        public_external.resolved_calls,
+        vec![ResolvedCall::ReceiverMethod {
+            receiver: "Box".to_string(),
+            name: "show".to_string(),
+            symbol: "demo.math::Box.show".to_string(),
+        }]
+    );
+    assert_eq!(
+        hidden_external.diagnostics,
+        vec![ResolveDiagnostic::MissingMethod {
+            receiver: Some("Box".to_string()),
+            name: "hidden".to_string(),
+        }]
+    );
+    assert_eq!(
+        hidden_internal.resolved_calls,
+        vec![ResolvedCall::ReceiverMethod {
+            receiver: "Box".to_string(),
+            name: "hidden".to_string(),
+            symbol: "demo.math::Box.hidden".to_string(),
         }]
     );
 }
