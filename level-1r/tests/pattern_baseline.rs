@@ -108,3 +108,28 @@ fn tuple_pattern_collects_nested_bindings_in_source_order() {
     assert_eq!(output.pattern.envs[0].failure_branch_binds, false);
     assert!(output.cps.to_string().contains("(head, (_, tail)) => join"));
 }
+
+#[test]
+fn tuple_pattern_reports_duplicate_binding_once() {
+    let output = compile_expr(&Expr::if_let(
+        Pattern::tuple(vec![
+            Pattern::bind("x"),
+            Pattern::tuple(vec![Pattern::bind("x"), Pattern::bind("y")]),
+            Pattern::bind("x"),
+        ]),
+        Expr::var("pair"),
+        Expr::var("y"),
+        Expr::i64(0),
+    ));
+
+    assert_eq!(
+        output.pattern.diagnostics,
+        vec![PatternDiagnostic::DuplicateBinding {
+            name: "x".to_string(),
+        }]
+    );
+    assert_eq!(
+        output.pattern.envs[0].bindings,
+        vec!["x".to_string(), "x".to_string(), "y".to_string(), "x".to_string()]
+    );
+}

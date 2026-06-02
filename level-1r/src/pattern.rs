@@ -29,6 +29,9 @@ pub enum PatternDiagnostic {
         scrutinee_type: Type,
         missing: Vec<Pattern>,
     },
+    DuplicateBinding {
+        name: String,
+    },
 }
 
 pub fn analyze_patterns(expr: &TypedExpr) -> PatternFacts {
@@ -77,6 +80,7 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             visit(scrutinee, facts);
             visit(then_branch, facts);
             visit(else_branch, facts);
+            diagnose_duplicate_bindings(pattern, facts);
             facts.envs.push(PatternEnvFact {
                 bindings: pattern_bindings(pattern),
                 success_branch_binds: true,
@@ -87,6 +91,7 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             visit(scrutinee, facts);
             for arm in arms {
                 visit(&arm.body, facts);
+                diagnose_duplicate_bindings(&arm.pattern, facts);
             }
             let fact = exhaustiveness(scrutinee, arms);
             if !fact.exhaustive {
@@ -163,5 +168,38 @@ fn pattern_bindings(pattern: &Pattern) -> Vec<String> {
             .flat_map(pattern_bindings)
             .collect::<Vec<_>>(),
         Pattern::Wildcard | Pattern::Lit(_) => vec![],
+    }
+}
+
+fn diagnose_duplicate_bindings(pattern: &Pattern, facts: &mut PatternFacts) {
+    let mut seen = Vec::new();
+    let mut duplicates = Vec::new();
+    collect_duplicate_bindings(pattern, &mut seen, &mut duplicates);
+    for name in duplicates {
+        facts
+            .diagnostics
+            .push(PatternDiagnostic::DuplicateBinding { name });
+    }
+}
+
+fn collect_duplicate_bindings(
+    pattern: &Pattern,
+    seen: &mut Vec<String>,
+    duplicates: &mut Vec<String>,
+) {
+    match pattern {
+        Pattern::Bind(name) => {
+            if seen.contains(name) && !duplicates.contains(name) {
+                duplicates.push(name.clone());
+            } else {
+                seen.push(name.clone());
+            }
+        }
+        Pattern::Tuple(fields) => {
+            for field in fields {
+                collect_duplicate_bindings(field, seen, duplicates);
+            }
+        }
+        Pattern::Wildcard | Pattern::Lit(_) => {}
     }
 }
