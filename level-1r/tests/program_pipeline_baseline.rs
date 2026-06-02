@@ -11,9 +11,10 @@ fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
 
 #[test]
 fn compile_program_keeps_legacy_per_def_outputs() {
-    let program = SourceProgram {
-        items: vec![def("one", vec![], Expr::i64(1)), def("two", vec![], Expr::i64(2))],
-    };
+    let program = SourceProgram::new(vec![
+        def("one", vec![], Expr::i64(1)),
+        def("two", vec![], Expr::i64(2)),
+    ]);
 
     let outputs = compile_program(&program);
 
@@ -24,12 +25,10 @@ fn compile_program_keeps_legacy_per_def_outputs() {
 
 #[test]
 fn program_bundle_selects_main_and_links_def_artifacts() {
-    let program = SourceProgram {
-        items: vec![
-            def("helper", vec![], Expr::i64(1)),
-            def("main", vec![], Expr::i64(7)),
-        ],
-    };
+    let program = SourceProgram::new(vec![
+        def("helper", vec![], Expr::i64(1)),
+        def("main", vec![], Expr::i64(7)),
+    ]);
 
     let bundle = compile_program_bundle(&program);
 
@@ -48,12 +47,10 @@ fn program_bundle_selects_main_and_links_def_artifacts() {
 
 #[test]
 fn program_bundle_reports_duplicate_defs_and_entry_params() {
-    let program = SourceProgram {
-        items: vec![
-            def("main", vec!["x"], Expr::var("x")),
-            def("main", vec![], Expr::i64(0)),
-        ],
-    };
+    let program = SourceProgram::new(vec![
+        def("main", vec!["x"], Expr::var("x")),
+        def("main", vec![], Expr::i64(0)),
+    ]);
 
     let bundle = compile_program_bundle(&program);
 
@@ -75,7 +72,7 @@ fn program_bundle_reports_duplicate_defs_and_entry_params() {
 
 #[test]
 fn program_bundle_reports_missing_entry_for_empty_program() {
-    let program = SourceProgram { items: vec![] };
+    let program = SourceProgram::default();
 
     let bundle = compile_program_bundle(&program);
 
@@ -86,14 +83,14 @@ fn program_bundle_reports_missing_entry_for_empty_program() {
 
 #[test]
 fn program_summary_contains_program_level_nanopass_events() {
-    let program = SourceProgram {
-        items: vec![def("main", vec![], Expr::i64(7))],
-    };
+    let program = SourceProgram::new(vec![def("main", vec![], Expr::i64(7))]);
 
     let bundle = compile_program_bundle(&program);
     let summary = bundle.render_summary();
 
     assert!(summary.contains("program:"));
+    assert!(summary.contains("namespace=<root>"));
+    assert!(summary.contains("imports=[]"));
     assert!(summary.contains("defs=1"));
     assert!(summary.contains("entry=Some(\"main\")"));
     assert!(summary.contains("P1ProgramSurface: SourceProgram -> ProgramDiagnostics"));

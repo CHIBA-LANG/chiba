@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOp, Expr, Pattern, SourceItem, SourceProgram};
+use crate::ast::{BinaryOp, Expr, NamespaceDecl, Pattern, SourceItem, SourceProgram, UseDecl};
 use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,6 +39,16 @@ fn chiba_lexer_spec() -> LexerSpec {
             LexerRule {
                 name: "KwDef".to_string(),
                 pattern: "def".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "KwNamespace".to_string(),
+                pattern: "namespace".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "KwUse".to_string(),
+                pattern: "use".to_string(),
                 skip: false,
             },
             LexerRule {
@@ -140,11 +150,52 @@ impl FrontendParser {
     }
 
     fn parse_program(&mut self) -> Result<SourceProgram, FrontendError> {
+        let namespace = if self.peek_name() == Some("KwNamespace") {
+            Some(self.parse_namespace()?)
+        } else {
+            None
+        };
+        let mut imports = Vec::new();
+        while self.peek_name() == Some("KwUse") {
+            imports.push(self.parse_use()?);
+        }
         let mut items = Vec::new();
         while !self.is_eof() {
             items.push(self.parse_def()?);
         }
-        Ok(SourceProgram { items })
+        Ok(SourceProgram::with_surface(namespace, imports, items))
+    }
+
+    fn parse_namespace(&mut self) -> Result<NamespaceDecl, FrontendError> {
+        self.expect("KwNamespace")?;
+        Ok(NamespaceDecl::new(self.parse_path()?))
+    }
+
+    fn parse_use(&mut self) -> Result<UseDecl, FrontendError> {
+        self.expect("KwUse")?;
+        let mut path = Vec::new();
+        path.push(self.expect_lexeme("Ident")?);
+        let mut glob = false;
+        while self.peek_name() == Some("Dot") {
+            self.pos += 1;
+            if self.peek_name() == Some("Star") {
+                self.pos += 1;
+                glob = true;
+                break;
+            }
+            path.push(self.expect_lexeme("Ident")?);
+        }
+        Ok(UseDecl::new(path, glob))
+    }
+
+    fn parse_path(&mut self) -> Result<Vec<String>, FrontendError> {
+        let mut path = Vec::new();
+        path.push(self.expect_lexeme("Ident")?);
+        while self.peek_name() == Some("Dot") {
+            self.pos += 1;
+            path.push(self.expect_lexeme("Ident")?);
+        }
+        Ok(path)
     }
 
     fn parse_def(&mut self) -> Result<SourceItem, FrontendError> {

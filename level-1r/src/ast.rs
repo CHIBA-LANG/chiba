@@ -1,6 +1,19 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceProgram {
+    pub namespace: Option<NamespaceDecl>,
+    pub imports: Vec<UseDecl>,
     pub items: Vec<SourceItem>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamespaceDecl {
+    pub path: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UseDecl {
+    pub path: Vec<String>,
+    pub glob: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -10,6 +23,58 @@ pub enum SourceItem {
         params: Vec<String>,
         body: Expr,
     },
+}
+
+impl SourceProgram {
+    pub fn new(items: Vec<SourceItem>) -> Self {
+        Self {
+            namespace: None,
+            imports: Vec::new(),
+            items,
+        }
+    }
+
+    pub fn with_surface(
+        namespace: Option<NamespaceDecl>,
+        imports: Vec<UseDecl>,
+        items: Vec<SourceItem>,
+    ) -> Self {
+        Self {
+            namespace,
+            imports,
+            items,
+        }
+    }
+}
+
+impl Default for SourceProgram {
+    fn default() -> Self {
+        Self::new(Vec::new())
+    }
+}
+
+impl NamespaceDecl {
+    pub fn new(path: Vec<String>) -> Self {
+        Self { path }
+    }
+
+    pub fn dotted(&self) -> String {
+        self.path.join(".")
+    }
+}
+
+impl UseDecl {
+    pub fn new(path: Vec<String>, glob: bool) -> Self {
+        Self { path, glob }
+    }
+
+    pub fn dotted(&self) -> String {
+        if self.glob {
+            format!("{}.*", self.path.join("."))
+        } else {
+            self.path.join(".")
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

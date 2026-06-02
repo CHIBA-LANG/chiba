@@ -1,7 +1,7 @@
 use crate::alpha::{alpha_expr, AlphaFacts};
 use std::collections::BTreeSet;
 
-use crate::ast::{Expr, SourceItem, SourceProgram};
+use crate::ast::{Expr, NamespaceDecl, SourceItem, SourceProgram, UseDecl};
 use crate::backend::{
     backend_cache_key, emit_wasm_gc, link_backend_artifacts, BackendArtifact, BackendCacheConfig,
     BackendCacheKey, BackendLinkedBundle,
@@ -62,6 +62,8 @@ pub struct CompileOutput {
 
 #[derive(Clone, Debug)]
 pub struct ProgramCompileOutput {
+    pub namespace: Option<NamespaceDecl>,
+    pub imports: Vec<UseDecl>,
     pub defs: Vec<ProgramDefOutput>,
     pub diagnostics: Vec<ProgramDiagnostic>,
     pub entry: Option<String>,
@@ -313,6 +315,8 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
     );
     ProgramCompileOutput {
+        namespace: program.namespace.clone(),
+        imports: program.imports.clone(),
         defs,
         diagnostics: all_diagnostics,
         entry,
@@ -421,6 +425,20 @@ impl ProgramCompileOutput {
     pub fn render_summary(&self) -> String {
         let mut out = String::new();
         out.push_str("program:\n");
+        out.push_str(&format!(
+            "  namespace={}\n",
+            self.namespace
+                .as_ref()
+                .map(NamespaceDecl::dotted)
+                .unwrap_or_else(|| "<root>".to_string())
+        ));
+        out.push_str(&format!(
+            "  imports={:?}\n",
+            self.imports
+                .iter()
+                .map(UseDecl::dotted)
+                .collect::<Vec<_>>()
+        ));
         out.push_str(&format!("  defs={}\n", self.defs.len()));
         out.push_str(&format!("  entry={:?}\n", self.entry));
         out.push_str(&format!("  diagnostics={:?}\n", self.diagnostics));
@@ -440,6 +458,24 @@ impl SourceCompileOutput {
         let mut out = String::new();
         out.push_str("source-program:\n");
         out.push_str(&format!("  tokens={}\n", self.frontend.tokens.len()));
+        out.push_str(&format!(
+            "  namespace={}\n",
+            self.frontend
+                .program
+                .namespace
+                .as_ref()
+                .map(NamespaceDecl::dotted)
+                .unwrap_or_else(|| "<root>".to_string())
+        ));
+        out.push_str(&format!(
+            "  imports={:?}\n",
+            self.frontend
+                .program
+                .imports
+                .iter()
+                .map(UseDecl::dotted)
+                .collect::<Vec<_>>()
+        ));
         out.push_str(&format!("  items={}\n", self.frontend.program.items.len()));
         out.push_str(&self.program.render_summary());
         out

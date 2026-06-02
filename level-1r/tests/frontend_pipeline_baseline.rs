@@ -62,6 +62,79 @@ fn frontend_source_program_enters_program_bundle_pipeline() {
 }
 
 #[test]
+fn frontend_parses_namespace_and_use_headers_as_project_surface() {
+    let output = parse_source_program(
+        "namespace parser.chiba use frontend.ast.* use std.regex def main() = 7",
+    )
+    .expect("frontend parse");
+
+    let namespace = output.program.namespace.as_ref().expect("namespace");
+    assert_eq!(namespace.path, vec!["parser".to_string(), "chiba".to_string()]);
+    assert_eq!(namespace.dotted(), "parser.chiba");
+    assert_eq!(output.program.imports.len(), 2);
+    assert_eq!(output.program.imports[0].path, vec!["frontend".to_string(), "ast".to_string()]);
+    assert!(output.program.imports[0].glob);
+    assert_eq!(output.program.imports[0].dotted(), "frontend.ast.*");
+    assert_eq!(output.program.imports[1].path, vec!["std".to_string(), "regex".to_string()]);
+    assert!(!output.program.imports[1].glob);
+    assert_eq!(output.program.items.len(), 1);
+
+    assert_eq!(
+        output
+            .tokens
+            .iter()
+            .map(|token| token.name.as_str())
+            .take(12)
+            .collect::<Vec<_>>(),
+        vec![
+            "KwNamespace",
+            "Ident",
+            "Dot",
+            "Ident",
+            "KwUse",
+            "Ident",
+            "Dot",
+            "Ident",
+            "Dot",
+            "Star",
+            "KwUse",
+            "Ident",
+        ]
+    );
+}
+
+#[test]
+fn frontend_project_surface_reaches_program_summary_and_keeps_entry() {
+    let output = compile_source_program_bundle(
+        "namespace parser.chiba use frontend.ast.* def helper() = 1 def main() = 7",
+    )
+    .expect("compile source");
+
+    assert_eq!(output.program.entry, Some("main".to_string()));
+    assert_eq!(
+        output.program.namespace.as_ref().map(|namespace| namespace.dotted()),
+        Some("parser.chiba".to_string())
+    );
+    assert_eq!(
+        output
+            .program
+            .imports
+            .iter()
+            .map(|import| import.dotted())
+            .collect::<Vec<_>>(),
+        vec!["frontend.ast.*".to_string()]
+    );
+
+    let summary = output.render_summary();
+    assert!(summary.contains("source-program:"));
+    assert!(summary.contains("namespace=parser.chiba"));
+    assert!(summary.contains("imports=[\"frontend.ast.*\"]"));
+    assert!(summary.contains("program:"));
+    assert!(summary.contains("defs=2"));
+    assert!(summary.contains("entry=Some(\"main\")"));
+}
+
+#[test]
 fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
     let output = compile_source_program_bundle("def helper() = f(1) def main() = helper(2)")
         .expect("compile source");
