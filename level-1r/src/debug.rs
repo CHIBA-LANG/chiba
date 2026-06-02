@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use crate::alpha::AlphaFacts;
 use crate::ast::Expr;
-use crate::backend::{BackendArtifact, BackendLinkedBundle};
+use crate::backend::{BackendArtifact, BackendCacheKey, BackendLinkedBundle};
 use crate::closure::ClosureFacts;
 use crate::closure_core_usage::ClosureCoreUsageFacts;
 use crate::closure_simplify::ClosureSimplificationFacts;
@@ -41,6 +41,7 @@ pub struct VisualReport {
     pub core_validation: String,
     pub backend: String,
     pub backend_link: String,
+    pub backend_cache_key: String,
     pub nanopass: String,
 }
 
@@ -86,6 +87,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.backend).unwrap();
     writeln!(out, "backend-link:").unwrap();
     writeln!(out, "  {}", report.backend_link).unwrap();
+    writeln!(out, "backend-cache-key:").unwrap();
+    writeln!(out, "  {}", report.backend_cache_key).unwrap();
     writeln!(out, "nanopass:").unwrap();
     for event in report.nanopass.lines() {
         writeln!(out, "  {event}").unwrap();
@@ -114,6 +117,7 @@ pub fn visual_report(
     core_validation: &CoreValidation,
     backend: &BackendArtifact,
     backend_link: &BackendLinkedBundle,
+    backend_cache_key: &BackendCacheKey,
     passes: &PassReport,
 ) -> VisualReport {
     VisualReport {
@@ -137,6 +141,7 @@ pub fn visual_report(
         core_validation: format!("{core_validation:#?}"),
         backend: format!("{backend:#?}"),
         backend_link: format!("{backend_link:#?}"),
+        backend_cache_key: format!("{backend_cache_key:#?}"),
         nanopass: render_pass_report(passes),
     }
 }

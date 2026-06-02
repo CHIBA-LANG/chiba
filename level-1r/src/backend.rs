@@ -53,6 +53,56 @@ pub enum BackendLinkDiagnostic {
     },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackendCacheConfig {
+    pub compiler_version: String,
+    pub features: BackendTargetFeatures,
+    pub ownership_runtime: BackendOwnershipRuntime,
+    pub imports: Vec<BackendExternImport>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackendTargetFeatures {
+    pub tailcall: bool,
+    pub wasi: bool,
+    pub thread: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BackendOwnershipRuntime {
+    WasmGc,
+    RcArcHelpers,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackendExternImport {
+    pub abi: String,
+    pub module: String,
+    pub name: String,
+    pub signature_hash: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackendCacheKey {
+    pub target: BackendTarget,
+    pub digest: String,
+}
+
+impl Default for BackendCacheConfig {
+    fn default() -> Self {
+        Self {
+            compiler_version: "level-1r-baseline".to_string(),
+            features: BackendTargetFeatures {
+                tailcall: true,
+                wasi: true,
+                thread: false,
+            },
+            ownership_runtime: BackendOwnershipRuntime::WasmGc,
+            imports: vec![],
+        }
+    }
+}
+
 pub fn emit_wasm_gc(core: &CoreProgram, validation: &CoreValidation) -> BackendArtifact {
     if !validation.is_ok() {
         return BackendArtifact {
@@ -222,4 +272,121 @@ pub fn link_backend_artifacts(mut artifacts: Vec<BackendArtifact>) -> BackendLin
         manifest: BackendManifest { entries },
         diagnostics,
     }
+}
+
+pub fn backend_cache_key(
+    bundle: &BackendLinkedBundle,
+    config: &BackendCacheConfig,
+) -> BackendCacheKey {
+    let mut encoded = String::new();
+    encoded.push_str("compiler=");
+    encoded.push_str(&config.compiler_version);
+    encoded.push('\n');
+    encoded.push_str("target=");
+    encoded.push_str(backend_target_name(bundle.target));
+    encoded.push('\n');
+    encoded.push_str("features=");
+    encoded.push_str(if config.features.tailcall {
+        "tailcall"
+    } else {
+        "no-tailcall"
+    });
+    encoded.push(',');
+    encoded.push_str(if config.features.wasi { "wasi" } else { "no-wasi" });
+    encoded.push(',');
+    encoded.push_str(if config.features.thread {
+        "thread"
+    } else {
+        "no-thread"
+    });
+    encoded.push('\n');
+    encoded.push_str("ownership-runtime=");
+    encoded.push_str(ownership_runtime_name(config.ownership_runtime));
+    encoded.push('\n');
+
+    let mut imports = config.imports.clone();
+    imports.sort_by(|left, right| canonical_import(left).cmp(&canonical_import(right)));
+    for import in &imports {
+        encoded.push_str("import=");
+        encoded.push_str(&canonical_import(import));
+        encoded.push('\n');
+    }
+
+    let mut entries = bundle.manifest.entries.clone();
+    entries.sort_by(|left, right| left.final_symbol.cmp(&right.final_symbol));
+    for entry in &entries {
+        encoded.push_str("symbol=");
+        encoded.push_str(&entry.final_symbol);
+        encoded.push('|');
+        encoded.push_str(&entry.source_debug_name);
+        encoded.push('|');
+        encoded.push_str(&entry.pass_origin);
+        encoded.push('|');
+        encoded.push_str(
+            entry
+                .ownership
+                .map(ownership_decision_name)
+                .unwrap_or("none"),
+        );
+        encoded.push('\n');
+    }
+    encoded.push_str("wat=");
+    encoded.push_str(&bundle.linked_wat);
+
+    BackendCacheKey {
+        target: bundle.target,
+        digest: stable_digest(&encoded),
+    }
+}
+
+fn backend_target_name(target: BackendTarget) -> &'static str {
+    match target {
+        BackendTarget::WasmGc => "wasm-gc",
+    }
+}
+
+fn ownership_runtime_name(runtime: BackendOwnershipRuntime) -> &'static str {
+    match runtime {
+        BackendOwnershipRuntime::WasmGc => "wasm-gc",
+        BackendOwnershipRuntime::RcArcHelpers => "rc-arc-helpers",
+    }
+}
+
+fn ownership_decision_name(decision: OwnershipDecision) -> &'static str {
+    match decision {
+        OwnershipDecision::StackValue => "stack-value",
+        OwnershipDecision::InplaceReuse => "inplace-reuse",
+        OwnershipDecision::Rc => "rc",
+        OwnershipDecision::Arc => "arc",
+        OwnershipDecision::StaticData => "static-data",
+        OwnershipDecision::BorrowedView => "borrowed-view",
+        OwnershipDecision::DynPackage => "dyn-package",
+    }
+}
+
+fn canonical_import(import: &BackendExternImport) -> String {
+    format!(
+        "{}::{}::{}::{}",
+        canonical_abi(&import.abi),
+        import.module,
+        import.name,
+        import.signature_hash
+    )
+}
+
+fn canonical_abi(abi: &str) -> String {
+    if abi.eq_ignore_ascii_case("c") {
+        "c".to_string()
+    } else {
+        abi.to_ascii_lowercase()
+    }
+}
+
+fn stable_digest(encoded: &str) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in encoded.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
 }

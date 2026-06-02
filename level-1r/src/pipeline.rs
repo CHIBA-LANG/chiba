@@ -1,6 +1,9 @@
 use crate::alpha::{alpha_expr, AlphaFacts};
 use crate::ast::{Expr, SourceItem, SourceProgram};
-use crate::backend::{emit_wasm_gc, link_backend_artifacts, BackendArtifact, BackendLinkedBundle};
+use crate::backend::{
+    backend_cache_key, emit_wasm_gc, link_backend_artifacts, BackendArtifact, BackendCacheConfig,
+    BackendCacheKey, BackendLinkedBundle,
+};
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
 use crate::closure_simplify::{simplify_closure_core, ClosureSimplificationFacts};
@@ -41,6 +44,7 @@ pub struct CompileOutput {
     pub core_validation: CoreValidation,
     pub backend: BackendArtifact,
     pub backend_link: BackendLinkedBundle,
+    pub backend_cache_key: BackendCacheKey,
     pub passes: PassReport,
     pub visual: VisualReport,
 }
@@ -125,6 +129,12 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         "BackendLinkedBundle",
         || link_backend_artifacts(vec![backend.clone()]),
     );
+    let backend_cache_key = passes.record(
+        "L20BackendCacheKey",
+        "BackendLinkedBundle",
+        "BackendCacheKey",
+        || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
+    );
     let visual = visual_report(
         expr,
         &alpha,
@@ -146,6 +156,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &core_validation,
         &backend,
         &backend_link,
+        &backend_cache_key,
         &passes,
     );
     CompileOutput {
@@ -168,6 +179,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         core_validation,
         backend,
         backend_link,
+        backend_cache_key,
         passes,
         visual,
     }

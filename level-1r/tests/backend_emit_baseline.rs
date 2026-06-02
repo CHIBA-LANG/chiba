@@ -1,5 +1,6 @@
 use chiba_level1r::backend::{
-    emit_wasm_gc, link_backend_artifacts, BackendDiagnostic, BackendLinkDiagnostic, BackendTarget,
+    backend_cache_key, emit_wasm_gc, link_backend_artifacts, BackendCacheConfig,
+    BackendDiagnostic, BackendExternImport, BackendLinkDiagnostic, BackendTarget,
 };
 use chiba_level1r::core::{CoreDiagnostic, CoreOp, CoreProgram, CoreValidation};
 use chiba_level1r::{compile_expr, Expr};
@@ -175,6 +176,83 @@ fn pipeline_records_backend_link_artifact() {
 
     let visual = output.render_visual();
     assert!(visual.contains("backend-link:"));
+    assert!(visual.contains("backend-cache-key:"));
     assert!(visual.contains("BackendLinkedBundle"));
+    assert!(visual.contains("BackendCacheKey"));
     assert!(visual.contains("L19BackendLink: BackendArtifact -> BackendLinkedBundle"));
+    assert!(visual.contains("L20BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
+}
+
+#[test]
+fn backend_cache_key_is_stable_across_manifest_order() {
+    let first = emit_wasm_gc(
+        &CoreProgram {
+            ops: vec![CoreOp::DirectMethodTarget {
+                name: "zeta".to_string(),
+                target: "z::target".to_string(),
+            }],
+            layouts: vec![],
+            ownership: vec![],
+            callable_storage: vec![],
+        },
+        &CoreValidation::default(),
+    );
+    let second = emit_wasm_gc(
+        &CoreProgram {
+            ops: vec![CoreOp::OperatorTarget {
+                protocol: "operator.add".to_string(),
+                target: "a::target".to_string(),
+            }],
+            layouts: vec![],
+            ownership: vec![],
+            callable_storage: vec![],
+        },
+        &CoreValidation::default(),
+    );
+    let left = link_backend_artifacts(vec![first.clone(), second.clone()]);
+    let right = link_backend_artifacts(vec![second, first]);
+
+    assert_eq!(
+        backend_cache_key(&left, &BackendCacheConfig::default()),
+        backend_cache_key(&right, &BackendCacheConfig::default())
+    );
+}
+
+#[test]
+fn backend_cache_key_distinguishes_target_features_and_imports() {
+    let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
+    let mut wasi = BackendCacheConfig::default();
+    wasi.imports.push(BackendExternImport {
+        abi: "wasi".to_string(),
+        module: "wasi_snapshot_preview1".to_string(),
+        name: "fd_write".to_string(),
+        signature_hash: "i32_i32_i32_i32_to_i32".to_string(),
+    });
+    let mut env = BackendCacheConfig::default();
+    env.imports.push(BackendExternImport {
+        abi: "C".to_string(),
+        module: "env".to_string(),
+        name: "js_log".to_string(),
+        signature_hash: "i32_to_unit".to_string(),
+    });
+    let mut env_lowercase = env.clone();
+    env_lowercase.imports[0].abi = "c".to_string();
+
+    let wasi_key = backend_cache_key(&output.backend_link, &wasi);
+    let env_key = backend_cache_key(&output.backend_link, &env);
+    let env_lowercase_key = backend_cache_key(&output.backend_link, &env_lowercase);
+
+    assert_ne!(wasi_key, env_key);
+    assert_eq!(env_key, env_lowercase_key);
+
+    let mut no_tailcall = BackendCacheConfig::default();
+    no_tailcall.features.tailcall = false;
+    assert_ne!(
+        backend_cache_key(&output.backend_link, &BackendCacheConfig::default()),
+        backend_cache_key(&output.backend_link, &no_tailcall)
+    );
+    assert_eq!(
+        output.backend_cache_key,
+        backend_cache_key(&output.backend_link, &BackendCacheConfig::default())
+    );
 }

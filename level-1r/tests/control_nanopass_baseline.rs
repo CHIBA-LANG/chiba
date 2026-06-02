@@ -54,7 +54,8 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
             "L16ClosureSimplify",
             "L17CoreValidate",
             "L18BackendEmit",
-            "L19BackendLink"
+            "L19BackendLink",
+            "L20BackendCacheKey"
         ]
     );
 
@@ -74,6 +75,7 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("core-validation:"));
     assert!(visual.contains("backend:"));
     assert!(visual.contains("backend-link:"));
+    assert!(visual.contains("backend-cache-key:"));
     assert!(visual.contains("nanopass:"));
     assert!(visual.contains("L1Alpha: SourceExpr -> AlphaFacts"));
     assert!(visual.contains("L3Template: AlphaExpr+ResolveFacts -> TemplateFacts"));
@@ -95,6 +97,9 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     ));
     assert!(visual.contains(
         "L19BackendLink: BackendArtifact -> BackendLinkedBundle"
+    ));
+    assert!(visual.contains(
+        "L20BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"
     ));
 }
 
