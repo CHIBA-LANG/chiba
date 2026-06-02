@@ -62,7 +62,7 @@ pub enum CpsTerm {
     Halt(CpsAtom),
     AppFun {
         func: CpsAtom,
-        arg: CpsAtom,
+        args: Vec<CpsAtom>,
         kont: CpsAtom,
     },
     AppCont {
@@ -155,8 +155,8 @@ fn transform(
                 ctx,
             )
         }
-        TypedExprKind::Call { callee, arg } => {
-            transform_call(callee, arg, k, controls, ctx)
+        TypedExprKind::Call { callee, args } => {
+            transform_call(callee, args, k, controls, ctx)
         }
         TypedExprKind::Tuple { fields, nominal } => {
             transform_tuple(fields, nominal, k, controls, ctx)
@@ -208,7 +208,7 @@ fn transform(
                             let kont_body = k(CpsAtom::Var(w.clone()), ctx);
                             CpsTerm::AppFun {
                                 func: CpsAtom::Var(format!("{receiver}.{name}")),
-                                arg,
+                                args: vec![arg],
                                 kont: CpsAtom::ContLambda {
                                     param: w,
                                     body: Box::new(kont_body),
@@ -238,7 +238,7 @@ fn transform(
                             let kont_body = k(CpsAtom::Var(w.clone()), ctx);
                             CpsTerm::AppFun {
                                 func: CpsAtom::Var(format!("{op_name}({lhs})")),
-                                arg: rhs,
+                                args: vec![rhs],
                                 kont: CpsAtom::ContLambda {
                                     param: w,
                                     body: Box::new(kont_body),
@@ -579,36 +579,53 @@ fn transform_record_fields(
 
 fn transform_call(
     callee: &TypedExpr,
-    arg: &TypedExpr,
+    args: &[TypedExpr],
     k: MetaKont<'_>,
     controls: Vec<ContinuationKind>,
     ctx: &mut CpsCtx,
 ) -> CpsTerm {
     let callee_controls = controls.clone();
-    let arg_controls = controls;
     transform(
         callee,
         Box::new(|func, ctx| {
-            let arg_controls = arg_controls.clone();
-            transform(
-                arg,
-                Box::new(|arg, ctx| {
-                    let w = ctx.fresh("w");
-                    let kont_body = k(CpsAtom::Var(w.clone()), ctx);
-                    CpsTerm::AppFun {
-                        func,
-                        arg,
-                        kont: CpsAtom::ContLambda {
-                            param: w,
-                            body: Box::new(kont_body),
-                        },
-                    }
-                }),
-                arg_controls,
-                ctx,
-            )
+            transform_call_args(args, 0, Vec::new(), func, k, controls, ctx)
         }),
         callee_controls,
+        ctx,
+    )
+}
+
+fn transform_call_args(
+    args: &[TypedExpr],
+    index: usize,
+    values: Vec<CpsAtom>,
+    func: CpsAtom,
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    if index == args.len() {
+        let w = ctx.fresh("w");
+        let kont_body = k(CpsAtom::Var(w.clone()), ctx);
+        return CpsTerm::AppFun {
+            func,
+            args: values,
+            kont: CpsAtom::ContLambda {
+                param: w,
+                body: Box::new(kont_body),
+            },
+        };
+    }
+
+    let arg_controls = controls.clone();
+    transform(
+        &args[index],
+        Box::new(move |value, ctx| {
+            let mut values = values;
+            values.push(value);
+            transform_call_args(args, index + 1, values, func, k, controls, ctx)
+        }),
+        arg_controls,
         ctx,
     )
 }
@@ -748,7 +765,19 @@ impl fmt::Display for CpsTerm {
         match self {
             CpsTerm::Halt(value) => write!(f, "halt {value}"),
             CpsTerm::AppCont { kont, value } => write!(f, "{kont}({value})"),
-            CpsTerm::AppFun { func, arg, kont } => write!(f, "{func}({arg}, {kont})"),
+            CpsTerm::AppFun { func, args, kont } => {
+                for (index, arg) in args.iter().enumerate() {
+                    if index == 0 {
+                        write!(f, "{func}({arg}")?;
+                    } else {
+                        write!(f, ", {arg}")?;
+                    }
+                }
+                if args.is_empty() {
+                    write!(f, "{func}(")?;
+                }
+                write!(f, ", {kont})")
+            }
             CpsTerm::Prompt { multi, body } => {
                 if *multi {
                     write!(f, "resetn {{ {body} }}")

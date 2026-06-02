@@ -255,14 +255,16 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
         }
         AlphaExprKind::Lit(_) => {}
         AlphaExprKind::Lambda { body, .. } => visit(body, facts),
-        AlphaExprKind::Call { callee, arg } => {
+        AlphaExprKind::Call { callee, args } => {
             match &callee.kind {
                 AlphaExprKind::Var(var) if var.target.is_none() => {
-                    resolve_function_call(&var.name, 1, facts);
+                    resolve_function_call(&var.name, args.len(), facts);
                 }
                 _ => visit(callee, facts),
             }
-            visit(arg, facts);
+            for arg in args {
+                visit(arg, facts);
+            }
         }
         AlphaExprKind::Tuple(fields) => {
             for field in fields {

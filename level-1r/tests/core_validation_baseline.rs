@@ -142,7 +142,7 @@ fn validator_rejects_dangling_direct_tailcall_target() {
     let program = CoreProgram {
         ops: vec![CoreOp::TailCall {
             func: "module::missing".to_string(),
-            arg: "x".to_string(),
+            args: vec!["x".to_string()],
         }],
         layouts: vec![],
         ownership: vec![],
@@ -167,7 +167,7 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
             },
             CoreOp::TailCall {
                 func: "math.Vec2.norm".to_string(),
-                arg: "v".to_string(),
+                args: vec!["v".to_string()],
             },
         ],
         layouts: vec![],
@@ -179,7 +179,7 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
     let dynamic = CoreProgram {
         ops: vec![CoreOp::TailCall {
             func: "f".to_string(),
-            arg: "x".to_string(),
+            args: vec!["x".to_string()],
         }],
         layouts: vec![],
         ownership: vec![],

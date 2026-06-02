@@ -20,7 +20,7 @@ pub enum CoreOp {
     ReturnAtom(String),
     TailCall {
         func: String,
-        arg: String,
+        args: Vec<String>,
     },
     Prompt {
         kind: ContinuationKind,
@@ -275,9 +275,9 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
     match term {
         CpsTerm::Halt(atom) => lower_atom_value(atom, ops),
         CpsTerm::AppCont { value, .. } => lower_atom_value(value, ops),
-        CpsTerm::AppFun { func, arg, .. } => ops.push(CoreOp::TailCall {
+        CpsTerm::AppFun { func, args, .. } => ops.push(CoreOp::TailCall {
             func: render_atom(func),
-            arg: render_atom(arg),
+            args: args.iter().map(render_atom).collect(),
         }),
         CpsTerm::Prompt { multi, body } => {
             ops.push(CoreOp::Prompt {

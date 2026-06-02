@@ -19,7 +19,7 @@ pub enum TypedExprKind {
     },
     Call {
         callee: Box<TypedExpr>,
-        arg: Box<TypedExpr>,
+        args: Vec<TypedExpr>,
     },
     Tuple {
         fields: Vec<TypedExpr>,
@@ -150,13 +150,13 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                 ty,
             )
         }
-        Expr::Call { callee, arg } => {
+        Expr::Call { callee, args } => {
             let callee = type_expr(callee);
-            let arg = type_expr(arg);
+            let args = args.iter().map(type_expr).collect();
             typed(
                 TypedExprKind::Call {
                     callee: Box::new(callee),
-                    arg: Box::new(arg),
+                    args,
                 },
                 Type::Unknown,
             )

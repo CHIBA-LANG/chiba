@@ -154,7 +154,7 @@ pub enum Expr {
     },
     Call {
         callee: Box<Expr>,
-        arg: Box<Expr>,
+        args: Vec<Expr>,
     },
     Tuple(Vec<Expr>),
     Record(Vec<RecordField>),
@@ -282,9 +282,13 @@ impl Expr {
     }
 
     pub fn call(callee: Expr, arg: Expr) -> Self {
+        Self::call_args(callee, vec![arg])
+    }
+
+    pub fn call_args(callee: Expr, args: Vec<Expr>) -> Self {
         Self::Call {
             callee: Box::new(callee),
-            arg: Box::new(arg),
+            args,
         }
     }
 

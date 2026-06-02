@@ -437,13 +437,50 @@ fn frontend_parses_call_before_infix_and_reaches_cps_shape() {
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
-            chiba_level1r::core::CoreOp::TailCall { func, arg }
+            chiba_level1r::core::CoreOp::TailCall { func, args }
                 if func.contains("operator::Add")
                     && func.contains("f(x,")
-                    && arg == "I64(1)"
+                    && args == &vec!["I64(1)".to_string()]
         )
     }));
     assert!(bundle.backend_link.linked_wat.contains(";; tailcall"));
+}
+
+#[test]
+fn frontend_preserves_multi_argument_calls_through_cps_and_core() {
+    let parsed = parse_source_program("def main() = f(1, 2, 3)").expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::call_args(
+                    Expr::var("f"),
+                    vec![Expr::i64(1), Expr::i64(2), Expr::i64(3)]
+                )
+            );
+        }
+    }
+
+    let bundle = compile_program_bundle(&parsed.program);
+    let main = &bundle.defs[0].output;
+    assert!(main.cps.to_string().contains("f(1, 2, 3,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "f"
+                    && args == &vec![
+                        "I64(1)".to_string(),
+                        "I64(2)".to_string(),
+                        "I64(3)".to_string()
+                    ]
+        )
+    }));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains(";; tailcall f args=[I64(1), I64(2), I64(3)]"));
 }
 
 #[test]
@@ -772,8 +809,8 @@ fn frontend_parses_dot_method_call_as_method_call_ast() {
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
-            chiba_level1r::core::CoreOp::TailCall { func, arg }
-                if func == "receiver.show" && arg == "I64(0)"
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "receiver.show" && args == &vec!["I64(0)".to_string()]
         )
     }));
 }

@@ -27,7 +27,7 @@ pub enum AlphaExprKind {
     },
     Call {
         callee: Box<AlphaExpr>,
-        arg: Box<AlphaExpr>,
+        args: Vec<AlphaExpr>,
     },
     Tuple(Vec<AlphaExpr>),
     Record(Vec<AlphaRecordField>),
@@ -197,10 +197,10 @@ impl AlphaCtx {
                     kind: AlphaExprKind::Lambda { param, body },
                 }
             }
-            Expr::Call { callee, arg } => AlphaExpr {
+            Expr::Call { callee, args } => AlphaExpr {
                 kind: AlphaExprKind::Call {
                     callee: Box::new(self.alpha(callee)),
-                    arg: Box::new(self.alpha(arg)),
+                    args: args.iter().map(|arg| self.alpha(arg)).collect(),
                 },
             },
             Expr::Tuple(fields) => AlphaExpr {

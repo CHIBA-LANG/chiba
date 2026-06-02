@@ -52,9 +52,11 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
         }
         TypedExprKind::Lit(_) => {}
         TypedExprKind::Lambda { body, .. } => visit(body, facts),
-        TypedExprKind::Call { callee, arg } => {
+        TypedExprKind::Call { callee, args } => {
             visit(callee, facts);
-            visit(arg, facts);
+            for arg in args {
+                visit(arg, facts);
+            }
         }
         TypedExprKind::Tuple { fields, .. } => {
             for field in fields {
@@ -138,9 +140,11 @@ fn visit_alpha(expr: &AlphaExpr, facts: &mut UsageFacts) {
         }
         AlphaExprKind::Lit(_) => {}
         AlphaExprKind::Lambda { body, .. } => visit_alpha(body, facts),
-        AlphaExprKind::Call { callee, arg } => {
+        AlphaExprKind::Call { callee, args } => {
             visit_alpha(callee, facts);
-            visit_alpha(arg, facts);
+            for arg in args {
+                visit_alpha(arg, facts);
+            }
         }
         AlphaExprKind::Tuple(fields) => {
             for field in fields {

@@ -42,9 +42,11 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
     match &expr.kind {
         TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
         TypedExprKind::Lambda { body, .. } => visit(body, stack, facts),
-        TypedExprKind::Call { callee, arg } => {
+        TypedExprKind::Call { callee, args } => {
             visit(callee, stack, facts);
-            visit(arg, stack, facts);
+            for arg in args {
+                visit(arg, stack, facts);
+            }
         }
         TypedExprKind::Tuple { fields, .. } => {
             for field in fields {

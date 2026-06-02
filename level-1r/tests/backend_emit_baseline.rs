@@ -10,7 +10,7 @@ fn backend_refuses_to_emit_when_core_validation_failed() {
     let core = CoreProgram {
         ops: vec![CoreOp::TailCall {
             func: "module::missing".to_string(),
-            arg: "x".to_string(),
+            args: vec!["x".to_string()],
         }],
         layouts: vec![],
         ownership: vec![],
@@ -63,7 +63,7 @@ fn backend_records_tailcall_targets_in_serialized_output() {
             },
             CoreOp::TailCall {
                 func: "math.Vec2.norm".to_string(),
-                arg: "v".to_string(),
+                args: vec!["v".to_string()],
             },
         ],
         layouts: vec![],
@@ -76,7 +76,7 @@ fn backend_records_tailcall_targets_in_serialized_output() {
 
     assert_eq!(artifact.diagnostics, vec![]);
     assert!(artifact.wat.contains("(func $math_Vec2_norm"));
-    assert!(artifact.wat.contains(";; tailcall math_Vec2_norm arg=v"));
+    assert!(artifact.wat.contains(";; tailcall math_Vec2_norm args=[v]"));
     assert_eq!(artifact.manifest.entries[0].source_debug_name, "norm");
 }
 

@@ -48,9 +48,11 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
     match &expr.kind {
         TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
         TypedExprKind::Lambda { body, .. } => visit(body, facts),
-        TypedExprKind::Call { callee, arg } => {
+        TypedExprKind::Call { callee, args } => {
             visit(callee, facts);
-            visit(arg, facts);
+            for arg in args {
+                visit(arg, facts);
+            }
         }
         TypedExprKind::Tuple { fields, .. } => {
             for field in fields {

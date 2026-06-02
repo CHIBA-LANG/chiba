@@ -199,11 +199,14 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
                 wat.push_str(&format!("    i32.const {})\n", atom_i32_result(atom)));
                 return_index += 1;
             }
-            CoreOp::TailCall { func, arg } => {
+            CoreOp::TailCall { func, args } => {
                 wat.push_str(&format!(
-                    "  ;; tailcall {} arg={}\n",
+                    "  ;; tailcall {} args=[{}]\n",
                     final_symbol(func),
-                    escape_wat_comment(arg)
+                    args.iter()
+                        .map(|arg| escape_wat_comment(arg))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ));
             }
             CoreOp::Branch { cond } => {

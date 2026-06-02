@@ -45,9 +45,11 @@ pub fn analyze_alpha_closures(expr: &AlphaExpr) -> ClosureFacts {
 fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFacts) {
     match &expr.kind {
         TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
-        TypedExprKind::Call { callee, arg } => {
+        TypedExprKind::Call { callee, args } => {
             collect(callee, scope, facts);
-            collect(arg, scope, facts);
+            for arg in args {
+                collect(arg, scope, facts);
+            }
         }
         TypedExprKind::Tuple { fields, .. } => {
             for field in fields {
@@ -141,9 +143,11 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
 fn collect_alpha(expr: &AlphaExpr, scope: &mut BTreeSet<BinderId>, facts: &mut ClosureFacts) {
     match &expr.kind {
         AlphaExprKind::Var(_) | AlphaExprKind::Lit(_) => {}
-        AlphaExprKind::Call { callee, arg } => {
+        AlphaExprKind::Call { callee, args } => {
             collect_alpha(callee, scope, facts);
-            collect_alpha(arg, scope, facts);
+            for arg in args {
+                collect_alpha(arg, scope, facts);
+            }
         }
         AlphaExprKind::Tuple(fields) => {
             for field in fields {
@@ -248,9 +252,11 @@ fn collect_alpha_free_vars(
             }
         }
         AlphaExprKind::Lit(_) => {}
-        AlphaExprKind::Call { callee, arg } => {
+        AlphaExprKind::Call { callee, args } => {
             collect_alpha_free_vars(callee, locals, free);
-            collect_alpha_free_vars(arg, locals, free);
+            for arg in args {
+                collect_alpha_free_vars(arg, locals, free);
+            }
         }
         AlphaExprKind::Tuple(fields) => {
             for field in fields {
@@ -331,9 +337,11 @@ fn collect_free_vars(
             }
         }
         TypedExprKind::Lit(_) => {}
-        TypedExprKind::Call { callee, arg } => {
+        TypedExprKind::Call { callee, args } => {
             collect_free_vars(callee, locals, free);
-            collect_free_vars(arg, locals, free);
+            for arg in args {
+                collect_free_vars(arg, locals, free);
+            }
         }
         TypedExprKind::Tuple { fields, .. } => {
             for field in fields {

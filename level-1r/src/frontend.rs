@@ -374,23 +374,32 @@ impl FrontendParser {
             match self.peek_name() {
                 Some("LParen") => {
                     self.pos += 1;
-                    let arg = self.parse_expr_bp(0)?;
+                    let args = self.parse_expr_args()?;
                     self.expect("RParen")?;
-                    expr = Expr::call(expr, arg);
+                    expr = Expr::call_args(expr, args);
                 }
                 Some("Dot") => {
                     self.pos += 1;
                     let name = self.expect_lexeme("Ident")?;
                     if self.peek_name() == Some("LParen") {
                         self.pos += 1;
-                        let arg = self.parse_expr_bp(0)?;
+                        let args = self.parse_expr_args()?;
                         self.expect("RParen")?;
                         expr = match expr {
                             Expr::Var(data) if is_big_camel(&name) => {
                                 let variants = self.known_variants(&data, &name);
-                                Expr::adt_ctor(data, name.clone(), variants, vec![arg])
+                                Expr::adt_ctor(data, name.clone(), variants, args)
                             }
-                            receiver => Expr::method_call(receiver, name, arg),
+                            receiver => {
+                                if args.len() != 1 {
+                                    return Err(FrontendError::UnexpectedToken {
+                                        found: "RParen".to_string(),
+                                        lexeme: ")".to_string(),
+                                        expected: vec!["single method argument".to_string()],
+                                    });
+                                }
+                                Expr::method_call(receiver, name, args.into_iter().next().unwrap())
+                            }
                         };
                     } else {
                         expr = match expr {
@@ -406,6 +415,18 @@ impl FrontendParser {
             }
         }
         Ok(expr)
+    }
+
+    fn parse_expr_args(&mut self) -> Result<Vec<Expr>, FrontendError> {
+        let mut args = Vec::new();
+        loop {
+            args.push(self.parse_expr_bp(0)?);
+            if self.peek_name() != Some("Comma") {
+                break;
+            }
+            self.pos += 1;
+        }
+        Ok(args)
     }
 
     fn parse_primary(&mut self) -> Result<Expr, FrontendError> {
@@ -869,9 +890,11 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
         Expr::Lambda { param, body } => {
             Expr::lambda(param, enrich_expr_with_data_variants(*body, variants))
         }
-        Expr::Call { callee, arg } => Expr::call(
+        Expr::Call { callee, args } => Expr::call_args(
             enrich_expr_with_data_variants(*callee, variants),
-            enrich_expr_with_data_variants(*arg, variants),
+            args.into_iter()
+                .map(|arg| enrich_expr_with_data_variants(arg, variants))
+                .collect(),
         ),
         Expr::Tuple(fields) => Expr::tuple(
             fields

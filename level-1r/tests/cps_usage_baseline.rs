@@ -54,7 +54,7 @@ fn cont1_many_resume_is_boxed_one_shot_state_machine() {
             binder: "k".to_string(),
             body: Box::new(CpsTerm::AppFun {
                 func: CpsAtom::Var("f".to_string()),
-                arg: CpsAtom::Var("k".to_string()),
+                args: vec![CpsAtom::Var("k".to_string())],
                 kont: CpsAtom::ContLambda {
                     param: "w".to_string(),
                     body: Box::new(CpsTerm::AppCont {

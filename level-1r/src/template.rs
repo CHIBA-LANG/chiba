@@ -120,9 +120,11 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
     match &expr.kind {
         AlphaExprKind::Var(_) | AlphaExprKind::Lit(_) => {}
         AlphaExprKind::Lambda { body, .. } => collect_expr_obligations(body, facts),
-        AlphaExprKind::Call { callee, arg } => {
+        AlphaExprKind::Call { callee, args } => {
             collect_expr_obligations(callee, facts);
-            collect_expr_obligations(arg, facts);
+            for arg in args {
+                collect_expr_obligations(arg, facts);
+            }
         }
         AlphaExprKind::Tuple(fields) => {
             for field in fields {

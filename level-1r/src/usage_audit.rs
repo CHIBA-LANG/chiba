@@ -207,9 +207,8 @@ fn type_for_var(expr: &TypedExpr, name: &str) -> Option<Type> {
         crate::typed::TypedExprKind::Var(var) if var == name => Some(expr.ty.clone()),
         crate::typed::TypedExprKind::Var(_) | crate::typed::TypedExprKind::Lit(_) => None,
         crate::typed::TypedExprKind::Lambda { body, .. } => type_for_var(body, name),
-        crate::typed::TypedExprKind::Call { callee, arg } => {
-            type_for_var(callee, name).or_else(|| type_for_var(arg, name))
-        }
+        crate::typed::TypedExprKind::Call { callee, args } => type_for_var(callee, name)
+            .or_else(|| args.iter().find_map(|arg| type_for_var(arg, name))),
         crate::typed::TypedExprKind::Tuple { fields, .. } => {
             fields.iter().find_map(|field| type_for_var(field, name))
         }

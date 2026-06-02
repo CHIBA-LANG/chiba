@@ -50,9 +50,11 @@ pub fn simplify_continuations(usage: &CpsUsageFacts) -> ContinuationSimplificati
 fn visit_term(term: &CpsTerm, facts: &mut CpsUsageFacts) {
     match term {
         CpsTerm::Halt(atom) => visit_atom(atom, facts),
-        CpsTerm::AppFun { func, arg, kont } => {
+        CpsTerm::AppFun { func, args, kont } => {
             visit_atom(func, facts);
-            visit_atom(arg, facts);
+            for arg in args {
+                visit_atom(arg, facts);
+            }
             visit_atom(kont, facts);
         }
         CpsTerm::AppCont { kont, value } => {
@@ -152,9 +154,11 @@ fn count_binder_uses(term: &CpsTerm, binder: &str) -> UseCount {
 fn count_term_refs(term: &CpsTerm, binder: &str, count: &mut UseCount) {
     match term {
         CpsTerm::Halt(atom) => count_atom_refs(atom, binder, count),
-        CpsTerm::AppFun { func, arg, kont } => {
+        CpsTerm::AppFun { func, args, kont } => {
             count_atom_refs(func, binder, count);
-            count_atom_refs(arg, binder, count);
+            for arg in args {
+                count_atom_refs(arg, binder, count);
+            }
             count_atom_refs(kont, binder, count);
         }
         CpsTerm::AppCont { kont, value } => {
