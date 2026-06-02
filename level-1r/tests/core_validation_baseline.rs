@@ -1,7 +1,8 @@
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
-    validate_core, CallableStorageFact, CallableStorageKind, ClosureEnvLayout, CoreDiagnostic,
-    CoreOp, CoreProgram, LayoutFact, LayoutKind, OwnershipDecision, OwnershipFact, TupleLayout,
+    validate_core, CallableStorageFact, CallableStorageKind, ClosureEnvField, ClosureEnvLayout,
+    ContinuationEnvLayout, CoreDiagnostic, CoreOp, CoreProgram, LayoutFact, LayoutKind,
+    OwnershipDecision, OwnershipFact, TupleLayout,
 };
 use chiba_level1r::template::{canonical_open_row, ShapeType};
 use chiba_level1r::typed::{SendColor, UsageColor};
@@ -39,7 +40,7 @@ fn validator_rejects_invalid_layout_hash_and_duplicate_keys() {
     let layout = LayoutFact {
         key: "continuation::ContN::retry".to_string(),
         hash: 1,
-        kind: LayoutKind::ContinuationPackage(ContinuationKind::ContN),
+        kind: LayoutKind::ContinuationPackage(continuation_env("retry", ContinuationKind::ContN)),
     };
     let program = CoreProgram {
         ops: vec![],
@@ -98,7 +99,7 @@ fn validator_rejects_cont1_package_and_send_rc_contradiction() {
         layouts: vec![LayoutFact {
             key: "continuation::Cont1::k".to_string(),
             hash: 0,
-            kind: LayoutKind::ContinuationPackage(ContinuationKind::Cont1),
+            kind: LayoutKind::ContinuationPackage(continuation_env("k", ContinuationKind::Cont1)),
         }],
         ownership: vec![
             OwnershipFact {
@@ -135,6 +136,16 @@ fn validator_rejects_cont1_package_and_send_rc_contradiction() {
                 subject: "dyn::user".to_string()
             })
     );
+}
+
+fn continuation_env(binder: &str, kind: ContinuationKind) -> ContinuationEnvLayout {
+    ContinuationEnvLayout {
+        binder: binder.to_string(),
+        kind,
+        fields: Vec::<ClosureEnvField>::new(),
+        clone_on_resume: kind == ContinuationKind::ContN,
+        consumed_state_machine: kind == ContinuationKind::Cont1,
+    }
 }
 
 #[test]

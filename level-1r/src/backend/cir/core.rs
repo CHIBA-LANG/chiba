@@ -99,11 +99,21 @@ pub struct LayoutFact {
 pub enum LayoutKind {
     RowShape(RowShape),
     DynRowPackage(DynRowContract),
-    ContinuationPackage(ContinuationKind),
+    ContinuationPackage(ContinuationEnvLayout),
+    Cont1StateMachine(ContinuationEnvLayout),
     ClosureEnv(ClosureEnvLayout),
     TupleStruct(TupleLayout),
     RecordStruct(RecordLayout),
     AdtShape(AdtLayout),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContinuationEnvLayout {
+    pub binder: String,
+    pub kind: ContinuationKind,
+    pub fields: Vec<ClosureEnvField>,
+    pub clone_on_resume: bool,
+    pub consumed_state_machine: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -207,6 +217,7 @@ pub enum CoreDiagnostic {
     EnvClosureMissingLayout { subject: String },
     ClosureEnvLayoutHasNoFields { layout: String },
     SendableCallableContainsContinuation { subject: String },
+    Cont1CallableUsedMoreThanOnce { subject: String },
     SharedSendSubjectUsesRc { subject: String },
     DynPayloadMustUseDynPackage { subject: String },
     DuplicateLiftedFunctionSymbol { symbol: String },
@@ -441,7 +452,8 @@ fn validate_layouts(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>
         } else {
             keys.push(layout.key.clone());
         }
-        if matches!(&layout.kind, LayoutKind::ContinuationPackage(ContinuationKind::Cont1)) {
+        if matches!(&layout.kind, LayoutKind::ContinuationPackage(env) if env.kind == ContinuationKind::Cont1)
+        {
             diagnostics.push(CoreDiagnostic::Cont1HasPackageLayout {
                 key: layout.key.clone(),
             });
@@ -463,9 +475,10 @@ fn validate_continuation_packages(program: &CoreProgram, diagnostics: &mut Vec<C
         {
             let has_package = program.layouts.iter().any(|layout| {
                 matches!(
-                    layout.kind,
-                    LayoutKind::ContinuationPackage(ContinuationKind::ContN)
-                ) && layout.key.contains(binder)
+                    &layout.kind,
+                    LayoutKind::ContinuationPackage(env)
+                        if env.kind == ContinuationKind::ContN && env.binder == *binder
+                )
             });
             if !has_package {
                 diagnostics.push(CoreDiagnostic::MissingContNPackage {
@@ -671,6 +684,11 @@ fn validate_callable_storage(program: &CoreProgram, diagnostics: &mut Vec<CoreDi
                 subject: fact.subject.clone(),
             });
         }
+        if fact.kind == CallableStorageKind::BoxedCont1 && fact.usage == UsageColor::Many {
+            diagnostics.push(CoreDiagnostic::Cont1CallableUsedMoreThanOnce {
+                subject: fact.subject.clone(),
+            });
+        }
         if fact.kind == CallableStorageKind::EnvClosure {
             let expected_layout = format!("closure-env::{}", fact.subject);
             let has_layout = program.layouts.iter().any(|layout| {
@@ -850,14 +868,16 @@ fn lower_layouts(
         }
     }
     for fact in continuations {
-        if fact.kind == ContinuationKind::ContN {
-            let key = format!("continuation::{:?}::{}", fact.kind, fact.binder);
-            layouts.push(LayoutFact {
-                hash: stable_hash(&key),
-                key,
-                kind: LayoutKind::ContinuationPackage(fact.kind),
-            });
-        }
+        let key = format!("continuation::{:?}::{}", fact.kind, fact.binder);
+        let env = continuation_env_layout(fact);
+        layouts.push(LayoutFact {
+            hash: stable_hash(&key),
+            key,
+            kind: match fact.kind {
+                ContinuationKind::Cont1 => LayoutKind::Cont1StateMachine(env),
+                ContinuationKind::ContN => LayoutKind::ContinuationPackage(env),
+            },
+        });
     }
     collect_tuple_layouts(&mut layouts, ops);
     collect_record_layouts(&mut layouts, ops);
@@ -1055,6 +1075,16 @@ fn closure_env_layout(closure: &str, captures: &[CaptureFact]) -> ClosureEnvLayo
     ClosureEnvLayout {
         closure: format!("closure::{closure}"),
         fields,
+    }
+}
+
+fn continuation_env_layout(fact: &ContinuationFact) -> ContinuationEnvLayout {
+    ContinuationEnvLayout {
+        binder: fact.binder.clone(),
+        kind: fact.kind,
+        fields: Vec::new(),
+        clone_on_resume: fact.kind == ContinuationKind::ContN,
+        consumed_state_machine: fact.kind == ContinuationKind::Cont1,
     }
 }
 

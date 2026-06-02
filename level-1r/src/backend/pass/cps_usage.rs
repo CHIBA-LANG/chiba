@@ -10,6 +10,7 @@ pub struct CpsUsageFacts {
     pub continuations: BTreeMap<String, CpsContinuationUsage>,
     pub function_lambdas: BTreeMap<String, UseCount>,
     pub continuation_lambdas: BTreeMap<String, UseCount>,
+    pub diagnostics: Vec<CpsUsageDiagnostic>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -23,8 +24,13 @@ pub struct CpsContinuationUsage {
 pub enum ContinuationMaterialization {
     Dead,
     InlineSingleUse,
-    BoxedOneShot,
+    OneShotStateMachine,
     MultiResumePackage,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CpsUsageDiagnostic {
+    Cont1ResumedMoreThanOnce { binder: String, count: UseCount },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -73,6 +79,12 @@ fn visit_term(term: &CpsTerm, facts: &mut CpsUsageFacts) {
                 ContinuationKind::Cont1
             };
             let count = count_binder_uses(body, binder);
+            if kind == ContinuationKind::Cont1 && count == UseCount::Many {
+                facts.diagnostics.push(CpsUsageDiagnostic::Cont1ResumedMoreThanOnce {
+                    binder: binder.clone(),
+                    count,
+                });
+            }
             facts.continuations.insert(
                 binder.clone(),
                 CpsContinuationUsage {
@@ -237,7 +249,9 @@ fn materialization(kind: ContinuationKind, count: UseCount) -> ContinuationMater
     match (kind, count) {
         (_, UseCount::Zero) => ContinuationMaterialization::Dead,
         (ContinuationKind::Cont1, UseCount::One) => ContinuationMaterialization::InlineSingleUse,
-        (ContinuationKind::Cont1, UseCount::Many) => ContinuationMaterialization::BoxedOneShot,
+        (ContinuationKind::Cont1, UseCount::Many) => {
+            ContinuationMaterialization::OneShotStateMachine
+        }
         (ContinuationKind::ContN, UseCount::One | UseCount::Many) => {
             ContinuationMaterialization::MultiResumePackage
         }

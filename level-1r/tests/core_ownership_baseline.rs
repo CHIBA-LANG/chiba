@@ -73,11 +73,34 @@ fn contn_core_keeps_continuation_package_layout_fact() {
     assert!(output.core.layouts.iter().any(|layout| {
         matches!(
             &layout.kind,
-            LayoutKind::ContinuationPackage(ContinuationKind::ContN)
+            LayoutKind::ContinuationPackage(env)
+                if env.kind == ContinuationKind::ContN
+                    && env.binder == "retry"
+                    && env.clone_on_resume
+                    && !env.consumed_state_machine
         )
     }));
     assert!(output.core.ownership.iter().any(|fact| {
         fact.subject == "continuation::retry" && fact.decision == OwnershipDecision::DynPackage
+    }));
+}
+
+#[test]
+fn cont1_core_keeps_consumed_state_machine_layout_fact() {
+    let output = compile_expr(&Expr::reset(Expr::shift("k", Expr::i64(0))));
+
+    assert!(output.core.layouts.iter().any(|layout| {
+        matches!(
+            &layout.kind,
+            LayoutKind::Cont1StateMachine(env)
+                if env.kind == ContinuationKind::Cont1
+                    && env.binder == "k"
+                    && !env.clone_on_resume
+                    && env.consumed_state_machine
+        )
+    }));
+    assert!(output.core.ownership.iter().any(|fact| {
+        fact.subject == "continuation::k" && fact.decision == OwnershipDecision::StackValue
     }));
 }
 

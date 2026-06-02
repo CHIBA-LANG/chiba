@@ -87,12 +87,12 @@ fn collect_layout_usage(core: &CoreProgram, facts: &mut ClosureCoreUsageFacts) {
                     );
                 }
             }
-            LayoutKind::ContinuationPackage(kind) => {
+            LayoutKind::ContinuationPackage(env) | LayoutKind::Cont1StateMachine(env) => {
                 facts.continuation_packages.insert(
                     layout.key.clone(),
                     ContinuationPackageUsage {
-                        kind: *kind,
-                        count: match kind {
+                        kind: env.kind,
+                        count: match env.kind {
                             ContinuationKind::Cont1 => UseCount::One,
                             ContinuationKind::ContN => UseCount::Many,
                         },

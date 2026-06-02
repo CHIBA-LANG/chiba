@@ -1,7 +1,7 @@
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::cps::{CpsAtom, CpsProgram, CpsTerm};
 use chiba_level1r::cps_usage::{
-    analyze_cps_usage, simplify_continuations, ContinuationMaterialization,
+    analyze_cps_usage, simplify_continuations, ContinuationMaterialization, CpsUsageDiagnostic,
 };
 use chiba_level1r::usage::UseCount;
 use chiba_level1r::{compile_expr, Expr};
@@ -47,31 +47,22 @@ fn cont1_single_resume_is_inline_single_use() {
 }
 
 #[test]
-fn cont1_many_resume_is_boxed_one_shot_state_machine() {
-    let cps = CpsProgram {
-        term: CpsTerm::Capture {
-            multi: false,
-            binder: "k".to_string(),
-            body: Box::new(CpsTerm::AppFun {
-                func: CpsAtom::Var("f".to_string()),
-                args: vec![CpsAtom::Var("k".to_string())],
-                kont: CpsAtom::ContLambda {
-                    param: "w".to_string(),
-                    body: Box::new(CpsTerm::AppCont {
-                        kont: CpsAtom::Var("k".to_string()),
-                        value: CpsAtom::Var("w".to_string()),
-                    }),
-                },
-            }),
-        },
-    };
+fn cont1_many_resume_is_one_shot_state_machine_and_compile_diagnostic() {
+    let cps = repeated_resume_cps(false, "k");
 
     let usage = analyze_cps_usage(&cps);
 
     assert_eq!(usage.continuations["k"].count, UseCount::Many);
     assert_eq!(
         usage.continuations["k"].materialization,
-        ContinuationMaterialization::BoxedOneShot
+        ContinuationMaterialization::OneShotStateMachine
+    );
+    assert_eq!(
+        usage.diagnostics,
+        vec![CpsUsageDiagnostic::Cont1ResumedMoreThanOnce {
+            binder: "k".to_string(),
+            count: UseCount::Many,
+        }]
     );
 }
 
@@ -92,6 +83,21 @@ fn contn_single_or_many_resume_uses_multi_resume_package() {
         usage.continuations["retry"].materialization,
         ContinuationMaterialization::MultiResumePackage
     );
+    assert_eq!(usage.diagnostics, vec![]);
+}
+
+#[test]
+fn contn_many_resume_is_legal_multi_resume_package() {
+    let cps = repeated_resume_cps(true, "retry");
+
+    let usage = analyze_cps_usage(&cps);
+
+    assert_eq!(usage.continuations["retry"].count, UseCount::Many);
+    assert_eq!(
+        usage.continuations["retry"].materialization,
+        ContinuationMaterialization::MultiResumePackage
+    );
+    assert_eq!(usage.diagnostics, vec![]);
 }
 
 #[test]
@@ -103,4 +109,24 @@ fn cps_usage_counts_object_level_lambdas() {
     assert!(output
         .render_visual()
         .contains("continuation-simplification:"));
+}
+
+fn repeated_resume_cps(multi: bool, binder: &str) -> CpsProgram {
+    CpsProgram {
+        term: CpsTerm::Capture {
+            multi,
+            binder: binder.to_string(),
+            body: Box::new(CpsTerm::AppFun {
+                func: CpsAtom::Var("store".to_string()),
+                args: vec![CpsAtom::Var(binder.to_string())],
+                kont: CpsAtom::ContLambda {
+                    param: "stored".to_string(),
+                    body: Box::new(CpsTerm::AppCont {
+                        kont: CpsAtom::Var(binder.to_string()),
+                        value: CpsAtom::Var("stored".to_string()),
+                    }),
+                },
+            }),
+        },
+    }
 }
