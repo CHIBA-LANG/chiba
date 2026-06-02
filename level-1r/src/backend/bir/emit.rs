@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::core::{
     CoreMatchArm, CoreOp, CorePattern, CoreProgram, CoreValidation, CoreValue, OwnershipDecision,
@@ -385,19 +385,32 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest, params: &[String])
     wat
 }
 
+#[derive(Clone)]
 struct RenderEnv {
     params: BTreeSet<String>,
+    bindings: BTreeMap<String, CoreValue>,
 }
 
 impl RenderEnv {
     fn new(params: &[String]) -> Self {
         Self {
             params: params.iter().cloned().collect(),
+            bindings: BTreeMap::new(),
         }
     }
 
     fn is_param(&self, name: &str) -> bool {
         self.params.contains(name)
+    }
+
+    fn binding(&self, name: &str) -> Option<&CoreValue> {
+        self.bindings.get(name)
+    }
+
+    fn with_binding(&self, name: &str, value: CoreValue) -> Self {
+        let mut next = self.clone();
+        next.bindings.insert(name.to_string(), value);
+        next
     }
 
     fn signature(&self) -> String {
@@ -426,6 +439,9 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue, env: &RenderEnv) {
         CoreValue::Unit => wat.push_str("    i32.const 0\n"),
         CoreValue::I64(value) => wat.push_str(&format!("    i32.const {}\n", *value as i32)),
         CoreValue::Bool(value) => wat.push_str(&format!("    i32.const {}\n", i32::from(*value))),
+        CoreValue::Var(name) if env.binding(name).is_some() => {
+            render_core_value_i32(wat, env.binding(name).expect("checked binding"), env);
+        }
         CoreValue::Var(name) if env.is_param(name) => {
             wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
         }
@@ -462,7 +478,10 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue, env: &RenderEnv) {
 fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
     match value {
         CoreValue::Unit | CoreValue::I64(_) | CoreValue::Bool(_) | CoreValue::Adt { .. } => true,
-        CoreValue::Var(name) => env.is_param(name),
+        CoreValue::Var(name) => env
+            .binding(name)
+            .map(|value| core_value_is_renderable_i32(value, env))
+            .unwrap_or_else(|| env.is_param(name)),
         CoreValue::TupleField { tuple, field } => tuple_field_value(tuple, field)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or(false),
@@ -534,6 +553,10 @@ fn render_match_arm_i32(
 ) {
     match &arm.pattern {
         CorePattern::Wildcard => render_core_value_i32_indented(wat, &arm.value, env, indent),
+        CorePattern::Bind(name) => {
+            let arm_env = env.with_binding(name, scrutinee.clone());
+            render_core_value_i32_indented(wat, &arm.value, &arm_env, indent);
+        }
         CorePattern::I64(value) => {
             render_core_value_i32_indented(wat, scrutinee, env, indent);
             push_indent(wat, indent);
@@ -564,8 +587,8 @@ fn render_match_arm_i32(
             push_indent(wat, indent);
             wat.push_str("end\n");
         }
-        CorePattern::Constructor { data, ctor } => {
-            if let Some(tag) = constructor_tag(scrutinee, data.as_deref(), ctor) {
+        CorePattern::Constructor { data, ctor, args } => {
+            if let Some((tag, arm_env)) = constructor_match_env(scrutinee, data.as_deref(), ctor, args, env) {
                 render_core_value_i32_indented(wat, scrutinee, env, indent);
                 push_indent(wat, indent);
                 wat.push_str(&format!("i32.const {tag}\n"));
@@ -573,7 +596,7 @@ fn render_match_arm_i32(
                 wat.push_str("i32.eq\n");
                 push_indent(wat, indent);
                 wat.push_str("if (result i32)\n");
-                render_core_value_i32_indented(wat, &arm.value, env, indent + 2);
+                render_core_value_i32_indented(wat, &arm.value, &arm_env, indent + 2);
                 push_indent(wat, indent);
                 wat.push_str("else\n");
                 render_match_arms_i32(wat, scrutinee, rest, env, indent + 2);
@@ -583,6 +606,45 @@ fn render_match_arm_i32(
                 render_match_arms_i32(wat, scrutinee, rest, env, indent);
             }
         }
+    }
+}
+
+fn constructor_match_env(
+    scrutinee: &CoreValue,
+    pattern_data: Option<&str>,
+    ctor: &str,
+    args: &[CorePattern],
+    env: &RenderEnv,
+) -> Option<(usize, RenderEnv)> {
+    let tag = constructor_tag(scrutinee, pattern_data, ctor)?;
+    let CoreValue::Adt { args: payloads, .. } = scrutinee else {
+        return None;
+    };
+    if args.len() != payloads.len() {
+        return None;
+    }
+    let mut next = env.clone();
+    for (pattern, payload) in args.iter().zip(payloads) {
+        bind_core_pattern(pattern, payload, &mut next)?;
+    }
+    Some((tag, next))
+}
+
+fn bind_core_pattern(pattern: &CorePattern, value: &CoreValue, env: &mut RenderEnv) -> Option<()> {
+    match pattern {
+        CorePattern::Wildcard => Some(()),
+        CorePattern::Bind(name) => {
+            env.bindings.insert(name.clone(), value.clone());
+            Some(())
+        }
+        CorePattern::I64(expected) if value == &CoreValue::I64(*expected) => Some(()),
+        CorePattern::Bool(expected) if value == &CoreValue::Bool(*expected) => Some(()),
+        CorePattern::Constructor { data, ctor, args } => {
+            constructor_match_env(value, data.as_deref(), ctor, args, env).map(|(_, next)| {
+                *env = next;
+            })
+        }
+        _ => None,
     }
 }
 

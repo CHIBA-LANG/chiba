@@ -1376,12 +1376,30 @@ def 计算🚀(值α: i64) = match 结果α.🚀成功(值α) { 结果α.🚀成
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
-            chiba_level1r::core::CoreOp::Match { scrutinee, patterns }
-                if scrutinee == "结果α.🚀成功(值α)"
-                    && patterns == &vec![
-                        "Constructor { data: Some(\"结果α\"), ctor: \"🚀成功\", args: [Bind(\"内值\")] }".to_string(),
-                        "Constructor { data: Some(\"结果α\"), ctor: \"失败中文\", args: [] }".to_string(),
-                    ]
+            chiba_level1r::core::CoreOp::ReturnMatch {
+                scrutinee: chiba_level1r::core::CoreValue::Adt {
+                    data,
+                    ctor,
+                    args,
+                    ..
+                },
+                arms,
+            } if data == "结果α"
+                && ctor == "🚀成功"
+                && args == &vec![chiba_level1r::core::CoreValue::Var("值α".to_string())]
+                && arms.len() == 2
+                && arms[0].pattern
+                    == chiba_level1r::core::CorePattern::Constructor {
+                        data: Some("结果α".to_string()),
+                        ctor: "🚀成功".to_string(),
+                        args: vec![chiba_level1r::core::CorePattern::Bind("内值".to_string())],
+                    }
+                && arms[1].pattern
+                    == chiba_level1r::core::CorePattern::Constructor {
+                        data: Some("结果α".to_string()),
+                        ctor: "失败中文".to_string(),
+                        args: Vec::new(),
+                    }
         )
     }));
 }
@@ -1463,12 +1481,30 @@ def 计算🚀(输入β: i64) = match 结果🚀.🚀成功(标量Ω) { 结果�
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
-            chiba_level1r::core::CoreOp::Match { scrutinee, patterns }
-                if scrutinee == "结果🚀.🚀成功(标量Ω)"
-                    && patterns == &vec![
-                        "Constructor { data: Some(\"结果🚀\"), ctor: \"🚀成功\", args: [Bind(\"绑定中文\")] }".to_string(),
-                        "Constructor { data: Some(\"结果🚀\"), ctor: \"失败中文\", args: [] }".to_string(),
-                    ]
+            chiba_level1r::core::CoreOp::ReturnMatch {
+                scrutinee: chiba_level1r::core::CoreValue::Adt {
+                    data,
+                    ctor,
+                    args,
+                    ..
+                },
+                arms,
+            } if data == "结果🚀"
+                && ctor == "🚀成功"
+                && args == &vec![chiba_level1r::core::CoreValue::Var("标量Ω".to_string())]
+                && arms.len() == 2
+                && arms[0].pattern
+                    == chiba_level1r::core::CorePattern::Constructor {
+                        data: Some("结果🚀".to_string()),
+                        ctor: "🚀成功".to_string(),
+                        args: vec![chiba_level1r::core::CorePattern::Bind("绑定中文".to_string())],
+                    }
+                && arms[1].pattern
+                    == chiba_level1r::core::CorePattern::Constructor {
+                        data: Some("结果🚀".to_string()),
+                        ctor: "失败中文".to_string(),
+                        args: Vec::new(),
+                    }
         )
     }));
 }
@@ -1545,13 +1581,28 @@ def 计算🚀(参数盒: 盒子🚀) = match 结果🚀.🚀成功(读取中文
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
-            chiba_level1r::core::CoreOp::Match { scrutinee, patterns }
-                if scrutinee.contains("结果🚀")
-                    && scrutinee.contains("🚀成功")
-                    && patterns == &vec![
-                        "Constructor { data: Some(\"结果🚀\"), ctor: \"🚀成功\", args: [Bind(\"绑定中文\")] }".to_string(),
-                        "Constructor { data: Some(\"结果🚀\"), ctor: \"失败中文\", args: [] }".to_string(),
-                    ]
+            chiba_level1r::core::CoreOp::ReturnMatch {
+                scrutinee: chiba_level1r::core::CoreValue::Adt {
+                    data,
+                    ctor,
+                    ..
+                },
+                arms,
+            } if data == "结果🚀"
+                && ctor == "🚀成功"
+                && arms.len() == 2
+                && arms[0].pattern
+                    == chiba_level1r::core::CorePattern::Constructor {
+                        data: Some("结果🚀".to_string()),
+                        ctor: "🚀成功".to_string(),
+                        args: vec![chiba_level1r::core::CorePattern::Bind("绑定中文".to_string())],
+                    }
+                && arms[1].pattern
+                    == chiba_level1r::core::CorePattern::Constructor {
+                        data: Some("结果🚀".to_string()),
+                        ctor: "失败中文".to_string(),
+                        args: Vec::new(),
+                    }
         )
     }));
 }

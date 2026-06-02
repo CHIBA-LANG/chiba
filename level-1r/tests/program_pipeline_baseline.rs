@@ -537,11 +537,13 @@ fn program_zero_arg_adt_match_lowers_to_executable_tag_match_wat() {
                     == chiba_level1r::core::CorePattern::Constructor {
                         data: Some("Option".to_string()),
                         ctor: "Some".to_string(),
+                        args: Vec::new(),
                     }
                 && arms[1].pattern
                     == chiba_level1r::core::CorePattern::Constructor {
                         data: Some("Option".to_string()),
                         ctor: "None".to_string(),
+                        args: Vec::new(),
                     }
         )
     }));
@@ -550,6 +552,69 @@ fn program_zero_arg_adt_match_lowers_to_executable_tag_match_wat() {
         .linked_wat
         .contains(";; core-return match scrutinee=Option.None() arms=2"));
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "4");
+}
+
+#[test]
+fn program_adt_payload_match_lowers_to_executable_payload_wat() {
+    let program = SourceProgram::new(vec![def(
+        "main",
+        vec![],
+        Expr::match_expr(
+            Expr::adt_ctor("Option", "Some", vec!["None", "Some"], vec![Expr::i64(8)]),
+            vec![
+                (
+                    chiba_level1r::ast::Pattern::qualified_ctor(
+                        "Option",
+                        "Some",
+                        vec![chiba_level1r::ast::Pattern::bind("value")],
+                    ),
+                    Expr::var("value"),
+                ),
+                (
+                    chiba_level1r::ast::Pattern::qualified_ctor("Option", "None", Vec::new()),
+                    Expr::i64(0),
+                ),
+            ],
+        ),
+    )]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.defs[0].output.backend.diagnostics,
+        bundle.defs[0].output.core_validation.diagnostics,
+        bundle.defs[0].output.backend.wat
+    );
+    assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ReturnMatch {
+                scrutinee: chiba_level1r::core::CoreValue::Adt {
+                    data,
+                    ctor,
+                    variants,
+                    args,
+                },
+                arms,
+            } if data == "Option"
+                && ctor == "Some"
+                && variants == &vec!["None".to_string(), "Some".to_string()]
+                && args == &vec![chiba_level1r::core::CoreValue::I64(8)]
+                && arms.len() == 2
+                && arms[0].pattern
+                    == chiba_level1r::core::CorePattern::Constructor {
+                        data: Some("Option".to_string()),
+                        ctor: "Some".to_string(),
+                        args: vec![chiba_level1r::core::CorePattern::Bind("value".to_string())],
+                    }
+                && arms[0].value == chiba_level1r::core::CoreValue::Var("value".to_string())
+        )
+    }));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "8");
 }
 
 #[test]

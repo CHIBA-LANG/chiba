@@ -108,11 +108,13 @@ pub struct CoreMatchArm {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CorePattern {
     Wildcard,
+    Bind(String),
     I64(i64),
     Bool(bool),
     Constructor {
         data: Option<String>,
         ctor: String,
+        args: Vec<CorePattern>,
     },
 }
 
@@ -501,14 +503,16 @@ fn direct_match_arms(arms: &[crate::cps::CpsMatchArm]) -> Option<Vec<CoreMatchAr
 fn core_pattern(pattern: &crate::ast::Pattern) -> Option<CorePattern> {
     match pattern {
         crate::ast::Pattern::Wildcard => Some(CorePattern::Wildcard),
+        crate::ast::Pattern::Bind(name) => Some(CorePattern::Bind(name.clone())),
         crate::ast::Pattern::Lit(crate::ast::Literal::I64(value)) => Some(CorePattern::I64(*value)),
         crate::ast::Pattern::Lit(crate::ast::Literal::Bool(value)) => {
             Some(CorePattern::Bool(*value))
         }
-        crate::ast::Pattern::Constructor { data, ctor, args } if args.is_empty() => {
+        crate::ast::Pattern::Constructor { data, ctor, args } => {
             Some(CorePattern::Constructor {
                 data: data.clone(),
                 ctor: ctor.clone(),
+                args: args.iter().map(core_pattern).collect::<Option<Vec<_>>>()?,
             })
         }
         _ => None,
