@@ -8,6 +8,7 @@ use crate::cps_usage::{
     analyze_cps_usage, simplify_continuations, ContinuationSimplificationFacts, CpsUsageFacts,
 };
 use crate::debug::{render_visual_report, visual_report, VisualReport};
+use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
 use crate::nanopass::PassReport;
 use crate::resolve::{resolve_expr, MethodIndex, ResolveFacts};
 use crate::specialize::{plan_specialization, SpecializationFacts};
@@ -28,6 +29,7 @@ pub struct CompileOutput {
     pub cps_usage: CpsUsageFacts,
     pub continuation_simplification: ContinuationSimplificationFacts,
     pub closure: ClosureFacts,
+    pub lambda_lift: LambdaLiftFacts,
     pub core: CoreProgram,
     pub core_validation: CoreValidation,
     pub passes: PassReport,
@@ -68,10 +70,13 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
     let closure = passes.record("L11Closure", "AlphaExpr", "ClosureFacts", || {
         analyze_alpha_closures(&alpha.expr)
     });
-    let core = passes.record("L12Core", "CpsProgram", "CoreProgram", || {
+    let lambda_lift = passes.record("L12LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
+        lift_lambdas(&closure)
+    });
+    let core = passes.record("L13Core", "CpsProgram", "CoreProgram", || {
         lower_core_with_facts(&cps, &control.continuations, &closure, &specialize, &usage)
     });
-    let core_validation = passes.record("L13CoreValidate", "CoreProgram", "CoreValidation", || {
+    let core_validation = passes.record("L14CoreValidate", "CoreProgram", "CoreValidation", || {
         validate_core(&core)
     });
     let visual = visual_report(
@@ -87,6 +92,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &cps_usage,
         &continuation_simplification,
         &closure,
+        &lambda_lift,
         &core,
         &core_validation,
         &passes,
@@ -103,6 +109,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         cps_usage,
         continuation_simplification,
         closure,
+        lambda_lift,
         core,
         core_validation,
         passes,

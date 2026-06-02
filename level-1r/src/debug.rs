@@ -7,6 +7,7 @@ use crate::control::ControlFacts;
 use crate::core::{CoreProgram, CoreValidation};
 use crate::cps::CpsProgram;
 use crate::cps_usage::{ContinuationSimplificationFacts, CpsUsageFacts};
+use crate::lambda_lift::LambdaLiftFacts;
 use crate::nanopass::PassReport;
 use crate::resolve::ResolveFacts;
 use crate::specialize::SpecializationFacts;
@@ -28,6 +29,7 @@ pub struct VisualReport {
     pub cps_usage: String,
     pub continuation_simplification: String,
     pub closure: String,
+    pub lambda_lift: String,
     pub core: String,
     pub core_validation: String,
     pub nanopass: String,
@@ -59,6 +61,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.continuation_simplification).unwrap();
     writeln!(out, "closure:").unwrap();
     writeln!(out, "  {}", report.closure).unwrap();
+    writeln!(out, "lambda-lift:").unwrap();
+    writeln!(out, "  {}", report.lambda_lift).unwrap();
     writeln!(out, "core:").unwrap();
     writeln!(out, "  {}", report.core).unwrap();
     writeln!(out, "core-validation:").unwrap();
@@ -83,6 +87,7 @@ pub fn visual_report(
     cps_usage: &CpsUsageFacts,
     continuation_simplification: &ContinuationSimplificationFacts,
     closure: &ClosureFacts,
+    lambda_lift: &LambdaLiftFacts,
     core: &CoreProgram,
     core_validation: &CoreValidation,
     passes: &PassReport,
@@ -100,6 +105,7 @@ pub fn visual_report(
         cps_usage: format!("{cps_usage:#?}"),
         continuation_simplification: format!("{continuation_simplification:#?}"),
         closure: format!("{closure:#?}"),
+        lambda_lift: format!("{lambda_lift:#?}"),
         core: format!("{core:#?}"),
         core_validation: format!("{core_validation:#?}"),
         nanopass: render_pass_report(passes),
