@@ -108,6 +108,14 @@ impl Default for BackendCacheConfig {
 }
 
 pub fn emit_wasm_gc(core: &CoreProgram, validation: &CoreValidation) -> BackendArtifact {
+    emit_wasm_gc_with_params(core, validation, &[])
+}
+
+pub fn emit_wasm_gc_with_params(
+    core: &CoreProgram,
+    validation: &CoreValidation,
+    params: &[String],
+) -> BackendArtifact {
     if !validation.is_ok() {
         return BackendArtifact {
             target: BackendTarget::WasmGc,
@@ -123,7 +131,7 @@ pub fn emit_wasm_gc(core: &CoreProgram, validation: &CoreValidation) -> BackendA
     let manifest = manifest_for_core(core);
     BackendArtifact {
         target: BackendTarget::WasmGc,
-        wat: render_wat(core, &manifest),
+        wat: render_wat(core, &manifest, params),
         manifest,
         diagnostics: vec![],
         return_value: first_return_value(core),
@@ -190,7 +198,8 @@ fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipD
         .map(|fact| fact.decision)
 }
 
-fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
+fn render_wat(core: &CoreProgram, manifest: &BackendManifest, params: &[String]) -> String {
+    let env = RenderEnv::new(params);
     let mut wat = String::from("(module\n");
     let mut return_index = 0usize;
     let mut tailcall_index = 0usize;
@@ -215,8 +224,8 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
                     "  ;; core-return atom={}\n",
                     escape_wat_comment(&debug_name)
                 ));
-                wat.push_str(&format!("  (func ${symbol} (export \"{symbol}\") (result i32)\n"));
-                render_core_value_i32(&mut wat, value);
+                render_func_header(&mut wat, &symbol, Some(&symbol), &env);
+                render_core_value_i32(&mut wat, value, &env);
                 wat.push_str(")\n");
                 return_index += 1;
             }
@@ -236,12 +245,12 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
                     escape_wat_comment(&then_value.debug_name()),
                     escape_wat_comment(&else_value.debug_name())
                 ));
-                wat.push_str(&format!("  (func ${symbol} (export \"{symbol}\") (result i32)\n"));
-                render_core_value_i32(&mut wat, cond);
+                render_func_header(&mut wat, &symbol, Some(&symbol), &env);
+                render_core_value_i32(&mut wat, cond, &env);
                 wat.push_str("    if (result i32)\n");
-                render_core_value_i32_indented(&mut wat, then_value, 6);
+                render_core_value_i32_indented(&mut wat, then_value, &env, 6);
                 wat.push_str("    else\n");
-                render_core_value_i32_indented(&mut wat, else_value, 6);
+                render_core_value_i32_indented(&mut wat, else_value, &env, 6);
                 wat.push_str("    end\n");
                 wat.push_str("  )\n");
                 return_index += 1;
@@ -257,8 +266,8 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
                     escape_wat_comment(&scrutinee.debug_name()),
                     arms.len()
                 ));
-                wat.push_str(&format!("  (func ${symbol} (export \"{symbol}\") (result i32)\n"));
-                render_match_arms_i32(&mut wat, scrutinee, arms, 4);
+                render_func_header(&mut wat, &symbol, Some(&symbol), &env);
+                render_match_arms_i32(&mut wat, scrutinee, arms, &env, 4);
                 wat.push_str("  )\n");
                 return_index += 1;
             }
@@ -272,11 +281,11 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                if args.iter().all(core_value_is_renderable_i32) {
+                if args.iter().all(|arg| core_value_is_renderable_i32(arg, &env)) {
                     let symbol = format!("chiba_tailcall_{tailcall_index}");
-                    wat.push_str(&format!("  (func ${symbol} (result i32)\n"));
+                    render_func_header(&mut wat, &symbol, None, &env);
                     for arg in args {
-                        render_core_value_i32(&mut wat, arg);
+                        render_core_value_i32(&mut wat, arg, &env);
                     }
                     wat.push_str(&format!("    call ${}\n", final_symbol(func)));
                     wat.push_str("  )\n");
@@ -376,21 +385,60 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
     wat
 }
 
-fn render_core_value_i32(wat: &mut String, value: &CoreValue) {
+struct RenderEnv {
+    params: BTreeSet<String>,
+}
+
+impl RenderEnv {
+    fn new(params: &[String]) -> Self {
+        Self {
+            params: params.iter().cloned().collect(),
+        }
+    }
+
+    fn is_param(&self, name: &str) -> bool {
+        self.params.contains(name)
+    }
+
+    fn signature(&self) -> String {
+        self.params
+            .iter()
+            .map(|param| format!(" (param ${} i32)", encode_debug_symbol(param)))
+            .collect()
+    }
+}
+
+fn render_func_header(wat: &mut String, symbol: &str, export: Option<&str>, env: &RenderEnv) {
+    match export {
+        Some(export) => wat.push_str(&format!(
+            "  (func ${symbol} (export \"{export}\"){} (result i32)\n",
+            env.signature()
+        )),
+        None => wat.push_str(&format!(
+            "  (func ${symbol}{} (result i32)\n",
+            env.signature()
+        )),
+    }
+}
+
+fn render_core_value_i32(wat: &mut String, value: &CoreValue, env: &RenderEnv) {
     match value {
         CoreValue::Unit => wat.push_str("    i32.const 0\n"),
         CoreValue::I64(value) => wat.push_str(&format!("    i32.const {}\n", *value as i32)),
         CoreValue::Bool(value) => wat.push_str(&format!("    i32.const {}\n", i32::from(*value))),
+        CoreValue::Var(name) if env.is_param(name) => {
+            wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
+        }
         CoreValue::TupleField { tuple, field } => {
             if let Some(value) = tuple_field_value(tuple, field) {
-                render_core_value_i32(wat, value);
+                render_core_value_i32(wat, value, env);
             } else {
                 wat.push_str("    i32.const 0\n");
             }
         }
         CoreValue::RecordField { record, field } => {
             if let Some(value) = record_field_value(record, field) {
-                render_core_value_i32(wat, value);
+                render_core_value_i32(wat, value, env);
             } else {
                 wat.push_str("    i32.const 0\n");
             }
@@ -402,8 +450,7 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue) {
                 wat.push_str("    i32.const 0\n");
             }
         }
-        CoreValue::Var(_)
-        | CoreValue::Tuple { .. }
+        CoreValue::Var(_) | CoreValue::Tuple { .. }
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
         | CoreValue::Rendered { .. } => {
@@ -412,17 +459,17 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue) {
     }
 }
 
-fn core_value_is_renderable_i32(value: &CoreValue) -> bool {
+fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
     match value {
         CoreValue::Unit | CoreValue::I64(_) | CoreValue::Bool(_) | CoreValue::Adt { .. } => true,
+        CoreValue::Var(name) => env.is_param(name),
         CoreValue::TupleField { tuple, field } => tuple_field_value(tuple, field)
-            .map(core_value_is_renderable_i32)
+            .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or(false),
         CoreValue::RecordField { record, field } => record_field_value(record, field)
-            .map(core_value_is_renderable_i32)
+            .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or(false),
-        CoreValue::Var(_)
-        | CoreValue::Tuple { .. }
+        CoreValue::Tuple { .. }
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
         | CoreValue::Rendered { .. } => false,
@@ -447,9 +494,14 @@ fn record_field_value<'a>(record: &'a CoreValue, field: &str) -> Option<&'a Core
         .map(|candidate| &candidate.value)
 }
 
-fn render_core_value_i32_indented(wat: &mut String, value: &CoreValue, indent: usize) {
+fn render_core_value_i32_indented(
+    wat: &mut String,
+    value: &CoreValue,
+    env: &RenderEnv,
+    indent: usize,
+) {
     let mut nested = String::new();
-    render_core_value_i32(&mut nested, value);
+    render_core_value_i32(&mut nested, value, env);
     for line in nested.lines() {
         wat.push_str(&" ".repeat(indent));
         wat.push_str(line.trim_start());
@@ -461,6 +513,7 @@ fn render_match_arms_i32(
     wat: &mut String,
     scrutinee: &CoreValue,
     arms: &[CoreMatchArm],
+    env: &RenderEnv,
     indent: usize,
 ) {
     let Some((first, rest)) = arms.split_first() else {
@@ -468,7 +521,7 @@ fn render_match_arms_i32(
         wat.push_str("unreachable\n");
         return;
     };
-    render_match_arm_i32(wat, scrutinee, first, rest, indent);
+    render_match_arm_i32(wat, scrutinee, first, rest, env, indent);
 }
 
 fn render_match_arm_i32(
@@ -476,57 +529,58 @@ fn render_match_arm_i32(
     scrutinee: &CoreValue,
     arm: &CoreMatchArm,
     rest: &[CoreMatchArm],
+    env: &RenderEnv,
     indent: usize,
 ) {
     match &arm.pattern {
-        CorePattern::Wildcard => render_core_value_i32_indented(wat, &arm.value, indent),
+        CorePattern::Wildcard => render_core_value_i32_indented(wat, &arm.value, env, indent),
         CorePattern::I64(value) => {
-            render_core_value_i32_indented(wat, scrutinee, indent);
+            render_core_value_i32_indented(wat, scrutinee, env, indent);
             push_indent(wat, indent);
             wat.push_str(&format!("i32.const {}\n", *value as i32));
             push_indent(wat, indent);
             wat.push_str("i32.eq\n");
             push_indent(wat, indent);
             wat.push_str("if (result i32)\n");
-            render_core_value_i32_indented(wat, &arm.value, indent + 2);
+            render_core_value_i32_indented(wat, &arm.value, env, indent + 2);
             push_indent(wat, indent);
             wat.push_str("else\n");
-            render_match_arms_i32(wat, scrutinee, rest, indent + 2);
+            render_match_arms_i32(wat, scrutinee, rest, env, indent + 2);
             push_indent(wat, indent);
             wat.push_str("end\n");
         }
         CorePattern::Bool(value) => {
-            render_core_value_i32_indented(wat, scrutinee, indent);
+            render_core_value_i32_indented(wat, scrutinee, env, indent);
             push_indent(wat, indent);
             wat.push_str(&format!("i32.const {}\n", i32::from(*value)));
             push_indent(wat, indent);
             wat.push_str("i32.eq\n");
             push_indent(wat, indent);
             wat.push_str("if (result i32)\n");
-            render_core_value_i32_indented(wat, &arm.value, indent + 2);
+            render_core_value_i32_indented(wat, &arm.value, env, indent + 2);
             push_indent(wat, indent);
             wat.push_str("else\n");
-            render_match_arms_i32(wat, scrutinee, rest, indent + 2);
+            render_match_arms_i32(wat, scrutinee, rest, env, indent + 2);
             push_indent(wat, indent);
             wat.push_str("end\n");
         }
         CorePattern::Constructor { data, ctor } => {
             if let Some(tag) = constructor_tag(scrutinee, data.as_deref(), ctor) {
-                render_core_value_i32_indented(wat, scrutinee, indent);
+                render_core_value_i32_indented(wat, scrutinee, env, indent);
                 push_indent(wat, indent);
                 wat.push_str(&format!("i32.const {tag}\n"));
                 push_indent(wat, indent);
                 wat.push_str("i32.eq\n");
                 push_indent(wat, indent);
                 wat.push_str("if (result i32)\n");
-                render_core_value_i32_indented(wat, &arm.value, indent + 2);
+                render_core_value_i32_indented(wat, &arm.value, env, indent + 2);
                 push_indent(wat, indent);
                 wat.push_str("else\n");
-                render_match_arms_i32(wat, scrutinee, rest, indent + 2);
+                render_match_arms_i32(wat, scrutinee, rest, env, indent + 2);
                 push_indent(wat, indent);
                 wat.push_str("end\n");
             } else {
-                render_match_arms_i32(wat, scrutinee, rest, indent);
+                render_match_arms_i32(wat, scrutinee, rest, env, indent);
             }
         }
     }

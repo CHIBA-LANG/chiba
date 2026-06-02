@@ -5,8 +5,8 @@ use crate::ast::{
     Expr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, UseDecl,
 };
 use crate::backend::{
-    backend_cache_key, emit_wasm_gc, link_backend_artifacts, BackendArtifact, BackendCacheConfig,
-    BackendCacheKey, BackendLinkedBundle,
+    backend_cache_key, emit_wasm_gc_with_params, link_backend_artifacts, BackendArtifact,
+    BackendCacheConfig, BackendCacheKey, BackendLinkedBundle,
 };
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -265,7 +265,10 @@ fn compile_expr_with_indexes_and_generics(
         "L22BackendEmit",
         "CoreProgram+CoreValidation",
         "BackendArtifact",
-        || emit_wasm_gc(&core, &core_validation),
+        || {
+            let param_names = params.iter().map(|param| param.name.clone()).collect::<Vec<_>>();
+            emit_wasm_gc_with_params(&core, &core_validation, &param_names)
+        },
     );
     let backend_link = passes.record(
         "L23BackendLink",
@@ -893,7 +896,6 @@ fn program_backend_artifacts(
                 &artifact,
                 &def_symbol(&def.name, index),
                 is_entry,
-                &def.params,
                 &static_names,
             );
             artifact
@@ -905,36 +907,18 @@ fn relabel_program_wat(
     artifact: &BackendArtifact,
     symbol: &str,
     is_entry: bool,
-    params: &[String],
     static_names: &BTreeSet<&str>,
 ) -> String {
     let wat = &artifact.wat;
-    let signature = if params.is_empty() {
-        String::new()
-    } else {
-        params
-            .iter()
-            .map(|param| format!(" (param ${} i32)", encode_debug_symbol(param)))
-            .collect::<String>()
-    };
     let relabeled = if is_entry {
         wat.replace(
             "(func $main (export \"main\")",
-            &format!("(func ${symbol} (export \"main\"){signature}"),
+            &format!("(func ${symbol} (export \"main\")"),
         )
     } else {
-        wat.replace(
-            "(func $main (export \"main\")",
-            &format!("(func ${symbol}{signature}"),
-        )
+        wat.replace("(func $main (export \"main\")", &format!("(func ${symbol}"))
     };
-    replace_program_return_from_fact(
-        &relabeled,
-        artifact.return_value.as_ref(),
-        params,
-        static_names,
-        is_entry,
-    )
+    replace_static_return_from_fact(&relabeled, artifact.return_value.as_ref(), static_names, is_entry)
 }
 
 fn def_symbol(name: &str, index: usize) -> String {
@@ -1022,27 +1006,23 @@ fn const_global_initializer(expr: &Expr) -> Option<i32> {
     }
 }
 
-fn replace_program_return_from_fact(
+fn replace_static_return_from_fact(
     wat: &str,
     return_value: Option<&CoreValue>,
-    params: &[String],
     static_names: &BTreeSet<&str>,
     is_entry: bool,
 ) -> String {
     let Some(CoreValue::Var(name)) = return_value else {
         return wat.to_string();
     };
-    let replacement = if params.iter().any(|param| param == name) {
-        format!("    local.get ${}", encode_debug_symbol(name))
-    } else if is_entry && static_names.contains(name.as_str()) {
-        format!("    global.get ${}", global_symbol(name))
-    } else {
+    if !is_entry || !static_names.contains(name.as_str()) {
         return wat.to_string();
-    };
+    }
     let Some(const_start) = wat.find("    i32.const 0") else {
         return wat.to_string();
     };
     let const_end = const_start + "    i32.const 0".len();
+    let replacement = format!("    global.get ${}", global_symbol(name));
     let mut out = String::new();
     out.push_str(&wat[..const_start]);
     out.push_str(&replacement);

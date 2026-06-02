@@ -1,5 +1,5 @@
 use chiba_level1r::backend::{
-    backend_cache_key, emit_wasm_gc, link_backend_artifacts, BackendCacheConfig,
+    backend_cache_key, emit_wasm_gc, emit_wasm_gc_with_params, link_backend_artifacts, BackendCacheConfig,
     BackendDiagnostic, BackendExternImport, BackendLinkDiagnostic, BackendTarget,
 };
 use chiba_level1r::core::{CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue};
@@ -88,6 +88,28 @@ fn backend_emits_exported_main_for_return_atom_core() {
     assert!(output.backend.wat.contains(";; core-return atom=7"));
     assert!(output.backend.wat.contains("(func $main (export \"main\") (result i32)"));
     assert!(output.backend.wat.contains("i32.const 7"));
+}
+
+#[test]
+fn backend_emits_params_and_local_get_for_param_return_core() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::Var("x".to_string()))],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+    let artifact = emit_wasm_gc_with_params(
+        &core,
+        &CoreValidation::default(),
+        &["x".to_string()],
+    );
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact
+        .wat
+        .contains("(func $main (export \"main\") (param $x i32) (result i32)"));
+    assert!(artifact.wat.contains("local.get $x"));
+    assert!(!artifact.wat.contains("i32.const 0"));
 }
 
 #[test]
