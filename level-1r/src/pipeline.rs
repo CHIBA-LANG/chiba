@@ -11,6 +11,7 @@ use crate::cps_usage::{
 };
 use crate::debug::{render_visual_report, visual_report, VisualReport};
 use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
+use crate::monomorphize::{schedule_monomorphization, MonomorphizationPlan};
 use crate::nanopass::PassReport;
 use crate::resolve::{resolve_expr, MethodIndex, ResolveFacts};
 use crate::specialize::{plan_specialization, SpecializationFacts};
@@ -24,6 +25,7 @@ pub struct CompileOutput {
     pub resolve: ResolveFacts,
     pub template: TemplateFacts,
     pub specialize: SpecializationFacts,
+    pub monomorphize: MonomorphizationPlan,
     pub typed: TypedExpr,
     pub control: ControlFacts,
     pub usage: UsageFacts,
@@ -52,32 +54,38 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
     let specialize = passes.record("L4Specialize", "TemplateFacts", "SpecializationFacts", || {
         plan_specialization("<expr>", &template)
     });
-    let typed = passes.record("L5Typed", "SourceExpr", "TypedExpr", || type_expr(expr));
-    let control = passes.record("L6AnswerControl", "TypedExpr", "ControlFacts", || {
+    let monomorphize = passes.record(
+        "L5Monomorphize",
+        "SpecializationFacts",
+        "MonomorphizationPlan",
+        || schedule_monomorphization(&specialize),
+    );
+    let typed = passes.record("L6Typed", "SourceExpr", "TypedExpr", || type_expr(expr));
+    let control = passes.record("L7AnswerControl", "TypedExpr", "ControlFacts", || {
         analyze_control(&typed)
     });
-    let usage = passes.record("L7Usage", "AlphaExpr", "UsageFacts", || {
+    let usage = passes.record("L8Usage", "AlphaExpr", "UsageFacts", || {
         analyze_alpha_usage(&alpha.expr)
     });
-    let cps = passes.record("L8OnePassCps", "TypedExpr", "CpsProgram", || {
+    let cps = passes.record("L9OnePassCps", "TypedExpr", "CpsProgram", || {
         cps_program(&typed)
     });
-    let cps_usage = passes.record("L9CpsUsage", "CpsProgram", "CpsUsageFacts", || {
+    let cps_usage = passes.record("L10CpsUsage", "CpsProgram", "CpsUsageFacts", || {
         analyze_cps_usage(&cps)
     });
     let continuation_simplification = passes.record(
-        "L10ContSimplify",
+        "L11ContSimplify",
         "CpsUsageFacts",
         "ContinuationSimplificationFacts",
         || simplify_continuations(&cps_usage),
     );
-    let closure = passes.record("L11Closure", "AlphaExpr", "ClosureFacts", || {
+    let closure = passes.record("L12Closure", "AlphaExpr", "ClosureFacts", || {
         analyze_alpha_closures(&alpha.expr)
     });
-    let lambda_lift = passes.record("L12LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
+    let lambda_lift = passes.record("L13LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
         lift_lambdas(&closure)
     });
-    let core = passes.record("L13Core", "CpsProgram", "CoreProgram", || {
+    let core = passes.record("L14Core", "CpsProgram", "CoreProgram", || {
         lower_core_with_facts(
             &cps,
             &control.continuations,
@@ -88,18 +96,18 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         )
     });
     let closure_core_usage = passes.record(
-        "L14ClosureCoreUsage",
+        "L15ClosureCoreUsage",
         "CoreProgram",
         "ClosureCoreUsageFacts",
         || analyze_closure_core_usage(&core),
     );
     let closure_simplification = passes.record(
-        "L15ClosureSimplify",
+        "L16ClosureSimplify",
         "ClosureCoreUsageFacts",
         "ClosureSimplificationFacts",
         || simplify_closure_core(&closure_core_usage),
     );
-    let core_validation = passes.record("L16CoreValidate", "CoreProgram", "CoreValidation", || {
+    let core_validation = passes.record("L17CoreValidate", "CoreProgram", "CoreValidation", || {
         validate_core(&core)
     });
     let visual = visual_report(
@@ -108,6 +116,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &resolve,
         &template,
         &specialize,
+        &monomorphize,
         &typed,
         &control,
         &usage,
@@ -127,6 +136,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         resolve,
         template,
         specialize,
+        monomorphize,
         typed,
         control,
         usage,

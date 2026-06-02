@@ -10,6 +10,7 @@ use crate::core::{CoreProgram, CoreValidation};
 use crate::cps::CpsProgram;
 use crate::cps_usage::{ContinuationSimplificationFacts, CpsUsageFacts};
 use crate::lambda_lift::LambdaLiftFacts;
+use crate::monomorphize::MonomorphizationPlan;
 use crate::nanopass::PassReport;
 use crate::resolve::ResolveFacts;
 use crate::specialize::SpecializationFacts;
@@ -24,6 +25,7 @@ pub struct VisualReport {
     pub resolve: String,
     pub template: String,
     pub specialize: String,
+    pub monomorphize: String,
     pub typed: String,
     pub control: String,
     pub usage: String,
@@ -51,6 +53,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.template).unwrap();
     writeln!(out, "specialize:").unwrap();
     writeln!(out, "  {}", report.specialize).unwrap();
+    writeln!(out, "monomorphize:").unwrap();
+    writeln!(out, "  {}", report.monomorphize).unwrap();
     writeln!(out, "typed:").unwrap();
     writeln!(out, "  {}", report.typed).unwrap();
     writeln!(out, "control:").unwrap();
@@ -88,6 +92,7 @@ pub fn visual_report(
     resolve: &ResolveFacts,
     template: &TemplateFacts,
     specialize: &SpecializationFacts,
+    monomorphize: &MonomorphizationPlan,
     typed: &TypedExpr,
     control: &ControlFacts,
     usage: &UsageFacts,
@@ -108,6 +113,7 @@ pub fn visual_report(
         resolve: format!("{resolve:#?}"),
         template: format!("{template:#?}"),
         specialize: format!("{specialize:#?}"),
+        monomorphize: format!("{monomorphize:#?}"),
         typed: format!("{typed:#?}"),
         control: format!("{control:#?}"),
         usage: format!("{usage:#?}"),

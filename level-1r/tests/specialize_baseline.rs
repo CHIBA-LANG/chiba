@@ -99,6 +99,8 @@ fn compile_output_contains_specialization_work_item() {
         .normalized_shapes
         .contains(&canonical_open_row(vec![("name", ShapeType::Unknown)])));
     assert!(output.render_visual().contains("specialize:"));
+    assert!(output.render_visual().contains("monomorphize:"));
+    assert_eq!(output.monomorphize.jobs.len(), 1);
 }
 
 #[test]
