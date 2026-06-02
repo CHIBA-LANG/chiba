@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::ast::Literal;
+use crate::ast::{Literal, Pattern};
 use crate::control::ContinuationKind;
 use crate::typed::{TypedExpr, TypedExprKind, Type};
 
@@ -45,6 +45,23 @@ pub enum CpsTerm {
         binder: String,
         body: Box<CpsTerm>,
     },
+    Branch {
+        cond: CpsAtom,
+        then_term: Box<CpsTerm>,
+        else_term: Box<CpsTerm>,
+        join: CpsAtom,
+    },
+    Match {
+        scrutinee: CpsAtom,
+        arms: Vec<CpsMatchArm>,
+        join: CpsAtom,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpsMatchArm {
+    pub pattern: Pattern,
+    pub body: CpsTerm,
 }
 
 #[derive(Default)]
@@ -175,6 +192,14 @@ fn transform(
                 ctx,
             )
         }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => transform_if(cond, then_branch, else_branch, k, controls, ctx),
+        TypedExprKind::Match { scrutinee, arms } => {
+            transform_match(scrutinee, arms, k, controls, ctx)
+        }
         TypedExprKind::Nominal { expr, .. } => {
             let _ = nominal_atom_type(expr);
             transform(expr, k, controls, ctx)
@@ -202,6 +227,101 @@ fn transform(
             }
         }
     }
+}
+
+fn transform_if(
+    cond: &TypedExpr,
+    then_branch: &TypedExpr,
+    else_branch: &TypedExpr,
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    let cond_controls = controls.clone();
+    transform(
+        cond,
+        Box::new(|cond, ctx| {
+            let join_param = ctx.fresh("join");
+            let join_name = join_param.clone();
+            let join = CpsAtom::ContLambda {
+                param: join_param,
+                body: Box::new(k(CpsAtom::Var(join_name.clone()), ctx)),
+            };
+            let then_join = join_name.clone();
+            let else_join = join_name;
+            let then_term = transform(
+                then_branch,
+                Box::new(move |value, _| CpsTerm::AppCont {
+                    kont: CpsAtom::Var(then_join),
+                    value,
+                }),
+                controls.clone(),
+                ctx,
+            );
+            let else_term = transform(
+                else_branch,
+                Box::new(move |value, _| CpsTerm::AppCont {
+                    kont: CpsAtom::Var(else_join),
+                    value,
+                }),
+                controls,
+                ctx,
+            );
+            CpsTerm::Branch {
+                cond,
+                then_term: Box::new(then_term),
+                else_term: Box::new(else_term),
+                join,
+            }
+        }),
+        cond_controls,
+        ctx,
+    )
+}
+
+fn transform_match(
+    scrutinee: &TypedExpr,
+    arms: &[crate::typed::TypedMatchArm],
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    let scrutinee_controls = controls.clone();
+    transform(
+        scrutinee,
+        Box::new(|scrutinee, ctx| {
+            let join_param = ctx.fresh("join");
+            let join_name = join_param.clone();
+            let join = CpsAtom::ContLambda {
+                param: join_param,
+                body: Box::new(k(CpsAtom::Var(join_name.clone()), ctx)),
+            };
+            let mut cps_arms = Vec::new();
+            for arm in arms {
+                let arm_join = join_name.clone();
+                let body = transform(
+                    &arm.body,
+                    Box::new(move |value, _| CpsTerm::AppCont {
+                        kont: CpsAtom::Var(arm_join),
+                        value,
+                    }),
+                    controls.clone(),
+                    ctx,
+                );
+                cps_arms.push(CpsMatchArm {
+                    pattern: arm.pattern.clone(),
+                    body,
+                });
+            }
+            CpsTerm::Match {
+                scrutinee,
+                arms: cps_arms,
+                join,
+            }
+        }),
+        scrutinee_controls,
+        ctx,
+    )
 }
 
 fn transform_call(
@@ -297,7 +417,34 @@ impl fmt::Display for CpsTerm {
                     write!(f, "shift@cont1 {binder} {{ {body} }}")
                 }
             }
+            CpsTerm::Branch {
+                cond,
+                then_term,
+                else_term,
+                join,
+            } => {
+                write!(f, "if {cond} then {then_term} else {else_term} join {join}")
+            }
+            CpsTerm::Match {
+                scrutinee,
+                arms,
+                join,
+            } => {
+                write!(f, "match {scrutinee} {{")?;
+                for arm in arms {
+                    write!(f, " {} => {}", display_pattern(&arm.pattern), arm.body)?;
+                }
+                write!(f, " }} join {join}")
+            }
         }
+    }
+}
+
+fn display_pattern(pattern: &Pattern) -> String {
+    match pattern {
+        Pattern::Wildcard => "_".to_string(),
+        Pattern::Lit(Literal::I64(value)) => value.to_string(),
+        Pattern::Lit(Literal::Bool(value)) => value.to_string(),
     }
 }
 

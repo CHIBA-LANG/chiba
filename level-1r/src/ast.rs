@@ -38,6 +38,15 @@ pub enum Expr {
         lhs: Box<Expr>,
         rhs: Box<Expr>,
     },
+    If {
+        cond: Box<Expr>,
+        then_branch: Box<Expr>,
+        else_branch: Box<Expr>,
+    },
+    Match {
+        scrutinee: Box<Expr>,
+        arms: Vec<MatchArm>,
+    },
     Nominal {
         name: String,
         expr: Box<Expr>,
@@ -50,6 +59,18 @@ pub enum Expr {
         binder: String,
         body: Box<Expr>,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Expr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Pattern {
+    Wildcard,
+    Lit(Literal),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -116,6 +137,24 @@ impl Expr {
         }
     }
 
+    pub fn if_else(cond: Expr, then_branch: Expr, else_branch: Expr) -> Self {
+        Self::If {
+            cond: Box::new(cond),
+            then_branch: Box::new(then_branch),
+            else_branch: Box::new(else_branch),
+        }
+    }
+
+    pub fn match_expr(scrutinee: Expr, arms: Vec<(Pattern, Expr)>) -> Self {
+        Self::Match {
+            scrutinee: Box::new(scrutinee),
+            arms: arms
+                .into_iter()
+                .map(|(pattern, body)| MatchArm { pattern, body })
+                .collect(),
+        }
+    }
+
     pub fn nominal(name: impl Into<String>, expr: Expr) -> Self {
         Self::Nominal {
             name: name.into(),
@@ -142,5 +181,19 @@ impl Expr {
             binder: binder.into(),
             body: Box::new(body),
         }
+    }
+}
+
+impl Pattern {
+    pub fn wildcard() -> Self {
+        Self::Wildcard
+    }
+
+    pub fn lit_i64(value: i64) -> Self {
+        Self::Lit(Literal::I64(value))
+    }
+
+    pub fn lit_bool(value: bool) -> Self {
+        Self::Lit(Literal::Bool(value))
     }
 }

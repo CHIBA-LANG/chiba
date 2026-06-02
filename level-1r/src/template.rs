@@ -131,6 +131,21 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
             collect_expr_obligations(lhs, facts);
             collect_expr_obligations(rhs, facts);
         }
+        AlphaExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_expr_obligations(cond, facts);
+            collect_expr_obligations(then_branch, facts);
+            collect_expr_obligations(else_branch, facts);
+        }
+        AlphaExprKind::Match { scrutinee, arms } => {
+            collect_expr_obligations(scrutinee, facts);
+            for arm in arms {
+                collect_expr_obligations(&arm.body, facts);
+            }
+        }
         AlphaExprKind::Nominal { expr, .. } => collect_expr_obligations(expr, facts),
         AlphaExprKind::Reset { body, .. } | AlphaExprKind::Shift { body, .. } => {
             collect_expr_obligations(body, facts);

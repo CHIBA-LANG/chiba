@@ -45,6 +45,13 @@ pub enum CoreOp {
         subject: String,
         layout: String,
     },
+    Branch {
+        cond: String,
+    },
+    Match {
+        scrutinee: String,
+        patterns: Vec<String>,
+    },
     LiftedFunction {
         source: String,
         symbol: String,
@@ -233,6 +240,30 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             });
             lower_term(body, continuations, ops);
         }
+        CpsTerm::Branch {
+            cond,
+            then_term,
+            else_term,
+            ..
+        } => {
+            ops.push(CoreOp::Branch {
+                cond: render_atom(cond),
+            });
+            lower_term(then_term, continuations, ops);
+            lower_term(else_term, continuations, ops);
+        }
+        CpsTerm::Match { scrutinee, arms, .. } => {
+            ops.push(CoreOp::Match {
+                scrutinee: render_atom(scrutinee),
+                patterns: arms
+                    .iter()
+                    .map(|arm| format!("{:?}", arm.pattern))
+                    .collect(),
+            });
+            for arm in arms {
+                lower_term(&arm.body, continuations, ops);
+            }
+        }
     }
 }
 
@@ -391,6 +422,8 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         | CoreOp::TailCall { .. }
         | CoreOp::Prompt { .. }
         | CoreOp::CaptureContinuation { .. }
+        | CoreOp::Branch { .. }
+        | CoreOp::Match { .. }
         | CoreOp::StaticRowAccess { .. }
         | CoreOp::DynRowAdapterAccess { .. } => false,
     })

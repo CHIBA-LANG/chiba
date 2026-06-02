@@ -55,6 +55,21 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
             visit(lhs, stack, facts);
             visit(rhs, stack, facts);
         }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            visit(cond, stack, facts);
+            visit(then_branch, stack, facts);
+            visit(else_branch, stack, facts);
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            visit(scrutinee, stack, facts);
+            for arm in arms {
+                visit(&arm.body, stack, facts);
+            }
+        }
         TypedExprKind::Nominal { expr, .. } => visit(expr, stack, facts),
         TypedExprKind::Reset { multi, body } => {
             stack.push(Boundary {

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use crate::ast::{BinaryOp, Expr, Literal};
+use crate::ast::{BinaryOp, Expr, Literal, Pattern};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BinderId(pub usize);
@@ -43,6 +43,15 @@ pub enum AlphaExprKind {
         lhs: Box<AlphaExpr>,
         rhs: Box<AlphaExpr>,
     },
+    If {
+        cond: Box<AlphaExpr>,
+        then_branch: Box<AlphaExpr>,
+        else_branch: Box<AlphaExpr>,
+    },
+    Match {
+        scrutinee: Box<AlphaExpr>,
+        arms: Vec<AlphaMatchArm>,
+    },
     Nominal {
         name: String,
         expr: Box<AlphaExpr>,
@@ -55,6 +64,12 @@ pub enum AlphaExprKind {
         binder: AlphaBinder,
         body: Box<AlphaExpr>,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AlphaMatchArm {
+    pub pattern: Pattern,
+    pub body: AlphaExpr,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -162,6 +177,29 @@ impl AlphaCtx {
                     op: op.clone(),
                     lhs: Box::new(self.alpha(lhs)),
                     rhs: Box::new(self.alpha(rhs)),
+                },
+            },
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+            } => AlphaExpr {
+                kind: AlphaExprKind::If {
+                    cond: Box::new(self.alpha(cond)),
+                    then_branch: Box::new(self.alpha(then_branch)),
+                    else_branch: Box::new(self.alpha(else_branch)),
+                },
+            },
+            Expr::Match { scrutinee, arms } => AlphaExpr {
+                kind: AlphaExprKind::Match {
+                    scrutinee: Box::new(self.alpha(scrutinee)),
+                    arms: arms
+                        .iter()
+                        .map(|arm| AlphaMatchArm {
+                            pattern: arm.pattern.clone(),
+                            body: self.alpha(&arm.body),
+                        })
+                        .collect(),
                 },
             },
             Expr::Nominal { name, expr } => AlphaExpr {

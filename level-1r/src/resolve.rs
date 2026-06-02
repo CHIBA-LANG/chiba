@@ -130,6 +130,21 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
             visit(lhs, facts);
             visit(rhs, facts);
         }
+        AlphaExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            visit(cond, facts);
+            visit(then_branch, facts);
+            visit(else_branch, facts);
+        }
+        AlphaExprKind::Match { scrutinee, arms } => {
+            visit(scrutinee, facts);
+            for arm in arms {
+                visit(&arm.body, facts);
+            }
+        }
         AlphaExprKind::Nominal { expr, .. } => visit(expr, facts),
         AlphaExprKind::Reset { body, .. } | AlphaExprKind::Shift { body, .. } => visit(body, facts),
     }

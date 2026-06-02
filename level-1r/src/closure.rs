@@ -58,6 +58,21 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
             collect(lhs, scope, facts);
             collect(rhs, scope, facts);
         }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect(cond, scope, facts);
+            collect(then_branch, scope, facts);
+            collect(else_branch, scope, facts);
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            collect(scrutinee, scope, facts);
+            for arm in arms {
+                collect(&arm.body, scope, facts);
+            }
+        }
         TypedExprKind::Nominal { expr, .. } => collect(expr, scope, facts),
         TypedExprKind::Reset { body, .. } | TypedExprKind::Shift { body, .. } => {
             collect(body, scope, facts);
@@ -107,6 +122,21 @@ fn collect_alpha(expr: &AlphaExpr, scope: &mut BTreeSet<BinderId>, facts: &mut C
         AlphaExprKind::Binary { lhs, rhs, .. } => {
             collect_alpha(lhs, scope, facts);
             collect_alpha(rhs, scope, facts);
+        }
+        AlphaExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_alpha(cond, scope, facts);
+            collect_alpha(then_branch, scope, facts);
+            collect_alpha(else_branch, scope, facts);
+        }
+        AlphaExprKind::Match { scrutinee, arms } => {
+            collect_alpha(scrutinee, scope, facts);
+            for arm in arms {
+                collect_alpha(&arm.body, scope, facts);
+            }
         }
         AlphaExprKind::Nominal { expr, .. } => collect_alpha(expr, scope, facts),
         AlphaExprKind::Reset { body, .. } | AlphaExprKind::Shift { body, .. } => {
@@ -169,6 +199,21 @@ fn collect_alpha_free_vars(
             collect_alpha_free_vars(lhs, locals, free);
             collect_alpha_free_vars(rhs, locals, free);
         }
+        AlphaExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_alpha_free_vars(cond, locals, free);
+            collect_alpha_free_vars(then_branch, locals, free);
+            collect_alpha_free_vars(else_branch, locals, free);
+        }
+        AlphaExprKind::Match { scrutinee, arms } => {
+            collect_alpha_free_vars(scrutinee, locals, free);
+            for arm in arms {
+                collect_alpha_free_vars(&arm.body, locals, free);
+            }
+        }
         AlphaExprKind::Nominal { expr, .. } => collect_alpha_free_vars(expr, locals, free),
         AlphaExprKind::Reset { body, .. } | AlphaExprKind::Shift { body, .. } => {
             collect_alpha_free_vars(body, locals, free);
@@ -205,6 +250,21 @@ fn collect_free_vars(
         TypedExprKind::Binary { lhs, rhs, .. } => {
             collect_free_vars(lhs, locals, free);
             collect_free_vars(rhs, locals, free);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_free_vars(cond, locals, free);
+            collect_free_vars(then_branch, locals, free);
+            collect_free_vars(else_branch, locals, free);
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            collect_free_vars(scrutinee, locals, free);
+            for arm in arms {
+                collect_free_vars(&arm.body, locals, free);
+            }
         }
         TypedExprKind::Nominal { expr, .. } => collect_free_vars(expr, locals, free),
         TypedExprKind::Reset { body, .. } | TypedExprKind::Shift { body, .. } => {

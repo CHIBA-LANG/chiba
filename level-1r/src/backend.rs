@@ -150,6 +150,8 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
             | CoreOp::TailCall { .. }
             | CoreOp::Prompt { .. }
             | CoreOp::CaptureContinuation { .. }
+            | CoreOp::Branch { .. }
+            | CoreOp::Match { .. }
             | CoreOp::StaticRowAccess { .. }
             | CoreOp::DynRowAdapterAccess { .. } => {}
         }

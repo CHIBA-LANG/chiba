@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOp, Expr, Literal};
+use crate::ast::{BinaryOp, Expr, Literal, Pattern};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypedExpr {
@@ -35,6 +35,15 @@ pub enum TypedExprKind {
         lhs: Box<TypedExpr>,
         rhs: Box<TypedExpr>,
     },
+    If {
+        cond: Box<TypedExpr>,
+        then_branch: Box<TypedExpr>,
+        else_branch: Box<TypedExpr>,
+    },
+    Match {
+        scrutinee: Box<TypedExpr>,
+        arms: Vec<TypedMatchArm>,
+    },
     Nominal {
         name: String,
         expr: Box<TypedExpr>,
@@ -47,6 +56,12 @@ pub enum TypedExprKind {
         binder: String,
         body: Box<TypedExpr>,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypedMatchArm {
+    pub pattern: Pattern,
+    pub body: TypedExpr,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -143,6 +158,46 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                 Type::Unknown,
             )
         }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            let cond = type_expr(cond);
+            let then_branch = type_expr(then_branch);
+            let else_branch = type_expr(else_branch);
+            let ty = common_type(&then_branch.ty, &else_branch.ty);
+            typed(
+                TypedExprKind::If {
+                    cond: Box::new(cond),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                },
+                ty,
+            )
+        }
+        Expr::Match { scrutinee, arms } => {
+            let scrutinee = type_expr(scrutinee);
+            let arms: Vec<_> = arms
+                .iter()
+                .map(|arm| TypedMatchArm {
+                    pattern: arm.pattern.clone(),
+                    body: type_expr(&arm.body),
+                })
+                .collect();
+            let ty = arms
+                .iter()
+                .map(|arm| arm.body.ty.clone())
+                .reduce(|left, right| common_type(&left, &right))
+                .unwrap_or(Type::Unknown);
+            typed(
+                TypedExprKind::Match {
+                    scrutinee: Box::new(scrutinee),
+                    arms,
+                },
+                ty,
+            )
+        }
         Expr::Nominal { name, expr } => {
             let expr = type_expr(expr);
             typed(
@@ -173,6 +228,14 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                 body.ty,
             )
         }
+    }
+}
+
+fn common_type(left: &Type, right: &Type) -> Type {
+    if left == right {
+        left.clone()
+    } else {
+        Type::Unknown
     }
 }
 

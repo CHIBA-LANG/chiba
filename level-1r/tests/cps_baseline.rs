@@ -1,5 +1,7 @@
 use chiba_level1r::cps::{cps_program, CpsAtom, CpsTerm};
+use chiba_level1r::core::CoreOp;
 use chiba_level1r::typed::type_expr;
+use chiba_level1r::usage::UseCount;
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -44,6 +46,71 @@ fn lambda_adds_object_level_continuation_parameter() {
         }
         other => panic!("expected lambda atom, got {other:?}"),
     }
+}
+
+#[test]
+fn if_cps_materializes_real_branch_join_without_administrative_chain() {
+    let output = compile_expr(&Expr::if_else(
+        Expr::var("cond"),
+        Expr::call(Expr::var("then_fn"), Expr::var("x")),
+        Expr::var("fallback"),
+    ));
+    let rendered = output.cps.to_string();
+
+    assert!(rendered.contains("if cond"));
+    assert!(rendered.contains("then then_fn(x,"));
+    assert!(rendered.contains("else"));
+    assert!(rendered.contains("join"));
+    assert!(!rendered.contains("LetCont"));
+    assert!(!rendered.contains("AppCont"));
+    assert!(!rendered.contains("lambda a"));
+    assert!(!rendered.contains("lambda b"));
+    assert!(output.core.ops.contains(&CoreOp::Branch {
+        cond: "cond".to_string()
+    }));
+}
+
+#[test]
+fn literal_match_cps_lowers_to_ordered_branch_chain() {
+    let output = compile_expr(&Expr::match_expr(
+        Expr::var("tag"),
+        vec![
+            (chiba_level1r::ast::Pattern::lit_i64(0), Expr::i64(10)),
+            (chiba_level1r::ast::Pattern::wildcard(), Expr::i64(20)),
+        ],
+    ));
+    let rendered = output.cps.to_string();
+
+    assert!(rendered.contains("match tag"));
+    assert!(rendered.contains("0 => join"));
+    assert!(rendered.contains("(10)"));
+    assert!(rendered.contains("_ => join"));
+    assert!(rendered.contains("(20)"));
+    assert!(!rendered.contains("LetCont"));
+    assert!(!rendered.contains("AppCont"));
+    assert!(output.core.ops.contains(&CoreOp::Match {
+        scrutinee: "tag".to_string(),
+        patterns: vec!["Lit(I64(0))".to_string(), "Wildcard".to_string()],
+    }));
+}
+
+#[test]
+fn branch_usage_traverses_condition_and_all_arms() {
+    let output = compile_expr(&Expr::if_else(
+        Expr::var("shared"),
+        Expr::var("then_only"),
+        Expr::call(Expr::var("shared"), Expr::var("else_arg")),
+    ));
+
+    assert_eq!(output.usage.vars.get("shared").copied(), Some(UseCount::Many));
+    assert_eq!(
+        output.usage.vars.get("then_only").copied(),
+        Some(UseCount::One)
+    );
+    assert_eq!(
+        output.usage.vars.get("else_arg").copied(),
+        Some(UseCount::One)
+    );
 }
 
 #[test]

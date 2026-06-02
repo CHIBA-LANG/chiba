@@ -81,6 +81,28 @@ fn visit_term(term: &CpsTerm, facts: &mut CpsUsageFacts) {
             );
             visit_term(body, facts);
         }
+        CpsTerm::Branch {
+            cond,
+            then_term,
+            else_term,
+            join,
+        } => {
+            visit_atom(cond, facts);
+            visit_term(then_term, facts);
+            visit_term(else_term, facts);
+            visit_atom(join, facts);
+        }
+        CpsTerm::Match {
+            scrutinee,
+            arms,
+            join,
+        } => {
+            visit_atom(scrutinee, facts);
+            for arm in arms {
+                visit_term(&arm.body, facts);
+            }
+            visit_atom(join, facts);
+        }
     }
 }
 
@@ -118,6 +140,28 @@ fn count_term_refs(term: &CpsTerm, binder: &str, count: &mut UseCount) {
         }
         CpsTerm::Prompt { body, .. } => count_term_refs(body, binder, count),
         CpsTerm::Capture { body, .. } => count_term_refs(body, binder, count),
+        CpsTerm::Branch {
+            cond,
+            then_term,
+            else_term,
+            join,
+        } => {
+            count_atom_refs(cond, binder, count);
+            count_term_refs(then_term, binder, count);
+            count_term_refs(else_term, binder, count);
+            count_atom_refs(join, binder, count);
+        }
+        CpsTerm::Match {
+            scrutinee,
+            arms,
+            join,
+        } => {
+            count_atom_refs(scrutinee, binder, count);
+            for arm in arms {
+                count_term_refs(&arm.body, binder, count);
+            }
+            count_atom_refs(join, binder, count);
+        }
     }
 }
 
