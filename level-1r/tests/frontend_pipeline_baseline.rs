@@ -1,4 +1,4 @@
-use chiba_level1r::ast::{BinaryOp, Expr, SourceItem};
+use chiba_level1r::ast::{BinaryOp, Expr, Pattern, SourceItem};
 use chiba_level1r::{
     compile_program_bundle, compile_source_program_bundle, parse_source_program, FrontendError,
 };
@@ -160,6 +160,41 @@ fn frontend_parses_if_then_else_through_branch_cps_and_wat() {
         )
     }));
     assert!(output.program.backend_link.linked_wat.contains(";; branch flag"));
+}
+
+#[test]
+fn frontend_parses_match_with_literal_and_wildcard_through_cps_core() {
+    let output = compile_source_program_bundle("def main() = match tag { 0 => f(1), _ => 2 }")
+        .expect("compile source");
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::match_expr(
+                    Expr::var("tag"),
+                    vec![
+                        (Pattern::lit_i64(0), Expr::call(Expr::var("f"), Expr::i64(1))),
+                        (Pattern::wildcard(), Expr::i64(2)),
+                    ],
+                )
+            );
+        }
+    }
+
+    let main = &output.program.defs[0].output;
+    assert!(main.cps.to_string().contains("match tag"));
+    assert!(main.cps.to_string().contains("0 =>"));
+    assert!(main.cps.to_string().contains("_ =>"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::Match { scrutinee, patterns }
+                if scrutinee == "tag"
+                    && patterns == &vec!["Lit(I64(0))".to_string(), "Wildcard".to_string()]
+        )
+    }));
+    assert!(output.program.backend_link.linked_wat.contains(";; match tag"));
 }
 
 #[test]

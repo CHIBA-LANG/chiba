@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOp, Expr, SourceItem, SourceProgram};
+use crate::ast::{BinaryOp, Expr, Pattern, SourceItem, SourceProgram};
 use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,6 +67,11 @@ fn chiba_lexer_spec() -> LexerSpec {
                 skip: false,
             },
             LexerRule {
+                name: "KwMatch".to_string(),
+                pattern: "match".to_string(),
+                skip: false,
+            },
+            LexerRule {
                 name: "Ident".to_string(),
                 pattern: "[a-zA-Z_][a-zA-Z0-9_]*".to_string(),
                 skip: false,
@@ -78,6 +83,9 @@ fn chiba_lexer_spec() -> LexerSpec {
             },
             punct("LParen", "\\("),
             punct("RParen", "\\)"),
+            punct("LBrace", "\\{"),
+            punct("RBrace", "\\}"),
+            punct("FatArrow", "=>"),
             punct("Comma", ","),
             punct("Eq", "="),
             punct("Plus", "\\+"),
@@ -185,6 +193,7 @@ impl FrontendParser {
                 Ok(Expr::bool(false))
             }
             Some("KwIf") => self.parse_if(),
+            Some("KwMatch") => self.parse_match(),
             Some("Ident") => self.expect_lexeme("Ident").map(Expr::var),
             Some("LParen") => {
                 self.pos += 1;
@@ -202,6 +211,7 @@ impl FrontendParser {
                         "True".to_string(),
                         "False".to_string(),
                         "KwIf".to_string(),
+                        "KwMatch".to_string(),
                         "Ident".to_string(),
                         "LParen".to_string(),
                     ],
@@ -221,6 +231,70 @@ impl FrontendParser {
         self.expect("KwElse")?;
         let else_branch = self.parse_expr_bp(0)?;
         Ok(Expr::if_else(cond, then_branch, else_branch))
+    }
+
+    fn parse_match(&mut self) -> Result<Expr, FrontendError> {
+        self.expect("KwMatch")?;
+        let scrutinee = self.parse_expr_bp(0)?;
+        self.expect("LBrace")?;
+        let mut arms = Vec::new();
+        while self.peek_name() != Some("RBrace") {
+            let pattern = self.parse_pattern()?;
+            self.expect("FatArrow")?;
+            let body = self.parse_expr_bp(0)?;
+            arms.push((pattern, body));
+            if self.peek_name() == Some("Comma") {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        self.expect("RBrace")?;
+        Ok(Expr::match_expr(scrutinee, arms))
+    }
+
+    fn parse_pattern(&mut self) -> Result<Pattern, FrontendError> {
+        match self.peek_name() {
+            Some("Number") => {
+                let lexeme = self.expect_lexeme("Number")?;
+                lexeme
+                    .parse::<i64>()
+                    .map(Pattern::lit_i64)
+                    .map_err(|_| FrontendError::InvalidInteger { lexeme })
+            }
+            Some("True") => {
+                self.pos += 1;
+                Ok(Pattern::lit_bool(true))
+            }
+            Some("False") => {
+                self.pos += 1;
+                Ok(Pattern::lit_bool(false))
+            }
+            Some("Ident") => {
+                let name = self.expect_lexeme("Ident")?;
+                if name == "_" {
+                    Ok(Pattern::wildcard())
+                } else {
+                    Ok(Pattern::bind(name))
+                }
+            }
+            Some(found) => {
+                let token = self.tokens[self.pos].clone();
+                Err(FrontendError::UnexpectedToken {
+                    found: found.to_string(),
+                    lexeme: token.lexeme,
+                    expected: vec![
+                        "Number".to_string(),
+                        "True".to_string(),
+                        "False".to_string(),
+                        "Ident".to_string(),
+                    ],
+                })
+            }
+            None => Err(FrontendError::UnexpectedEof {
+                expected: vec!["pattern".to_string()],
+            }),
+        }
     }
 
     fn peek_infix(&self) -> Option<(BinaryOp, u32, u32)> {
