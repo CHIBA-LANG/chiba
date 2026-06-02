@@ -491,6 +491,122 @@ fn frontend_preserves_multi_argument_calls_through_cps_and_core() {
 }
 
 #[test]
+fn frontend_pipe_defaults_to_first_argument_call() {
+    let parsed = parse_source_program("def main() = value |> f(1, 2)").expect("parse");
+
+    assert!(parsed
+        .tokens
+        .iter()
+        .any(|token| token.name == "PipeForward" && token.lexeme == "|>"));
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::call_args(
+                    Expr::var("f"),
+                    vec![Expr::var("value"), Expr::i64(1), Expr::i64(2)]
+                )
+            );
+        }
+    }
+
+    let bundle = compile_program_bundle(&parsed.program);
+    let main = &bundle.defs[0].output;
+    assert!(main.cps.to_string().contains("f(value, 1, 2,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "f"
+                    && args == &vec![
+                        "value".to_string(),
+                        "1".to_string(),
+                        "2".to_string()
+                    ]
+        )
+    }));
+}
+
+#[test]
+fn frontend_pipe_placeholder_replaces_each_hole_with_input() {
+    let parsed = parse_source_program("def main() = value |> f(prefix, _, _)")
+        .expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::call_args(
+                    Expr::var("f"),
+                    vec![
+                        Expr::var("prefix"),
+                        Expr::var("value"),
+                        Expr::var("value")
+                    ]
+                )
+            );
+        }
+    }
+
+    let bundle = compile_program_bundle(&parsed.program);
+    let main = &bundle.defs[0].output;
+    assert!(main.cps.to_string().contains("f(prefix, value, value,"));
+    assert_eq!(
+        main.usage.vars.get("value").copied(),
+        Some(chiba_level1r::usage::UseCount::Many)
+    );
+}
+
+#[test]
+fn frontend_pipe_method_path_is_receiver_first_desugar() {
+    let parsed = parse_source_program("def main() = value |> Vec.push(1)")
+        .expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::method_call_args(Expr::var("value"), "push", vec![Expr::i64(1)])
+            );
+        }
+    }
+
+    let bundle = compile_program_bundle(&parsed.program);
+    let main = &bundle.defs[0].output;
+    assert!(main.cps.to_string().contains("value.push(1,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "value.push" && args == &vec!["1".to_string()]
+        )
+    }));
+}
+
+#[test]
+fn frontend_pipe_chains_left_to_right() {
+    let parsed = parse_source_program("def main() = value |> f |> g")
+        .expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::call_args(
+                    Expr::var("g"),
+                    vec![Expr::call_args(Expr::var("f"), vec![Expr::var("value")])]
+                )
+            );
+        }
+    }
+
+    let bundle = compile_program_bundle(&parsed.program);
+    let main = &bundle.defs[0].output;
+    assert!(main.cps.to_string().contains("f(value,"));
+    assert!(main.cps.to_string().contains("g(w"));
+}
+
+#[test]
 fn frontend_parses_if_then_else_through_branch_cps_and_wat() {
     let output = compile_source_program_bundle("def main() = if flag then f(1) else 2")
         .expect("compile source");

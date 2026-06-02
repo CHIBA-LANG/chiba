@@ -129,6 +129,7 @@ fn chiba_lexer_spec() -> LexerSpec {
             punct("RBracket", "\\]"),
             punct("FatArrow", "=>"),
             punct("Arrow", "->"),
+            punct("PipeForward", "\\|>"),
             punct("Dot", "\\."),
             punct("Colon", ":"),
             punct("Pipe", "\\|"),
@@ -355,6 +356,16 @@ impl FrontendParser {
     fn parse_expr_bp(&mut self, min_bp: u32) -> Result<Expr, FrontendError> {
         let mut lhs = self.parse_postfix()?;
         loop {
+            if self.peek_name() == Some("PipeForward") {
+                let (lbp, rbp) = (3, 4);
+                if lbp < min_bp {
+                    break;
+                }
+                self.pos += 1;
+                let rhs = self.parse_expr_bp(rbp)?;
+                lhs = desugar_pipe(lhs, rhs);
+                continue;
+            }
             let Some((op, lbp, rbp)) = self.peek_infix() else {
                 break;
             };
@@ -836,6 +847,199 @@ fn is_big_camel(name: &str) -> bool {
         .next()
         .map(|ch| ch.is_ascii_uppercase())
         .unwrap_or(false)
+}
+
+fn desugar_pipe(input: Expr, rhs: Expr) -> Expr {
+    let (rhs, used_placeholder) = replace_pipe_placeholders(rhs, &input);
+    if used_placeholder {
+        rhs
+    } else {
+        pipe_default_insert(input, rhs)
+    }
+}
+
+fn replace_pipe_placeholders(expr: Expr, input: &Expr) -> (Expr, bool) {
+    match expr {
+        Expr::Var(name) if name == "_" => (input.clone(), true),
+        Expr::Var(_) | Expr::Lit(_) => (expr, false),
+        Expr::Lambda { param, body } => {
+            let (body, used) = replace_pipe_placeholders(*body, input);
+            (Expr::lambda(param, body), used)
+        }
+        Expr::Call { callee, args } => {
+            let (callee, callee_used) = replace_pipe_placeholders(*callee, input);
+            let (args, args_used) = replace_pipe_placeholders_in_vec(args, input);
+            (Expr::call_args(callee, args), callee_used || args_used)
+        }
+        Expr::Tuple(fields) => {
+            let (fields, used) = replace_pipe_placeholders_in_vec(fields, input);
+            (Expr::tuple(fields), used)
+        }
+        Expr::Record(fields) => {
+            let mut used = false;
+            let fields = fields
+                .into_iter()
+                .map(|field| {
+                    let (value, field_used) = replace_pipe_placeholders(field.value, input);
+                    used |= field_used;
+                    crate::ast::RecordField {
+                        name: field.name,
+                        value,
+                    }
+                })
+                .collect();
+            (Expr::Record(fields), used)
+        }
+        Expr::RecordUpdate { base, fields } => {
+            let (base, base_used) = replace_pipe_placeholders(*base, input);
+            let mut used = base_used;
+            let fields = fields
+                .into_iter()
+                .map(|field| {
+                    let (value, field_used) = replace_pipe_placeholders(field.value, input);
+                    used |= field_used;
+                    crate::ast::RecordField {
+                        name: field.name,
+                        value,
+                    }
+                })
+                .collect();
+            (
+                Expr::RecordUpdate {
+                    base: Box::new(base),
+                    fields,
+                },
+                used,
+            )
+        }
+        Expr::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => {
+            let (args, used) = replace_pipe_placeholders_in_vec(args, input);
+            (Expr::adt_ctor(data, ctor, variants, args), used)
+        }
+        Expr::Field { receiver, name } => {
+            let (receiver, used) = replace_pipe_placeholders(*receiver, input);
+            (Expr::field(receiver, name), used)
+        }
+        Expr::MethodCall {
+            receiver,
+            name,
+            args,
+        } => {
+            let (receiver, receiver_used) = replace_pipe_placeholders(*receiver, input);
+            let (args, args_used) = replace_pipe_placeholders_in_vec(args, input);
+            (
+                Expr::method_call_args(receiver, name, args),
+                receiver_used || args_used,
+            )
+        }
+        Expr::Binary { op, lhs, rhs } => {
+            let (lhs, lhs_used) = replace_pipe_placeholders(*lhs, input);
+            let (rhs, rhs_used) = replace_pipe_placeholders(*rhs, input);
+            (Expr::binary(op, lhs, rhs), lhs_used || rhs_used)
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            let (cond, cond_used) = replace_pipe_placeholders(*cond, input);
+            let (then_branch, then_used) = replace_pipe_placeholders(*then_branch, input);
+            let (else_branch, else_used) = replace_pipe_placeholders(*else_branch, input);
+            (
+                Expr::if_else(cond, then_branch, else_branch),
+                cond_used || then_used || else_used,
+            )
+        }
+        Expr::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => {
+            let (scrutinee, scrutinee_used) = replace_pipe_placeholders(*scrutinee, input);
+            let (then_branch, then_used) = replace_pipe_placeholders(*then_branch, input);
+            let (else_branch, else_used) = replace_pipe_placeholders(*else_branch, input);
+            (
+                Expr::if_let(pattern, scrutinee, then_branch, else_branch),
+                scrutinee_used || then_used || else_used,
+            )
+        }
+        Expr::Match { scrutinee, arms } => {
+            let (scrutinee, scrutinee_used) = replace_pipe_placeholders(*scrutinee, input);
+            let mut used = scrutinee_used;
+            let arms = arms
+                .into_iter()
+                .map(|arm| {
+                    let (body, body_used) = replace_pipe_placeholders(arm.body, input);
+                    used |= body_used;
+                    (arm.pattern, body)
+                })
+                .collect();
+            (Expr::match_expr(scrutinee, arms), used)
+        }
+        Expr::Nominal { name, expr } => {
+            let (expr, used) = replace_pipe_placeholders(*expr, input);
+            (Expr::nominal(name, expr), used)
+        }
+        Expr::Reset { multi, body } => {
+            let (body, used) = replace_pipe_placeholders(*body, input);
+            if multi {
+                (Expr::resetn(body), used)
+            } else {
+                (Expr::reset(body), used)
+            }
+        }
+        Expr::Shift { binder, body } => {
+            let (body, used) = replace_pipe_placeholders(*body, input);
+            (Expr::shift(binder, body), used)
+        }
+    }
+}
+
+fn replace_pipe_placeholders_in_vec(values: Vec<Expr>, input: &Expr) -> (Vec<Expr>, bool) {
+    let mut used = false;
+    let values = values
+        .into_iter()
+        .map(|value| {
+            let (value, value_used) = replace_pipe_placeholders(value, input);
+            used |= value_used;
+            value
+        })
+        .collect();
+    (values, used)
+}
+
+fn pipe_default_insert(input: Expr, rhs: Expr) -> Expr {
+    match rhs {
+        Expr::Var(name) => Expr::call_args(Expr::var(name), vec![input]),
+        Expr::Call { callee, args } => {
+            let mut args = args;
+            args.insert(0, input);
+            Expr::call_args(*callee, args)
+        }
+        Expr::Field { receiver, name } if is_type_or_namespace_path(&receiver) => {
+            Expr::method_call_args(input, name, Vec::new())
+        }
+        Expr::MethodCall {
+            receiver,
+            name,
+            args,
+        } if is_type_or_namespace_path(&receiver) => Expr::method_call_args(input, name, args),
+        other => Expr::call_args(other, vec![input]),
+    }
+}
+
+fn is_type_or_namespace_path(expr: &Expr) -> bool {
+    match expr {
+        Expr::Var(name) => is_big_camel(name),
+        Expr::Field { receiver, .. } => is_type_or_namespace_path(receiver),
+        _ => false,
+    }
 }
 
 fn data_variant_map(data: &[DataDecl]) -> BTreeMap<String, Vec<String>> {
