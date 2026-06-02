@@ -40,7 +40,7 @@ fn backend_emits_wasm_gc_wat_and_manifest_for_lifted_symbols() {
     assert!(output.backend.wat.starts_with("(module\n"));
     assert!(output.backend.wat.contains("(func $lift__0000__closure__x"));
     assert!(output.backend.wat.contains("source=closure::x"));
-    assert!(output.backend.wat.contains("origin=L13LambdaLift"));
+    assert!(output.backend.wat.contains("origin=L15LambdaLift"));
 
     let entry = output
         .backend
@@ -50,7 +50,7 @@ fn backend_emits_wasm_gc_wat_and_manifest_for_lifted_symbols() {
         .find(|entry| entry.source_debug_name == "closure::x")
         .unwrap();
     assert_eq!(entry.final_symbol, "lift__0000__closure__x");
-    assert_eq!(entry.pass_origin, "L13LambdaLift");
+    assert_eq!(entry.pass_origin, "L15LambdaLift");
 }
 
 #[test]
@@ -179,8 +179,8 @@ fn pipeline_records_backend_link_artifact() {
     assert!(visual.contains("backend-cache-key:"));
     assert!(visual.contains("BackendLinkedBundle"));
     assert!(visual.contains("BackendCacheKey"));
-    assert!(visual.contains("L22BackendLink: BackendArtifact -> BackendLinkedBundle"));
-    assert!(visual.contains("L23BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
+    assert!(visual.contains("L23BackendLink: BackendArtifact -> BackendLinkedBundle"));
+    assert!(visual.contains("L24BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
 }
 
 #[test]

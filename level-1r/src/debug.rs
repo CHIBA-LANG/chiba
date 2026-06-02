@@ -18,6 +18,7 @@ use crate::resolve::ResolveFacts;
 use crate::specialize::SpecializationFacts;
 use crate::std_audit::StdAuditReport;
 use crate::template::TemplateFacts;
+use crate::template_audit::TemplateAuditReport;
 use crate::typed::TypedExpr;
 use crate::usage::UsageFacts;
 use crate::usage_audit::UsageAuditReport;
@@ -30,6 +31,7 @@ pub struct VisualReport {
     pub template: String,
     pub specialize: String,
     pub monomorphize: String,
+    pub template_audit: String,
     pub typed: String,
     pub pattern: String,
     pub control: String,
@@ -65,6 +67,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.specialize).unwrap();
     writeln!(out, "monomorphize:").unwrap();
     writeln!(out, "  {}", report.monomorphize).unwrap();
+    writeln!(out, "template-audit:").unwrap();
+    writeln!(out, "  {}", report.template_audit).unwrap();
     writeln!(out, "typed:").unwrap();
     writeln!(out, "  {}", report.typed).unwrap();
     writeln!(out, "pattern:").unwrap();
@@ -115,6 +119,7 @@ pub fn visual_report(
     template: &TemplateFacts,
     specialize: &SpecializationFacts,
     monomorphize: &MonomorphizationPlan,
+    template_audit: &TemplateAuditReport,
     typed: &TypedExpr,
     pattern: &PatternFacts,
     control: &ControlFacts,
@@ -142,6 +147,7 @@ pub fn visual_report(
         template: format!("{template:#?}"),
         specialize: format!("{specialize:#?}"),
         monomorphize: format!("{monomorphize:#?}"),
+        template_audit: format!("{template_audit:#?}"),
         typed: format!("{typed:#?}"),
         pattern: format!("{pattern:#?}"),
         control: format!("{control:#?}"),

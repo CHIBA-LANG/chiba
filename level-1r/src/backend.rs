@@ -131,19 +131,19 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
             CoreOp::LiftedFunction { source, symbol, .. } => entries.push(BackendManifestEntry {
                 final_symbol: final_symbol(symbol),
                 source_debug_name: source.clone(),
-                pass_origin: "L13LambdaLift".to_string(),
+                pass_origin: "L15LambdaLift".to_string(),
                 ownership: ownership_for_subject(core, source),
             }),
             CoreOp::DirectMethodTarget { name, target } => entries.push(BackendManifestEntry {
                 final_symbol: final_symbol(target),
                 source_debug_name: name.clone(),
-                pass_origin: "L14Core".to_string(),
+                pass_origin: "L16Core".to_string(),
                 ownership: ownership_for_subject(core, target),
             }),
             CoreOp::OperatorTarget { protocol, target } => entries.push(BackendManifestEntry {
                 final_symbol: final_symbol(target),
                 source_debug_name: protocol.clone(),
-                pass_origin: "L14Core".to_string(),
+                pass_origin: "L16Core".to_string(),
                 ownership: ownership_for_subject(core, target),
             }),
             CoreOp::ReturnAtom(_)

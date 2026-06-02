@@ -22,6 +22,7 @@ use crate::resolve::{resolve_expr, MethodIndex, ResolveFacts};
 use crate::specialize::{plan_specialization, SpecializationFacts};
 use crate::std_audit::{audit_std_dependencies, StdAuditReport};
 use crate::template::{analyze_template, TemplateFacts};
+use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{type_expr, TypedExpr};
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -33,6 +34,7 @@ pub struct CompileOutput {
     pub template: TemplateFacts,
     pub specialize: SpecializationFacts,
     pub monomorphize: MonomorphizationPlan,
+    pub template_audit: TemplateAuditReport,
     pub typed: TypedExpr,
     pub pattern: PatternFacts,
     pub control: ControlFacts,
@@ -73,35 +75,41 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         "MonomorphizationPlan",
         || schedule_monomorphization(&specialize),
     );
-    let typed = passes.record("L6Typed", "SourceExpr", "TypedExpr", || type_expr(expr));
-    let pattern = passes.record("L7PatternElab", "TypedExpr", "PatternFacts", || {
+    let template_audit = passes.record(
+        "L6TemplateAudit",
+        "TemplateFacts+SpecializationFacts+MonomorphizationPlan",
+        "TemplateAuditReport",
+        || audit_checked_templates(&template, &specialize, &monomorphize),
+    );
+    let typed = passes.record("L7Typed", "SourceExpr", "TypedExpr", || type_expr(expr));
+    let pattern = passes.record("L8PatternElab", "TypedExpr", "PatternFacts", || {
         analyze_patterns(&typed)
     });
-    let control = passes.record("L8AnswerControl", "TypedExpr", "ControlFacts", || {
+    let control = passes.record("L9AnswerControl", "TypedExpr", "ControlFacts", || {
         analyze_control(&typed)
     });
-    let usage = passes.record("L9Usage", "AlphaExpr", "UsageFacts", || {
+    let usage = passes.record("L10Usage", "AlphaExpr", "UsageFacts", || {
         analyze_alpha_usage(&alpha.expr)
     });
-    let cps = passes.record("L10OnePassCps", "TypedExpr", "CpsProgram", || {
+    let cps = passes.record("L11OnePassCps", "TypedExpr", "CpsProgram", || {
         cps_program(&typed)
     });
-    let cps_usage = passes.record("L11CpsUsage", "CpsProgram", "CpsUsageFacts", || {
+    let cps_usage = passes.record("L12CpsUsage", "CpsProgram", "CpsUsageFacts", || {
         analyze_cps_usage(&cps)
     });
     let continuation_simplification = passes.record(
-        "L12ContSimplify",
+        "L13ContSimplify",
         "CpsUsageFacts",
         "ContinuationSimplificationFacts",
         || simplify_continuations(&cps_usage),
     );
-    let closure = passes.record("L13Closure", "AlphaExpr", "ClosureFacts", || {
+    let closure = passes.record("L14Closure", "AlphaExpr", "ClosureFacts", || {
         analyze_alpha_closures(&alpha.expr)
     });
-    let lambda_lift = passes.record("L14LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
+    let lambda_lift = passes.record("L15LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
         lift_lambdas(&closure)
     });
-    let core = passes.record("L15Core", "CpsProgram", "CoreProgram", || {
+    let core = passes.record("L16Core", "CpsProgram", "CoreProgram", || {
         lower_core_with_facts(
             &cps,
             &control.continuations,
@@ -112,43 +120,43 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         )
     });
     let closure_core_usage = passes.record(
-        "L16ClosureCoreUsage",
+        "L17ClosureCoreUsage",
         "CoreProgram",
         "ClosureCoreUsageFacts",
         || analyze_closure_core_usage(&core),
     );
     let closure_simplification = passes.record(
-        "L17ClosureSimplify",
+        "L18ClosureSimplify",
         "ClosureCoreUsageFacts",
         "ClosureSimplificationFacts",
         || simplify_closure_core(&closure_core_usage),
     );
     let usage_audit = passes.record(
-        "L18UsageAudit",
+        "L19UsageAudit",
         "TypedExpr+UsageFacts+CoreProgram",
         "UsageAuditReport",
         || audit_usage_lowering(expr, &typed, &usage, &control, &core),
     );
-    let std_audit = passes.record("L19StdAudit", "CompilerCrate", "StdAuditReport", || {
+    let std_audit = passes.record("L20StdAudit", "CompilerCrate", "StdAuditReport", || {
         audit_std_dependencies()
     });
-    let core_validation = passes.record("L20CoreValidate", "CoreProgram", "CoreValidation", || {
+    let core_validation = passes.record("L21CoreValidate", "CoreProgram", "CoreValidation", || {
         validate_core(&core)
     });
     let backend = passes.record(
-        "L21BackendEmit",
+        "L22BackendEmit",
         "CoreProgram+CoreValidation",
         "BackendArtifact",
         || emit_wasm_gc(&core, &core_validation),
     );
     let backend_link = passes.record(
-        "L22BackendLink",
+        "L23BackendLink",
         "BackendArtifact",
         "BackendLinkedBundle",
         || link_backend_artifacts(vec![backend.clone()]),
     );
     let backend_cache_key = passes.record(
-        "L23BackendCacheKey",
+        "L24BackendCacheKey",
         "BackendLinkedBundle",
         "BackendCacheKey",
         || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
@@ -160,6 +168,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &template,
         &specialize,
         &monomorphize,
+        &template_audit,
         &typed,
         &pattern,
         &control,
@@ -186,6 +195,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         template,
         specialize,
         monomorphize,
+        template_audit,
         typed,
         pattern,
         control,

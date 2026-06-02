@@ -41,24 +41,25 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
             "L3Template",
             "L4Specialize",
             "L5Monomorphize",
-            "L6Typed",
-            "L7PatternElab",
-            "L8AnswerControl",
-            "L9Usage",
-            "L10OnePassCps",
-            "L11CpsUsage",
-            "L12ContSimplify",
-            "L13Closure",
-            "L14LambdaLift",
-            "L15Core",
-            "L16ClosureCoreUsage",
-            "L17ClosureSimplify",
-            "L18UsageAudit",
-            "L19StdAudit",
-            "L20CoreValidate",
-            "L21BackendEmit",
-            "L22BackendLink",
-            "L23BackendCacheKey"
+            "L6TemplateAudit",
+            "L7Typed",
+            "L8PatternElab",
+            "L9AnswerControl",
+            "L10Usage",
+            "L11OnePassCps",
+            "L12CpsUsage",
+            "L13ContSimplify",
+            "L14Closure",
+            "L15LambdaLift",
+            "L16Core",
+            "L17ClosureCoreUsage",
+            "L18ClosureSimplify",
+            "L19UsageAudit",
+            "L20StdAudit",
+            "L21CoreValidate",
+            "L22BackendEmit",
+            "L23BackendLink",
+            "L24BackendCacheKey"
         ]
     );
 
@@ -67,6 +68,7 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("template:"));
     assert!(visual.contains("specialize:"));
     assert!(visual.contains("monomorphize:"));
+    assert!(visual.contains("template-audit:"));
     assert!(visual.contains("pattern:"));
     assert!(visual.contains("control:"));
     assert!(visual.contains("cps-usage:"));
@@ -87,30 +89,33 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("L3Template: AlphaExpr+ResolveFacts -> TemplateFacts"));
     assert!(visual.contains("L4Specialize: TemplateFacts -> SpecializationFacts"));
     assert!(visual.contains("L5Monomorphize: SpecializationFacts -> MonomorphizationPlan"));
-    assert!(visual.contains("L7PatternElab: TypedExpr -> PatternFacts"));
-    assert!(visual.contains("L10OnePassCps: TypedExpr -> CpsProgram"));
-    assert!(visual.contains("L11CpsUsage: CpsProgram -> CpsUsageFacts"));
     assert!(visual.contains(
-        "L12ContSimplify: CpsUsageFacts -> ContinuationSimplificationFacts"
+        "L6TemplateAudit: TemplateFacts+SpecializationFacts+MonomorphizationPlan -> TemplateAuditReport"
     ));
-    assert!(visual.contains("L14LambdaLift: ClosureFacts -> LambdaLiftFacts"));
-    assert!(visual.contains("L16ClosureCoreUsage: CoreProgram -> ClosureCoreUsageFacts"));
+    assert!(visual.contains("L8PatternElab: TypedExpr -> PatternFacts"));
+    assert!(visual.contains("L11OnePassCps: TypedExpr -> CpsProgram"));
+    assert!(visual.contains("L12CpsUsage: CpsProgram -> CpsUsageFacts"));
     assert!(visual.contains(
-        "L17ClosureSimplify: ClosureCoreUsageFacts -> ClosureSimplificationFacts"
+        "L13ContSimplify: CpsUsageFacts -> ContinuationSimplificationFacts"
     ));
+    assert!(visual.contains("L15LambdaLift: ClosureFacts -> LambdaLiftFacts"));
+    assert!(visual.contains("L17ClosureCoreUsage: CoreProgram -> ClosureCoreUsageFacts"));
     assert!(visual.contains(
-        "L18UsageAudit: TypedExpr+UsageFacts+CoreProgram -> UsageAuditReport"
-    ));
-    assert!(visual.contains("L19StdAudit: CompilerCrate -> StdAuditReport"));
-    assert!(visual.contains("L20CoreValidate: CoreProgram -> CoreValidation"));
-    assert!(visual.contains(
-        "L21BackendEmit: CoreProgram+CoreValidation -> BackendArtifact"
+        "L18ClosureSimplify: ClosureCoreUsageFacts -> ClosureSimplificationFacts"
     ));
     assert!(visual.contains(
-        "L22BackendLink: BackendArtifact -> BackendLinkedBundle"
+        "L19UsageAudit: TypedExpr+UsageFacts+CoreProgram -> UsageAuditReport"
+    ));
+    assert!(visual.contains("L20StdAudit: CompilerCrate -> StdAuditReport"));
+    assert!(visual.contains("L21CoreValidate: CoreProgram -> CoreValidation"));
+    assert!(visual.contains(
+        "L22BackendEmit: CoreProgram+CoreValidation -> BackendArtifact"
     ));
     assert!(visual.contains(
-        "L23BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"
+        "L23BackendLink: BackendArtifact -> BackendLinkedBundle"
+    ));
+    assert!(visual.contains(
+        "L24BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"
     ));
 }
 
