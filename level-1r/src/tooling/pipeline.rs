@@ -2,8 +2,7 @@ use crate::alpha::{alpha_expr, AlphaFacts};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
-    DataDecl, Expr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram,
-    UseDecl,
+    Expr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, UseDecl,
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc, link_backend_artifacts, BackendArtifact, BackendCacheConfig,
@@ -142,7 +141,6 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &None,
         &TypeContext::new(),
         &BTreeMap::new(),
-        &PatternTypeEnv::default(),
     )
 }
 
@@ -157,7 +155,6 @@ fn compile_expr_with_indexes_and_generics(
     receiver: &Option<MethodReceiver>,
     type_context: &TypeContext,
     type_aliases: &BTreeMap<String, String>,
-    pattern_types: &PatternTypeEnv,
 ) -> CompileOutput {
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || alpha_expr(expr));
@@ -197,14 +194,14 @@ fn compile_expr_with_indexes_and_generics(
         "L7TypedSignature",
         "DefHeader+MethodReceiver",
         "TypedSignature",
-        || typed_signature(params, return_type, receiver, type_aliases, pattern_types),
+        || typed_signature(params, return_type, receiver, type_aliases, type_context),
     );
     let typed_env = typed_signature.type_env();
     let typed = passes.record("L7Typed", "SourceExpr+TypedSignature", "TypedExpr", || {
         type_expr_with_context(expr, &typed_env, type_context)
     });
     let pattern = passes.record("L8PatternElab", "TypedExpr+ParamPatterns", "PatternFacts", || {
-        crate::pattern::analyze_patterns_with_params(&typed, params)
+        crate::pattern::analyze_patterns_with_params_and_context(&typed, params, type_context)
     });
     let control = passes.record("L9AnswerControl", "TypedExpr", "ControlFacts", || {
         analyze_control(&typed)
@@ -357,9 +354,10 @@ pub fn compile_source_program_bundle(source: &str) -> Result<SourceCompileOutput
 }
 
 pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
+    let normalized_program = normalize_pattern_clause_defs(program);
     let mut passes = PassReport::default();
     let surface = passes.record("P1ProjectSurface", "SourceProgram", "ProjectSurface", || {
-        project_surface(program)
+        project_surface(&normalized_program)
     });
     let interface = passes.record(
         "P2InterfaceSummary",
@@ -377,13 +375,13 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         "P4GlobalInit",
         "SourceProgram+ProjectSurface",
         "GlobalInitPlan",
-        || analyze_global_init(program),
+        || analyze_global_init(&normalized_program),
     );
     let defs = passes.record(
         "P5ProgramDefs",
         "SourceProgram+InterfaceSummary",
         "ProgramDefOutput",
-        || compile_program_defs(program, &interface),
+        || compile_program_defs(&normalized_program, &interface),
     );
     let entry = passes.record(
         "P6ProgramEntry",
@@ -419,8 +417,8 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
     );
     ProgramCompileOutput {
-        namespace: program.namespace.clone(),
-        imports: program.imports.clone(),
+        namespace: normalized_program.namespace.clone(),
+        imports: normalized_program.imports.clone(),
         surface,
         interface,
         global_init,
@@ -433,15 +431,148 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     }
 }
 
+fn normalize_pattern_clause_defs(program: &SourceProgram) -> SourceProgram {
+    let mut normalized = SourceProgram::with_surface(
+        program.namespace.clone(),
+        program.imports.clone(),
+        program.types.clone(),
+        program.data.clone(),
+        Vec::new(),
+    );
+    let mut index_by_key = BTreeMap::<ClauseKey, usize>::new();
+    let mut clauses_by_key = BTreeMap::<ClauseKey, Vec<SourceItem>>::new();
+
+    for item in &program.items {
+        let Some(key) = clause_key(item) else {
+            normalized.items.push(item.clone());
+            continue;
+        };
+        if let Some(index) = index_by_key.get(&key).copied() {
+            let clauses = clauses_by_key.entry(key).or_default();
+            clauses.push(item.clone());
+            normalized.items[index] = merge_clause_items(clauses);
+        } else {
+            index_by_key.insert(key.clone(), normalized.items.len());
+            clauses_by_key.insert(key, vec![item.clone()]);
+            normalized.items.push(item.clone());
+        }
+    }
+
+    normalized
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct ClauseKey {
+    name: String,
+    receiver: Option<String>,
+    arity: usize,
+}
+
+fn clause_key(item: &SourceItem) -> Option<ClauseKey> {
+    let SourceItem::Def {
+        name,
+        receiver,
+        params,
+        ..
+    } = item
+    else {
+        return None;
+    };
+    if !params.iter().any(|param| is_refutable_clause_pattern(&param.pattern)) {
+        return None;
+    }
+    Some(ClauseKey {
+        name: name.clone(),
+        receiver: receiver.as_ref().map(MethodReceiver::display_name),
+        arity: params.len(),
+    })
+}
+
+fn is_refutable_clause_pattern(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Constructor { .. } | Pattern::Lit(_) => true,
+        Pattern::Tuple(fields) => fields.iter().any(is_refutable_clause_pattern),
+        Pattern::Record(fields) => fields
+            .iter()
+            .any(|field| is_refutable_clause_pattern(&field.pattern)),
+        Pattern::At { pattern, .. } => is_refutable_clause_pattern(pattern),
+        Pattern::Wildcard | Pattern::Bind(_) => false,
+    }
+}
+
+fn merge_clause_items(clauses: &[SourceItem]) -> SourceItem {
+    let SourceItem::Def {
+        name,
+        visibility,
+        receiver,
+        generics,
+        params,
+        return_type,
+        ..
+    } = &clauses[0]
+    else {
+        unreachable!("clause groups only contain def items");
+    };
+    let dispatcher_params = (0..params.len())
+        .map(|index| {
+            let ty = clauses.iter().find_map(|clause| match clause {
+                SourceItem::Def { params, .. } => params.get(index).and_then(|param| param.ty.clone()),
+                SourceItem::StaticValue { .. } => None,
+            });
+            ParamDecl::new(dispatcher_param_name(index), ty)
+        })
+        .collect::<Vec<_>>();
+    let scrutinee = if dispatcher_params.len() == 1 {
+        Expr::var(dispatcher_params[0].name.clone())
+    } else {
+        Expr::tuple(
+            dispatcher_params
+                .iter()
+                .map(|param| Expr::var(param.name.clone()))
+                .collect(),
+        )
+    };
+    let arms = clauses
+        .iter()
+        .map(|clause| match clause {
+            SourceItem::Def { params, body, .. } => {
+                let pattern = if params.len() == 1 {
+                    params[0].pattern.clone()
+                } else {
+                    Pattern::tuple(params.iter().map(|param| param.pattern.clone()).collect())
+                };
+                (pattern, body.clone())
+            }
+            SourceItem::StaticValue { .. } => unreachable!("clause groups only contain def items"),
+        })
+        .collect();
+    SourceItem::Def {
+        name: name.clone(),
+        visibility: *visibility,
+        receiver: receiver.clone(),
+        generics: generics.clone(),
+        params: dispatcher_params,
+        return_type: return_type.clone(),
+        body: Expr::match_expr(scrutinee, arms),
+    }
+}
+
+fn dispatcher_param_name(index: usize) -> String {
+    if index == 0 {
+        "value".to_string()
+    } else {
+        format!("value{}", index + 1)
+    }
+}
+
 fn compile_program_defs(
     program: &SourceProgram,
     interface: &InterfaceSummary,
 ) -> Vec<ProgramDefOutput> {
     let names = NameIndex::from_interface(interface);
     let methods = MethodIndex::from_interface(interface);
-    let type_context = type_context_from_interface(interface);
     let type_aliases = type_aliases_from_interface(interface);
-    let pattern_types = PatternTypeEnv::from_data(&program.data, &type_aliases);
+    let type_context = type_context_from_interface(interface, &program.data, &type_aliases);
     program
         .items
         .iter()
@@ -468,7 +599,6 @@ fn compile_program_defs(
                     receiver,
                     &type_context,
                     &type_aliases,
-                    &pattern_types,
                 ),
             }),
             SourceItem::StaticValue { .. } => None,
@@ -503,7 +633,7 @@ fn typed_signature(
     return_type: &Option<String>,
     receiver: &Option<MethodReceiver>,
     type_aliases: &BTreeMap<String, String>,
-    pattern_types: &PatternTypeEnv,
+    type_context: &TypeContext,
 ) -> TypedSignature {
     TypedSignature {
         params: params
@@ -513,7 +643,8 @@ fn typed_signature(
                 TypedParam {
                     name: param.name.clone(),
                     pattern: param.pattern.clone(),
-                    binding_types: pattern_types.bindings_for(&param.pattern, &ty),
+                    binding_types: type_context
+                        .pattern_bindings_for(&param.pattern, &header_type_to_type(&ty)),
                     ty,
                 }
             })
@@ -551,184 +682,11 @@ fn header_type_to_type(ty: &str) -> Type {
     }
 }
 
-#[derive(Clone, Debug, Default)]
-struct PatternTypeEnv {
-    data_generics: BTreeMap<String, Vec<String>>,
-    constructors: BTreeMap<(String, String), Vec<Type>>,
-}
-
-impl PatternTypeEnv {
-    fn from_data(data: &[DataDecl], type_aliases: &BTreeMap<String, String>) -> Self {
-        let mut env = Self::default();
-        for decl in data {
-            env.data_generics.insert(decl.name.clone(), decl.generics.clone());
-            for variant in &decl.variants {
-                env.constructors.insert(
-                    (decl.name.clone(), variant.name.clone()),
-                    variant
-                        .fields
-                        .iter()
-                        .map(|field| header_type_to_type_resolved(field, type_aliases))
-                        .collect(),
-                );
-            }
-        }
-        env
-    }
-
-    fn bindings_for(&self, pattern: &Pattern, subject_ty: &str) -> Vec<(String, Type)> {
-        let subject = header_type_to_type(subject_ty);
-        let subject_data = nominal_type_name(&subject).map(|name| nominal_base_name(name).to_string());
-        let substitutions = nominal_type_name(&subject)
-            .and_then(|nominal| self.substitutions_for_subject(nominal))
-            .unwrap_or_default();
-        self.bindings_for_pattern(pattern, subject, subject_data.as_deref(), &substitutions)
-    }
-
-    fn bindings_for_pattern(
-        &self,
-        pattern: &Pattern,
-        ty: Type,
-        subject_data: Option<&str>,
-        substitutions: &BTreeMap<String, Type>,
-    ) -> Vec<(String, Type)> {
-        match pattern {
-            Pattern::Bind(name) => vec![(name.clone(), ty)],
-            Pattern::Tuple(fields) => fields
-                .iter()
-                .enumerate()
-                .flat_map(|(index, field)| {
-                    let field_ty = match &ty {
-                        Type::Tuple(types) => types.get(index).cloned().unwrap_or(Type::Unknown),
-                        _ => Type::Unknown,
-                    };
-                    self.bindings_for_pattern(field, field_ty, subject_data, substitutions)
-                })
-                .collect(),
-            Pattern::Record(fields) => fields
-                .iter()
-                .flat_map(|field| {
-                    let field_ty = match &ty {
-                        Type::Record(types) => types
-                            .iter()
-                            .find(|typed| typed.name == field.name)
-                            .map(|typed| typed.ty.clone())
-                            .unwrap_or(Type::Unknown),
-                        _ => Type::Unknown,
-                    };
-                    self.bindings_for_pattern(&field.pattern, field_ty, subject_data, substitutions)
-                })
-                .collect(),
-            Pattern::Constructor { data, ctor, args } => {
-                let ctor_data = data.as_deref().or(subject_data);
-                let payloads = ctor_data
-                    .and_then(|data| self.constructors.get(&(data.to_string(), ctor.clone())))
-                    .map(Vec::as_slice)
-                    .unwrap_or(&[]);
-                args.iter()
-                    .enumerate()
-                    .flat_map(|(index, arg)| {
-                        let field_ty = payloads
-                            .get(index)
-                            .map(|field| substitute_pattern_type(field, substitutions))
-                            .unwrap_or(Type::Unknown);
-                        self.bindings_for_pattern(arg, field_ty, subject_data, substitutions)
-                    })
-                    .collect()
-            }
-            Pattern::At { name, pattern } => {
-                let mut bindings =
-                    self.bindings_for_pattern(pattern, ty.clone(), subject_data, substitutions);
-                bindings.push((name.clone(), ty));
-                bindings
-            }
-            Pattern::Wildcard | Pattern::Lit(_) => Vec::new(),
-        }
-    }
-
-    fn substitutions_for_subject(&self, subject: &str) -> Option<BTreeMap<String, Type>> {
-        let (base, args) = parse_nominal_application_local(subject)?;
-        let generics = self.data_generics.get(base)?;
-        if generics.len() != args.len() {
-            return None;
-        }
-        Some(
-            generics
-                .iter()
-                .cloned()
-                .zip(args.into_iter().map(|arg| header_type_to_type(&arg)))
-                .collect(),
-        )
-    }
-}
-
-fn header_type_to_type_resolved(ty: &str, type_aliases: &BTreeMap<String, String>) -> Type {
-    header_type_to_type(type_aliases.get(ty).map(String::as_str).unwrap_or(ty))
-}
-
-fn nominal_type_name(ty: &Type) -> Option<&str> {
-    match ty {
-        Type::Nominal(name) => Some(name),
-        _ => None,
-    }
-}
-
-fn nominal_base_name(name: &str) -> &str {
-    name.find('[').map(|open| &name[..open]).unwrap_or(name)
-}
-
-fn substitute_pattern_type(ty: &Type, substitutions: &BTreeMap<String, Type>) -> Type {
-    match ty {
-        Type::Nominal(name) => substitutions
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| Type::Nominal(name.clone())),
-        Type::Tuple(fields) => Type::Tuple(
-            fields
-                .iter()
-                .map(|field| substitute_pattern_type(field, substitutions))
-                .collect(),
-        ),
-        Type::Record(fields) => Type::Record(
-            fields
-                .iter()
-                .map(|field| RecordTypeField {
-                    name: field.name.clone(),
-                    ty: substitute_pattern_type(&field.ty, substitutions),
-                })
-                .collect(),
-        ),
-        Type::Func(param, result) => Type::Func(
-            Box::new(substitute_pattern_type(param, substitutions)),
-            Box::new(substitute_pattern_type(result, substitutions)),
-        ),
-        Type::Adt { name, variants } => Type::Adt {
-            name: name.clone(),
-            variants: variants.clone(),
-        },
-        Type::Unknown => Type::Unknown,
-        Type::I64 => Type::I64,
-        Type::Bool => Type::Bool,
-    }
-}
-
-fn parse_nominal_application_local(name: &str) -> Option<(&str, Vec<String>)> {
-    let open = name.find('[')?;
-    let close = name.rfind(']')?;
-    if close <= open || close != name.len() - 1 {
-        return None;
-    }
-    let base = &name[..open];
-    let args = &name[open + 1..close];
-    let args = if args.trim().is_empty() {
-        Vec::new()
-    } else {
-        args.split(',').map(|arg| arg.trim().to_string()).collect()
-    };
-    Some((base, args))
-}
-
-fn type_context_from_interface(interface: &InterfaceSummary) -> TypeContext {
+fn type_context_from_interface(
+    interface: &InterfaceSummary,
+    data_decls: &[crate::ast::DataDecl],
+    type_aliases: &BTreeMap<String, String>,
+) -> TypeContext {
     let mut context = TypeContext::new();
     for ty in &interface.types {
         if ty.alias_target.is_some() {
@@ -751,7 +709,25 @@ fn type_context_from_interface(interface: &InterfaceSummary) -> TypeContext {
             context.insert_generic_nominal_row(name, ty.generics.clone(), fields);
         }
     }
+    for data in data_decls {
+        for variant in &data.variants {
+            context.insert_data_constructor(
+                data.name.clone(),
+                data.generics.clone(),
+                variant.name.clone(),
+                variant
+                    .fields
+                    .iter()
+                    .map(|field| header_type_to_type(resolve_type_alias(field, type_aliases)))
+                    .collect(),
+            );
+        }
+    }
     context
+}
+
+fn resolve_type_alias<'a>(ty: &'a str, type_aliases: &'a BTreeMap<String, String>) -> &'a str {
+    type_aliases.get(ty).map(String::as_str).unwrap_or(ty)
 }
 
 fn type_aliases_from_interface(interface: &InterfaceSummary) -> BTreeMap<String, String> {

@@ -1,5 +1,5 @@
 use crate::ast::{Literal, ParamDecl, Pattern};
-use crate::typed::{TypedExpr, TypedExprKind, Type};
+use crate::typed::{TypedExpr, TypedExprKind, Type, TypeContext};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PatternFacts {
@@ -39,17 +39,29 @@ pub enum PatternDiagnostic {
 }
 
 pub fn analyze_patterns(expr: &TypedExpr) -> PatternFacts {
+    analyze_patterns_with_context(expr, &TypeContext::new())
+}
+
+pub fn analyze_patterns_with_context(expr: &TypedExpr, context: &TypeContext) -> PatternFacts {
     let mut facts = PatternFacts::default();
-    visit(expr, &mut facts);
+    visit(expr, &mut facts, context);
     facts
 }
 
 pub fn analyze_patterns_with_params(expr: &TypedExpr, params: &[ParamDecl]) -> PatternFacts {
+    analyze_patterns_with_params_and_context(expr, params, &TypeContext::new())
+}
+
+pub fn analyze_patterns_with_params_and_context(
+    expr: &TypedExpr,
+    params: &[ParamDecl],
+    context: &TypeContext,
+) -> PatternFacts {
     let mut facts = PatternFacts::default();
     for param in params {
         analyze_param_pattern(param, &mut facts);
     }
-    visit(expr, &mut facts);
+    visit(expr, &mut facts, context);
     facts
 }
 
@@ -74,64 +86,64 @@ fn analyze_param_pattern(param: &ParamDecl, facts: &mut PatternFacts) {
     }
 }
 
-fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
+fn visit(expr: &TypedExpr, facts: &mut PatternFacts, context: &TypeContext) {
     match &expr.kind {
         TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
-        TypedExprKind::Lambda { body, .. } => visit(body, facts),
+        TypedExprKind::Lambda { body, .. } => visit(body, facts, context),
         TypedExprKind::Call { callee, args } => {
-            visit(callee, facts);
+            visit(callee, facts, context);
             for arg in args {
-                visit(arg, facts);
+                visit(arg, facts, context);
             }
         }
         TypedExprKind::Tuple { fields, .. } => {
             for field in fields {
-                visit(field, facts);
+                visit(field, facts, context);
             }
         }
         TypedExprKind::Record { fields } => {
             for field in fields {
-                visit(&field.value, facts);
+                visit(&field.value, facts, context);
             }
         }
         TypedExprKind::RecordUpdate { base, fields } => {
-            visit(base, facts);
+            visit(base, facts, context);
             for field in fields {
-                visit(&field.value, facts);
+                visit(&field.value, facts, context);
             }
         }
         TypedExprKind::AdtCtor { args, .. } => {
             for arg in args {
-                visit(arg, facts);
+                visit(arg, facts, context);
             }
         }
-        TypedExprKind::Field { receiver, .. } => visit(receiver, facts),
+        TypedExprKind::Field { receiver, .. } => visit(receiver, facts, context),
         TypedExprKind::MethodCall { receiver, args, .. } => {
-            visit(receiver, facts);
+            visit(receiver, facts, context);
             for arg in args {
-                visit(arg, facts);
+                visit(arg, facts, context);
             }
         }
         TypedExprKind::Index { receiver, index } => {
-            visit(receiver, facts);
-            visit(index, facts);
+            visit(receiver, facts, context);
+            visit(index, facts, context);
         }
         TypedExprKind::Range { start, end } => {
-            visit(start, facts);
-            visit(end, facts);
+            visit(start, facts, context);
+            visit(end, facts, context);
         }
         TypedExprKind::Binary { lhs, rhs, .. } => {
-            visit(lhs, facts);
-            visit(rhs, facts);
+            visit(lhs, facts, context);
+            visit(rhs, facts, context);
         }
         TypedExprKind::If {
             cond,
             then_branch,
             else_branch,
         } => {
-            visit(cond, facts);
-            visit(then_branch, facts);
-            visit(else_branch, facts);
+            visit(cond, facts, context);
+            visit(then_branch, facts, context);
+            visit(else_branch, facts, context);
         }
         TypedExprKind::IfLet {
             pattern,
@@ -139,9 +151,9 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             then_branch,
             else_branch,
         } => {
-            visit(scrutinee, facts);
-            visit(then_branch, facts);
-            visit(else_branch, facts);
+            visit(scrutinee, facts, context);
+            visit(then_branch, facts, context);
+            visit(else_branch, facts, context);
             diagnose_duplicate_bindings(pattern, facts);
             diagnose_chained_at_patterns(pattern, facts);
             facts.envs.push(PatternEnvFact {
@@ -151,9 +163,9 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             });
         }
         TypedExprKind::Match { scrutinee, arms } => {
-            visit(scrutinee, facts);
+            visit(scrutinee, facts, context);
             for arm in arms {
-                visit(&arm.body, facts);
+                visit(&arm.body, facts, context);
                 diagnose_duplicate_bindings(&arm.pattern, facts);
                 diagnose_chained_at_patterns(&arm.pattern, facts);
                 let bindings = pattern_bindings(&arm.pattern);
@@ -165,7 +177,7 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
                     });
                 }
             }
-            let fact = exhaustiveness(scrutinee, arms);
+            let fact = exhaustiveness(scrutinee, arms, context);
             if !fact.exhaustive {
                 facts.diagnostics.push(PatternDiagnostic::NonExhaustiveMatch {
                     scrutinee_type: fact.scrutinee_type.clone(),
@@ -174,15 +186,16 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             }
             facts.matches.push(fact);
         }
-        TypedExprKind::Nominal { expr, .. } => visit(expr, facts),
-        TypedExprKind::Reset { body, .. } => visit(body, facts),
-        TypedExprKind::Shift { body, .. } => visit(body, facts),
+        TypedExprKind::Nominal { expr, .. } => visit(expr, facts, context),
+        TypedExprKind::Reset { body, .. } => visit(body, facts, context),
+        TypedExprKind::Shift { body, .. } => visit(body, facts, context),
     }
 }
 
 fn exhaustiveness(
     scrutinee: &TypedExpr,
     arms: &[crate::typed::TypedMatchArm],
+    context: &TypeContext,
 ) -> MatchExhaustivenessFact {
     let mut covered_literals = Vec::new();
     let mut covered_constructors = Vec::new();
@@ -219,7 +232,7 @@ fn exhaustiveness(
     }
     let exhaustive = has_wildcard
         || bool_is_exhaustive(&scrutinee.ty, &covered_literals)
-        || adt_is_exhaustive(&scrutinee.ty, &covered_constructors);
+        || adt_is_exhaustive(&scrutinee.ty, &covered_constructors, context);
     MatchExhaustivenessFact {
         scrutinee_type: scrutinee.ty.clone(),
         covered_literals,
@@ -243,11 +256,10 @@ fn bool_is_exhaustive(ty: &Type, covered: &[Literal]) -> bool {
     covered.contains(&Literal::Bool(true)) && covered.contains(&Literal::Bool(false))
 }
 
-fn adt_is_exhaustive(ty: &Type, covered: &[String]) -> bool {
-    let Type::Adt { variants, .. } = ty else {
-        return false;
-    };
-    variants.iter().all(|variant| covered.contains(variant))
+fn adt_is_exhaustive(ty: &Type, covered: &[String], context: &TypeContext) -> bool {
+    context
+        .adt_variants_for_type(ty)
+        .is_some_and(|(_, variants)| variants.iter().all(|variant| covered.contains(variant)))
 }
 
 fn missing_patterns(fact: &MatchExhaustivenessFact) -> Vec<Pattern> {

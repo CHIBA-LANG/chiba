@@ -91,6 +91,81 @@ fn program_bundle_reports_duplicate_defs_and_entry_params() {
 }
 
 #[test]
+fn pattern_clause_defs_lower_to_single_dispatcher_without_duplicate_def() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            vec!["T".to_string()],
+            vec![
+                DataVariant::new("Some", vec!["T".to_string()]),
+                DataVariant::new("None", Vec::new()),
+            ],
+        )],
+        vec![
+            SourceItem::Def {
+                receiver: None,
+                generics: vec!["T".to_string()],
+                name: "unwrap_or_zero".to_string(),
+                visibility: Visibility::Public,
+                params: vec![ParamDecl::pattern(
+                    chiba_level1r::ast::Pattern::ctor("Some", vec![chiba_level1r::ast::Pattern::bind("x")]),
+                    Some("Option[i64]".to_string()),
+                )],
+                return_type: Some("i64".to_string()),
+                body: Expr::var("x"),
+            },
+            SourceItem::Def {
+                receiver: None,
+                generics: vec!["T".to_string()],
+                name: "unwrap_or_zero".to_string(),
+                visibility: Visibility::Public,
+                params: vec![ParamDecl::pattern(
+                    chiba_level1r::ast::Pattern::ctor("None", Vec::new()),
+                    Some("Option[i64]".to_string()),
+                )],
+                return_type: Some("i64".to_string()),
+                body: Expr::i64(0),
+            },
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(!bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateDef {
+            name: "unwrap_or_zero".to_string(),
+        }));
+    assert_eq!(bundle.defs.len(), 1);
+    assert_eq!(bundle.defs[0].name, "unwrap_or_zero");
+    assert_eq!(bundle.defs[0].params, vec!["value".to_string()]);
+    assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(bundle.defs[0].output.pattern.matches.len(), 1);
+    assert!(bundle.defs[0].output.pattern.matches[0].exhaustive);
+}
+
+#[test]
+fn source_pattern_clause_defs_compile_through_dispatcher() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "data Option[T] = { Some(T), None }
+def unwrap_or_zero(Some(x): Option[i64]): i64 = x
+def unwrap_or_zero(None: Option[i64]): i64 = 0",
+    )
+    .expect("compile source");
+
+    assert_eq!(output.frontend.program.items.len(), 2);
+    assert_eq!(output.program.defs.len(), 1);
+    assert_eq!(output.program.defs[0].name, "unwrap_or_zero");
+    assert_eq!(output.program.defs[0].params, vec!["value".to_string()]);
+    assert_eq!(output.program.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(output.program.defs[0].output.pattern.matches.len(), 1);
+    assert!(output.program.defs[0].output.pattern.matches[0].exhaustive);
+}
+
+#[test]
 fn program_surface_and_interface_summary_preserve_owner_namespace() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),

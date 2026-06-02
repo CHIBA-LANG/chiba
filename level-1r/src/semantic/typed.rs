@@ -145,6 +145,8 @@ pub type TypeEnv = BTreeMap<String, Type>;
 pub struct TypeContext {
     nominal_rows: BTreeMap<String, Vec<RecordTypeField>>,
     generic_nominal_rows: BTreeMap<String, NominalRowDecl>,
+    data_generics: BTreeMap<String, Vec<String>>,
+    constructors: BTreeMap<(String, String), Vec<Type>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -184,6 +186,18 @@ impl TypeContext {
         );
     }
 
+    pub fn insert_data_constructor(
+        &mut self,
+        data: impl Into<String>,
+        generics: Vec<String>,
+        ctor: impl Into<String>,
+        payloads: Vec<Type>,
+    ) {
+        let data = data.into();
+        self.data_generics.entry(data.clone()).or_insert(generics);
+        self.constructors.insert((data, ctor.into()), payloads);
+    }
+
     pub fn nominal_field_type(&self, receiver: &Type, name: &str) -> Option<Type> {
         let Type::Nominal(nominal) = receiver else {
             return None;
@@ -207,6 +221,114 @@ impl TypeContext {
             .zip(args.into_iter().map(type_name_to_type))
             .collect::<BTreeMap<_, _>>();
         field_type(&decl.fields, field).map(|ty| substitute_type_params(&ty, &substitutions))
+    }
+
+    pub fn pattern_bindings_for(&self, pattern: &Pattern, subject: &Type) -> Vec<(String, Type)> {
+        let subject_data =
+            nominal_type_name(subject).map(|name| nominal_base_name(name).to_string());
+        let substitutions = nominal_type_name(subject)
+            .and_then(|nominal| self.substitutions_for_subject(nominal))
+            .unwrap_or_default();
+        self.pattern_bindings(pattern, subject.clone(), subject_data.as_deref(), &substitutions)
+    }
+
+    pub fn adt_variants_for_type(&self, ty: &Type) -> Option<(String, Vec<String>)> {
+        match ty {
+            Type::Adt { name, variants } => Some((name.clone(), variants.clone())),
+            Type::Nominal(name) => {
+                let base = nominal_base_name(name).to_string();
+                let mut variants = self
+                    .constructors
+                    .keys()
+                    .filter(|(data, _)| data == &base)
+                    .map(|(_, ctor)| ctor.clone())
+                    .collect::<Vec<_>>();
+                if variants.is_empty() {
+                    None
+                } else {
+                    variants.sort();
+                    variants.dedup();
+                    Some((base, variants))
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn pattern_bindings(
+        &self,
+        pattern: &Pattern,
+        ty: Type,
+        subject_data: Option<&str>,
+        substitutions: &BTreeMap<String, Type>,
+    ) -> Vec<(String, Type)> {
+        match pattern {
+            Pattern::Bind(name) => vec![(name.clone(), ty)],
+            Pattern::Tuple(fields) => fields
+                .iter()
+                .enumerate()
+                .flat_map(|(index, field)| {
+                    let field_ty = match &ty {
+                        Type::Tuple(types) => types.get(index).cloned().unwrap_or(Type::Unknown),
+                        _ => Type::Unknown,
+                    };
+                    self.pattern_bindings(field, field_ty, subject_data, substitutions)
+                })
+                .collect(),
+            Pattern::Record(fields) => fields
+                .iter()
+                .flat_map(|field| {
+                    let field_ty = match &ty {
+                        Type::Record(types) => types
+                            .iter()
+                            .find(|typed| typed.name == field.name)
+                            .map(|typed| typed.ty.clone())
+                            .unwrap_or(Type::Unknown),
+                        _ => Type::Unknown,
+                    };
+                    self.pattern_bindings(&field.pattern, field_ty, subject_data, substitutions)
+                })
+                .collect(),
+            Pattern::Constructor { data, ctor, args } => {
+                let ctor_data = data.as_deref().or(subject_data);
+                let payloads = ctor_data
+                    .and_then(|data| self.constructors.get(&(data.to_string(), ctor.clone())))
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
+                args.iter()
+                    .enumerate()
+                    .flat_map(|(index, arg)| {
+                        let field_ty = payloads
+                            .get(index)
+                            .map(|field| substitute_type_params(field, substitutions))
+                            .unwrap_or(Type::Unknown);
+                        self.pattern_bindings(arg, field_ty, subject_data, substitutions)
+                    })
+                    .collect()
+            }
+            Pattern::At { name, pattern } => {
+                let mut bindings =
+                    self.pattern_bindings(pattern, ty.clone(), subject_data, substitutions);
+                bindings.push((name.clone(), ty));
+                bindings
+            }
+            Pattern::Wildcard | Pattern::Lit(_) => Vec::new(),
+        }
+    }
+
+    fn substitutions_for_subject(&self, subject: &str) -> Option<BTreeMap<String, Type>> {
+        let (base, args) = parse_nominal_application(subject)?;
+        let generics = self.data_generics.get(base)?;
+        if generics.len() != args.len() {
+            return None;
+        }
+        Some(
+            generics
+                .iter()
+                .cloned()
+                .zip(args.into_iter().map(type_name_to_type))
+                .collect(),
+        )
     }
 }
 
@@ -421,7 +543,9 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             else_branch,
         } => {
             let scrutinee = type_expr_with_context(scrutinee, env, context);
-            let then_branch = type_expr_with_context(then_branch, env, context);
+            let mut then_env = env.clone();
+            then_env.extend(context.pattern_bindings_for(pattern, &scrutinee.ty));
+            let then_branch = type_expr_with_context(then_branch, &then_env, context);
             let else_branch = type_expr_with_context(else_branch, env, context);
             let ty = common_type(&then_branch.ty, &else_branch.ty);
             typed(
@@ -438,9 +562,13 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             let scrutinee = type_expr_with_context(scrutinee, env, context);
             let arms: Vec<_> = arms
                 .iter()
-                .map(|arm| TypedMatchArm {
-                    pattern: arm.pattern.clone(),
-                    body: type_expr_with_context(&arm.body, env, context),
+                .map(|arm| {
+                    let mut arm_env = env.clone();
+                    arm_env.extend(context.pattern_bindings_for(&arm.pattern, &scrutinee.ty));
+                    TypedMatchArm {
+                        pattern: arm.pattern.clone(),
+                        body: type_expr_with_context(&arm.body, &arm_env, context),
+                    }
                 })
                 .collect();
             let ty = arms
@@ -580,6 +708,17 @@ fn parse_nominal_application(nominal: &str) -> Option<(&str, Vec<String>)> {
         args.split(',').map(|arg| arg.trim().to_string()).collect()
     };
     Some((base, args))
+}
+
+fn nominal_type_name(ty: &Type) -> Option<&str> {
+    match ty {
+        Type::Nominal(name) => Some(name),
+        _ => None,
+    }
+}
+
+fn nominal_base_name(name: &str) -> &str {
+    name.find('[').map(|open| &name[..open]).unwrap_or(name)
 }
 
 fn type_name_to_type(name: String) -> Type {
