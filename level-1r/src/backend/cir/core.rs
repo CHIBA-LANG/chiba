@@ -18,6 +18,11 @@ pub struct CoreProgram {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoreOp {
     ReturnValue(CoreValue),
+    ReturnBranch {
+        cond: CoreValue,
+        then_value: CoreValue,
+        else_value: CoreValue,
+    },
     TailCall {
         func: String,
         args: Vec<String>,
@@ -351,6 +356,16 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             else_term,
             ..
         } => {
+            if let (Some(then_value), Some(else_value)) =
+                (direct_return_value(then_term), direct_return_value(else_term))
+            {
+                ops.push(CoreOp::ReturnBranch {
+                    cond: core_value(cond),
+                    then_value,
+                    else_value,
+                });
+                return;
+            }
             ops.push(CoreOp::Branch {
                 cond: render_atom(cond),
             });
@@ -369,6 +384,13 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                 lower_term(&arm.body, continuations, ops);
             }
         }
+    }
+}
+
+fn direct_return_value(term: &CpsTerm) -> Option<CoreValue> {
+    match term {
+        CpsTerm::Halt(atom) | CpsTerm::AppCont { value: atom, .. } => Some(core_value(atom)),
+        _ => None,
     }
 }
 
@@ -537,6 +559,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         CoreOp::OperatorTarget { target, .. } => target == func,
         CoreOp::LiftedFunction { symbol, .. } => symbol == func,
         CoreOp::ReturnValue(_)
+        | CoreOp::ReturnBranch { .. }
         | CoreOp::TupleConstruct { .. }
         | CoreOp::TupleFieldGet { .. }
         | CoreOp::RecordConstruct { .. }

@@ -131,6 +131,7 @@ pub fn emit_wasm_gc(core: &CoreProgram, validation: &CoreValidation) -> BackendA
 fn first_return_value(core: &CoreProgram) -> Option<CoreValue> {
     core.ops.iter().find_map(|op| match op {
         CoreOp::ReturnValue(value) => Some(value.clone()),
+        CoreOp::ReturnBranch { .. } => None,
         _ => None,
     })
 }
@@ -158,6 +159,7 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
                 ownership: ownership_for_subject(core, target),
             }),
             CoreOp::ReturnValue(_)
+            | CoreOp::ReturnBranch { .. }
             | CoreOp::DynamicCallableTarget { .. }
             | CoreOp::TupleConstruct { .. }
             | CoreOp::TupleFieldGet { .. }
@@ -211,6 +213,32 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
                 wat.push_str(&format!("  (func ${symbol} (export \"{symbol}\") (result i32)\n"));
                 render_core_value_i32(&mut wat, value);
                 wat.push_str(")\n");
+                return_index += 1;
+            }
+            CoreOp::ReturnBranch {
+                cond,
+                then_value,
+                else_value,
+            } => {
+                let symbol = if return_index == 0 {
+                    "main".to_string()
+                } else {
+                    format!("chiba_return_{return_index}")
+                };
+                wat.push_str(&format!(
+                    "  ;; core-return branch cond={} then={} else={}\n",
+                    escape_wat_comment(&cond.debug_name()),
+                    escape_wat_comment(&then_value.debug_name()),
+                    escape_wat_comment(&else_value.debug_name())
+                ));
+                wat.push_str(&format!("  (func ${symbol} (export \"{symbol}\") (result i32)\n"));
+                render_core_value_i32(&mut wat, cond);
+                wat.push_str("    if (result i32)\n");
+                render_core_value_i32_indented(&mut wat, then_value, 6);
+                wat.push_str("    else\n");
+                render_core_value_i32_indented(&mut wat, else_value, 6);
+                wat.push_str("    end\n");
+                wat.push_str("  )\n");
                 return_index += 1;
             }
             CoreOp::TailCall { func, args } => {
@@ -322,6 +350,16 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue) {
         CoreValue::I64(value) => wat.push_str(&format!("    i32.const {}\n", *value as i32)),
         CoreValue::Bool(value) => wat.push_str(&format!("    i32.const {}\n", i32::from(*value))),
         CoreValue::Var(_) | CoreValue::Rendered { .. } => wat.push_str("    i32.const 0\n"),
+    }
+}
+
+fn render_core_value_i32_indented(wat: &mut String, value: &CoreValue, indent: usize) {
+    let mut nested = String::new();
+    render_core_value_i32(&mut nested, value);
+    for line in nested.lines() {
+        wat.push_str(&" ".repeat(indent));
+        wat.push_str(line.trim_start());
+        wat.push('\n');
     }
 }
 

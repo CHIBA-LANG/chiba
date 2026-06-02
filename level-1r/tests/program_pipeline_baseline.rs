@@ -67,6 +67,32 @@ fn program_bundle_selects_main_and_links_def_artifacts() {
 }
 
 #[test]
+fn program_branch_return_lowers_to_executable_wat_if() {
+    let program = SourceProgram::new(vec![def(
+        "main",
+        vec![],
+        Expr::if_else(Expr::bool(true), Expr::i64(1), Expr::i64(2)),
+    )]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ReturnBranch {
+                cond: chiba_level1r::core::CoreValue::Bool(true),
+                then_value: chiba_level1r::core::CoreValue::I64(1),
+                else_value: chiba_level1r::core::CoreValue::I64(2),
+            }
+        )
+    }));
+    assert!(bundle.backend_link.linked_wat.contains("if (result i32)"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
+#[test]
 fn program_bundle_reports_duplicate_defs_and_entry_params() {
     let program = SourceProgram::new(vec![
         def("main", vec!["x"], Expr::var("x")),
