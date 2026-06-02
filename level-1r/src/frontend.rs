@@ -109,6 +109,7 @@ fn chiba_lexer_spec() -> LexerSpec {
             punct("Dot", "\\."),
             punct("Colon", ":"),
             punct("Pipe", "\\|"),
+            punct("At", "@"),
             punct("Comma", ","),
             punct("Eq", "="),
             punct("Plus", "\\+"),
@@ -390,6 +391,25 @@ impl FrontendParser {
     }
 
     fn parse_pattern(&mut self) -> Result<Pattern, FrontendError> {
+        let pattern = self.parse_pattern_atom()?;
+        if self.peek_name() == Some("At") {
+            self.pos += 1;
+            let name = match pattern {
+                Pattern::Bind(name) => name,
+                other => {
+                    return Err(FrontendError::UnexpectedToken {
+                        found: format!("{other:?}"),
+                        lexeme: "@".to_string(),
+                        expected: vec!["binding name before @".to_string()],
+                    })
+                }
+            };
+            return Ok(Pattern::at(name, self.parse_pattern()?));
+        }
+        Ok(pattern)
+    }
+
+    fn parse_pattern_atom(&mut self) -> Result<Pattern, FrontendError> {
         match self.peek_name() {
             Some("Number") => {
                 let lexeme = self.expect_lexeme("Number")?;
@@ -414,6 +434,8 @@ impl FrontendParser {
                     Ok(Pattern::bind(name))
                 }
             }
+            Some("LParen") => self.parse_tuple_pattern(),
+            Some("LBrace") => self.parse_record_pattern(),
             Some(found) => {
                 let token = self.tokens[self.pos].clone();
                 Err(FrontendError::UnexpectedToken {
@@ -424,6 +446,8 @@ impl FrontendParser {
                         "True".to_string(),
                         "False".to_string(),
                         "Ident".to_string(),
+                        "LParen".to_string(),
+                        "LBrace".to_string(),
                     ],
                 })
             }
@@ -431,6 +455,43 @@ impl FrontendParser {
                 expected: vec!["pattern".to_string()],
             }),
         }
+    }
+
+    fn parse_tuple_pattern(&mut self) -> Result<Pattern, FrontendError> {
+        self.expect("LParen")?;
+        let first = self.parse_pattern()?;
+        let mut fields = vec![first];
+        while self.peek_name() == Some("Comma") {
+            self.pos += 1;
+            if self.peek_name() == Some("RParen") {
+                break;
+            }
+            fields.push(self.parse_pattern()?);
+        }
+        self.expect("RParen")?;
+        Ok(Pattern::tuple(fields))
+    }
+
+    fn parse_record_pattern(&mut self) -> Result<Pattern, FrontendError> {
+        self.expect("LBrace")?;
+        let mut fields = Vec::new();
+        while self.peek_name() != Some("RBrace") {
+            let name = self.expect_lexeme("Ident")?;
+            let pattern = if self.peek_name() == Some("Colon") {
+                self.pos += 1;
+                self.parse_pattern()?
+            } else {
+                Pattern::bind(name.clone())
+            };
+            fields.push((name, pattern));
+            if self.peek_name() == Some("Comma") {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        self.expect("RBrace")?;
+        Ok(Pattern::record(fields))
     }
 
     fn peek_infix(&self) -> Option<(BinaryOp, u32, u32)> {

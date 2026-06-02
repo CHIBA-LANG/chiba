@@ -200,6 +200,46 @@ fn frontend_parses_match_with_literal_and_wildcard_through_cps_core() {
 }
 
 #[test]
+fn frontend_parses_nested_tuple_record_and_at_patterns() {
+    let output = compile_source_program_bundle(
+        "def main() = match value { whole @ (head, {tail: rest}) => whole, _ => 0 }",
+    )
+    .expect("compile source");
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::match_expr(
+                    Expr::var("value"),
+                    vec![
+                        (
+                            Pattern::at(
+                                "whole",
+                                Pattern::tuple(vec![
+                                    Pattern::bind("head"),
+                                    Pattern::record(vec![("tail", Pattern::bind("rest"))]),
+                                ]),
+                            ),
+                            Expr::var("whole"),
+                        ),
+                        (Pattern::wildcard(), Expr::i64(0)),
+                    ],
+                )
+            );
+        }
+    }
+
+    let main = &output.program.defs[0].output;
+    assert_eq!(main.pattern.envs.len(), 1);
+    assert_eq!(
+        main.pattern.envs[0].bindings,
+        vec!["head".to_string(), "rest".to_string(), "whole".to_string()]
+    );
+    assert!(main.cps.to_string().contains("whole @ (head, {tail: rest}) =>"));
+}
+
+#[test]
 fn frontend_parses_if_let_block_form_through_pattern_env_and_cps() {
     let output = compile_source_program_bundle("def main() = if let value = maybe { value } else { 0 }")
         .expect("compile source");
