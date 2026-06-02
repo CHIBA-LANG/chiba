@@ -239,6 +239,56 @@ fn interface_summary_preserves_row_style_type_decl_shape() {
 }
 
 #[test]
+fn interface_summary_preserves_type_alias_target() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::alias("UserId", Vec::new(), "i64")],
+        Vec::new(),
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.interface.types[0].symbol, "parser.core::UserId");
+    assert_eq!(
+        bundle.interface.types[0].alias_target,
+        Some("i64".to_string())
+    );
+    assert!(bundle.render_summary().contains("alias_target"));
+}
+
+#[test]
+fn typed_signature_resolves_type_alias_headers() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::alias("UserId", Vec::new(), "i64")],
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "id".to_string(),
+            params: vec![ParamDecl::new("value", Some("UserId".to_string()))],
+            return_type: Some("UserId".to_string()),
+            body: Expr::var("value"),
+        }],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(
+        bundle.defs[0].output.typed_signature.params,
+        vec![("value".to_string(), "i64".to_string())]
+    );
+    assert_eq!(
+        bundle.defs[0].output.typed_signature.return_type,
+        Some("i64".to_string())
+    );
+    assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+}
+
+#[test]
 fn interface_summary_splits_type_fields_from_phantom_markers() {
     let program = SourceProgram::with_surface(
         None,

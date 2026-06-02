@@ -113,6 +113,18 @@ fn frontend_parses_row_style_type_decl_with_generics() {
 }
 
 #[test]
+fn frontend_parses_type_alias_decl() {
+    let output = parse_source_program("type UserId = i64 def main(id: UserId) = id")
+        .expect("frontend parse");
+
+    assert_eq!(
+        output.program.types,
+        vec![TypeDecl::alias("UserId", Vec::new(), "i64")]
+    );
+    assert_eq!(output.program.items.len(), 1);
+}
+
+#[test]
 fn frontend_parses_utf8_row_style_type_decl_names() {
     let output = parse_source_program(
         "type 向量🚀[Τ] = { 值中文: Τ, emoji字段🚀: i64 } def main() = 0",
@@ -1314,6 +1326,74 @@ fn frontend_accepts_utf8_names_for_function_scalar_adt_and_ctor_in_one_program()
             op,
             chiba_level1r::core::CoreOp::Match { scrutinee, patterns }
                 if scrutinee == "结果🚀.🚀成功(标量Ω)"
+                    && patterns == &vec![
+                        "Constructor { data: Some(\"结果🚀\"), ctor: \"🚀成功\", args: [Bind(\"绑定中文\")] }".to_string(),
+                        "Constructor { data: Some(\"结果🚀\"), ctor: \"失败中文\", args: [] }".to_string(),
+                    ]
+        )
+    }));
+}
+
+#[test]
+fn frontend_preserves_utf8_names_across_type_alias_row_adt_and_patterns() {
+    let output = compile_source_program_bundle(
+        "type 标识Ω = i64 type 盒子🚀 = { 值中文: 标识Ω } data 结果🚀 = { 🚀成功(标识Ω), 失败中文 } def 标量Ω: 标识Ω = 41 def 读取中文(输入β: 盒子🚀): 标识Ω = 输入β.值中文 def 计算🚀(参数盒: 盒子🚀) = match 结果🚀.🚀成功(读取中文(参数盒)) { 结果🚀.🚀成功(绑定中文) => 绑定中文, 结果🚀.失败中文 => 标量Ω }",
+    )
+    .expect("compile source");
+
+    for expected in [
+        "标识Ω",
+        "盒子🚀",
+        "值中文",
+        "结果🚀",
+        "🚀成功",
+        "失败中文",
+        "标量Ω",
+        "读取中文",
+        "输入β",
+        "计算🚀",
+        "参数盒",
+        "绑定中文",
+    ] {
+        assert!(
+            output
+                .frontend
+                .tokens
+                .iter()
+                .any(|token| token.name == "Ident" && token.lexeme == expected),
+            "missing UTF-8 identifier token {expected}"
+        );
+    }
+
+    assert_eq!(
+        output.program.interface.types[0].alias_target,
+        Some("i64".to_string())
+    );
+    assert_eq!(output.program.interface.types[1].symbol, "root::盒子🚀");
+    assert_eq!(output.program.interface.types[1].fields[0].name, "值中文");
+    assert_eq!(
+        output.program.defs[0].output.typed_signature.params,
+        vec![("输入β".to_string(), "盒子🚀".to_string())]
+    );
+    assert_eq!(
+        output.program.defs[0].output.typed_signature.return_type,
+        Some("i64".to_string())
+    );
+
+    let main = &output.program.defs[1].output;
+    assert!(main.resolve.resolved_names.contains(&ResolvedName::Constructor {
+        data: "结果🚀".to_string(),
+        ctor: "🚀成功".to_string(),
+        symbol: "root::结果🚀.🚀成功".to_string(),
+        arity: 1,
+    }));
+    assert_eq!(main.pattern.envs[0].bindings, vec!["绑定中文".to_string()]);
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::Match { scrutinee, patterns }
+                if scrutinee.contains("结果🚀")
+                    && scrutinee.contains("🚀成功")
                     && patterns == &vec![
                         "Constructor { data: Some(\"结果🚀\"), ctor: \"🚀成功\", args: [Bind(\"绑定中文\")] }".to_string(),
                         "Constructor { data: Some(\"结果🚀\"), ctor: \"失败中文\", args: [] }".to_string(),

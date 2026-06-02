@@ -36,6 +36,7 @@ pub struct SurfaceType {
     pub owner: String,
     pub name: String,
     pub generics: Vec<String>,
+    pub alias_target: Option<String>,
     pub fields: Vec<SurfaceTypeField>,
     pub phantom_markers: Vec<String>,
 }
@@ -95,6 +96,7 @@ pub struct InterfaceStatic {
 pub struct InterfaceType {
     pub symbol: String,
     pub generics: Vec<String>,
+    pub alias_target: Option<String>,
     pub fields: Vec<InterfaceTypeField>,
     pub phantom_markers: Vec<String>,
 }
@@ -224,6 +226,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .map(|ty| InterfaceType {
             symbol: owned_symbol(&ty.owner, &ty.name),
             generics: ty.generics.clone(),
+            alias_target: ty.alias_target.clone(),
             phantom_markers: ty.phantom_markers.clone(),
             fields: ty
                 .fields
@@ -321,6 +324,7 @@ fn surface_type(owner: &str, decl: &TypeDecl) -> SurfaceType {
         owner: owner.to_string(),
         name: decl.name.clone(),
         generics: decl.generics.clone(),
+        alias_target: decl.alias_target.clone(),
         fields: decl
             .fields
             .iter()
@@ -416,6 +420,10 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
         text.push('[');
         text.push_str(&ty.generics.join(","));
         text.push(']');
+        if let Some(alias_target) = &ty.alias_target {
+            text.push_str("=alias:");
+            text.push_str(alias_target);
+        }
         text.push('{');
         for field in &ty.fields {
             text.push_str(&field.name);

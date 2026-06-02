@@ -340,6 +340,10 @@ impl FrontendParser {
             Vec::new()
         };
         self.expect("Eq")?;
+        if self.peek_name() != Some("LBrace") {
+            let alias_target = self.expect_type_name()?;
+            return Ok(TypeDecl::alias(name, generics, alias_target));
+        }
         self.expect("LBrace")?;
         let mut fields = Vec::new();
         while self.peek_name() != Some("RBrace") {

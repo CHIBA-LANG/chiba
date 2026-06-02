@@ -52,6 +52,7 @@ pub struct TypeDecl {
     pub name: String,
     pub generics: Vec<String>,
     pub fields: Vec<TypeField>,
+    pub alias_target: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -162,6 +163,20 @@ impl TypeDecl {
             name: name.into(),
             generics,
             fields,
+            alias_target: None,
+        }
+    }
+
+    pub fn alias(
+        name: impl Into<String>,
+        generics: Vec<String>,
+        alias_target: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            generics,
+            fields: Vec::new(),
+            alias_target: Some(alias_target.into()),
         }
     }
 }

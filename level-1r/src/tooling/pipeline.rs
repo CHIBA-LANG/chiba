@@ -1,5 +1,5 @@
 use crate::alpha::{alpha_expr, AlphaFacts};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
     Expr, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram, UseDecl,
@@ -132,6 +132,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &None,
         &None,
         &TypeContext::new(),
+        &BTreeMap::new(),
     )
 }
 
@@ -145,6 +146,7 @@ fn compile_expr_with_indexes_and_generics(
     return_type: &Option<String>,
     receiver: &Option<MethodReceiver>,
     type_context: &TypeContext,
+    type_aliases: &BTreeMap<String, String>,
 ) -> CompileOutput {
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || alpha_expr(expr));
@@ -184,7 +186,7 @@ fn compile_expr_with_indexes_and_generics(
         "L7TypedSignature",
         "DefHeader+MethodReceiver",
         "TypedSignature",
-        || typed_signature(params, return_type, receiver),
+        || typed_signature(params, return_type, receiver, type_aliases),
     );
     let typed_env = typed_signature.type_env();
     let typed = passes.record("L7Typed", "SourceExpr+TypedSignature", "TypedExpr", || {
@@ -427,6 +429,7 @@ fn compile_program_defs(
     let names = NameIndex::from_interface(interface);
     let methods = MethodIndex::from_interface(interface);
     let type_context = type_context_from_interface(interface);
+    let type_aliases = type_aliases_from_interface(interface);
     program
         .items
         .iter()
@@ -451,6 +454,7 @@ fn compile_program_defs(
                     return_type,
                     receiver,
                     &type_context,
+                    &type_aliases,
                 ),
             }),
             SourceItem::StaticValue { .. } => None,
@@ -487,6 +491,7 @@ fn typed_signature(
     params: &[ParamDecl],
     return_type: &Option<String>,
     receiver: &Option<MethodReceiver>,
+    type_aliases: &BTreeMap<String, String>,
 ) -> TypedSignature {
     TypedSignature {
         params: params
@@ -494,23 +499,30 @@ fn typed_signature(
             .map(|param| {
                 (
                     param.name.clone(),
-                    resolve_header_type(param.ty.as_deref(), receiver),
+                    resolve_header_type(param.ty.as_deref(), receiver, type_aliases),
                 )
             })
             .collect(),
         return_type: return_type
             .as_deref()
-            .map(|ty| resolve_header_type(Some(ty), receiver)),
+            .map(|ty| resolve_header_type(Some(ty), receiver, type_aliases)),
     }
 }
 
-fn resolve_header_type(ty: Option<&str>, receiver: &Option<MethodReceiver>) -> String {
+fn resolve_header_type(
+    ty: Option<&str>,
+    receiver: &Option<MethodReceiver>,
+    type_aliases: &BTreeMap<String, String>,
+) -> String {
     match ty {
         Some("Self") => receiver
             .as_ref()
             .map(MethodReceiver::display_name)
             .unwrap_or_else(|| "Self".to_string()),
-        Some(ty) => ty.to_string(),
+        Some(ty) => type_aliases
+            .get(ty)
+            .cloned()
+            .unwrap_or_else(|| ty.to_string()),
         None => "Unknown".to_string(),
     }
 }
@@ -527,6 +539,9 @@ fn header_type_to_type(ty: &str) -> Type {
 fn type_context_from_interface(interface: &InterfaceSummary) -> TypeContext {
     let mut context = TypeContext::new();
     for ty in &interface.types {
+        if ty.alias_target.is_some() {
+            continue;
+        }
         let Some(name) = ty.symbol.rsplit("::").next() else {
             continue;
         };
@@ -545,6 +560,18 @@ fn type_context_from_interface(interface: &InterfaceSummary) -> TypeContext {
         }
     }
     context
+}
+
+fn type_aliases_from_interface(interface: &InterfaceSummary) -> BTreeMap<String, String> {
+    interface
+        .types
+        .iter()
+        .filter_map(|ty| {
+            let name = ty.symbol.rsplit("::").next()?;
+            let target = ty.alias_target.clone()?;
+            Some((name.to_string(), target))
+        })
+        .collect()
 }
 
 fn nominal_display_name(name: &str, generics: &[String]) -> String {
