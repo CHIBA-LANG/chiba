@@ -6,6 +6,7 @@ pub mod cps;
 pub mod debug;
 pub mod nanopass;
 pub mod pipeline;
+pub mod regex;
 pub mod typed;
 pub mod usage;
 
