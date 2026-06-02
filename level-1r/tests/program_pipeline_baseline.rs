@@ -77,7 +77,14 @@ fn program_branch_return_lowers_to_executable_wat_if() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.defs[0].output.backend.diagnostics,
+        bundle.defs[0].output.core_validation.diagnostics,
+        bundle.defs[0].output.backend.wat
+    );
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -128,6 +135,48 @@ fn program_literal_match_return_lowers_to_executable_wat_if_chain() {
         .linked_wat
         .contains(";; core-return match scrutinee=0 arms=2"));
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
+}
+
+#[test]
+fn program_tuple_field_return_lowers_to_executable_wat_value() {
+    let program = SourceProgram::new(vec![def(
+        "main",
+        vec![],
+        Expr::field(Expr::tuple(vec![Expr::i64(4), Expr::bool(true)]), "_2"),
+    )]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.defs[0].output.backend.diagnostics,
+        bundle.defs[0].output.core_validation.diagnostics,
+        bundle.defs[0].output.backend.wat
+    );
+    assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ReturnValue(
+                chiba_level1r::core::CoreValue::TupleField { tuple, field }
+            ) if field == "_2"
+                && matches!(
+                    tuple.as_ref(),
+                    chiba_level1r::core::CoreValue::Tuple { fields }
+                        if fields == &vec![
+                            chiba_level1r::core::CoreValue::I64(4),
+                            chiba_level1r::core::CoreValue::Bool(true),
+                        ]
+                )
+        )
+    }));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains(";; tuple-field layout=tuple::Tuple2_I64_Bool field=_2"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
 }
 
 #[test]

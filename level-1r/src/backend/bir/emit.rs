@@ -369,8 +369,25 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue) {
         CoreValue::Unit => wat.push_str("    i32.const 0\n"),
         CoreValue::I64(value) => wat.push_str(&format!("    i32.const {}\n", *value as i32)),
         CoreValue::Bool(value) => wat.push_str(&format!("    i32.const {}\n", i32::from(*value))),
-        CoreValue::Var(_) | CoreValue::Rendered { .. } => wat.push_str("    i32.const 0\n"),
+        CoreValue::TupleField { tuple, field } => {
+            if let Some(value) = tuple_field_value(tuple, field) {
+                render_core_value_i32(wat, value);
+            } else {
+                wat.push_str("    i32.const 0\n");
+            }
+        }
+        CoreValue::Var(_) | CoreValue::Tuple { .. } | CoreValue::Rendered { .. } => {
+            wat.push_str("    i32.const 0\n")
+        }
     }
+}
+
+fn tuple_field_value<'a>(tuple: &'a CoreValue, field: &str) -> Option<&'a CoreValue> {
+    let CoreValue::Tuple { fields } = tuple else {
+        return None;
+    };
+    let index = field.strip_prefix('_')?.parse::<usize>().ok()?.checked_sub(1)?;
+    fields.get(index)
 }
 
 fn render_core_value_i32_indented(wat: &mut String, value: &CoreValue, indent: usize) {

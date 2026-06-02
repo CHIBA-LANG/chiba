@@ -118,6 +118,13 @@ pub enum CoreValue {
     I64(i64),
     Bool(bool),
     Var(String),
+    Tuple {
+        fields: Vec<CoreValue>,
+    },
+    TupleField {
+        tuple: Box<CoreValue>,
+        field: String,
+    },
     Rendered {
         debug: String,
     },
@@ -130,6 +137,17 @@ impl CoreValue {
             CoreValue::I64(value) => value.to_string(),
             CoreValue::Bool(value) => value.to_string(),
             CoreValue::Var(name) => name.clone(),
+            CoreValue::Tuple { fields } => {
+                let fields = fields
+                    .iter()
+                    .map(CoreValue::debug_name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("({fields})")
+            }
+            CoreValue::TupleField { tuple, field } => {
+                format!("{}.{}", tuple.debug_name(), field)
+            }
             CoreValue::Rendered { debug } => debug.clone(),
         }
     }
@@ -836,6 +854,13 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
         CpsAtom::Lit(crate::ast::Literal::Bool(value)) => CoreValue::Bool(*value),
         CpsAtom::Var(name) if name == "Unit" || name == "unit" => CoreValue::Unit,
         CpsAtom::Var(name) => CoreValue::Var(name.clone()),
+        CpsAtom::Tuple { fields, .. } => CoreValue::Tuple {
+            fields: fields.iter().map(core_value).collect(),
+        },
+        CpsAtom::TupleField { tuple, field } => CoreValue::TupleField {
+            tuple: Box::new(core_value(tuple)),
+            field: field.clone(),
+        },
         _ => CoreValue::Rendered {
             debug: render_atom(atom),
         },
@@ -853,13 +878,16 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::TupleField { tuple, field } => {
-            if let CpsAtom::Tuple { nominal, .. } = tuple.as_ref() {
+            if let CpsAtom::Tuple { nominal, fields } = tuple.as_ref() {
+                ops.push(CoreOp::TupleConstruct {
+                    layout: format!("tuple::{nominal}"),
+                    fields: fields.iter().map(render_atom).collect(),
+                });
                 ops.push(CoreOp::TupleFieldGet {
                     layout: format!("tuple::{nominal}"),
                     field: field.clone(),
                 });
             }
-            lower_atom_value(tuple, ops);
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Range { start, end } => {
