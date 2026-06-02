@@ -157,8 +157,12 @@ impl NameIndex {
     pub fn from_interface(interface: &InterfaceSummary) -> Self {
         let mut index = Self::default();
         for function in &interface.functions {
-            if let Some(name) = function.symbol.rsplit("::").next() {
-                index.add_function_with_arity(name, &function.symbol, function.arity);
+            if function.receiver.is_none() {
+                index.add_function_with_arity(
+                    &function.source_name,
+                    &function.symbol,
+                    function.arity,
+                );
             }
         }
         for ctor in &interface.constructors {
@@ -221,6 +225,21 @@ impl NameIndex {
 }
 
 impl MethodIndex {
+    pub fn from_interface(interface: &InterfaceSummary) -> Self {
+        let mut index = Self::default();
+        for function in &interface.functions {
+            let Some(receiver) = &function.receiver else {
+                continue;
+            };
+            index.add_candidate(MethodCandidate {
+                receiver: receiver.display_name(),
+                name: function.source_name.clone(),
+                symbol: function.symbol.clone(),
+            });
+        }
+        index
+    }
+
     pub fn add_method(&mut self, receiver: impl Into<String>, name: impl Into<String>) {
         let receiver = receiver.into();
         let name = name.into();
@@ -233,6 +252,10 @@ impl MethodIndex {
     }
 
     pub fn add_candidate(&mut self, candidate: MethodCandidate) {
+        self.qualified.insert(
+            format!("{}.{}", candidate.receiver, candidate.name),
+            candidate.clone(),
+        );
         self.qualified
             .insert(candidate.symbol.clone(), candidate.clone());
         self.methods

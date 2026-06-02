@@ -107,12 +107,20 @@ pub enum ProgramDiagnostic {
 }
 
 pub fn compile_expr(expr: &Expr) -> CompileOutput {
-    compile_expr_with_name_index_and_generics(expr, NameIndex::default(), &[], &[], &None)
+    compile_expr_with_indexes_and_generics(
+        expr,
+        NameIndex::default(),
+        MethodIndex::default(),
+        &[],
+        &[],
+        &None,
+    )
 }
 
-fn compile_expr_with_name_index_and_generics(
+fn compile_expr_with_indexes_and_generics(
     expr: &Expr,
     names: NameIndex,
+    methods: MethodIndex,
     explicit_generics: &[String],
     params: &[ParamDecl],
     return_type: &Option<String>,
@@ -120,10 +128,10 @@ fn compile_expr_with_name_index_and_generics(
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || alpha_expr(expr));
     let resolve = passes.record("L2Resolve", "AlphaExpr", "ResolveFacts", || {
-        if names == NameIndex::default() {
+        if names == NameIndex::default() && methods == MethodIndex::default() {
             resolve_expr(&alpha.expr, MethodIndex::default())
         } else {
-            resolve_expr_with_names(&alpha.expr, MethodIndex::default(), names)
+            resolve_expr_with_names(&alpha.expr, methods.clone(), names.clone())
         }
     });
     let template = passes.record("L3Template", "AlphaExpr+ResolveFacts", "TemplateFacts", || {
@@ -385,6 +393,7 @@ fn compile_program_defs(
     interface: &InterfaceSummary,
 ) -> Vec<ProgramDefOutput> {
     let names = NameIndex::from_interface(interface);
+    let methods = MethodIndex::from_interface(interface);
     program
         .items
         .iter()
@@ -399,9 +408,10 @@ fn compile_program_defs(
             } => Some(ProgramDefOutput {
                 name: name.clone(),
                 params: params.iter().map(|param| param.name.clone()).collect(),
-                output: compile_expr_with_name_index_and_generics(
+                output: compile_expr_with_indexes_and_generics(
                     body,
                     names.clone(),
+                    methods.clone(),
                     generics,
                     params,
                     return_type,

@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::ast::{
-    BinaryOp, DataDecl, DataVariant, Expr, NamespaceDecl, ParamDecl, Pattern, SourceItem,
-    SourceProgram, UseDecl,
+    BinaryOp, DataDecl, DataVariant, Expr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern,
+    SourceItem, SourceProgram, UseDecl,
 };
 use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
 
@@ -237,15 +237,28 @@ impl FrontendParser {
 
     fn parse_def(&mut self) -> Result<SourceItem, FrontendError> {
         self.expect("KwDef")?;
-        let name = self.expect_lexeme("Ident")?;
+        let first_name = self.expect_lexeme("Ident")?;
         let generics = if self.peek_name() == Some("LBracket")
-            && self.peek_type_list_then(&["LParen"])
+            && self.peek_type_list_then(&["LParen", "Dot"])
         {
             self.parse_generic_params()?
         } else {
             Vec::new()
         };
+        let (receiver, name) = if self.peek_name() == Some("Dot") {
+            self.pos += 1;
+            let method_name = self.expect_lexeme("Ident")?;
+            (
+                Some(MethodReceiver::new(first_name, generics.clone())),
+                method_name,
+            )
+        } else {
+            (None, first_name)
+        };
         if self.peek_name() == Some("Colon") {
+            if receiver.is_some() {
+                return Err(self.unexpected_current(vec!["LParen"]));
+            }
             self.pos += 1;
             let ty = Some(self.expect_type_name()?);
             self.expect("Eq")?;
@@ -253,6 +266,9 @@ impl FrontendParser {
             return Ok(SourceItem::static_value(name, ty, body));
         }
         if self.peek_name() == Some("Eq") {
+            if receiver.is_some() {
+                return Err(self.unexpected_current(vec!["LParen"]));
+            }
             self.pos += 1;
             let body = self.parse_expr_bp(0)?;
             return Ok(SourceItem::static_value(name, None, body));
@@ -270,7 +286,11 @@ impl FrontendParser {
         let body = self.parse_expr_bp(0)?;
         Ok(SourceItem::Def {
             name,
-            generics,
+            generics: receiver
+                .as_ref()
+                .map(|receiver| receiver.generics.clone())
+                .unwrap_or(generics),
+            receiver,
             params,
             return_type,
             body,
@@ -936,6 +956,19 @@ impl FrontendParser {
         }
     }
 
+    fn unexpected_current(&self, expected: Vec<&str>) -> FrontendError {
+        match self.tokens.get(self.pos) {
+            Some(token) => FrontendError::UnexpectedToken {
+                found: token.name.clone(),
+                lexeme: token.lexeme.clone(),
+                expected: expected.into_iter().map(str::to_string).collect(),
+            },
+            None => FrontendError::UnexpectedEof {
+                expected: expected.into_iter().map(str::to_string).collect(),
+            },
+        }
+    }
+
     fn peek_name(&self) -> Option<&str> {
         self.tokens.get(self.pos).map(|token| token.name.as_str())
     }
@@ -1197,12 +1230,14 @@ fn enrich_item_with_data_variants(
     match item {
         SourceItem::Def {
             name,
+            receiver,
             generics,
             params,
             return_type,
             body,
         } => SourceItem::Def {
             name,
+            receiver,
             generics,
             params,
             return_type,

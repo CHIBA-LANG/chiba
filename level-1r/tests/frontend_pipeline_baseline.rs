@@ -1,4 +1,4 @@
-use chiba_level1r::ast::{BinaryOp, Expr, ParamDecl, Pattern, SourceItem};
+use chiba_level1r::ast::{BinaryOp, Expr, MethodReceiver, ParamDecl, Pattern, SourceItem};
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::resolve::ResolvedName;
 use chiba_level1r::specialize::DischargedObligation;
@@ -35,12 +35,14 @@ fn frontend_lexes_and_parses_def_source_to_program() {
     match &output.program.items[0] {
         SourceItem::Def {
             name,
+            receiver,
             generics,
             params,
             return_type,
             body,
         } => {
             assert_eq!(name, "main");
+            assert_eq!(receiver, &None);
             assert_eq!(generics, &Vec::<String>::new());
             assert_eq!(params, &Vec::<ParamDecl>::new());
             assert_eq!(return_type, &None);
@@ -54,6 +56,41 @@ fn frontend_lexes_and_parses_def_source_to_program() {
             );
         }
         other => panic!("expected function def, got {other:?}"),
+    }
+}
+
+#[test]
+fn frontend_parses_method_style_def_with_generic_receiver_and_self_type() {
+    let output =
+        parse_source_program("def Box[T].update(self: Self, value: T): Self = self")
+            .expect("frontend parse");
+
+    match &output.program.items[0] {
+        SourceItem::Def {
+            name,
+            receiver,
+            generics,
+            params,
+            return_type,
+            body,
+        } => {
+            assert_eq!(name, "update");
+            assert_eq!(
+                receiver,
+                &Some(MethodReceiver::new("Box", vec!["T".to_string()]))
+            );
+            assert_eq!(generics, &vec!["T".to_string()]);
+            assert_eq!(
+                params,
+                &vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("value", Some("T".to_string())),
+                ]
+            );
+            assert_eq!(return_type, &Some("Self".to_string()));
+            assert_eq!(body, &Expr::var("self"));
+        }
+        other => panic!("expected method-style function def, got {other:?}"),
     }
 }
 
@@ -427,12 +464,14 @@ fn frontend_parses_explicit_checked_template_def_header() {
     match &parsed.program.items[0] {
         SourceItem::Def {
             name,
+            receiver,
             generics,
             params,
             return_type,
             body,
         } => {
             assert_eq!(name, "id");
+            assert_eq!(receiver, &None);
             assert_eq!(generics, &vec!["T".to_string()]);
             assert_eq!(params, &vec![ParamDecl::new("x", Some("T".to_string()))]);
             assert_eq!(return_type, &Some("T".to_string()));
@@ -1150,6 +1189,87 @@ fn frontend_accepts_utf8_function_scalar_and_adt_constructor_names_together() {
                     && patterns == &vec![
                         "Constructor { data: Some(\"结果α\"), ctor: \"🚀成功\", args: [Bind(\"内值\")] }".to_string(),
                         "Constructor { data: Some(\"结果α\"), ctor: \"失败中文\", args: [] }".to_string(),
+                    ]
+        )
+    }));
+}
+
+#[test]
+fn frontend_accepts_utf8_names_for_function_scalar_adt_and_ctor_in_one_program() {
+    let output = compile_source_program_bundle(
+        "data 结果🚀 = { 🚀成功(i64), 失败中文 } def 标量Ω: i64 = 41 def 计算🚀(输入β: i64) = match 结果🚀.🚀成功(标量Ω) { 结果🚀.🚀成功(绑定中文) => 绑定中文, 结果🚀.失败中文 => 输入β }",
+    )
+    .expect("compile source");
+
+    for expected in ["结果🚀", "🚀成功", "标量Ω", "计算🚀", "输入β", "绑定中文"] {
+        assert!(
+            output
+                .frontend
+                .tokens
+                .iter()
+                .any(|token| token.name == "Ident" && token.lexeme == expected),
+            "missing UTF-8 identifier token {expected}"
+        );
+    }
+    assert_eq!(
+        output.program.global_init.statics[0].name,
+        "标量Ω".to_string()
+    );
+
+    match &output.frontend.program.items[1] {
+        SourceItem::Def {
+            name,
+            params,
+            body,
+            ..
+        } => {
+            assert_eq!(name, "计算🚀");
+            assert_eq!(params, &vec![ParamDecl::new("输入β", Some("i64".to_string()))]);
+            assert_eq!(
+                body,
+                &Expr::match_expr(
+                    Expr::adt_ctor(
+                        "结果🚀",
+                        "🚀成功",
+                        vec!["🚀成功", "失败中文"],
+                        vec![Expr::var("标量Ω")]
+                    ),
+                    vec![
+                        (
+                            Pattern::qualified_ctor(
+                                "结果🚀",
+                                "🚀成功",
+                                vec![Pattern::bind("绑定中文")]
+                            ),
+                            Expr::var("绑定中文"),
+                        ),
+                        (
+                            Pattern::qualified_ctor("结果🚀", "失败中文", Vec::<Pattern>::new()),
+                            Expr::var("输入β"),
+                        ),
+                    ],
+                )
+            );
+        }
+        other => panic!("expected UTF-8 function def, got {other:?}"),
+    }
+
+    let main = &output.program.defs[0].output;
+    assert!(main.resolve.resolved_names.contains(&ResolvedName::Constructor {
+        data: "结果🚀".to_string(),
+        ctor: "🚀成功".to_string(),
+        symbol: "root::结果🚀.🚀成功".to_string(),
+        arity: 1,
+    }));
+    assert_eq!(main.pattern.envs[0].bindings, vec!["绑定中文".to_string()]);
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::Match { scrutinee, patterns }
+                if scrutinee == "结果🚀.🚀成功(标量Ω)"
+                    && patterns == &vec![
+                        "Constructor { data: Some(\"结果🚀\"), ctor: \"🚀成功\", args: [Bind(\"绑定中文\")] }".to_string(),
+                        "Constructor { data: Some(\"结果🚀\"), ctor: \"失败中文\", args: [] }".to_string(),
                     ]
         )
     }));

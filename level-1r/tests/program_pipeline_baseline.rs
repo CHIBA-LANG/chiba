@@ -1,10 +1,12 @@
 use chiba_level1r::ast::{
-    DataDecl, DataVariant, NamespaceDecl, ParamDecl, SourceItem, SourceProgram, UseDecl,
+    DataDecl, DataVariant, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
+    UseDecl,
 };
 use chiba_level1r::{compile_program, compile_program_bundle, Expr, ProgramDiagnostic};
 
 fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
     SourceItem::Def {
+        receiver: None,
         generics: Vec::new(),
         name: name.to_string(),
         params: params.into_iter().map(ParamDecl::untyped).collect(),
@@ -134,6 +136,7 @@ fn interface_summary_preserves_function_signature_types() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            receiver: None,
             generics: Vec::new(),
             name: "id".to_string(),
             params: vec![ParamDecl::new("x", Some("I64".to_string()))],
@@ -170,6 +173,7 @@ fn interface_summary_preserves_explicit_checked_template_params() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            receiver: None,
             generics: vec!["T".to_string()],
             name: "id".to_string(),
             params: vec![ParamDecl::new("x", Some("T".to_string()))],
@@ -200,6 +204,49 @@ fn interface_summary_preserves_explicit_checked_template_params() {
             .key
             .template_params,
         bundle.defs[0].output.template.explicit_params
+    );
+}
+
+#[test]
+fn interface_summary_preserves_method_style_receiver_and_self_surface() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::method_def(
+            MethodReceiver::new("Box", vec!["T".to_string()]),
+            "update",
+            vec![
+                ParamDecl::new("self", Some("Self".to_string())),
+                ParamDecl::new("value", Some("T".to_string())),
+            ],
+            Some("Self".to_string()),
+            Expr::var("self"),
+        )],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(
+        bundle.surface.defs[0].receiver,
+        Some(MethodReceiver::new("Box", vec!["T".to_string()]))
+    );
+    assert_eq!(
+        bundle.interface.functions[0].receiver,
+        Some(MethodReceiver::new("Box", vec!["T".to_string()]))
+    );
+    assert_eq!(bundle.interface.functions[0].source_name, "update");
+    assert_eq!(
+        bundle.interface.functions[0].symbol,
+        "parser.core::Box[T].update"
+    );
+    assert_eq!(
+        bundle.interface.functions[0].param_types,
+        vec![Some("Self".to_string()), Some("T".to_string())]
+    );
+    assert_eq!(
+        bundle.interface.functions[0].return_type,
+        Some("Self".to_string())
     );
 }
 

@@ -21,6 +21,7 @@ pub struct UseDecl {
 pub enum SourceItem {
     Def {
         name: String,
+        receiver: Option<MethodReceiver>,
         generics: Vec<String>,
         params: Vec<ParamDecl>,
         return_type: Option<String>,
@@ -37,6 +38,12 @@ pub enum SourceItem {
 pub struct ParamDecl {
     pub name: String,
     pub ty: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MethodReceiver {
+    pub name: String,
+    pub generics: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -150,6 +157,23 @@ impl ParamDecl {
     }
 }
 
+impl MethodReceiver {
+    pub fn new(name: impl Into<String>, generics: Vec<String>) -> Self {
+        Self {
+            name: name.into(),
+            generics,
+        }
+    }
+
+    pub fn display_name(&self) -> String {
+        if self.generics.is_empty() {
+            self.name.clone()
+        } else {
+            format!("{}[{}]", self.name, self.generics.join(","))
+        }
+    }
+}
+
 impl SourceItem {
     pub fn def(
         name: impl Into<String>,
@@ -160,7 +184,25 @@ impl SourceItem {
     ) -> Self {
         Self::Def {
             name: name.into(),
+            receiver: None,
             generics,
+            params,
+            return_type,
+            body,
+        }
+    }
+
+    pub fn method_def(
+        receiver: MethodReceiver,
+        name: impl Into<String>,
+        params: Vec<ParamDecl>,
+        return_type: Option<String>,
+        body: Expr,
+    ) -> Self {
+        Self::Def {
+            generics: receiver.generics.clone(),
+            receiver: Some(receiver),
+            name: name.into(),
             params,
             return_type,
             body,

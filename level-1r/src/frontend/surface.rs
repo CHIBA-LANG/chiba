@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::ast::{DataDecl, SourceItem, SourceProgram};
+use crate::ast::{DataDecl, MethodReceiver, SourceItem, SourceProgram};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectSurface {
@@ -16,6 +16,7 @@ pub struct ProjectSurface {
 pub struct SurfaceDef {
     pub owner: String,
     pub name: String,
+    pub receiver: Option<MethodReceiver>,
     pub generics: Vec<String>,
     pub arity: usize,
     pub param_types: Vec<Option<String>>,
@@ -59,6 +60,8 @@ pub struct InterfaceSummary {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterfaceFunction {
     pub symbol: String,
+    pub source_name: String,
+    pub receiver: Option<MethodReceiver>,
     pub generics: Vec<String>,
     pub arity: usize,
     pub param_types: Vec<Option<String>>,
@@ -98,6 +101,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .filter_map(|item| match item {
             SourceItem::Def {
                 name,
+                receiver,
                 generics,
                 params,
                 return_type,
@@ -105,6 +109,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
             } => Some(SurfaceDef {
                 owner: namespace.clone(),
                 name: name.clone(),
+                receiver: receiver.clone(),
                 generics: generics.clone(),
                 arity: params.len(),
                 param_types: params.iter().map(|param| param.ty.clone()).collect(),
@@ -150,7 +155,9 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .defs
         .iter()
         .map(|def| InterfaceFunction {
-            symbol: owned_symbol(&def.owner, &def.name),
+            symbol: def_symbol(def),
+            source_name: def.name.clone(),
+            receiver: def.receiver.clone(),
             generics: def.generics.clone(),
             arity: def.arity,
             param_types: def.param_types.clone(),
@@ -238,6 +245,13 @@ fn owned_symbol(owner: &str, name: &str) -> String {
     format!("{owner}::{name}")
 }
 
+fn def_symbol(def: &SurfaceDef) -> String {
+    match &def.receiver {
+        Some(receiver) => format!("{}::{}.{}", def.owner, receiver.display_name(), def.name),
+        None => owned_symbol(&def.owner, &def.name),
+    }
+}
+
 fn duplicates<'a>(names: impl Iterator<Item = &'a str>) -> Vec<String> {
     let mut counts = BTreeMap::<String, usize>::new();
     for name in names {
@@ -258,6 +272,10 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
     }
     for def in &surface.defs {
         text.push_str("|def:");
+        if let Some(receiver) = &def.receiver {
+            text.push_str(&receiver.display_name());
+            text.push('.');
+        }
         text.push_str(&def.name);
         text.push('[');
         text.push_str(&def.generics.join(","));

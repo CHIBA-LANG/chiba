@@ -6,7 +6,7 @@ use chiba_level1r::resolve::{
 };
 use chiba_level1r::{
     build_interface_summary, compile_expr, project_surface, DataDecl, DataVariant, Expr,
-    NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
+    MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
 };
 
 #[test]
@@ -48,6 +48,64 @@ fn qualified_callee_resolves_without_receiver_injection() {
 }
 
 #[test]
+fn interface_summary_builds_method_index_for_method_style_defs() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::method_def(
+            MethodReceiver::new("Box", vec!["T".to_string()]),
+            "update",
+            vec![
+                ParamDecl::new("self", Some("Self".to_string())),
+                ParamDecl::new("value", Some("T".to_string())),
+            ],
+            Some("Self".to_string()),
+            Expr::var("self"),
+        )],
+    );
+    let interface = build_interface_summary(&project_surface(&program));
+    let methods = MethodIndex::from_interface(&interface);
+
+    let qualified_alpha = alpha_expr(&Expr::method_call(
+        Expr::var("Box[T]"),
+        "update",
+        Expr::var("value"),
+    ));
+    let qualified = resolve_expr_with_names(
+        &qualified_alpha.expr,
+        methods.clone(),
+        NameIndex::from_interface(&interface),
+    );
+    assert_eq!(
+        qualified.resolved_calls,
+        vec![ResolvedCall::QualifiedCallee {
+            path: "Box[T].update".to_string(),
+            symbol: "parser::Box[T].update".to_string(),
+        }]
+    );
+
+    let receiver_alpha = alpha_expr(&Expr::method_call(
+        Expr::nominal("Box[T]", Expr::var("box_value")),
+        "update",
+        Expr::var("value"),
+    ));
+    let receiver = resolve_expr_with_names(
+        &receiver_alpha.expr,
+        methods,
+        NameIndex::from_interface(&interface),
+    );
+    assert_eq!(
+        receiver.resolved_calls,
+        vec![ResolvedCall::ReceiverMethod {
+            receiver: "Box[T]".to_string(),
+            name: "update".to_string(),
+            symbol: "parser::Box[T].update".to_string(),
+        }]
+    );
+}
+
+#[test]
 fn duplicate_nominal_method_candidates_are_ambiguous_not_order_dependent() {
     let expr = Expr::method_call(Expr::nominal("Vec2", Expr::var("v")), "show", Expr::i64(0));
     let alpha = alpha_expr(&expr);
@@ -82,6 +140,7 @@ fn interface_summary_resolves_global_function_owner_symbol() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            receiver: None,
             generics: Vec::new(),
             name: "helper".to_string(),
             params: Vec::new(),
@@ -115,6 +174,7 @@ fn interface_summary_resolves_one_arg_function_call_by_arity() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            receiver: None,
             generics: Vec::new(),
             name: "helper".to_string(),
             params: vec![ParamDecl::new("x", Some("I64".to_string()))],
@@ -148,6 +208,7 @@ fn interface_summary_reports_function_call_arity_mismatch() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            receiver: None,
             generics: Vec::new(),
             name: "helper".to_string(),
             params: Vec::new(),
@@ -224,6 +285,7 @@ fn interface_summary_does_not_resolve_local_binder_as_global_function() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            receiver: None,
             generics: Vec::new(),
             name: "x".to_string(),
             params: Vec::new(),
