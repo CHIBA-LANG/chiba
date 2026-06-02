@@ -263,6 +263,48 @@ fn program_zero_arg_tailcall_lowers_to_executable_direct_call_wat() {
 }
 
 #[test]
+fn program_adt_constructor_return_lowers_to_executable_tag_wat() {
+    let program = SourceProgram::new(vec![def(
+        "main",
+        vec![],
+        Expr::adt_ctor("Option", "Some", vec!["None", "Some"], vec![Expr::i64(1)]),
+    )]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.defs[0].output.backend.diagnostics,
+        bundle.defs[0].output.core_validation.diagnostics,
+        bundle.defs[0].output.backend.wat
+    );
+    assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ReturnValue(
+                chiba_level1r::core::CoreValue::Adt {
+                    data,
+                    ctor,
+                    variants,
+                    args,
+                }
+            ) if data == "Option"
+                && ctor == "Some"
+                && variants == &vec!["None".to_string(), "Some".to_string()]
+                && args == &vec![chiba_level1r::core::CoreValue::I64(1)]
+        )
+    }));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains(";; adt data=Option ctor=Some args=1"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
+#[test]
 fn program_bundle_reports_duplicate_defs_and_entry_params() {
     let program = SourceProgram::new(vec![
         def("main", vec!["x"], Expr::var("x")),

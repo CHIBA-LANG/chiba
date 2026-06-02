@@ -132,6 +132,12 @@ pub enum CoreValue {
         record: Box<CoreValue>,
         field: String,
     },
+    Adt {
+        data: String,
+        ctor: String,
+        variants: Vec<String>,
+        args: Vec<CoreValue>,
+    },
     Rendered {
         debug: String,
     },
@@ -171,6 +177,16 @@ impl CoreValue {
             }
             CoreValue::RecordField { record, field } => {
                 format!("{}.{}", record.debug_name(), field)
+            }
+            CoreValue::Adt {
+                data, ctor, args, ..
+            } => {
+                let args = args
+                    .iter()
+                    .map(CoreValue::debug_name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{data}.{ctor}({args})")
             }
             CoreValue::Rendered { debug } => debug.clone(),
         }
@@ -897,6 +913,17 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
         CpsAtom::RecordField { record, field } => CoreValue::RecordField {
             record: Box::new(core_value(record)),
             field: field.clone(),
+        },
+        CpsAtom::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => CoreValue::Adt {
+            data: data.clone(),
+            ctor: ctor.clone(),
+            variants: variants.clone(),
+            args: args.iter().map(core_value).collect(),
         },
         _ => CoreValue::Rendered {
             debug: render_atom(atom),

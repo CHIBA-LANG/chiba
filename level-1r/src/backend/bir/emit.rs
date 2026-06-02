@@ -391,6 +391,13 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue) {
                 wat.push_str("    i32.const 0\n");
             }
         }
+        CoreValue::Adt { ctor, variants, .. } => {
+            if let Some(tag) = variants.iter().position(|variant| variant == ctor) {
+                wat.push_str(&format!("    i32.const {tag}\n"));
+            } else {
+                wat.push_str("    i32.const 0\n");
+            }
+        }
         CoreValue::Var(_)
         | CoreValue::Tuple { .. }
         | CoreValue::Record { .. }
