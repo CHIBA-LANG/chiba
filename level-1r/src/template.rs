@@ -22,19 +22,19 @@ pub enum ShapeType {
     Named(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RowShape {
     pub openness: RowOpenness,
     pub fields: Vec<RowField>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RowOpenness {
     Open,
     Closed,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TemplateObligation {
     Field {
         shape: RowShape,
@@ -55,7 +55,7 @@ pub enum TemplateObligation {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DynRowContract {
     pub shape: RowShape,
     pub payload_usage: UsageColor,
@@ -63,7 +63,7 @@ pub struct DynRowContract {
     pub adapter: DynAdapterKind,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DynAdapterKind {
     StaticToDynPackage,
     DynAdapterAccess,

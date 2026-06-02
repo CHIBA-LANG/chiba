@@ -58,7 +58,7 @@ pub enum Literal {
     Bool(bool),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BinaryOp {
     Add,
     Sub,

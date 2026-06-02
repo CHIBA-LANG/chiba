@@ -39,25 +39,28 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
             "L1Alpha",
             "L2Resolve",
             "L3Template",
-            "L4Typed",
-            "L5AnswerControl",
-            "L6Usage",
-            "L7OnePassCps",
-            "L8Closure",
-            "L9Core"
+            "L4Specialize",
+            "L5Typed",
+            "L6AnswerControl",
+            "L7Usage",
+            "L8OnePassCps",
+            "L9Closure",
+            "L10Core"
         ]
     );
 
     let visual = output.render_visual();
     assert!(visual.contains("resolve:"));
     assert!(visual.contains("template:"));
+    assert!(visual.contains("specialize:"));
     assert!(visual.contains("control:"));
     assert!(visual.contains("closure:"));
     assert!(visual.contains("core:"));
     assert!(visual.contains("nanopass:"));
     assert!(visual.contains("L1Alpha: SourceExpr -> AlphaFacts"));
     assert!(visual.contains("L3Template: AlphaExpr+ResolveFacts -> TemplateFacts"));
-    assert!(visual.contains("L7OnePassCps: TypedExpr -> CpsProgram"));
+    assert!(visual.contains("L4Specialize: TemplateFacts -> SpecializationFacts"));
+    assert!(visual.contains("L8OnePassCps: TypedExpr -> CpsProgram"));
 }
 
 #[test]

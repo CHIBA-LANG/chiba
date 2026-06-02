@@ -58,14 +58,14 @@ pub enum Type {
     Func(Box<Type>, Box<Type>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UsageColor {
     One,
     Many,
     Obligation,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SendColor {
     Send,
     NotSend,

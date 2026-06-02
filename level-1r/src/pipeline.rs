@@ -7,6 +7,7 @@ use crate::cps::{cps_program, CpsProgram};
 use crate::debug::{render_visual_report, visual_report, VisualReport};
 use crate::nanopass::PassReport;
 use crate::resolve::{resolve_expr, MethodIndex, ResolveFacts};
+use crate::specialize::{plan_specialization, SpecializationFacts};
 use crate::template::{analyze_template, TemplateFacts};
 use crate::typed::{type_expr, TypedExpr};
 use crate::usage::{analyze_alpha_usage, UsageFacts};
@@ -16,6 +17,7 @@ pub struct CompileOutput {
     pub alpha: AlphaFacts,
     pub resolve: ResolveFacts,
     pub template: TemplateFacts,
+    pub specialize: SpecializationFacts,
     pub typed: TypedExpr,
     pub control: ControlFacts,
     pub usage: UsageFacts,
@@ -35,30 +37,44 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
     let template = passes.record("L3Template", "AlphaExpr+ResolveFacts", "TemplateFacts", || {
         analyze_template(&alpha.expr, &resolve)
     });
-    let typed = passes.record("L4Typed", "SourceExpr", "TypedExpr", || type_expr(expr));
-    let control = passes.record("L5AnswerControl", "TypedExpr", "ControlFacts", || {
+    let specialize = passes.record("L4Specialize", "TemplateFacts", "SpecializationFacts", || {
+        plan_specialization("<expr>", &template)
+    });
+    let typed = passes.record("L5Typed", "SourceExpr", "TypedExpr", || type_expr(expr));
+    let control = passes.record("L6AnswerControl", "TypedExpr", "ControlFacts", || {
         analyze_control(&typed)
     });
-    let usage = passes.record("L6Usage", "AlphaExpr", "UsageFacts", || {
+    let usage = passes.record("L7Usage", "AlphaExpr", "UsageFacts", || {
         analyze_alpha_usage(&alpha.expr)
     });
-    let cps = passes.record("L7OnePassCps", "TypedExpr", "CpsProgram", || {
+    let cps = passes.record("L8OnePassCps", "TypedExpr", "CpsProgram", || {
         cps_program(&typed)
     });
-    let closure = passes.record("L8Closure", "AlphaExpr", "ClosureFacts", || {
+    let closure = passes.record("L9Closure", "AlphaExpr", "ClosureFacts", || {
         analyze_alpha_closures(&alpha.expr)
     });
-    let core = passes.record("L9Core", "CpsProgram", "CoreProgram", || {
+    let core = passes.record("L10Core", "CpsProgram", "CoreProgram", || {
         lower_core(&cps, &control.continuations)
     });
     let visual = visual_report(
-        expr, &alpha, &resolve, &template, &typed, &control, &usage, &cps, &closure, &core,
+        expr,
+        &alpha,
+        &resolve,
+        &template,
+        &specialize,
+        &typed,
+        &control,
+        &usage,
+        &cps,
+        &closure,
+        &core,
         &passes,
     );
     CompileOutput {
         alpha,
         resolve,
         template,
+        specialize,
         typed,
         control,
         usage,

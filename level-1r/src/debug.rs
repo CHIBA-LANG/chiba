@@ -8,6 +8,7 @@ use crate::core::CoreProgram;
 use crate::cps::CpsProgram;
 use crate::nanopass::PassReport;
 use crate::resolve::ResolveFacts;
+use crate::specialize::SpecializationFacts;
 use crate::template::TemplateFacts;
 use crate::typed::TypedExpr;
 use crate::usage::UsageFacts;
@@ -18,6 +19,7 @@ pub struct VisualReport {
     pub alpha: String,
     pub resolve: String,
     pub template: String,
+    pub specialize: String,
     pub typed: String,
     pub control: String,
     pub usage: String,
@@ -37,6 +39,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.resolve).unwrap();
     writeln!(out, "template:").unwrap();
     writeln!(out, "  {}", report.template).unwrap();
+    writeln!(out, "specialize:").unwrap();
+    writeln!(out, "  {}", report.specialize).unwrap();
     writeln!(out, "typed:").unwrap();
     writeln!(out, "  {}", report.typed).unwrap();
     writeln!(out, "control:").unwrap();
@@ -61,6 +65,7 @@ pub fn visual_report(
     alpha: &AlphaFacts,
     resolve: &ResolveFacts,
     template: &TemplateFacts,
+    specialize: &SpecializationFacts,
     typed: &TypedExpr,
     control: &ControlFacts,
     usage: &UsageFacts,
@@ -74,6 +79,7 @@ pub fn visual_report(
         alpha: format!("{alpha:#?}"),
         resolve: format!("{resolve:#?}"),
         template: format!("{template:#?}"),
+        specialize: format!("{specialize:#?}"),
         typed: format!("{typed:#?}"),
         control: format!("{control:#?}"),
         usage: format!("{usage:#?}"),
