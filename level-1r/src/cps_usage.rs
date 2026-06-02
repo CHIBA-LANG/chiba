@@ -129,6 +129,12 @@ fn visit_atom(atom: &CpsAtom, facts: &mut CpsUsageFacts) {
             }
         }
         CpsAtom::RecordField { record, .. } => visit_atom(record, facts),
+        CpsAtom::RecordUpdate { base, fields, .. } => {
+            visit_atom(base, facts);
+            for field in fields {
+                visit_atom(&field.value, facts);
+            }
+        }
     }
 }
 
@@ -196,6 +202,12 @@ fn count_atom_refs(atom: &CpsAtom, binder: &str, count: &mut UseCount) {
             }
         }
         CpsAtom::RecordField { record, .. } => count_atom_refs(record, binder, count),
+        CpsAtom::RecordUpdate { base, fields, .. } => {
+            count_atom_refs(base, binder, count);
+            for field in fields {
+                count_atom_refs(&field.value, binder, count);
+            }
+        }
     }
 }
 

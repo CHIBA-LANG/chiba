@@ -59,6 +59,12 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
                 collect(&field.value, scope, facts);
             }
         }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            collect(base, scope, facts);
+            for field in fields {
+                collect(&field.value, scope, facts);
+            }
+        }
         TypedExprKind::Field { receiver, .. } => collect(receiver, scope, facts),
         TypedExprKind::MethodCall { receiver, arg, .. } => {
             collect(receiver, scope, facts);
@@ -140,6 +146,12 @@ fn collect_alpha(expr: &AlphaExpr, scope: &mut BTreeSet<BinderId>, facts: &mut C
             }
         }
         AlphaExprKind::Record(fields) => {
+            for field in fields {
+                collect_alpha(&field.value, scope, facts);
+            }
+        }
+        AlphaExprKind::RecordUpdate { base, fields } => {
+            collect_alpha(base, scope, facts);
             for field in fields {
                 collect_alpha(&field.value, scope, facts);
             }
@@ -240,6 +252,12 @@ fn collect_alpha_free_vars(
                 collect_alpha_free_vars(&field.value, locals, free);
             }
         }
+        AlphaExprKind::RecordUpdate { base, fields } => {
+            collect_alpha_free_vars(base, locals, free);
+            for field in fields {
+                collect_alpha_free_vars(&field.value, locals, free);
+            }
+        }
         AlphaExprKind::Field { receiver, .. } => collect_alpha_free_vars(receiver, locals, free),
         AlphaExprKind::MethodCall { receiver, arg, .. } => {
             collect_alpha_free_vars(receiver, locals, free);
@@ -308,6 +326,12 @@ fn collect_free_vars(
             }
         }
         TypedExprKind::Record { fields } => {
+            for field in fields {
+                collect_free_vars(&field.value, locals, free);
+            }
+        }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            collect_free_vars(base, locals, free);
             for field in fields {
                 collect_free_vars(&field.value, locals, free);
             }

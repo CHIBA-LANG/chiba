@@ -150,6 +150,7 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
             | CoreOp::TupleConstruct { .. }
             | CoreOp::TupleFieldGet { .. }
             | CoreOp::RecordConstruct { .. }
+            | CoreOp::RecordUpdate { .. }
             | CoreOp::RecordFieldGet { .. }
             | CoreOp::TailCall { .. }
             | CoreOp::Prompt { .. }

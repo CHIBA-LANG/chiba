@@ -131,6 +131,19 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
                 collect_expr_obligations(&field.value, facts);
             }
         }
+        AlphaExprKind::RecordUpdate { base, fields } => {
+            let shape = canonical_open_row(
+                fields
+                    .iter()
+                    .map(|field| (field.name.as_str(), ShapeType::Unknown))
+                    .collect(),
+            );
+            facts.row_shapes.push(shape);
+            collect_expr_obligations(base, facts);
+            for field in fields {
+                collect_expr_obligations(&field.value, facts);
+            }
+        }
         AlphaExprKind::Field { receiver, name } => {
             let shape = canonical_open_row(vec![(name.as_str(), ShapeType::Unknown)]);
             facts.row_shapes.push(shape.clone());

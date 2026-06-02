@@ -64,6 +64,11 @@ pub enum CoreOp {
         layout: String,
         fields: Vec<String>,
     },
+    RecordUpdate {
+        base: String,
+        layout: String,
+        fields: Vec<String>,
+    },
     RecordFieldGet {
         layout: String,
         field: String,
@@ -465,6 +470,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         | CoreOp::TupleConstruct { .. }
         | CoreOp::TupleFieldGet { .. }
         | CoreOp::RecordConstruct { .. }
+        | CoreOp::RecordUpdate { .. }
         | CoreOp::RecordFieldGet { .. }
         | CoreOp::TailCall { .. }
         | CoreOp::Prompt { .. }
@@ -642,6 +648,7 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::TupleField { tuple, field } => format!("{}.{}", render_atom(tuple), field),
         CpsAtom::Record { layout, .. } => format!("record#{layout}"),
         CpsAtom::RecordField { record, field } => format!("{}.{}", render_atom(record), field),
+        CpsAtom::RecordUpdate { layout, .. } => format!("record-update#{layout}"),
     }
 }
 
@@ -670,6 +677,19 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 layout: layout.clone(),
                 fields: fields.iter().map(|field| field.name.clone()).collect(),
             });
+            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+        }
+        CpsAtom::RecordUpdate {
+            base,
+            layout,
+            fields,
+        } => {
+            ops.push(CoreOp::RecordUpdate {
+                base: render_atom(base),
+                layout: layout.clone(),
+                fields: fields.iter().map(|field| field.name.clone()).collect(),
+            });
+            lower_atom_value(base, ops);
             ops.push(CoreOp::ReturnAtom(render_atom(atom)));
         }
         CpsAtom::RecordField { record, field } => {
@@ -741,6 +761,7 @@ fn collect_record_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
     for op in ops {
         let (layout, fields) = match op {
             CoreOp::RecordConstruct { layout, fields } => (layout, fields),
+            CoreOp::RecordUpdate { layout, fields, .. } => (layout, fields),
             CoreOp::RecordFieldGet { .. } => continue,
             _ => continue,
         };

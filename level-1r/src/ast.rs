@@ -26,6 +26,10 @@ pub enum Expr {
     },
     Tuple(Vec<Expr>),
     Record(Vec<RecordField>),
+    RecordUpdate {
+        base: Box<Expr>,
+        fields: Vec<RecordField>,
+    },
     Field {
         receiver: Box<Expr>,
         name: String,
@@ -144,6 +148,19 @@ impl Expr {
                 })
                 .collect(),
         )
+    }
+
+    pub fn record_update(base: Expr, fields: Vec<(impl Into<String>, Expr)>) -> Self {
+        Self::RecordUpdate {
+            base: Box::new(base),
+            fields: fields
+                .into_iter()
+                .map(|(name, value)| RecordField {
+                    name: name.into(),
+                    value,
+                })
+                .collect(),
+        }
     }
 
     pub fn field(receiver: Expr, name: impl Into<String>) -> Self {

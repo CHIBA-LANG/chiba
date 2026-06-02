@@ -34,6 +34,11 @@ pub enum CpsAtom {
         record: Box<CpsAtom>,
         field: String,
     },
+    RecordUpdate {
+        base: Box<CpsAtom>,
+        layout: String,
+        fields: Vec<CpsRecordField>,
+    },
     Record {
         layout: String,
         fields: Vec<CpsRecordField>,
@@ -149,6 +154,9 @@ fn transform(
             transform_tuple(fields, nominal, k, controls, ctx)
         }
         TypedExprKind::Record { fields } => transform_record(fields, k, controls, ctx),
+        TypedExprKind::RecordUpdate { base, fields } => {
+            transform_record_update(base, fields, k, controls, ctx)
+        }
         TypedExprKind::Field { receiver, name } => transform(
             receiver,
             Box::new(|value, ctx| {
@@ -440,6 +448,90 @@ fn transform_record(
     transform_record_fields(fields, 0, Vec::new(), k, controls, ctx)
 }
 
+fn transform_record_update(
+    base: &TypedExpr,
+    fields: &[TypedRecordField],
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    let base_controls = controls.clone();
+    transform(
+        base,
+        Box::new(|base, ctx| {
+            transform_record_update_fields(base, fields, 0, Vec::new(), k, controls, ctx)
+        }),
+        base_controls,
+        ctx,
+    )
+}
+
+fn transform_record_update_fields(
+    base: CpsAtom,
+    fields: &[TypedRecordField],
+    index: usize,
+    values: Vec<CpsRecordField>,
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    if index == fields.len() {
+        let fields = merge_record_update_fields(&base, values);
+        let layout = record_layout_name(&fields);
+        let atom = match base {
+            CpsAtom::Record { .. } => CpsAtom::Record { layout, fields },
+            _ => CpsAtom::RecordUpdate {
+                base: Box::new(base),
+                layout,
+                fields,
+            },
+        };
+        return k(atom, ctx);
+    }
+
+    let field_controls = controls.clone();
+    transform(
+        &fields[index].value,
+        Box::new(move |value, ctx| {
+            let mut values = values;
+            values.push(CpsRecordField {
+                name: fields[index].name.clone(),
+                value,
+            });
+            transform_record_update_fields(base, fields, index + 1, values, k, controls, ctx)
+        }),
+        field_controls,
+        ctx,
+    )
+}
+
+fn merge_record_update_fields(base: &CpsAtom, updates: Vec<CpsRecordField>) -> Vec<CpsRecordField> {
+    let mut fields = match base {
+        CpsAtom::Record { fields, .. } => fields.clone(),
+        _ => Vec::new(),
+    };
+    for update in updates {
+        if let Some(existing) = fields.iter_mut().find(|field| field.name == update.name) {
+            *existing = update;
+        } else {
+            fields.push(update);
+        }
+    }
+    fields.sort_by(|left, right| left.name.cmp(&right.name));
+    fields
+}
+
+fn record_layout_name(fields: &[CpsRecordField]) -> String {
+    format!(
+        "record::{}",
+        fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect::<Vec<_>>()
+            .join("+")
+    )
+}
+
 fn transform_record_fields(
     fields: &[TypedRecordField],
     index: usize,
@@ -451,14 +543,7 @@ fn transform_record_fields(
     if index == fields.len() {
         let mut fields = values;
         fields.sort_by(|left, right| left.name.cmp(&right.name));
-        let layout = format!(
-            "record::{}",
-            fields
-                .iter()
-                .map(|field| field.name.as_str())
-                .collect::<Vec<_>>()
-                .join("+")
-        );
+        let layout = record_layout_name(&fields);
         return k(CpsAtom::Record { layout, fields }, ctx);
     }
 
@@ -555,6 +640,17 @@ impl fmt::Display for CpsAtom {
             }
             CpsAtom::TupleField { tuple, field } => write!(f, "{tuple}.{field}"),
             CpsAtom::RecordField { record, field } => write!(f, "{record}.{field}"),
+            CpsAtom::RecordUpdate {
+                base,
+                layout,
+                fields,
+            } => {
+                write!(f, "{layout}{{base={base}")?;
+                for field in fields {
+                    write!(f, ", {}={}", field.name, field.value)?;
+                }
+                write!(f, "}}")
+            }
             CpsAtom::Record { layout, fields } => {
                 write!(f, "{layout}{{")?;
                 for (index, field) in fields.iter().enumerate() {

@@ -66,6 +66,12 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
                 visit(&field.value, facts);
             }
         }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            visit(base, facts);
+            for field in fields {
+                visit(&field.value, facts);
+            }
+        }
         TypedExprKind::Field { receiver, .. } => visit(receiver, facts),
         TypedExprKind::MethodCall { receiver, arg, .. } => {
             visit(receiver, facts);
@@ -137,6 +143,12 @@ fn visit_alpha(expr: &AlphaExpr, facts: &mut UsageFacts) {
             }
         }
         AlphaExprKind::Record(fields) => {
+            for field in fields {
+                visit_alpha(&field.value, facts);
+            }
+        }
+        AlphaExprKind::RecordUpdate { base, fields } => {
+            visit_alpha(base, facts);
             for field in fields {
                 visit_alpha(&field.value, facts);
             }

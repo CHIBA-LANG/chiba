@@ -120,6 +120,12 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
                 visit(&field.value, facts);
             }
         }
+        AlphaExprKind::RecordUpdate { base, fields } => {
+            visit(base, facts);
+            for field in fields {
+                visit(&field.value, facts);
+            }
+        }
         AlphaExprKind::Field { receiver, .. } => visit(receiver, facts),
         AlphaExprKind::MethodCall {
             receiver,

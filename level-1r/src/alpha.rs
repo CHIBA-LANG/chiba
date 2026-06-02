@@ -31,6 +31,10 @@ pub enum AlphaExprKind {
     },
     Tuple(Vec<AlphaExpr>),
     Record(Vec<AlphaRecordField>),
+    RecordUpdate {
+        base: Box<AlphaExpr>,
+        fields: Vec<AlphaRecordField>,
+    },
     Field {
         receiver: Box<AlphaExpr>,
         name: String,
@@ -192,6 +196,18 @@ impl AlphaCtx {
                         })
                         .collect(),
                 ),
+            },
+            Expr::RecordUpdate { base, fields } => AlphaExpr {
+                kind: AlphaExprKind::RecordUpdate {
+                    base: Box::new(self.alpha(base)),
+                    fields: fields
+                        .iter()
+                        .map(|field| AlphaRecordField {
+                            name: field.name.clone(),
+                            value: self.alpha(&field.value),
+                        })
+                        .collect(),
+                },
             },
             Expr::Field { receiver, name } => AlphaExpr {
                 kind: AlphaExprKind::Field {

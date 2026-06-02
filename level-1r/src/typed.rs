@@ -28,6 +28,10 @@ pub enum TypedExprKind {
     Record {
         fields: Vec<TypedRecordField>,
     },
+    RecordUpdate {
+        base: Box<TypedExpr>,
+        fields: Vec<TypedRecordField>,
+    },
     Field {
         receiver: Box<TypedExpr>,
         name: String,
@@ -171,6 +175,24 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                 .collect::<Vec<_>>();
             let ty = Type::Record(record_type_fields(&fields));
             typed(TypedExprKind::Record { fields }, ty)
+        }
+        Expr::RecordUpdate { base, fields } => {
+            let base = type_expr(base);
+            let fields = fields
+                .iter()
+                .map(|field| TypedRecordField {
+                    name: field.name.clone(),
+                    value: type_expr(&field.value),
+                })
+                .collect::<Vec<_>>();
+            let ty = record_update_type(&base.ty, &fields);
+            typed(
+                TypedExprKind::RecordUpdate {
+                    base: Box::new(base),
+                    fields,
+                },
+                ty,
+            )
         }
         Expr::Field { receiver, name } => {
             let receiver = type_expr(receiver);
@@ -350,6 +372,29 @@ fn record_type_fields(fields: &[TypedRecordField]) -> Vec<RecordTypeField> {
     });
     fields.dedup_by(|left, right| left.name == right.name);
     fields
+}
+
+fn record_update_type(base: &Type, fields: &[TypedRecordField]) -> Type {
+    let mut merged = match base {
+        Type::Record(fields) => fields.clone(),
+        _ => Vec::new(),
+    };
+    for field in fields {
+        if let Some(existing) = merged.iter_mut().find(|existing| existing.name == field.name) {
+            existing.ty = field.value.ty.clone();
+        } else {
+            merged.push(RecordTypeField {
+                name: field.name.clone(),
+                ty: field.value.ty.clone(),
+            });
+        }
+    }
+    merged.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| type_stable_name(&left.ty).cmp(&type_stable_name(&right.ty)))
+    });
+    Type::Record(merged)
 }
 
 fn typed(kind: TypedExprKind, ty: Type) -> TypedExpr {

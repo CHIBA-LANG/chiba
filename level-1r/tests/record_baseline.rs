@@ -86,3 +86,70 @@ fn record_field_access_infers_type_and_validates_layout() {
     }));
     assert!(output.core_validation.diagnostics.is_empty());
 }
+
+#[test]
+fn record_update_overwrites_existing_field_and_preserves_canonical_layout() {
+    let expr = Expr::record_update(
+        Expr::record(vec![("x", Expr::i64(1)), ("y", Expr::bool(true))]),
+        vec![("y", Expr::bool(false))],
+    );
+    let output = compile_expr(&expr);
+
+    assert_eq!(
+        output.typed.ty,
+        Type::Record(vec![
+            RecordTypeField {
+                name: "x".to_string(),
+                ty: Type::I64,
+            },
+            RecordTypeField {
+                name: "y".to_string(),
+                ty: Type::Bool,
+            },
+        ])
+    );
+    assert_eq!(output.cps.to_string(), "halt record::x+y{x=1, y=false}");
+    assert!(output.core.ops.contains(&CoreOp::RecordConstruct {
+        layout: "record::x+y".to_string(),
+        fields: vec!["x".to_string(), "y".to_string()],
+    }));
+    assert!(output.core_validation.diagnostics.is_empty());
+}
+
+#[test]
+fn record_update_extends_record_shape() {
+    let expr = Expr::record_update(
+        Expr::record(vec![("x", Expr::i64(1))]),
+        vec![("z", Expr::bool(true))],
+    );
+    let output = compile_expr(&expr);
+
+    assert_eq!(output.cps.to_string(), "halt record::x+z{x=1, z=true}");
+    assert!(output.core.layouts.iter().any(|layout| {
+        matches!(
+            &layout.kind,
+            LayoutKind::RecordStruct(record)
+                if record.fields == vec!["x".to_string(), "z".to_string()]
+        )
+    }));
+    assert!(output.core_validation.diagnostics.is_empty());
+}
+
+#[test]
+fn record_update_of_unknown_base_reaches_target_neutral_core_update_op() {
+    let expr = Expr::record_update(Expr::var("base"), vec![("z", Expr::i64(4))]);
+    let output = compile_expr(&expr);
+
+    assert_eq!(
+        output.cps.to_string(),
+        "halt record::z{base=base, z=4}"
+    );
+    assert!(output.core.ops.contains(&CoreOp::RecordUpdate {
+        base: "base".to_string(),
+        layout: "record::z".to_string(),
+        fields: vec!["z".to_string()],
+    }));
+    assert_eq!(output.usage.vars["base"], chiba_level1r::usage::UseCount::One);
+    assert!(output.core_validation.diagnostics.is_empty());
+    assert!(!output.cps.to_string().contains("LetCont"));
+}
