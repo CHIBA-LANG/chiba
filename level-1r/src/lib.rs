@@ -73,8 +73,8 @@ pub use pipeline::{
 pub use resolve::{resolve_expr, resolve_expr_with_names, MethodIndex, NameIndex, ResolveFacts};
 pub use specialize::{plan_specialization, SpecializationFacts};
 pub use surface::{
-    build_interface_summary, project_surface, InterfaceSummary, ProjectSurface, SurfaceConstructor,
-    SurfaceData, SurfaceDef, SurfaceType, SurfaceTypeField,
+    build_interface_summary, project_surface, project_surface_many, InterfaceSummary,
+    ProjectSurface, SurfaceConstructor, SurfaceData, SurfaceDef, SurfaceType, SurfaceTypeField,
 };
 pub use template::{
     analyze_template, analyze_template_with_source, TemplateFacts, TemplateInstantiation,

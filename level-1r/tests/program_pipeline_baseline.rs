@@ -3,7 +3,10 @@ use chiba_level1r::ast::{
     TypeDecl, TypeField, UseDecl,
 };
 use chiba_level1r::typed::{Type, TypedExprKind};
-use chiba_level1r::{compile_program, compile_program_bundle, Expr, ProgramDiagnostic};
+use chiba_level1r::{
+    build_interface_summary, compile_program, compile_program_bundle, project_surface_many, Expr,
+    ProgramDiagnostic,
+};
 
 fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
     SourceItem::Def {
@@ -129,6 +132,58 @@ fn program_surface_and_interface_summary_preserve_owner_namespace() {
     assert!(summary.contains("surface=ProjectSurface"));
     assert!(summary.contains("interface=InterfaceSummary"));
     assert!(summary.contains("parser.core::Option.Some"));
+}
+
+#[test]
+fn project_surface_many_merges_namespaces_deterministically() {
+    let lexer_program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["lexer".to_string()])),
+        vec![UseDecl::new(vec!["std".to_string(), "text".to_string()], false)],
+        vec![TypeDecl::alias("TokenId", Vec::new(), "i64")],
+        Vec::new(),
+        vec![def("scan", vec![], Expr::i64(1))],
+    );
+    let parser_program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        vec![UseDecl::new(vec!["lexer".to_string()], true)],
+        Vec::new(),
+        vec![DataDecl::new(
+            "Ast",
+            Vec::new(),
+            vec![DataVariant::new("Node", vec!["TokenId".to_string()])],
+        )],
+        vec![def("parse", vec![], Expr::i64(2))],
+    );
+
+    let forward = project_surface_many(&[lexer_program.clone(), parser_program.clone()]);
+    let reverse = project_surface_many(&[parser_program, lexer_program]);
+
+    assert_eq!(forward, reverse);
+    assert_eq!(forward.namespace, "<project>");
+    assert_eq!(
+        forward.imports,
+        vec!["lexer.*".to_string(), "std.text".to_string()]
+    );
+    assert_eq!(
+        forward
+            .defs
+            .iter()
+            .map(|def| format!("{}::{}", def.owner, def.name))
+            .collect::<Vec<_>>(),
+        vec!["lexer::scan".to_string(), "parser::parse".to_string()]
+    );
+    assert_eq!(forward.types[0].owner, "lexer");
+    assert_eq!(forward.data[0].owner, "parser");
+    assert_eq!(forward.constructors[0].owner, "parser");
+
+    let forward_summary = build_interface_summary(&forward);
+    let reverse_summary = build_interface_summary(&reverse);
+    assert_eq!(forward_summary, reverse_summary);
+    assert_eq!(forward_summary.functions[0].symbol, "lexer::scan");
+    assert_eq!(forward_summary.functions[1].symbol, "parser::parse");
+    assert_eq!(forward_summary.types[0].symbol, "lexer::TokenId");
+    assert_eq!(forward_summary.data[0].symbol, "parser::Ast");
+    assert_eq!(forward_summary.constructors[0].symbol, "parser::Ast.Node");
 }
 
 #[test]

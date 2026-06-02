@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{DataDecl, MethodReceiver, SourceItem, SourceProgram, TypeDecl};
 
@@ -189,6 +189,40 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
     }
 }
 
+pub fn project_surface_many(programs: &[SourceProgram]) -> ProjectSurface {
+    let mut imports = BTreeSet::new();
+    let mut defs = Vec::new();
+    let mut statics = Vec::new();
+    let mut types = Vec::new();
+    let mut data = Vec::new();
+    let mut constructors = Vec::new();
+
+    for surface in programs.iter().map(project_surface) {
+        imports.extend(surface.imports);
+        defs.extend(surface.defs);
+        statics.extend(surface.statics);
+        types.extend(surface.types);
+        data.extend(surface.data);
+        constructors.extend(surface.constructors);
+    }
+
+    sort_defs(&mut defs);
+    sort_statics(&mut statics);
+    sort_types(&mut types);
+    sort_data(&mut data);
+    sort_constructors(&mut constructors);
+
+    ProjectSurface {
+        namespace: "<project>".to_string(),
+        imports: imports.into_iter().collect(),
+        defs,
+        statics,
+        types,
+        data,
+        constructors,
+    }
+}
+
 pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
     let functions = surface
         .defs
@@ -258,6 +292,81 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         imports: surface.imports.clone(),
         stable_hash,
     }
+}
+
+fn sort_defs(defs: &mut [SurfaceDef]) {
+    defs.sort_by(|left, right| {
+        (
+            left.owner.as_str(),
+            left.receiver.as_ref().map(MethodReceiver::display_name),
+            left.name.as_str(),
+            left.arity,
+            &left.param_types,
+            &left.return_type,
+        )
+            .cmp(&(
+                right.owner.as_str(),
+                right.receiver.as_ref().map(MethodReceiver::display_name),
+                right.name.as_str(),
+                right.arity,
+                &right.param_types,
+                &right.return_type,
+            ))
+    });
+}
+
+fn sort_statics(statics: &mut [SurfaceStatic]) {
+    statics.sort_by(|left, right| {
+        (left.owner.as_str(), left.name.as_str(), &left.ty).cmp(&(
+            right.owner.as_str(),
+            right.name.as_str(),
+            &right.ty,
+        ))
+    });
+}
+
+fn sort_types(types: &mut [SurfaceType]) {
+    types.sort_by(|left, right| {
+        (
+            left.owner.as_str(),
+            left.name.as_str(),
+            &left.generics,
+            &left.alias_target,
+        )
+            .cmp(&(
+                right.owner.as_str(),
+                right.name.as_str(),
+                &right.generics,
+                &right.alias_target,
+            ))
+    });
+}
+
+fn sort_data(data: &mut [SurfaceData]) {
+    data.sort_by(|left, right| {
+        (left.owner.as_str(), left.name.as_str(), &left.generics).cmp(&(
+            right.owner.as_str(),
+            right.name.as_str(),
+            &right.generics,
+        ))
+    });
+}
+
+fn sort_constructors(constructors: &mut [SurfaceConstructor]) {
+    constructors.sort_by(|left, right| {
+        (
+            left.owner.as_str(),
+            left.data.as_str(),
+            left.name.as_str(),
+            left.arity,
+        )
+            .cmp(&(
+                right.owner.as_str(),
+                right.data.as_str(),
+                right.name.as_str(),
+                right.arity,
+            ))
+    });
 }
 
 pub fn duplicate_data_names(surface: &ProjectSurface) -> Vec<String> {
