@@ -22,6 +22,7 @@ pub mod specialize;
 pub mod template;
 pub mod typed;
 pub mod usage;
+pub mod usage_audit;
 
 pub use ast::{Expr, Literal, SourceProgram};
 pub use alpha::{alpha_expr, AlphaFacts, BinderId};

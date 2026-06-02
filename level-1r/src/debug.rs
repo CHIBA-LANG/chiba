@@ -19,6 +19,7 @@ use crate::specialize::SpecializationFacts;
 use crate::template::TemplateFacts;
 use crate::typed::TypedExpr;
 use crate::usage::UsageFacts;
+use crate::usage_audit::UsageAuditReport;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VisualReport {
@@ -40,6 +41,7 @@ pub struct VisualReport {
     pub core: String,
     pub closure_core_usage: String,
     pub closure_simplification: String,
+    pub usage_audit: String,
     pub core_validation: String,
     pub backend: String,
     pub backend_link: String,
@@ -85,6 +87,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.closure_core_usage).unwrap();
     writeln!(out, "closure-simplification:").unwrap();
     writeln!(out, "  {}", report.closure_simplification).unwrap();
+    writeln!(out, "usage-audit:").unwrap();
+    writeln!(out, "  {}", report.usage_audit).unwrap();
     writeln!(out, "core-validation:").unwrap();
     writeln!(out, "  {}", report.core_validation).unwrap();
     writeln!(out, "backend:").unwrap();
@@ -119,6 +123,7 @@ pub fn visual_report(
     core: &CoreProgram,
     closure_core_usage: &ClosureCoreUsageFacts,
     closure_simplification: &ClosureSimplificationFacts,
+    usage_audit: &UsageAuditReport,
     core_validation: &CoreValidation,
     backend: &BackendArtifact,
     backend_link: &BackendLinkedBundle,
@@ -144,6 +149,7 @@ pub fn visual_report(
         core: format!("{core:#?}"),
         closure_core_usage: format!("{closure_core_usage:#?}"),
         closure_simplification: format!("{closure_simplification:#?}"),
+        usage_audit: format!("{usage_audit:#?}"),
         core_validation: format!("{core_validation:#?}"),
         backend: format!("{backend:#?}"),
         backend_link: format!("{backend_link:#?}"),

@@ -53,10 +53,11 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
             "L15Core",
             "L16ClosureCoreUsage",
             "L17ClosureSimplify",
-            "L18CoreValidate",
-            "L19BackendEmit",
-            "L20BackendLink",
-            "L21BackendCacheKey"
+            "L18UsageAudit",
+            "L19CoreValidate",
+            "L20BackendEmit",
+            "L21BackendLink",
+            "L22BackendCacheKey"
         ]
     );
 
@@ -74,6 +75,7 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("core:"));
     assert!(visual.contains("closure-core-usage:"));
     assert!(visual.contains("closure-simplification:"));
+    assert!(visual.contains("usage-audit:"));
     assert!(visual.contains("core-validation:"));
     assert!(visual.contains("backend:"));
     assert!(visual.contains("backend-link:"));
@@ -94,15 +96,18 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains(
         "L17ClosureSimplify: ClosureCoreUsageFacts -> ClosureSimplificationFacts"
     ));
-    assert!(visual.contains("L18CoreValidate: CoreProgram -> CoreValidation"));
     assert!(visual.contains(
-        "L19BackendEmit: CoreProgram+CoreValidation -> BackendArtifact"
+        "L18UsageAudit: TypedExpr+UsageFacts+CoreProgram -> UsageAuditReport"
+    ));
+    assert!(visual.contains("L19CoreValidate: CoreProgram -> CoreValidation"));
+    assert!(visual.contains(
+        "L20BackendEmit: CoreProgram+CoreValidation -> BackendArtifact"
     ));
     assert!(visual.contains(
-        "L20BackendLink: BackendArtifact -> BackendLinkedBundle"
+        "L21BackendLink: BackendArtifact -> BackendLinkedBundle"
     ));
     assert!(visual.contains(
-        "L21BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"
+        "L22BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"
     ));
 }
 
