@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-use chiba_level1r::chibacc::{parse_tokens, Alt, Ast, Grammar, Item, LabeledAst, Rule};
+use chiba_level1r::chibacc::{
+    parse_pratt_tokens, parse_tokens, Alt, Ast, Grammar, Item, LabeledAst, PrattInfix,
+    PrattPrefix, PrattSpec, Rule,
+};
 use chiba_level1r::chibalex::Token;
 
 fn tok(name: &str, lexeme: &str) -> Token {
@@ -139,6 +142,98 @@ fn parser_reports_err_with_partial_ast_for_trailing_garbage() {
         result,
         LabeledAst::Err {
             partial: Some(_),
+            skipped: 1
+        }
+    ));
+}
+
+fn calculator_pratt() -> PrattSpec {
+    PrattSpec {
+        prefixes: vec![PrattPrefix {
+            token: "Number".to_string(),
+            label: "NumberExpr".to_string(),
+        }],
+        infixes: vec![
+            PrattInfix {
+                token: "Star".to_string(),
+                label: "MulExpr".to_string(),
+                lbp: 90,
+                rbp: 91,
+            },
+            PrattInfix {
+                token: "Plus".to_string(),
+                label: "AddExpr".to_string(),
+                lbp: 80,
+                rbp: 81,
+            },
+        ],
+    }
+}
+
+#[test]
+fn pratt_parser_preserves_precedence_for_calculator_shape() {
+    let result = parse_pratt_tokens(
+        &calculator_pratt(),
+        &[
+            tok("Number", "2"),
+            tok("Plus", "+"),
+            tok("Number", "3"),
+            tok("Star", "*"),
+            tok("Number", "4"),
+        ],
+    );
+
+    match result {
+        LabeledAst::Ok {
+            ast: Ast::Node { label, children },
+            consumed: 5,
+        } => {
+            assert_eq!(label, "AddExpr");
+            assert!(matches!(
+                &children[2],
+                Ast::Node { label, .. } if label == "MulExpr"
+            ));
+        }
+        other => panic!("expected precedence parse, got {other:?}"),
+    }
+}
+
+#[test]
+fn pratt_parser_uses_lbp_rbp_for_left_associative_infix() {
+    let result = parse_pratt_tokens(
+        &calculator_pratt(),
+        &[
+            tok("Number", "1"),
+            tok("Plus", "+"),
+            tok("Number", "2"),
+            tok("Plus", "+"),
+            tok("Number", "3"),
+        ],
+    );
+
+    match result {
+        LabeledAst::Ok {
+            ast: Ast::Node { label, children },
+            consumed: 5,
+        } => {
+            assert_eq!(label, "AddExpr");
+            assert!(matches!(
+                &children[0],
+                Ast::Node { label, .. } if label == "AddExpr"
+            ));
+        }
+        other => panic!("expected left associative parse, got {other:?}"),
+    }
+}
+
+#[test]
+fn pratt_parser_reports_prefix_failure_without_string_terminals() {
+    let result = parse_pratt_tokens(&calculator_pratt(), &[tok("Plus", "+")]);
+
+    assert!(matches!(
+        result,
+        LabeledAst::Err {
+            partial: None,
             skipped: 1
         }
     ));

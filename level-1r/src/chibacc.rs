@@ -34,6 +34,26 @@ pub enum Item {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PrattSpec {
+    pub prefixes: Vec<PrattPrefix>,
+    pub infixes: Vec<PrattInfix>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PrattPrefix {
+    pub token: String,
+    pub label: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PrattInfix {
+    pub token: String,
+    pub label: String,
+    pub lbp: u32,
+    pub rbp: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ast {
     Token {
         name: String,
@@ -69,6 +89,95 @@ pub fn parse_tokens(grammar: &Grammar, tokens: &[Token]) -> LabeledAst {
             skipped: tokens.len().saturating_sub(err.farthest),
         },
     }
+}
+
+pub fn parse_pratt_tokens(spec: &PrattSpec, tokens: &[Token]) -> LabeledAst {
+    match parse_pratt_expr(spec, tokens, 0, 0) {
+        ParseAttempt::Ok { ast, pos } if pos == tokens.len() => LabeledAst::Ok { ast, consumed: pos },
+        ParseAttempt::Ok { ast, pos } => LabeledAst::Err {
+            partial: Some(ast),
+            skipped: tokens.len().saturating_sub(pos),
+        },
+        ParseAttempt::Err(err) => LabeledAst::Err {
+            partial: None,
+            skipped: tokens.len().saturating_sub(err.farthest),
+        },
+    }
+}
+
+fn parse_pratt_expr(spec: &PrattSpec, tokens: &[Token], pos: usize, min_bp: u32) -> ParseAttempt {
+    let mut lhs = match parse_pratt_prefix(spec, tokens, pos) {
+        ParseAttempt::Ok { ast, pos } => ParsedNode { ast, pos },
+        err @ ParseAttempt::Err(_) => return err,
+    };
+
+    loop {
+        let Some(op_token) = tokens.get(lhs.pos) else {
+            break;
+        };
+        let Some(infix) = spec.infixes.iter().find(|infix| infix.token == op_token.name) else {
+            break;
+        };
+        if infix.lbp < min_bp {
+            break;
+        }
+        let rhs = match parse_pratt_expr(spec, tokens, lhs.pos + 1, infix.rbp) {
+            ParseAttempt::Ok { ast, pos } => ParsedNode { ast, pos },
+            err @ ParseAttempt::Err(_) => return err,
+        };
+        let lhs_pos = rhs.pos;
+        lhs = ParsedNode {
+            ast: Ast::Node {
+                label: infix.label.clone(),
+                children: vec![
+                    lhs.ast,
+                    Ast::Token {
+                        name: op_token.name.clone(),
+                        lexeme: op_token.lexeme.clone(),
+                    },
+                    rhs.ast,
+                ],
+            },
+            pos: lhs_pos,
+        };
+    }
+
+    ParseAttempt::Ok {
+        ast: lhs.ast,
+        pos: lhs.pos,
+    }
+}
+
+fn parse_pratt_prefix(spec: &PrattSpec, tokens: &[Token], pos: usize) -> ParseAttempt {
+    match tokens.get(pos) {
+        Some(token) => match spec.prefixes.iter().find(|prefix| prefix.token == token.name) {
+            Some(prefix) => ParseAttempt::Ok {
+                ast: Ast::Node {
+                    label: prefix.label.clone(),
+                    children: vec![Ast::Token {
+                        name: token.name.clone(),
+                        lexeme: token.lexeme.clone(),
+                    }],
+                },
+                pos: pos + 1,
+            },
+            None => ParseAttempt::Err(ParseError {
+                farthest: pos,
+                expected: pratt_prefix_expected(spec),
+            }),
+        },
+        None => ParseAttempt::Err(ParseError {
+            farthest: pos,
+            expected: pratt_prefix_expected(spec),
+        }),
+    }
+}
+
+fn pratt_prefix_expected(spec: &PrattSpec) -> Vec<String> {
+    spec.prefixes
+        .iter()
+        .map(|prefix| prefix.token.clone())
+        .collect()
 }
 
 fn parse_rule(grammar: &Grammar, name: &str, tokens: &[Token], pos: usize) -> ParseAttempt {
@@ -230,4 +339,10 @@ fn merge_error(best: &mut ParseError, next: ParseError) {
 enum ParseAttempt {
     Ok { ast: Ast, pos: usize },
     Err(ParseError),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ParsedNode {
+    ast: Ast,
+    pos: usize,
 }

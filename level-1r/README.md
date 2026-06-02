@@ -15,6 +15,7 @@ Current baseline:
 - target-neutral CoreIR skeleton
 - chibalex maximal-munch lexer baseline
 - chibacc token parser baseline
+- chibacc Pratt expression parser baseline
 - visual report across source / typed / usage / cps
 
 Run:
