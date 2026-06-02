@@ -2,7 +2,7 @@ use crate::alpha::{alpha_expr, AlphaFacts};
 use crate::ast::{Expr, SourceItem, SourceProgram};
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::control::{analyze_control, ControlFacts};
-use crate::core::{lower_core, CoreProgram};
+use crate::core::{lower_core_with_facts, CoreProgram};
 use crate::cps::{cps_program, CpsProgram};
 use crate::debug::{render_visual_report, visual_report, VisualReport};
 use crate::nanopass::PassReport;
@@ -54,7 +54,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         analyze_alpha_closures(&alpha.expr)
     });
     let core = passes.record("L10Core", "CpsProgram", "CoreProgram", || {
-        lower_core(&cps, &control.continuations)
+        lower_core_with_facts(&cps, &control.continuations, &specialize, &usage)
     });
     let visual = visual_report(
         expr,
