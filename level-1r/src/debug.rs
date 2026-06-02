@@ -1,0 +1,71 @@
+use std::fmt::Write;
+
+use crate::ast::Expr;
+use crate::control::ControlFacts;
+use crate::cps::CpsProgram;
+use crate::nanopass::PassReport;
+use crate::typed::TypedExpr;
+use crate::usage::UsageFacts;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VisualReport {
+    pub source: String,
+    pub typed: String,
+    pub control: String,
+    pub usage: String,
+    pub cps: String,
+    pub nanopass: String,
+}
+
+pub fn render_visual_report(report: &VisualReport) -> String {
+    let mut out = String::new();
+    writeln!(out, "source:").unwrap();
+    writeln!(out, "  {}", report.source).unwrap();
+    writeln!(out, "typed:").unwrap();
+    writeln!(out, "  {}", report.typed).unwrap();
+    writeln!(out, "control:").unwrap();
+    writeln!(out, "  {}", report.control).unwrap();
+    writeln!(out, "usage:").unwrap();
+    writeln!(out, "  {}", report.usage).unwrap();
+    writeln!(out, "cps:").unwrap();
+    writeln!(out, "  {}", report.cps).unwrap();
+    writeln!(out, "nanopass:").unwrap();
+    for event in report.nanopass.lines() {
+        writeln!(out, "  {event}").unwrap();
+    }
+    out
+}
+
+pub fn visual_report(
+    source: &Expr,
+    typed: &TypedExpr,
+    control: &ControlFacts,
+    usage: &UsageFacts,
+    cps: &CpsProgram,
+    passes: &PassReport,
+) -> VisualReport {
+    VisualReport {
+        source: format!("{source:?}"),
+        typed: format!("{typed:#?}"),
+        control: format!("{control:#?}"),
+        usage: format!("{usage:#?}"),
+        cps: cps.to_string(),
+        nanopass: render_pass_report(passes),
+    }
+}
+
+fn render_pass_report(report: &PassReport) -> String {
+    let mut out = String::new();
+    for event in &report.events {
+        writeln!(
+            out,
+            "{}: {} -> {} ({}us)",
+            event.name,
+            event.input,
+            event.output,
+            event.elapsed.as_micros()
+        )
+        .unwrap();
+    }
+    out
+}

@@ -1,0 +1,80 @@
+use crate::typed::{TypedExpr, TypedExprKind, Type, UsageColor};
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ControlFacts {
+    pub continuations: Vec<ContinuationFact>,
+    pub errors: Vec<ControlError>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContinuationFact {
+    pub binder: String,
+    pub kind: ContinuationKind,
+    pub input: Type,
+    pub answer: Type,
+    pub usage: UsageColor,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ContinuationKind {
+    Cont1,
+    ContN,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ControlError {
+    ShiftOutsideReset { binder: String },
+}
+
+#[derive(Clone, Debug)]
+struct Boundary {
+    kind: ContinuationKind,
+    answer: Type,
+}
+
+pub fn analyze_control(expr: &TypedExpr) -> ControlFacts {
+    let mut facts = ControlFacts::default();
+    visit(expr, &mut Vec::new(), &mut facts);
+    facts
+}
+
+fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) {
+    match &expr.kind {
+        TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
+        TypedExprKind::Lambda { body, .. } => visit(body, stack, facts),
+        TypedExprKind::Call { callee, arg } => {
+            visit(callee, stack, facts);
+            visit(arg, stack, facts);
+        }
+        TypedExprKind::Reset { multi, body } => {
+            stack.push(Boundary {
+                kind: if *multi {
+                    ContinuationKind::ContN
+                } else {
+                    ContinuationKind::Cont1
+                },
+                answer: expr.ty.clone(),
+            });
+            visit(body, stack, facts);
+            stack.pop();
+        }
+        TypedExprKind::Shift { binder, body } => {
+            match stack.last() {
+                Some(boundary) => facts.continuations.push(ContinuationFact {
+                    binder: binder.clone(),
+                    kind: boundary.kind,
+                    input: Type::Unknown,
+                    answer: boundary.answer.clone(),
+                    usage: match boundary.kind {
+                        ContinuationKind::Cont1 => UsageColor::One,
+                        ContinuationKind::ContN => UsageColor::Many,
+                    },
+                }),
+                None => facts.errors.push(ControlError::ShiftOutsideReset {
+                    binder: binder.clone(),
+                }),
+            }
+            visit(body, stack, facts);
+        }
+    }
+}

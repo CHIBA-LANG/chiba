@@ -78,7 +78,9 @@
 - [ ] **Pass 12: One-Pass CPS Transformation + Beta Reduction**
 	- **TODO**: 用 meta-continuation 做 CPS lowering，并在变换过程中 beta-reduce administrative redex。
 	- **DESC**: 这是 level-1 中端核心。普通表达式求值顺序产生的 administrative continuation 默认不实体化；只有 call/switch/prompt/control/multi-resume 等语义控制点进入 CPS Core。这个 pass 支撑 compiler lowering、chibalex backtracking、chibacc recovery 的共同实现模型。
-	- **验收**: atom lowering 不产生额外 continuation；single-use administrative continuation 被直接 beta-reduce；`reset` / `shift` 和 multi-resume continuation 在 CPS dump 中保留清晰语义节点。
+	- **算法约束**: `T(expr, k_meta)` 的 `k_meta` 是编译期函数 `(Val) => CpsExpr`；object-level lambda/app 只出现在生成的 CPS Core 中，meta-level lambda/app 必须在 pass 执行时消失。`T[var](k_meta) = k_meta(var)`，`T[lit](k_meta) = k_meta(lit)`，不得为 atom 生成 runtime continuation。`T[call f x](k_meta)` 必须先用 meta-continuation lower `f`，再 lower `x`，最后只在 call 边界把当前 meta-continuation reify 成必要的 object continuation。
+	- **禁止形状**: naive CPS 产生的 `(\a. (\b. a b k) x) f`、`LetCont + AppCont` administrative chain、atom/field/tuple access 专属 continuation block 都不允许进入 CPS Core；这些必须在 one-pass 过程中 beta-reduce 掉。
+	- **验收**: atom lowering 不产生额外 continuation；single-use administrative continuation 被直接 beta-reduce；普通 call/branch 除必要 join/control 点外保持 tail form；`reset` / `shift` 和 multi-resume continuation 在 CPS dump 中保留清晰语义节点。
 	- **并行**: 函数体级并行；只读 typed/answer-control/usage facts。
 
 - [ ] **Pass 13: Usage Analysis 1: CPS Core**
