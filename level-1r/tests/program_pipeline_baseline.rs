@@ -1454,6 +1454,31 @@ fn global_init_lowers_pure_const_expressions_into_global_initializers() {
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "42");
 }
 
+#[test]
+fn global_init_lowers_adt_constructor_tag_into_global_initializer() {
+    let program = SourceProgram::new(vec![
+        static_value(
+            "CHOICE",
+            Some("Option"),
+            Expr::adt_ctor("Option", "Some", vec!["None", "Some"], vec![Expr::i64(1)]),
+        ),
+        def("main", vec![], Expr::var("CHOICE")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__CHOICE (mut i32) (i32.const 1)"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__CHOICE"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
 fn run_wat_text(wat: &str) -> String {
     run_wat_export(wat, "main")
 }

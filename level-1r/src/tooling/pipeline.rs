@@ -1002,6 +1002,10 @@ fn const_global_initializer(expr: &Expr) -> Option<i32> {
                 const_global_initializer(else_branch)
             }
         }
+        Expr::AdtCtor { ctor, variants, .. } => variants
+            .iter()
+            .position(|variant| variant == ctor)
+            .map(|tag| tag as i32),
         _ => None,
     }
 }
@@ -1062,6 +1066,13 @@ fn render_global_init_expr(wat: &mut String, expr: &Expr, global_init: &GlobalIn
             wat.push_str("    else\n");
             render_global_init_expr_nested(wat, else_branch, global_init, 6);
             wat.push_str("    end\n");
+        }
+        Expr::AdtCtor { ctor, variants, .. } => {
+            let tag = variants
+                .iter()
+                .position(|variant| variant == ctor)
+                .unwrap_or(0);
+            wat.push_str(&format!("    i32.const {tag}\n"));
         }
         other => {
             wat.push_str(&format!("    ;; unsupported static init {:?}\n", other));
