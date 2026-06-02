@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
-use crate::core::{CoreOp, CoreProgram, CoreValidation, CoreValue, OwnershipDecision};
+use crate::core::{
+    CoreMatchArm, CoreOp, CorePattern, CoreProgram, CoreValidation, CoreValue, OwnershipDecision,
+};
 use crate::symbol::encode_debug_symbol;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -132,6 +134,7 @@ fn first_return_value(core: &CoreProgram) -> Option<CoreValue> {
     core.ops.iter().find_map(|op| match op {
         CoreOp::ReturnValue(value) => Some(value.clone()),
         CoreOp::ReturnBranch { .. } => None,
+        CoreOp::ReturnMatch { .. } => None,
         _ => None,
     })
 }
@@ -160,6 +163,7 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
             }),
             CoreOp::ReturnValue(_)
             | CoreOp::ReturnBranch { .. }
+            | CoreOp::ReturnMatch { .. }
             | CoreOp::DynamicCallableTarget { .. }
             | CoreOp::TupleConstruct { .. }
             | CoreOp::TupleFieldGet { .. }
@@ -238,6 +242,22 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
                 wat.push_str("    else\n");
                 render_core_value_i32_indented(&mut wat, else_value, 6);
                 wat.push_str("    end\n");
+                wat.push_str("  )\n");
+                return_index += 1;
+            }
+            CoreOp::ReturnMatch { scrutinee, arms } => {
+                let symbol = if return_index == 0 {
+                    "main".to_string()
+                } else {
+                    format!("chiba_return_{return_index}")
+                };
+                wat.push_str(&format!(
+                    "  ;; core-return match scrutinee={} arms={}\n",
+                    escape_wat_comment(&scrutinee.debug_name()),
+                    arms.len()
+                ));
+                wat.push_str(&format!("  (func ${symbol} (export \"{symbol}\") (result i32)\n"));
+                render_match_arms_i32(&mut wat, scrutinee, arms, 4);
                 wat.push_str("  )\n");
                 return_index += 1;
             }
@@ -361,6 +381,66 @@ fn render_core_value_i32_indented(wat: &mut String, value: &CoreValue, indent: u
         wat.push_str(line.trim_start());
         wat.push('\n');
     }
+}
+
+fn render_match_arms_i32(
+    wat: &mut String,
+    scrutinee: &CoreValue,
+    arms: &[CoreMatchArm],
+    indent: usize,
+) {
+    let Some((first, rest)) = arms.split_first() else {
+        wat.push_str(&" ".repeat(indent));
+        wat.push_str("unreachable\n");
+        return;
+    };
+    render_match_arm_i32(wat, scrutinee, first, rest, indent);
+}
+
+fn render_match_arm_i32(
+    wat: &mut String,
+    scrutinee: &CoreValue,
+    arm: &CoreMatchArm,
+    rest: &[CoreMatchArm],
+    indent: usize,
+) {
+    match &arm.pattern {
+        CorePattern::Wildcard => render_core_value_i32_indented(wat, &arm.value, indent),
+        CorePattern::I64(value) => {
+            render_core_value_i32_indented(wat, scrutinee, indent);
+            push_indent(wat, indent);
+            wat.push_str(&format!("i32.const {}\n", *value as i32));
+            push_indent(wat, indent);
+            wat.push_str("i32.eq\n");
+            push_indent(wat, indent);
+            wat.push_str("if (result i32)\n");
+            render_core_value_i32_indented(wat, &arm.value, indent + 2);
+            push_indent(wat, indent);
+            wat.push_str("else\n");
+            render_match_arms_i32(wat, scrutinee, rest, indent + 2);
+            push_indent(wat, indent);
+            wat.push_str("end\n");
+        }
+        CorePattern::Bool(value) => {
+            render_core_value_i32_indented(wat, scrutinee, indent);
+            push_indent(wat, indent);
+            wat.push_str(&format!("i32.const {}\n", i32::from(*value)));
+            push_indent(wat, indent);
+            wat.push_str("i32.eq\n");
+            push_indent(wat, indent);
+            wat.push_str("if (result i32)\n");
+            render_core_value_i32_indented(wat, &arm.value, indent + 2);
+            push_indent(wat, indent);
+            wat.push_str("else\n");
+            render_match_arms_i32(wat, scrutinee, rest, indent + 2);
+            push_indent(wat, indent);
+            wat.push_str("end\n");
+        }
+    }
+}
+
+fn push_indent(wat: &mut String, indent: usize) {
+    wat.push_str(&" ".repeat(indent));
 }
 
 fn escape_wat_comment(text: &str) -> String {

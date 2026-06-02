@@ -23,6 +23,10 @@ pub enum CoreOp {
         then_value: CoreValue,
         else_value: CoreValue,
     },
+    ReturnMatch {
+        scrutinee: CoreValue,
+        arms: Vec<CoreMatchArm>,
+    },
     TailCall {
         func: String,
         args: Vec<String>,
@@ -93,6 +97,19 @@ pub enum CoreOp {
         env_params: Vec<String>,
         direct: bool,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CoreMatchArm {
+    pub pattern: CorePattern,
+    pub value: CoreValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CorePattern {
+    Wildcard,
+    I64(i64),
+    Bool(bool),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -373,6 +390,13 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             lower_term(else_term, continuations, ops);
         }
         CpsTerm::Match { scrutinee, arms, .. } => {
+            if let Some(arms) = direct_match_arms(arms) {
+                ops.push(CoreOp::ReturnMatch {
+                    scrutinee: core_value(scrutinee),
+                    arms,
+                });
+                return;
+            }
             ops.push(CoreOp::Match {
                 scrutinee: render_atom(scrutinee),
                 patterns: arms
@@ -390,6 +414,28 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
 fn direct_return_value(term: &CpsTerm) -> Option<CoreValue> {
     match term {
         CpsTerm::Halt(atom) | CpsTerm::AppCont { value: atom, .. } => Some(core_value(atom)),
+        _ => None,
+    }
+}
+
+fn direct_match_arms(arms: &[crate::cps::CpsMatchArm]) -> Option<Vec<CoreMatchArm>> {
+    arms.iter()
+        .map(|arm| {
+            Some(CoreMatchArm {
+                pattern: core_pattern(&arm.pattern)?,
+                value: direct_return_value(&arm.body)?,
+            })
+        })
+        .collect()
+}
+
+fn core_pattern(pattern: &crate::ast::Pattern) -> Option<CorePattern> {
+    match pattern {
+        crate::ast::Pattern::Wildcard => Some(CorePattern::Wildcard),
+        crate::ast::Pattern::Lit(crate::ast::Literal::I64(value)) => Some(CorePattern::I64(*value)),
+        crate::ast::Pattern::Lit(crate::ast::Literal::Bool(value)) => {
+            Some(CorePattern::Bool(*value))
+        }
         _ => None,
     }
 }
@@ -560,6 +606,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         CoreOp::LiftedFunction { symbol, .. } => symbol == func,
         CoreOp::ReturnValue(_)
         | CoreOp::ReturnBranch { .. }
+        | CoreOp::ReturnMatch { .. }
         | CoreOp::TupleConstruct { .. }
         | CoreOp::TupleFieldGet { .. }
         | CoreOp::RecordConstruct { .. }

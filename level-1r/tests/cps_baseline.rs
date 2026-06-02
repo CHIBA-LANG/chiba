@@ -88,9 +88,19 @@ fn literal_match_cps_lowers_to_ordered_branch_chain() {
     assert!(rendered.contains("(20)"));
     assert!(!rendered.contains("LetCont"));
     assert!(!rendered.contains("AppCont"));
-    assert!(output.core.ops.contains(&CoreOp::Match {
-        scrutinee: "tag".to_string(),
-        patterns: vec!["Lit(I64(0))".to_string(), "Wildcard".to_string()],
+    assert!(output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::ReturnMatch {
+                scrutinee: chiba_level1r::core::CoreValue::Var(tag),
+                arms,
+            } if tag == "tag"
+                && arms.len() == 2
+                && arms[0].pattern == chiba_level1r::core::CorePattern::I64(0)
+                && arms[0].value == chiba_level1r::core::CoreValue::I64(10)
+                && arms[1].pattern == chiba_level1r::core::CorePattern::Wildcard
+                && arms[1].value == chiba_level1r::core::CoreValue::I64(20)
+        )
     }));
 }
 

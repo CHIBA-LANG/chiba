@@ -93,6 +93,44 @@ fn program_branch_return_lowers_to_executable_wat_if() {
 }
 
 #[test]
+fn program_literal_match_return_lowers_to_executable_wat_if_chain() {
+    let program = SourceProgram::new(vec![def(
+        "main",
+        vec![],
+        Expr::match_expr(
+            Expr::i64(0),
+            vec![
+                (chiba_level1r::ast::Pattern::lit_i64(0), Expr::i64(7)),
+                (chiba_level1r::ast::Pattern::wildcard(), Expr::i64(9)),
+            ],
+        ),
+    )]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ReturnMatch {
+                scrutinee: chiba_level1r::core::CoreValue::I64(0),
+                arms,
+            } if arms.len() == 2
+                && arms[0].pattern == chiba_level1r::core::CorePattern::I64(0)
+                && arms[0].value == chiba_level1r::core::CoreValue::I64(7)
+                && arms[1].pattern == chiba_level1r::core::CorePattern::Wildcard
+                && arms[1].value == chiba_level1r::core::CoreValue::I64(9)
+        )
+    }));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains(";; core-return match scrutinee=0 arms=2"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
+}
+
+#[test]
 fn program_bundle_reports_duplicate_defs_and_entry_params() {
     let program = SourceProgram::new(vec![
         def("main", vec!["x"], Expr::var("x")),
