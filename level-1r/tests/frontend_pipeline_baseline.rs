@@ -271,6 +271,92 @@ fn frontend_parses_resetn_shift_as_contn_with_rc_usage_audit() {
 }
 
 #[test]
+fn frontend_parses_tuple_and_stable_underscore_field_access() {
+    let output = compile_source_program_bundle("def main() = (1, true)._2").expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::field(Expr::tuple(vec![Expr::i64(1), Expr::bool(true)]), "_2")
+            );
+        }
+    }
+
+    assert!(main.cps.to_string().contains("Tuple2_I64_Bool(_1=1, _2=true)._2"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TupleFieldGet { layout, field }
+                if layout == "tuple::Tuple2_I64_Bool" && field == "_2"
+        )
+    }));
+}
+
+#[test]
+fn frontend_parses_record_literal_field_and_update_through_core() {
+    let output =
+        compile_source_program_bundle("def main() = { {x: 1, y: true} | y: false }.y")
+            .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::field(
+                    Expr::record_update(
+                        Expr::record(vec![("x", Expr::i64(1)), ("y", Expr::bool(true))]),
+                        vec![("y", Expr::bool(false))],
+                    ),
+                    "y",
+                )
+            );
+        }
+    }
+
+    assert!(main.cps.to_string().contains("record::x+y{x=1, y=false}.y"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::RecordFieldGet { layout, field }
+                if layout == "record::x+y" && field == "y"
+        )
+    }));
+    assert!(output
+        .program
+        .backend_link
+        .linked_wat
+        .contains(";; record layout=record::x+y fields=2"));
+}
+
+#[test]
+fn frontend_parses_dot_method_call_as_method_call_ast() {
+    let output = compile_source_program_bundle("def main() = receiver.show(0)")
+        .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::method_call(Expr::var("receiver"), "show", Expr::i64(0))
+            );
+        }
+    }
+
+    assert!(main.cps.to_string().contains("receiver.show(0,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, arg }
+                if func == "receiver.show" && arg == "I64(0)"
+        )
+    }));
+}
+
+#[test]
 fn frontend_rejects_empty_call_argument() {
     let err = parse_source_program("def main() = f()").unwrap_err();
 

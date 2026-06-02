@@ -106,6 +106,9 @@ fn chiba_lexer_spec() -> LexerSpec {
             punct("LBrace", "\\{"),
             punct("RBrace", "\\}"),
             punct("FatArrow", "=>"),
+            punct("Dot", "\\."),
+            punct("Colon", ":"),
+            punct("Pipe", "\\|"),
             punct("Comma", ","),
             punct("Eq", "="),
             punct("Plus", "\\+"),
@@ -186,11 +189,28 @@ impl FrontendParser {
 
     fn parse_postfix(&mut self) -> Result<Expr, FrontendError> {
         let mut expr = self.parse_primary()?;
-        while self.peek_name() == Some("LParen") {
-            self.pos += 1;
-            let arg = self.parse_expr_bp(0)?;
-            self.expect("RParen")?;
-            expr = Expr::call(expr, arg);
+        loop {
+            match self.peek_name() {
+                Some("LParen") => {
+                    self.pos += 1;
+                    let arg = self.parse_expr_bp(0)?;
+                    self.expect("RParen")?;
+                    expr = Expr::call(expr, arg);
+                }
+                Some("Dot") => {
+                    self.pos += 1;
+                    let name = self.expect_lexeme("Ident")?;
+                    if self.peek_name() == Some("LParen") {
+                        self.pos += 1;
+                        let arg = self.parse_expr_bp(0)?;
+                        self.expect("RParen")?;
+                        expr = Expr::method_call(expr, name, arg);
+                    } else {
+                        expr = Expr::field(expr, name);
+                    }
+                }
+                _ => break,
+            }
         }
         Ok(expr)
     }
@@ -220,10 +240,23 @@ impl FrontendParser {
             Some("Ident") => self.expect_lexeme("Ident").map(Expr::var),
             Some("LParen") => {
                 self.pos += 1;
-                let expr = self.parse_expr_bp(0)?;
+                let first = self.parse_expr_bp(0)?;
+                if self.peek_name() == Some("Comma") {
+                    let mut fields = vec![first];
+                    while self.peek_name() == Some("Comma") {
+                        self.pos += 1;
+                        if self.peek_name() == Some("RParen") {
+                            break;
+                        }
+                        fields.push(self.parse_expr_bp(0)?);
+                    }
+                    self.expect("RParen")?;
+                    return Ok(Expr::tuple(fields));
+                }
                 self.expect("RParen")?;
-                Ok(expr)
+                Ok(first)
             }
+            Some("LBrace") => self.parse_record_or_update(),
             Some(found) => {
                 let token = self.tokens[self.pos].clone();
                 Err(FrontendError::UnexpectedToken {
@@ -240,6 +273,7 @@ impl FrontendParser {
                         "KwShift".to_string(),
                         "Ident".to_string(),
                         "LParen".to_string(),
+                        "LBrace".to_string(),
                     ],
                 })
             }
@@ -247,6 +281,40 @@ impl FrontendParser {
                 expected: vec!["expr".to_string()],
             }),
         }
+    }
+
+    fn parse_record_or_update(&mut self) -> Result<Expr, FrontendError> {
+        self.expect("LBrace")?;
+        if self.peek_name() == Some("RBrace") {
+            self.pos += 1;
+            return Ok(Expr::record(Vec::<(&str, Expr)>::new()));
+        }
+        if self.peek_name() == Some("Ident") && self.peek_next_name() == Some("Colon") {
+            let fields = self.parse_record_fields_until("RBrace")?;
+            self.expect("RBrace")?;
+            return Ok(Expr::record(fields));
+        }
+        let base = self.parse_expr_bp(0)?;
+        self.expect("Pipe")?;
+        let fields = self.parse_record_fields_until("RBrace")?;
+        self.expect("RBrace")?;
+        Ok(Expr::record_update(base, fields))
+    }
+
+    fn parse_record_fields_until(&mut self, end: &str) -> Result<Vec<(String, Expr)>, FrontendError> {
+        let mut fields = Vec::new();
+        while self.peek_name() != Some(end) {
+            let name = self.expect_lexeme("Ident")?;
+            self.expect("Colon")?;
+            let value = self.parse_expr_bp(0)?;
+            fields.push((name, value));
+            if self.peek_name() == Some("Comma") {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        Ok(fields)
     }
 
     fn parse_if(&mut self) -> Result<Expr, FrontendError> {
@@ -398,6 +466,10 @@ impl FrontendParser {
 
     fn peek_name(&self) -> Option<&str> {
         self.tokens.get(self.pos).map(|token| token.name.as_str())
+    }
+
+    fn peek_next_name(&self) -> Option<&str> {
+        self.tokens.get(self.pos + 1).map(|token| token.name.as_str())
     }
 
     fn is_eof(&self) -> bool {
