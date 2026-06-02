@@ -1,6 +1,7 @@
 use chiba_level1r::alpha::{alpha_expr, AlphaDiagnostic, AlphaExprKind};
 use chiba_level1r::closure::ClosureStorageKind;
 use chiba_level1r::usage::UseCount;
+use chiba_level1r::ast::Pattern;
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -78,6 +79,29 @@ fn shift_binder_scope_is_limited_to_shift_body() {
         }]
     );
     assert_eq!(facts.binders.len(), 1);
+}
+
+#[test]
+fn if_let_pattern_binder_scope_is_limited_to_success_branch() {
+    let facts = alpha_expr(&Expr::if_let(
+        Pattern::bind("x"),
+        Expr::var("maybe"),
+        Expr::var("x"),
+        Expr::var("x"),
+    ));
+
+    assert!(facts.binders.iter().any(|binder| binder.name == "x"));
+    assert_eq!(
+        facts.diagnostics,
+        vec![
+            AlphaDiagnostic::UndefinedVar {
+                name: "maybe".to_string()
+            },
+            AlphaDiagnostic::UndefinedVar {
+                name: "x".to_string()
+            }
+        ]
+    );
 }
 
 #[test]

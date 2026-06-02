@@ -74,6 +74,16 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
             visit(then_branch, facts);
             visit(else_branch, facts);
         }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            visit(scrutinee, facts);
+            visit(then_branch, facts);
+            visit(else_branch, facts);
+        }
         TypedExprKind::Match { scrutinee, arms } => {
             visit(scrutinee, facts);
             for arm in arms {
@@ -126,6 +136,16 @@ fn visit_alpha(expr: &AlphaExpr, facts: &mut UsageFacts) {
             else_branch,
         } => {
             visit_alpha(cond, facts);
+            visit_alpha(then_branch, facts);
+            visit_alpha(else_branch, facts);
+        }
+        AlphaExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            visit_alpha(scrutinee, facts);
             visit_alpha(then_branch, facts);
             visit_alpha(else_branch, facts);
         }

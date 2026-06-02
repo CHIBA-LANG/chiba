@@ -95,6 +95,24 @@ fn literal_match_cps_lowers_to_ordered_branch_chain() {
 }
 
 #[test]
+fn if_let_cps_has_success_and_failure_paths() {
+    let output = compile_expr(&Expr::if_let(
+        chiba_level1r::ast::Pattern::bind("value"),
+        Expr::var("candidate"),
+        Expr::var("value"),
+        Expr::i64(0),
+    ));
+    let rendered = output.cps.to_string();
+
+    assert!(rendered.contains("match candidate"));
+    assert!(rendered.contains("value => join"));
+    assert!(rendered.contains("_ => join"));
+    assert!(rendered.contains("(0)"));
+    assert!(!rendered.contains("LetCont"));
+    assert!(!rendered.contains("AppCont"));
+}
+
+#[test]
 fn branch_usage_traverses_condition_and_all_arms() {
     let output = compile_expr(&Expr::if_else(
         Expr::var("shared"),

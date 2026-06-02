@@ -71,3 +71,19 @@ fn non_bool_literal_match_without_wildcard_requires_fallback() {
         }]
     );
 }
+
+#[test]
+fn if_let_records_success_only_pattern_environment() {
+    let output = compile_expr(&Expr::if_let(
+        Pattern::bind("value"),
+        Expr::var("candidate"),
+        Expr::var("value"),
+        Expr::i64(0),
+    ));
+
+    assert_eq!(output.pattern.envs.len(), 1);
+    let env = &output.pattern.envs[0];
+    assert_eq!(env.bindings, vec!["value".to_string()]);
+    assert_eq!(env.success_branch_binds, true);
+    assert_eq!(env.failure_branch_binds, false);
+}

@@ -67,6 +67,16 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
             collect(then_branch, scope, facts);
             collect(else_branch, scope, facts);
         }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect(scrutinee, scope, facts);
+            collect(then_branch, scope, facts);
+            collect(else_branch, scope, facts);
+        }
         TypedExprKind::Match { scrutinee, arms } => {
             collect(scrutinee, scope, facts);
             for arm in arms {
@@ -129,6 +139,16 @@ fn collect_alpha(expr: &AlphaExpr, scope: &mut BTreeSet<BinderId>, facts: &mut C
             else_branch,
         } => {
             collect_alpha(cond, scope, facts);
+            collect_alpha(then_branch, scope, facts);
+            collect_alpha(else_branch, scope, facts);
+        }
+        AlphaExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_alpha(scrutinee, scope, facts);
             collect_alpha(then_branch, scope, facts);
             collect_alpha(else_branch, scope, facts);
         }
@@ -208,6 +228,16 @@ fn collect_alpha_free_vars(
             collect_alpha_free_vars(then_branch, locals, free);
             collect_alpha_free_vars(else_branch, locals, free);
         }
+        AlphaExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_alpha_free_vars(scrutinee, locals, free);
+            collect_alpha_free_vars(then_branch, locals, free);
+            collect_alpha_free_vars(else_branch, locals, free);
+        }
         AlphaExprKind::Match { scrutinee, arms } => {
             collect_alpha_free_vars(scrutinee, locals, free);
             for arm in arms {
@@ -257,6 +287,16 @@ fn collect_free_vars(
             else_branch,
         } => {
             collect_free_vars(cond, locals, free);
+            collect_free_vars(then_branch, locals, free);
+            collect_free_vars(else_branch, locals, free);
+        }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_free_vars(scrutinee, locals, free);
             collect_free_vars(then_branch, locals, free);
             collect_free_vars(else_branch, locals, free);
         }

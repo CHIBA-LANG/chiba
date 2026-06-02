@@ -139,6 +139,16 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
             visit(then_branch, facts);
             visit(else_branch, facts);
         }
+        AlphaExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            visit(scrutinee, facts);
+            visit(then_branch, facts);
+            visit(else_branch, facts);
+        }
         AlphaExprKind::Match { scrutinee, arms } => {
             visit(scrutinee, facts);
             for arm in arms {

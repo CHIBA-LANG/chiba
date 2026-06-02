@@ -48,6 +48,12 @@ pub enum AlphaExprKind {
         then_branch: Box<AlphaExpr>,
         else_branch: Box<AlphaExpr>,
     },
+    IfLet {
+        pattern: AlphaPattern,
+        scrutinee: Box<AlphaExpr>,
+        then_branch: Box<AlphaExpr>,
+        else_branch: Box<AlphaExpr>,
+    },
     Match {
         scrutinee: Box<AlphaExpr>,
         arms: Vec<AlphaMatchArm>,
@@ -68,8 +74,15 @@ pub enum AlphaExprKind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AlphaMatchArm {
-    pub pattern: Pattern,
+    pub pattern: AlphaPattern,
     pub body: AlphaExpr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AlphaPattern {
+    Wildcard,
+    Bind(AlphaBinder),
+    Lit(Literal),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -190,14 +203,37 @@ impl AlphaCtx {
                     else_branch: Box::new(self.alpha(else_branch)),
                 },
             },
+            Expr::IfLet {
+                pattern,
+                scrutinee,
+                then_branch,
+                else_branch,
+            } => {
+                let scrutinee = Box::new(self.alpha(scrutinee));
+                self.push_scope();
+                let pattern = self.alpha_pattern(pattern);
+                let then_branch = Box::new(self.alpha(then_branch));
+                self.pop_scope();
+                AlphaExpr {
+                    kind: AlphaExprKind::IfLet {
+                        pattern,
+                        scrutinee,
+                        then_branch,
+                        else_branch: Box::new(self.alpha(else_branch)),
+                    },
+                }
+            }
             Expr::Match { scrutinee, arms } => AlphaExpr {
                 kind: AlphaExprKind::Match {
                     scrutinee: Box::new(self.alpha(scrutinee)),
                     arms: arms
                         .iter()
-                        .map(|arm| AlphaMatchArm {
-                            pattern: arm.pattern.clone(),
-                            body: self.alpha(&arm.body),
+                        .map(|arm| {
+                            self.push_scope();
+                            let pattern = self.alpha_pattern(&arm.pattern);
+                            let body = self.alpha(&arm.body);
+                            self.pop_scope();
+                            AlphaMatchArm { pattern, body }
                         })
                         .collect(),
                 },
@@ -254,5 +290,13 @@ impl AlphaCtx {
 
     fn pop_scope(&mut self) {
         self.scopes.pop();
+    }
+
+    fn alpha_pattern(&mut self, pattern: &Pattern) -> AlphaPattern {
+        match pattern {
+            Pattern::Wildcard => AlphaPattern::Wildcard,
+            Pattern::Bind(name) => AlphaPattern::Bind(self.bind(name)),
+            Pattern::Lit(lit) => AlphaPattern::Lit(lit.clone()),
+        }
     }
 }

@@ -43,6 +43,12 @@ pub enum Expr {
         then_branch: Box<Expr>,
         else_branch: Box<Expr>,
     },
+    IfLet {
+        pattern: Pattern,
+        scrutinee: Box<Expr>,
+        then_branch: Box<Expr>,
+        else_branch: Box<Expr>,
+    },
     Match {
         scrutinee: Box<Expr>,
         arms: Vec<MatchArm>,
@@ -70,6 +76,7 @@ pub struct MatchArm {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Pattern {
     Wildcard,
+    Bind(String),
     Lit(Literal),
 }
 
@@ -155,6 +162,15 @@ impl Expr {
         }
     }
 
+    pub fn if_let(pattern: Pattern, scrutinee: Expr, then_branch: Expr, else_branch: Expr) -> Self {
+        Self::IfLet {
+            pattern,
+            scrutinee: Box::new(scrutinee),
+            then_branch: Box::new(then_branch),
+            else_branch: Box::new(else_branch),
+        }
+    }
+
     pub fn nominal(name: impl Into<String>, expr: Expr) -> Self {
         Self::Nominal {
             name: name.into(),
@@ -187,6 +203,10 @@ impl Expr {
 impl Pattern {
     pub fn wildcard() -> Self {
         Self::Wildcard
+    }
+
+    pub fn bind(name: impl Into<String>) -> Self {
+        Self::Bind(name.into())
     }
 
     pub fn lit_i64(value: i64) -> Self {

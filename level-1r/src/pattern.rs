@@ -4,6 +4,7 @@ use crate::typed::{TypedExpr, TypedExprKind, Type};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PatternFacts {
     pub matches: Vec<MatchExhaustivenessFact>,
+    pub envs: Vec<PatternEnvFact>,
     pub diagnostics: Vec<PatternDiagnostic>,
 }
 
@@ -13,6 +14,13 @@ pub struct MatchExhaustivenessFact {
     pub covered_literals: Vec<Literal>,
     pub has_wildcard: bool,
     pub exhaustive: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatternEnvFact {
+    pub bindings: Vec<String>,
+    pub success_branch_binds: bool,
+    pub failure_branch_binds: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,6 +63,21 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             visit(then_branch, facts);
             visit(else_branch, facts);
         }
+        TypedExprKind::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => {
+            visit(scrutinee, facts);
+            visit(then_branch, facts);
+            visit(else_branch, facts);
+            facts.envs.push(PatternEnvFact {
+                bindings: pattern_bindings(pattern),
+                success_branch_binds: true,
+                failure_branch_binds: false,
+            });
+        }
         TypedExprKind::Match { scrutinee, arms } => {
             visit(scrutinee, facts);
             for arm in arms {
@@ -84,6 +107,7 @@ fn exhaustiveness(
     for arm in arms {
         match &arm.pattern {
             Pattern::Wildcard => has_wildcard = true,
+            Pattern::Bind(_) => has_wildcard = true,
             Pattern::Lit(lit) if !covered_literals.contains(lit) => {
                 covered_literals.push(lit.clone());
             }
@@ -122,5 +146,12 @@ fn missing_patterns(fact: &MatchExhaustivenessFact) -> Vec<Pattern> {
             missing
         }
         _ => vec![Pattern::Wildcard],
+    }
+}
+
+fn pattern_bindings(pattern: &Pattern) -> Vec<String> {
+    match pattern {
+        Pattern::Bind(name) => vec![name.clone()],
+        Pattern::Wildcard | Pattern::Lit(_) => vec![],
     }
 }

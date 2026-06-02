@@ -197,6 +197,24 @@ fn transform(
             then_branch,
             else_branch,
         } => transform_if(cond, then_branch, else_branch, k, controls, ctx),
+        TypedExprKind::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => {
+            let arms = vec![
+                crate::typed::TypedMatchArm {
+                    pattern: pattern.clone(),
+                    body: (*then_branch.clone()),
+                },
+                crate::typed::TypedMatchArm {
+                    pattern: Pattern::Wildcard,
+                    body: (*else_branch.clone()),
+                },
+            ];
+            transform_match(scrutinee, &arms, k, controls, ctx)
+        }
         TypedExprKind::Match { scrutinee, arms } => {
             transform_match(scrutinee, arms, k, controls, ctx)
         }
@@ -443,6 +461,7 @@ impl fmt::Display for CpsTerm {
 fn display_pattern(pattern: &Pattern) -> String {
     match pattern {
         Pattern::Wildcard => "_".to_string(),
+        Pattern::Bind(name) => name.clone(),
         Pattern::Lit(Literal::I64(value)) => value.to_string(),
         Pattern::Lit(Literal::Bool(value)) => value.to_string(),
     }

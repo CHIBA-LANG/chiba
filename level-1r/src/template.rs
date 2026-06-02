@@ -140,6 +140,16 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
             collect_expr_obligations(then_branch, facts);
             collect_expr_obligations(else_branch, facts);
         }
+        AlphaExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_expr_obligations(scrutinee, facts);
+            collect_expr_obligations(then_branch, facts);
+            collect_expr_obligations(else_branch, facts);
+        }
         AlphaExprKind::Match { scrutinee, arms } => {
             collect_expr_obligations(scrutinee, facts);
             for arm in arms {

@@ -40,6 +40,12 @@ pub enum TypedExprKind {
         then_branch: Box<TypedExpr>,
         else_branch: Box<TypedExpr>,
     },
+    IfLet {
+        pattern: Pattern,
+        scrutinee: Box<TypedExpr>,
+        then_branch: Box<TypedExpr>,
+        else_branch: Box<TypedExpr>,
+    },
     Match {
         scrutinee: Box<TypedExpr>,
         arms: Vec<TypedMatchArm>,
@@ -170,6 +176,26 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             typed(
                 TypedExprKind::If {
                     cond: Box::new(cond),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                },
+                ty,
+            )
+        }
+        Expr::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => {
+            let scrutinee = type_expr(scrutinee);
+            let then_branch = type_expr(then_branch);
+            let else_branch = type_expr(else_branch);
+            let ty = common_type(&then_branch.ty, &else_branch.ty);
+            typed(
+                TypedExprKind::IfLet {
+                    pattern: pattern.clone(),
+                    scrutinee: Box::new(scrutinee),
                     then_branch: Box::new(then_branch),
                     else_branch: Box::new(else_branch),
                 },

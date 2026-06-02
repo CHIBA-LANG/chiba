@@ -64,6 +64,16 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
             visit(then_branch, stack, facts);
             visit(else_branch, stack, facts);
         }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            visit(scrutinee, stack, facts);
+            visit(then_branch, stack, facts);
+            visit(else_branch, stack, facts);
+        }
         TypedExprKind::Match { scrutinee, arms } => {
             visit(scrutinee, stack, facts);
             for arm in arms {
