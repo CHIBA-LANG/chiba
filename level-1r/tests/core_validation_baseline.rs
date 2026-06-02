@@ -155,7 +155,7 @@ fn validator_rejects_dangling_direct_tailcall_target() {
     let program = CoreProgram {
         ops: vec![CoreOp::TailCall {
             func: "module::missing".to_string(),
-            args: vec!["x".to_string()],
+            args: vec![CoreValue::Var("x".to_string())],
         }],
         layouts: vec![],
         ownership: vec![],
@@ -180,7 +180,7 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
             },
             CoreOp::TailCall {
                 func: "math.Vec2.norm".to_string(),
-                args: vec!["v".to_string()],
+                args: vec![CoreValue::Var("v".to_string())],
             },
         ],
         layouts: vec![],
@@ -196,7 +196,7 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
             },
             CoreOp::TailCall {
                 func: "f".to_string(),
-                args: vec!["x".to_string()],
+                args: vec![CoreValue::Var("x".to_string())],
             },
         ],
         layouts: vec![],
@@ -212,7 +212,7 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
             },
             CoreOp::TailCall {
                 func: "receiver.put".to_string(),
-                args: vec!["1".to_string(), "2".to_string()],
+                args: vec![CoreValue::I64(1), CoreValue::I64(2)],
             },
         ],
         layouts: vec![],
@@ -228,7 +228,7 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
             },
             CoreOp::TailCall {
                 func: "operator::Add(w0)".to_string(),
-                args: vec!["1".to_string()],
+                args: vec![CoreValue::I64(1)],
             },
         ],
         layouts: vec![],
@@ -244,7 +244,7 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
             },
             CoreOp::TailCall {
                 func: "模块.函数α".to_string(),
-                args: vec!["标量名".to_string()],
+                args: vec![CoreValue::Var("标量名".to_string())],
             },
         ],
         layouts: vec![],
@@ -260,7 +260,7 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
             },
             CoreOp::TailCall {
                 func: "结果.🚀Ok".to_string(),
-                args: vec!["1".to_string()],
+                args: vec![CoreValue::I64(1)],
             },
         ],
         layouts: vec![],

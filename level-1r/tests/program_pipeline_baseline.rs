@@ -263,6 +263,46 @@ fn program_zero_arg_tailcall_lowers_to_executable_direct_call_wat() {
 }
 
 #[test]
+fn program_literal_arg_tailcall_lowers_to_executable_direct_call_wat() {
+    let program = SourceProgram::new(vec![
+        def("helper", vec!["x"], Expr::var("x")),
+        def(
+            "main",
+            vec![],
+            Expr::call_args(Expr::var("helper"), vec![Expr::i64(9)]),
+        ),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.backend_link.linked_wat
+    );
+    assert!(bundle.defs[1].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "helper"
+                    && args == &vec![chiba_level1r::core::CoreValue::I64(9)]
+        )
+    }));
+    assert!(bundle.backend_link.linked_wat.contains("(func $helper (param $x i32) (result i32)"));
+    assert!(bundle.backend_link.linked_wat.contains("i32.const 9"));
+    assert!(bundle.backend_link.linked_wat.contains("call $helper"));
+
+    let callable_wat = export_func_for_test(
+        &bundle.backend_link.linked_wat,
+        "$chiba_tailcall_0",
+        "tailcall_main",
+    );
+    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "9");
+}
+
+#[test]
 fn program_adt_constructor_return_lowers_to_executable_tag_wat() {
     let program = SourceProgram::new(vec![def(
         "main",

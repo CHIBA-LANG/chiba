@@ -893,6 +893,7 @@ fn program_backend_artifacts(
                 &artifact,
                 &def_symbol(&def.name, index),
                 is_entry,
+                &def.params,
                 &static_names,
             );
             artifact
@@ -904,26 +905,36 @@ fn relabel_program_wat(
     artifact: &BackendArtifact,
     symbol: &str,
     is_entry: bool,
+    params: &[String],
     static_names: &BTreeSet<&str>,
 ) -> String {
     let wat = &artifact.wat;
+    let signature = if params.is_empty() {
+        String::new()
+    } else {
+        params
+            .iter()
+            .map(|param| format!(" (param ${} i32)", encode_debug_symbol(param)))
+            .collect::<String>()
+    };
     let relabeled = if is_entry {
         wat.replace(
             "(func $main (export \"main\")",
-            &format!("(func ${symbol} (export \"main\")"),
+            &format!("(func ${symbol} (export \"main\"){signature}"),
         )
     } else {
-        wat.replace("(func $main (export \"main\")", &format!("(func ${symbol}"))
+        wat.replace(
+            "(func $main (export \"main\")",
+            &format!("(func ${symbol}{signature}"),
+        )
     };
-    if is_entry {
-        replace_static_return_from_fact(
-            &relabeled,
-            artifact.return_value.as_ref(),
-            static_names,
-        )
-    } else {
-        relabeled
-    }
+    replace_program_return_from_fact(
+        &relabeled,
+        artifact.return_value.as_ref(),
+        params,
+        static_names,
+        is_entry,
+    )
 }
 
 fn def_symbol(name: &str, index: usize) -> String {
@@ -1011,22 +1022,27 @@ fn const_global_initializer(expr: &Expr) -> Option<i32> {
     }
 }
 
-fn replace_static_return_from_fact(
+fn replace_program_return_from_fact(
     wat: &str,
     return_value: Option<&CoreValue>,
+    params: &[String],
     static_names: &BTreeSet<&str>,
+    is_entry: bool,
 ) -> String {
     let Some(CoreValue::Var(name)) = return_value else {
         return wat.to_string();
     };
-    if !static_names.contains(name.as_str()) {
+    let replacement = if params.iter().any(|param| param == name) {
+        format!("    local.get ${}", encode_debug_symbol(name))
+    } else if is_entry && static_names.contains(name.as_str()) {
+        format!("    global.get ${}", global_symbol(name))
+    } else {
         return wat.to_string();
-    }
+    };
     let Some(const_start) = wat.find("    i32.const 0") else {
         return wat.to_string();
     };
     let const_end = const_start + "    i32.const 0".len();
-    let replacement = format!("    global.get ${}", global_symbol(name));
     let mut out = String::new();
     out.push_str(&wat[..const_start]);
     out.push_str(&replacement);

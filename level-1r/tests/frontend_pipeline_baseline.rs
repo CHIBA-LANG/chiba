@@ -2,6 +2,7 @@ use chiba_level1r::ast::{
     BinaryOp, Expr, MethodReceiver, ParamDecl, Pattern, SourceItem, TypeDecl, TypeField,
 };
 use chiba_level1r::control::ContinuationKind;
+use chiba_level1r::core::CoreValue;
 use chiba_level1r::resolve::ResolvedName;
 use chiba_level1r::specialize::DischargedObligation;
 use chiba_level1r::template::TemplateObligation;
@@ -719,7 +720,7 @@ fn frontend_parses_call_before_infix_and_reaches_cps_shape() {
         matches!(
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
-                if func == "f" && args == &vec!["x".to_string()]
+                if func == "f" && args == &vec![CoreValue::Var("x".to_string())]
         )
     }));
     assert!(main.core.ops.iter().any(|op| {
@@ -727,7 +728,7 @@ fn frontend_parses_call_before_infix_and_reaches_cps_shape() {
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
                 if func.starts_with("operator::Add(")
-                    && args == &vec!["1".to_string()]
+                    && args == &vec![CoreValue::I64(1)]
         )
     }));
     assert!(bundle.backend_link.linked_wat.contains(";; tailcall"));
@@ -758,11 +759,7 @@ fn frontend_preserves_multi_argument_calls_through_cps_and_core() {
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
                 if func == "f"
-                    && args == &vec![
-                        "1".to_string(),
-                        "2".to_string(),
-                        "3".to_string()
-                    ]
+                    && args == &vec![CoreValue::I64(1), CoreValue::I64(2), CoreValue::I64(3)]
         )
     }));
     assert!(bundle
@@ -801,9 +798,9 @@ fn frontend_pipe_defaults_to_first_argument_call() {
             chiba_level1r::core::CoreOp::TailCall { func, args }
                 if func == "f"
                     && args == &vec![
-                        "value".to_string(),
-                        "1".to_string(),
-                        "2".to_string()
+                        CoreValue::Var("value".to_string()),
+                        CoreValue::I64(1),
+                        CoreValue::I64(2)
                     ]
         )
     }));
@@ -862,7 +859,7 @@ fn frontend_pipe_method_path_is_receiver_first_desugar() {
         matches!(
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
-                if func == "value.push" && args == &vec!["1".to_string()]
+                if func == "value.push" && args == &vec![CoreValue::I64(1)]
         )
     }));
 }
@@ -963,7 +960,7 @@ fn frontend_indexing_enters_operator_obligation_path() {
         matches!(
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
-                if func == "operator::op_index(values)" && args == &vec!["i".to_string()]
+                if func == "operator::op_index(values)" && args == &vec![CoreValue::Var("i".to_string())]
         )
     }));
 }
@@ -1016,7 +1013,10 @@ fn frontend_slice_indexing_uses_index_slice_operator_path() {
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
                 if func == "operator::op_index_slice(values)"
-                    && args == &vec!["start..end".to_string()]
+                    && args == &vec![CoreValue::Range {
+                        start: Box::new(CoreValue::Var("start".to_string())),
+                        end: Box::new(CoreValue::Var("end".to_string())),
+                    }]
         )
     }));
 }
@@ -1217,7 +1217,7 @@ fn frontend_unknown_qualified_call_is_not_guessed_as_adt_ctor() {
         matches!(
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
-                if func == "Option.Some" && args == &vec!["1".to_string()]
+                if func == "Option.Some" && args == &vec![CoreValue::I64(1)]
         )
     }));
 }
@@ -1757,7 +1757,7 @@ fn frontend_parses_dot_method_call_as_method_call_ast() {
         matches!(
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
-                if func == "receiver.show" && args == &vec!["0".to_string()]
+                if func == "receiver.show" && args == &vec![CoreValue::I64(0)]
         )
     }));
 }
@@ -1788,7 +1788,7 @@ fn frontend_preserves_multi_argument_method_calls_through_cps_and_core() {
             op,
             chiba_level1r::core::CoreOp::TailCall { func, args }
                 if func == "receiver.put"
-                    && args == &vec!["1".to_string(), "2".to_string()]
+                    && args == &vec![CoreValue::I64(1), CoreValue::I64(2)]
         )
     }));
     assert!(main.backend.wat.contains(";; tailcall receiver_put args=[1, 2]"));

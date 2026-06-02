@@ -267,13 +267,17 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
                     "  ;; tailcall {} args=[{}]\n",
                     final_symbol(func),
                     args.iter()
-                        .map(|arg| escape_wat_comment(arg))
+                        .map(CoreValue::debug_name)
+                        .map(|arg| escape_wat_comment(&arg))
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                if args.is_empty() {
+                if args.iter().all(core_value_is_renderable_i32) {
                     let symbol = format!("chiba_tailcall_{tailcall_index}");
                     wat.push_str(&format!("  (func ${symbol} (result i32)\n"));
+                    for arg in args {
+                        render_core_value_i32(&mut wat, arg);
+                    }
                     wat.push_str(&format!("    call ${}\n", final_symbol(func)));
                     wat.push_str("  )\n");
                     tailcall_index += 1;
@@ -405,6 +409,23 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue) {
         | CoreValue::Rendered { .. } => {
             wat.push_str("    i32.const 0\n")
         }
+    }
+}
+
+fn core_value_is_renderable_i32(value: &CoreValue) -> bool {
+    match value {
+        CoreValue::Unit | CoreValue::I64(_) | CoreValue::Bool(_) | CoreValue::Adt { .. } => true,
+        CoreValue::TupleField { tuple, field } => tuple_field_value(tuple, field)
+            .map(core_value_is_renderable_i32)
+            .unwrap_or(false),
+        CoreValue::RecordField { record, field } => record_field_value(record, field)
+            .map(core_value_is_renderable_i32)
+            .unwrap_or(false),
+        CoreValue::Var(_)
+        | CoreValue::Tuple { .. }
+        | CoreValue::Range { .. }
+        | CoreValue::Record { .. }
+        | CoreValue::Rendered { .. } => false,
     }
 }
 

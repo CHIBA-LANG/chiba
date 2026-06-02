@@ -29,7 +29,7 @@ pub enum CoreOp {
     },
     TailCall {
         func: String,
-        args: Vec<String>,
+        args: Vec<CoreValue>,
     },
     DynamicCallableTarget {
         target: String,
@@ -410,7 +410,7 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             });
             ops.push(CoreOp::TailCall {
                 func,
-                args: args.iter().map(render_atom).collect(),
+                args: args.iter().map(core_value).collect(),
             });
             lower_continuation_atom(kont, continuations, ops);
         }

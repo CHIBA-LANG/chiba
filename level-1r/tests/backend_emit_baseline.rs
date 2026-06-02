@@ -2,7 +2,7 @@ use chiba_level1r::backend::{
     backend_cache_key, emit_wasm_gc, link_backend_artifacts, BackendCacheConfig,
     BackendDiagnostic, BackendExternImport, BackendLinkDiagnostic, BackendTarget,
 };
-use chiba_level1r::core::{CoreDiagnostic, CoreOp, CoreProgram, CoreValidation};
+use chiba_level1r::core::{CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue};
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -10,7 +10,7 @@ fn backend_refuses_to_emit_when_core_validation_failed() {
     let core = CoreProgram {
         ops: vec![CoreOp::TailCall {
             func: "module::missing".to_string(),
-            args: vec!["x".to_string()],
+            args: vec![CoreValue::Var("x".to_string())],
         }],
         layouts: vec![],
         ownership: vec![],
@@ -63,7 +63,7 @@ fn backend_records_tailcall_targets_in_serialized_output() {
             },
             CoreOp::TailCall {
                 func: "math.Vec2.norm".to_string(),
-                args: vec!["v".to_string()],
+                args: vec![CoreValue::Var("v".to_string())],
             },
         ],
         layouts: vec![],
