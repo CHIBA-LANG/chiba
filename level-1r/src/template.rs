@@ -1,6 +1,6 @@
 use crate::alpha::{AlphaExpr, AlphaExprKind};
 use crate::ast::BinaryOp;
-use crate::resolve::{OperatorObligation, ResolveFacts, ResolvedCall};
+use crate::resolve::{OperatorObligation, ResolveFacts, ResolvedCall, ResolvedName};
 use crate::typed::{SendColor, UsageColor};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -44,6 +44,16 @@ pub enum TemplateObligation {
         receiver: Option<String>,
         name: String,
         resolved: Option<String>,
+    },
+    Function {
+        name: String,
+        resolved: String,
+    },
+    Constructor {
+        data: String,
+        ctor: String,
+        resolved: String,
+        arity: usize,
     },
     Operator {
         op: BinaryOp,
@@ -199,6 +209,28 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
 }
 
 fn collect_resolve_obligations(resolve: &ResolveFacts, facts: &mut TemplateFacts) {
+    for name in &resolve.resolved_names {
+        match name {
+            ResolvedName::Function { name, symbol } => {
+                facts.obligations.push(TemplateObligation::Function {
+                    name: name.clone(),
+                    resolved: symbol.clone(),
+                });
+            }
+            ResolvedName::Constructor {
+                data,
+                ctor,
+                symbol,
+                arity,
+            } => facts.obligations.push(TemplateObligation::Constructor {
+                data: data.clone(),
+                ctor: ctor.clone(),
+                resolved: symbol.clone(),
+                arity: *arity,
+            }),
+        }
+    }
+
     for call in &resolve.resolved_calls {
         match call {
             ResolvedCall::FieldCallable { field } => {

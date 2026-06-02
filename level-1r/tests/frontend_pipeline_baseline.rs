@@ -1,6 +1,8 @@
 use chiba_level1r::ast::{BinaryOp, Expr, Pattern, SourceItem};
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::resolve::ResolvedName;
+use chiba_level1r::specialize::DischargedObligation;
+use chiba_level1r::template::TemplateObligation;
 use chiba_level1r::typed::UsageColor;
 use chiba_level1r::{
     compile_program_bundle, compile_source_program_bundle, parse_source_program, FrontendError,
@@ -163,6 +165,23 @@ fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
             name: "helper".to_string(),
             symbol: "root::helper".to_string(),
         }));
+    assert!(output.program.defs[1]
+        .output
+        .template
+        .obligations
+        .contains(&TemplateObligation::Function {
+            name: "helper".to_string(),
+            resolved: "root::helper".to_string(),
+        }));
+    assert!(output.program.defs[1]
+        .output
+        .specialize
+        .work_items[0]
+        .obligations
+        .contains(&DischargedObligation::Function {
+            name: "helper".to_string(),
+            target: "root::helper".to_string(),
+        }));
 
     let summary = output.render_summary();
     assert!(summary.contains("source-program:"));
@@ -222,6 +241,23 @@ fn frontend_parses_data_decl_and_uses_variants_for_qualified_ctors() {
         symbol: "root::Option.Some".to_string(),
         arity: 1,
     }));
+    assert!(main
+        .template
+        .obligations
+        .contains(&TemplateObligation::Constructor {
+            data: "Option".to_string(),
+            ctor: "Some".to_string(),
+            resolved: "root::Option.Some".to_string(),
+            arity: 1,
+        }));
+    assert!(main.specialize.work_items[0]
+        .obligations
+        .contains(&DischargedObligation::Constructor {
+            data: "Option".to_string(),
+            ctor: "Some".to_string(),
+            target: "root::Option.Some".to_string(),
+            arity: 1,
+        }));
     assert!(output.render_summary().contains("data=1"));
 }
 

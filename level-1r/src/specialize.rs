@@ -45,6 +45,8 @@ pub struct SpecializationWorkItem {
 pub enum DischargedObligation {
     Field { field: String, shape: RowShape },
     Method { name: String, target: Option<String> },
+    Function { name: String, target: String },
+    Constructor { data: String, ctor: String, target: String, arity: usize },
     Operator { protocol: String, receiver: Option<String> },
     DynAdapter { contract: DynRowContract },
 }
@@ -88,6 +90,14 @@ pub fn specialization_key(generic_symbol: impl Into<String>, template: &Template
                 receiver: Some(receiver),
                 ..
             }
+            | TemplateObligation::Function {
+                resolved: receiver,
+                ..
+            }
+            | TemplateObligation::Constructor {
+                resolved: receiver,
+                ..
+            }
             | TemplateObligation::Operator {
                 receiver: Some(receiver),
                 ..
@@ -124,6 +134,23 @@ pub fn discharge_obligations(template: &TemplateFacts) -> Vec<DischargedObligati
             TemplateObligation::Method { name, resolved, .. } => DischargedObligation::Method {
                 name: name.clone(),
                 target: resolved.clone(),
+            },
+            TemplateObligation::Function { name, resolved } => {
+                DischargedObligation::Function {
+                    name: name.clone(),
+                    target: resolved.clone(),
+                }
+            }
+            TemplateObligation::Constructor {
+                data,
+                ctor,
+                resolved,
+                arity,
+            } => DischargedObligation::Constructor {
+                data: data.clone(),
+                ctor: ctor.clone(),
+                target: resolved.clone(),
+                arity: *arity,
             },
             TemplateObligation::Operator {
                 protocol,

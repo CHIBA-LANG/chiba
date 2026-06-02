@@ -141,6 +141,7 @@
 	- [ ] 三条基础规则必须直接落地：变量/atom 为 `T[x](k_meta) = k_meta(x)`；lambda 为 `k_meta(object_lambda x k => T[body](fn v => object_app k v))`；call 为 `T[e1](fn f => T[e2](fn v => object_app (object_app f v) (object_lambda w => k_meta(w))))`。多参数 call / operator / tuple / record / ADT ctor 只是把这条 CBV 规则按左到右参数列表推广。
 	- [ ] `k_meta` 不是 IR 节点、不是 `ContId`、不是后续 pass 可见的 CPS term；它只能是 pass 实现里的宿主函数/闭包。变换完成后，meta-level lambda/app 必须全部被宿主求值消掉，CPS dump 里只能剩 object-level lambda/app/control 节点。
 	- [ ] `f(x)` 的推导必须在编译期完成两次 meta-level beta：`T(f, fn f2 => T(x, fn v => object_app(object_app f2 v, object_lambda w => k_meta(w))))` 直接输出真实 call，不允许留下 `lambda f2` / `lambda v` 这种 administrative object-level 节点。
+	- [ ] 实现验收必须对比 naive CPS 与 one-pass CPS：naive 形如 `M[f x] k = M[f] (lambda a. M[x] (lambda b. a b k))` 会生成 `(\a. (\b. a b k) x) f`；level-1b 禁止这种中间形态。one-pass 必须让 `T[f x] (fn w => k w)` 在编译期依次 beta 到 `f x (cont w => k w)`，其中 `fn f2` / `fn v` 是宿主语言 continuation，不得进入 CPS IR。
 	- [ ] 禁止形状：`(lambda a. (lambda b. a(b, k)) x) f`、`LetCont + AppCont` administrative chain、为普通 atom/field/tuple access 单独生成 continuation block；这些必须在变换过程中由 meta-level beta 消掉。
 	- [ ] 验收必须包含显式反例检查：`f(x)` 不得出现 `lambda a` / `lambda b` / `LetCont` / `AppCont`；`f(g(x), y)` 不得把 `g(x)` 的返回再包一层 administrative continuation；branch arm 内的 atom/field/tuple/record access 不得产生专属 continuation block。
 	- [ ] 实现时必须给 CPS dump / debug map 显示哪些 continuation 是真实 object-level continuation，哪些 evaluation continuation 已经被 meta-level beta 消去；不能用后置 optimizer 把 naive CPS 清干净后再宣称 one-pass。

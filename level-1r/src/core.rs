@@ -343,6 +343,8 @@ fn lower_specialization_ops(
                     name: name.clone(),
                     target: target.clone(),
                 }),
+                DischargedObligation::Function { .. }
+                | DischargedObligation::Constructor { .. } => {}
                 DischargedObligation::Operator {
                     protocol,
                     receiver: Some(receiver),

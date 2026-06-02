@@ -24,6 +24,8 @@ pub enum TemplateObligationSource {
     RowShape,
     Field,
     Method,
+    Function,
+    Constructor,
     Operator,
     DynAdapter,
 }
@@ -105,6 +107,8 @@ fn obligation_source(obligation: &TemplateObligation) -> TemplateObligationSourc
     match obligation {
         TemplateObligation::Field { .. } => TemplateObligationSource::Field,
         TemplateObligation::Method { .. } => TemplateObligationSource::Method,
+        TemplateObligation::Function { .. } => TemplateObligationSource::Function,
+        TemplateObligation::Constructor { .. } => TemplateObligationSource::Constructor,
         TemplateObligation::Operator { .. } => TemplateObligationSource::Operator,
         TemplateObligation::DynAdapter { .. } => TemplateObligationSource::DynAdapter,
     }
@@ -125,6 +129,8 @@ fn discharged_source(obligation: &DischargedObligation) -> TemplateObligationSou
     match obligation {
         DischargedObligation::Field { .. } => TemplateObligationSource::Field,
         DischargedObligation::Method { .. } => TemplateObligationSource::Method,
+        DischargedObligation::Function { .. } => TemplateObligationSource::Function,
+        DischargedObligation::Constructor { .. } => TemplateObligationSource::Constructor,
         DischargedObligation::Operator { .. } => TemplateObligationSource::Operator,
         DischargedObligation::DynAdapter { .. } => TemplateObligationSource::DynAdapter,
     }
@@ -150,6 +156,17 @@ fn explanation_for(obligation: &TemplateObligation) -> String {
             Some(target) => format!("method `{name}` is discharged to concrete target `{target}`"),
             None => format!("method `{name}` remains a checked-template method obligation"),
         },
+        TemplateObligation::Function { name, resolved } => {
+            format!("function `{name}` is resolved to owner symbol `{resolved}`")
+        }
+        TemplateObligation::Constructor {
+            data,
+            ctor,
+            resolved,
+            arity,
+        } => {
+            format!("constructor `{data}.{ctor}/{arity}` is resolved to owner symbol `{resolved}`")
+        }
         TemplateObligation::Operator { protocol, .. } => {
             format!("operator protocol `{protocol}` is a structural operator obligation")
         }
