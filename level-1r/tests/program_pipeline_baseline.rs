@@ -1,12 +1,13 @@
 use chiba_level1r::ast::{
-    DataDecl, DataVariant, NamespaceDecl, SourceItem, SourceProgram, UseDecl,
+    DataDecl, DataVariant, NamespaceDecl, ParamDecl, SourceItem, SourceProgram, UseDecl,
 };
 use chiba_level1r::{compile_program, compile_program_bundle, Expr, ProgramDiagnostic};
 
 fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
     SourceItem::Def {
         name: name.to_string(),
-        params: params.into_iter().map(str::to_string).collect(),
+        params: params.into_iter().map(ParamDecl::untyped).collect(),
+        return_type: None,
         body,
     }
 }
@@ -93,10 +94,14 @@ fn program_surface_and_interface_summary_preserve_owner_namespace() {
     assert_eq!(bundle.surface.namespace, "parser.core");
     assert_eq!(bundle.surface.imports, vec!["std.regex".to_string()]);
     assert_eq!(bundle.surface.defs[0].owner, "parser.core");
+    assert_eq!(bundle.surface.defs[0].param_types, Vec::<Option<String>>::new());
+    assert_eq!(bundle.surface.defs[0].return_type, None);
     assert_eq!(bundle.surface.data[0].owner, "parser.core");
     assert_eq!(bundle.surface.constructors.len(), 2);
     assert_eq!(bundle.interface.namespace, "parser.core");
     assert_eq!(bundle.interface.functions[0].symbol, "parser.core::main");
+    assert_eq!(bundle.interface.functions[0].param_types, Vec::<Option<String>>::new());
+    assert_eq!(bundle.interface.functions[0].return_type, None);
     assert_eq!(bundle.interface.data[0].symbol, "parser.core::Option");
     assert_eq!(
         bundle.interface.constructors[0].symbol,
@@ -111,6 +116,41 @@ fn program_surface_and_interface_summary_preserve_owner_namespace() {
     assert!(summary.contains("surface=ProjectSurface"));
     assert!(summary.contains("interface=InterfaceSummary"));
     assert!(summary.contains("parser.core::Option.Some"));
+}
+
+#[test]
+fn interface_summary_preserves_function_signature_types() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            name: "id".to_string(),
+            params: vec![ParamDecl::new("x", Some("I64".to_string()))],
+            return_type: Some("I64".to_string()),
+            body: Expr::var("x"),
+        }],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.surface.defs[0].arity, 1);
+    assert_eq!(
+        bundle.surface.defs[0].param_types,
+        vec![Some("I64".to_string())]
+    );
+    assert_eq!(bundle.surface.defs[0].return_type, Some("I64".to_string()));
+    assert_eq!(bundle.interface.functions[0].symbol, "parser.core::id");
+    assert_eq!(
+        bundle.interface.functions[0].param_types,
+        vec![Some("I64".to_string())]
+    );
+    assert_eq!(
+        bundle.interface.functions[0].return_type,
+        Some("I64".to_string())
+    );
+    assert!(bundle.render_summary().contains("param_types"));
+    assert!(bundle.render_summary().contains("return_type"));
 }
 
 #[test]

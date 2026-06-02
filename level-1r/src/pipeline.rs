@@ -362,9 +362,11 @@ fn compile_program_defs(
         .items
         .iter()
         .map(|item| match item {
-            SourceItem::Def { name, params, body } => ProgramDefOutput {
+            SourceItem::Def {
+                name, params, body, ..
+            } => ProgramDefOutput {
                 name: name.clone(),
-                params: params.clone(),
+                params: params.iter().map(|param| param.name.clone()).collect(),
                 output: compile_expr_with_name_index(body, names.clone()),
             },
         })

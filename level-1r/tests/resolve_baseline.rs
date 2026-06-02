@@ -84,6 +84,7 @@ fn interface_summary_resolves_global_function_owner_symbol() {
         vec![SourceItem::Def {
             name: "helper".to_string(),
             params: Vec::new(),
+            return_type: None,
             body: Expr::i64(1),
         }],
     );
@@ -156,6 +157,7 @@ fn interface_summary_does_not_resolve_local_binder_as_global_function() {
         vec![SourceItem::Def {
             name: "x".to_string(),
             params: Vec::new(),
+            return_type: None,
             body: Expr::i64(1),
         }],
     );

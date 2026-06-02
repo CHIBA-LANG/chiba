@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::ast::{
-    BinaryOp, DataDecl, DataVariant, Expr, NamespaceDecl, Pattern, SourceItem, SourceProgram,
-    UseDecl,
+    BinaryOp, DataDecl, DataVariant, Expr, NamespaceDecl, ParamDecl, Pattern, SourceItem,
+    SourceProgram, UseDecl,
 };
 use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
 
@@ -238,25 +238,33 @@ impl FrontendParser {
         let name = self.expect_lexeme("Ident")?;
         if self.peek_name() == Some("Colon") {
             self.pos += 1;
-            self.expect_type_name()?;
+            let return_type = Some(self.expect_type_name()?);
             self.expect("Eq")?;
             let body = self.parse_expr_bp(0)?;
             return Ok(SourceItem::Def {
                 name,
                 params: Vec::new(),
+                return_type,
                 body,
             });
         }
         self.expect("LParen")?;
         let params = self.parse_params()?;
         self.expect("RParen")?;
-        if self.peek_name() == Some("Colon") {
+        let return_type = if self.peek_name() == Some("Colon") {
             self.pos += 1;
-            self.expect_type_name()?;
-        }
+            Some(self.expect_type_name()?)
+        } else {
+            None
+        };
         self.expect("Eq")?;
         let body = self.parse_expr_bp(0)?;
-        Ok(SourceItem::Def { name, params, body })
+        Ok(SourceItem::Def {
+            name,
+            params,
+            return_type,
+            body,
+        })
     }
 
     fn parse_data(&mut self) -> Result<DataDecl, FrontendError> {
@@ -322,17 +330,20 @@ impl FrontendParser {
         Ok(DataVariant::new(name, fields))
     }
 
-    fn parse_params(&mut self) -> Result<Vec<String>, FrontendError> {
+    fn parse_params(&mut self) -> Result<Vec<ParamDecl>, FrontendError> {
         let mut params = Vec::new();
         if self.peek_name() == Some("RParen") {
             return Ok(params);
         }
         loop {
-            params.push(self.expect_lexeme("Ident")?);
-            if self.peek_name() == Some("Colon") {
+            let name = self.expect_lexeme("Ident")?;
+            let ty = if self.peek_name() == Some("Colon") {
                 self.pos += 1;
-                self.expect_type_name()?;
-            }
+                Some(self.expect_type_name()?)
+            } else {
+                None
+            };
+            params.push(ParamDecl::new(name, ty));
             if self.peek_name() != Some("Comma") {
                 break;
             }
@@ -826,9 +837,15 @@ fn enrich_item_with_data_variants(
     variants: &BTreeMap<String, Vec<String>>,
 ) -> SourceItem {
     match item {
-        SourceItem::Def { name, params, body } => SourceItem::Def {
+        SourceItem::Def {
             name,
             params,
+            return_type,
+            body,
+        } => SourceItem::Def {
+            name,
+            params,
+            return_type,
             body: enrich_expr_with_data_variants(body, variants),
         },
     }

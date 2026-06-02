@@ -21,9 +21,16 @@ pub struct UseDecl {
 pub enum SourceItem {
     Def {
         name: String,
-        params: Vec<String>,
+        params: Vec<ParamDecl>,
+        return_type: Option<String>,
         body: Expr,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParamDecl {
+    pub name: String,
+    pub ty: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -121,6 +128,19 @@ impl DataVariant {
             name: name.into(),
             fields,
         }
+    }
+}
+
+impl ParamDecl {
+    pub fn new(name: impl Into<String>, ty: Option<String>) -> Self {
+        Self {
+            name: name.into(),
+            ty,
+        }
+    }
+
+    pub fn untyped(name: impl Into<String>) -> Self {
+        Self::new(name, None)
     }
 }
 

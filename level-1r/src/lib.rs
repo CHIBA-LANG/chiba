@@ -28,7 +28,9 @@ pub mod typed;
 pub mod usage;
 pub mod usage_audit;
 
-pub use ast::{DataDecl, DataVariant, Expr, Literal, NamespaceDecl, SourceProgram, UseDecl};
+pub use ast::{
+    DataDecl, DataVariant, Expr, Literal, NamespaceDecl, ParamDecl, SourceProgram, UseDecl,
+};
 pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use cps::{cps_program, CpsProgram};
 pub use debug::{render_visual_report, VisualReport};

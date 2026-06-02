@@ -1,4 +1,4 @@
-use chiba_level1r::ast::{BinaryOp, Expr, Pattern, SourceItem};
+use chiba_level1r::ast::{BinaryOp, Expr, ParamDecl, Pattern, SourceItem};
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::resolve::ResolvedName;
 use chiba_level1r::specialize::DischargedObligation;
@@ -33,9 +33,15 @@ fn frontend_lexes_and_parses_def_source_to_program() {
     );
     assert_eq!(output.program.items.len(), 1);
     match &output.program.items[0] {
-        SourceItem::Def { name, params, body } => {
+        SourceItem::Def {
+            name,
+            params,
+            return_type,
+            body,
+        } => {
             assert_eq!(name, "main");
-            assert_eq!(params, &Vec::<String>::new());
+            assert_eq!(params, &Vec::<ParamDecl>::new());
+            assert_eq!(return_type, &None);
             assert_eq!(
                 body,
                 &Expr::binary(
@@ -345,9 +351,15 @@ fn frontend_supports_parameters_and_variables() {
     let parsed = parse_source_program("def id(x) = x").expect("parse");
 
     match &parsed.program.items[0] {
-        SourceItem::Def { name, params, body } => {
+        SourceItem::Def {
+            name,
+            params,
+            return_type,
+            body,
+        } => {
             assert_eq!(name, "id");
-            assert_eq!(params, &vec!["x".to_string()]);
+            assert_eq!(params, &vec![ParamDecl::untyped("x")]);
+            assert_eq!(return_type, &None);
             assert_eq!(body, &Expr::var("x"));
         }
     }
@@ -360,9 +372,15 @@ fn frontend_parses_typed_global_value_def_surface() {
 
     assert_eq!(output.frontend.program.items.len(), 2);
     match &output.frontend.program.items[0] {
-        SourceItem::Def { name, params, body } => {
+        SourceItem::Def {
+            name,
+            params,
+            return_type,
+            body,
+        } => {
             assert_eq!(name, "ANSWER");
-            assert_eq!(params, &Vec::<String>::new());
+            assert_eq!(params, &Vec::<ParamDecl>::new());
+            assert_eq!(return_type, &Some("I64".to_string()));
             assert_eq!(body, &Expr::i64(42));
         }
     }
@@ -382,9 +400,15 @@ fn frontend_consumes_parameter_and_return_type_annotations() {
     let parsed = parse_source_program("def id(x: I64): I64 = x").expect("parse");
 
     match &parsed.program.items[0] {
-        SourceItem::Def { name, params, body } => {
+        SourceItem::Def {
+            name,
+            params,
+            return_type,
+            body,
+        } => {
             assert_eq!(name, "id");
-            assert_eq!(params, &vec!["x".to_string()]);
+            assert_eq!(params, &vec![ParamDecl::new("x", Some("I64".to_string()))]);
+            assert_eq!(return_type, &Some("I64".to_string()));
             assert_eq!(body, &Expr::var("x"));
         }
     }

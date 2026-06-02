@@ -16,6 +16,8 @@ pub struct SurfaceDef {
     pub owner: String,
     pub name: String,
     pub arity: usize,
+    pub param_types: Vec<Option<String>>,
+    pub return_type: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -48,6 +50,8 @@ pub struct InterfaceSummary {
 pub struct InterfaceFunction {
     pub symbol: String,
     pub arity: usize,
+    pub param_types: Vec<Option<String>>,
+    pub return_type: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -75,10 +79,17 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .items
         .iter()
         .map(|item| match item {
-            SourceItem::Def { name, params, .. } => SurfaceDef {
+            SourceItem::Def {
+                name,
+                params,
+                return_type,
+                ..
+            } => SurfaceDef {
                 owner: namespace.clone(),
                 name: name.clone(),
                 arity: params.len(),
+                param_types: params.iter().map(|param| param.ty.clone()).collect(),
+                return_type: return_type.clone(),
             },
         })
         .collect();
@@ -108,6 +119,8 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .map(|def| InterfaceFunction {
             symbol: owned_symbol(&def.owner, &def.name),
             arity: def.arity,
+            param_types: def.param_types.clone(),
+            return_type: def.return_type.clone(),
         })
         .collect();
     let data = surface
@@ -205,6 +218,17 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
         text.push_str(&def.name);
         text.push(':');
         text.push_str(&def.arity.to_string());
+        text.push('(');
+        text.push_str(
+            &def.param_types
+                .iter()
+                .map(|ty| ty.as_deref().unwrap_or("_"))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+        text.push(')');
+        text.push_str("->");
+        text.push_str(def.return_type.as_deref().unwrap_or("_"));
     }
     for data in &surface.data {
         text.push_str("|data:");
