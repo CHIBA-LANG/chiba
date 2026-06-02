@@ -4,6 +4,7 @@ pub mod chibalex;
 pub mod chibacc;
 pub mod closure;
 pub mod closure_core_usage;
+pub mod closure_simplify;
 pub mod control;
 pub mod core;
 pub mod cps;
