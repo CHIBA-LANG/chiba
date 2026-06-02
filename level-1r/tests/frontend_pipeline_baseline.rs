@@ -1,4 +1,6 @@
 use chiba_level1r::ast::{BinaryOp, Expr, Pattern, SourceItem};
+use chiba_level1r::control::ContinuationKind;
+use chiba_level1r::typed::UsageColor;
 use chiba_level1r::{
     compile_program_bundle, compile_source_program_bundle, parse_source_program, FrontendError,
 };
@@ -224,6 +226,48 @@ fn frontend_parses_if_let_block_form_through_pattern_env_and_cps() {
     assert!(main.cps.to_string().contains("match maybe"));
     assert!(main.cps.to_string().contains("value => join"));
     assert!(main.cps.to_string().contains("_ => join"));
+}
+
+#[test]
+fn frontend_parses_reset_shift_as_cont1_with_usage_audit() {
+    let output = compile_source_program_bundle("def main() = reset { shift k { 0 } }")
+        .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert_eq!(main.control.errors, vec![]);
+    assert_eq!(main.control.continuations.len(), 1);
+    assert_eq!(main.control.continuations[0].binder, "k");
+    assert_eq!(main.control.continuations[0].kind, ContinuationKind::Cont1);
+    assert_eq!(main.control.continuations[0].usage, UsageColor::One);
+    assert!(main.cps.to_string().contains("reset {"));
+    assert!(main.cps.to_string().contains("shift@cont1 k"));
+    assert!(main
+        .usage_audit
+        .entries
+        .iter()
+        .any(|entry| entry.subject == "continuation::k"
+            && entry.usage_signature.contains("k: 1 Cont1")));
+}
+
+#[test]
+fn frontend_parses_resetn_shift_as_contn_with_rc_usage_audit() {
+    let output = compile_source_program_bundle("def main() = resetn { shift retry { 0 } }")
+        .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert_eq!(main.control.errors, vec![]);
+    assert_eq!(main.control.continuations.len(), 1);
+    assert_eq!(main.control.continuations[0].binder, "retry");
+    assert_eq!(main.control.continuations[0].kind, ContinuationKind::ContN);
+    assert_eq!(main.control.continuations[0].usage, UsageColor::Many);
+    assert!(main.cps.to_string().contains("resetn {"));
+    assert!(main.cps.to_string().contains("shift@contN retry"));
+    assert!(main
+        .usage_audit
+        .entries
+        .iter()
+        .any(|entry| entry.subject == "continuation::retry"
+            && entry.rust_reference_signature == "let retry: Rc<ContNFrame>"));
 }
 
 #[test]

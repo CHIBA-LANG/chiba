@@ -77,6 +77,21 @@ fn chiba_lexer_spec() -> LexerSpec {
                 skip: false,
             },
             LexerRule {
+                name: "KwResetn".to_string(),
+                pattern: "resetn".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "KwReset".to_string(),
+                pattern: "reset".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "KwShift".to_string(),
+                pattern: "shift".to_string(),
+                skip: false,
+            },
+            LexerRule {
                 name: "Ident".to_string(),
                 pattern: "[a-zA-Z_][a-zA-Z0-9_]*".to_string(),
                 skip: false,
@@ -199,6 +214,9 @@ impl FrontendParser {
             }
             Some("KwIf") => self.parse_if(),
             Some("KwMatch") => self.parse_match(),
+            Some("KwReset") => self.parse_reset(false),
+            Some("KwResetn") => self.parse_reset(true),
+            Some("KwShift") => self.parse_shift(),
             Some("Ident") => self.expect_lexeme("Ident").map(Expr::var),
             Some("LParen") => {
                 self.pos += 1;
@@ -217,6 +235,9 @@ impl FrontendParser {
                         "False".to_string(),
                         "KwIf".to_string(),
                         "KwMatch".to_string(),
+                        "KwReset".to_string(),
+                        "KwResetn".to_string(),
+                        "KwShift".to_string(),
                         "Ident".to_string(),
                         "LParen".to_string(),
                     ],
@@ -277,6 +298,27 @@ impl FrontendParser {
         }
         self.expect("RBrace")?;
         Ok(Expr::match_expr(scrutinee, arms))
+    }
+
+    fn parse_reset(&mut self, multi: bool) -> Result<Expr, FrontendError> {
+        if multi {
+            self.expect("KwResetn")?;
+        } else {
+            self.expect("KwReset")?;
+        }
+        let body = self.parse_block_expr()?;
+        if multi {
+            Ok(Expr::resetn(body))
+        } else {
+            Ok(Expr::reset(body))
+        }
+    }
+
+    fn parse_shift(&mut self) -> Result<Expr, FrontendError> {
+        self.expect("KwShift")?;
+        let binder = self.expect_lexeme("Ident")?;
+        let body = self.parse_block_expr()?;
+        Ok(Expr::shift(binder, body))
     }
 
     fn parse_pattern(&mut self) -> Result<Pattern, FrontendError> {
