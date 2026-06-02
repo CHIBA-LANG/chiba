@@ -24,6 +24,8 @@ pub mod cps_usage;
 pub mod debug;
 #[path = "frontend/parser.rs"]
 pub mod frontend;
+#[path = "semantic/global.rs"]
+pub mod global;
 #[path = "backend/pass/lambda_lift.rs"]
 pub mod lambda_lift;
 #[path = "semantic/monomorphize.rs"]

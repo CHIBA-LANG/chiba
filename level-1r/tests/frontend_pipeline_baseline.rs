@@ -51,6 +51,7 @@ fn frontend_lexes_and_parses_def_source_to_program() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 }
 
@@ -230,6 +231,7 @@ fn frontend_parses_data_decl_and_uses_variants_for_qualified_ctors() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert!(main.core.ops.iter().any(|op| {
@@ -307,6 +309,7 @@ fn frontend_data_decl_allows_zero_arg_qualified_ctor_and_exhaustive_match() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert_eq!(main.pattern.diagnostics, vec![]);
@@ -335,6 +338,7 @@ fn frontend_data_variant_summary_is_independent_of_decl_order() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
     assert_eq!(output.frontend.program.data.len(), 1);
     assert_eq!(output.program.defs.len(), 1);
@@ -363,6 +367,7 @@ fn frontend_supports_parameters_and_variables() {
             assert_eq!(return_type, &None);
             assert_eq!(body, &Expr::var("x"));
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 }
 
@@ -372,28 +377,23 @@ fn frontend_parses_typed_global_value_def_surface() {
         .expect("compile source");
 
     assert_eq!(output.frontend.program.items.len(), 2);
-    match &output.frontend.program.items[0] {
-        SourceItem::Def {
-            name,
-            params,
-            return_type,
-            body,
-        } => {
-            assert_eq!(name, "ANSWER");
-            assert_eq!(params, &Vec::<ParamDecl>::new());
-            assert_eq!(return_type, &Some("I64".to_string()));
-            assert_eq!(body, &Expr::i64(42));
+    assert_eq!(
+        output.frontend.program.items[0],
+        SourceItem::StaticValue {
+            name: "ANSWER".to_string(),
+            ty: Some("I64".to_string()),
+            body: Expr::i64(42),
         }
-    }
+    );
 
     assert_eq!(output.program.entry, Some("main".to_string()));
-    assert_eq!(output.program.defs[0].name, "ANSWER");
-    assert!(output.program.defs[0].output.backend.wat.contains("i32.const 42"));
-    assert!(output
-        .program
-        .backend_link
-        .linked_wat
-        .contains("(func $ANSWER (result i32)"));
+    assert_eq!(output.program.defs.len(), 1);
+    assert_eq!(output.program.defs[0].name, "main");
+    assert_eq!(
+        output.program.global_init.init_order,
+        vec!["ANSWER".to_string()]
+    );
+    assert_eq!(output.program.global_init.statics[0].ty, Some("I64".to_string()));
 }
 
 #[test]
@@ -412,6 +412,39 @@ fn frontend_consumes_parameter_and_return_type_annotations() {
             assert_eq!(return_type, &Some("I64".to_string()));
             assert_eq!(body, &Expr::var("x"));
         }
+        other => panic!("expected function def, got {other:?}"),
+    }
+}
+
+#[test]
+fn frontend_parses_static_value_defs_separately_from_zero_arg_functions() {
+    let output = parse_source_program("def ONE: i64 = 1 def TWO = ONE def main() = TWO")
+        .expect("frontend parse");
+
+    assert_eq!(output.program.items.len(), 3);
+    assert_eq!(
+        output.program.items[0],
+        SourceItem::StaticValue {
+            name: "ONE".to_string(),
+            ty: Some("i64".to_string()),
+            body: Expr::i64(1),
+        }
+    );
+    assert_eq!(
+        output.program.items[1],
+        SourceItem::StaticValue {
+            name: "TWO".to_string(),
+            ty: None,
+            body: Expr::var("ONE"),
+        }
+    );
+    match &output.program.items[2] {
+        SourceItem::Def { name, params, body, .. } => {
+            assert_eq!(name, "main");
+            assert_eq!(params, &Vec::<ParamDecl>::new());
+            assert_eq!(body, &Expr::var("TWO"));
+        }
+        other => panic!("expected zero arg function def, got {other:?}"),
     }
 }
 
@@ -430,6 +463,7 @@ fn frontend_parses_call_before_infix_and_reaches_cps_shape() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let bundle = compile_program_bundle(&parsed.program);
@@ -467,6 +501,7 @@ fn frontend_preserves_multi_argument_calls_through_cps_and_core() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let bundle = compile_program_bundle(&parsed.program);
@@ -508,6 +543,7 @@ fn frontend_pipe_defaults_to_first_argument_call() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let bundle = compile_program_bundle(&parsed.program);
@@ -546,6 +582,7 @@ fn frontend_pipe_placeholder_replaces_each_hole_with_input() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let bundle = compile_program_bundle(&parsed.program);
@@ -569,6 +606,7 @@ fn frontend_pipe_method_path_is_receiver_first_desugar() {
                 &Expr::method_call_args(Expr::var("value"), "push", vec![Expr::i64(1)])
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let bundle = compile_program_bundle(&parsed.program);
@@ -598,6 +636,7 @@ fn frontend_pipe_chains_left_to_right() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let bundle = compile_program_bundle(&parsed.program);
@@ -618,6 +657,7 @@ fn frontend_parses_range_value_as_shared_ast_node() {
         SourceItem::Def { body, .. } => {
             assert_eq!(body, &Expr::range(Expr::var("start"), Expr::var("end")));
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let bundle = compile_program_bundle(&parsed.program);
@@ -636,6 +676,7 @@ fn frontend_indexing_enters_operator_obligation_path() {
         SourceItem::Def { body, .. } => {
             assert_eq!(body, &Expr::index(Expr::var("values"), Expr::var("i")));
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let bundle = compile_program_bundle(&parsed.program);
@@ -684,6 +725,7 @@ fn frontend_slice_indexing_uses_index_slice_operator_path() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let bundle = compile_program_bundle(&parsed.program);
@@ -738,6 +780,7 @@ fn frontend_parses_if_then_else_through_branch_cps_and_wat() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let main = &output.program.defs[0].output;
@@ -770,6 +813,7 @@ fn frontend_parses_match_with_literal_and_wildcard_through_cps_core() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let main = &output.program.defs[0].output;
@@ -820,6 +864,7 @@ fn frontend_parses_nested_tuple_record_and_at_patterns() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let main = &output.program.defs[0].output;
@@ -851,6 +896,7 @@ fn frontend_parses_qualified_adt_constructor_expression() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert_eq!(main.cps.to_string(), "halt Option.Some(1)");
@@ -883,6 +929,7 @@ fn frontend_unknown_qualified_call_is_not_guessed_as_adt_ctor() {
                 &Expr::method_call_args(Expr::var("Option"), "Some", vec![Expr::i64(1)])
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert!(main.cps.to_string().contains("Option.Some(1,"));
@@ -920,6 +967,7 @@ fn frontend_utf8_identifiers_and_ctors_are_not_ascii_case_guessed() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert_eq!(main.cps.to_string(), "halt 选项.成功(1)");
@@ -971,6 +1019,7 @@ fn frontend_accepts_greek_chinese_and_emoji_symbols() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert!(main.core.ops.iter().any(|op| {
@@ -1025,6 +1074,7 @@ fn frontend_parses_qualified_constructor_patterns() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert!(main.cps.to_string().contains("Option.Some(value) =>"));
@@ -1049,6 +1099,7 @@ fn frontend_parses_if_let_block_form_through_pattern_env_and_cps() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     let main = &output.program.defs[0].output;
@@ -1115,6 +1166,7 @@ fn frontend_parses_tuple_and_stable_underscore_field_access() {
                 &Expr::field(Expr::tuple(vec![Expr::i64(1), Expr::bool(true)]), "_2")
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert!(main.cps.to_string().contains("Tuple2_I64_Bool(_1=1, _2=true)._2"));
@@ -1147,6 +1199,7 @@ fn frontend_parses_record_literal_field_and_update_through_core() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert!(main.cps.to_string().contains("record::x+y{x=1, y=false}.y"));
@@ -1177,6 +1230,7 @@ fn frontend_parses_dot_method_call_as_method_call_ast() {
                 &Expr::method_call(Expr::var("receiver"), "show", Expr::i64(0))
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert!(main.cps.to_string().contains("receiver.show(0,"));
@@ -1206,6 +1260,7 @@ fn frontend_preserves_multi_argument_method_calls_through_cps_and_core() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert!(main.cps.to_string().contains("receiver.put(1, 2,"));
@@ -1230,6 +1285,7 @@ fn frontend_parses_lambda_closure_surface_to_lifted_function() {
         SourceItem::Def { body, .. } => {
             assert_eq!(body, &Expr::lambda("x", Expr::var("x")));
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert_eq!(main.closure.closures.len(), 1);
@@ -1261,6 +1317,7 @@ fn frontend_parses_nested_lambda_and_preserves_capture_env() {
                 )
             );
         }
+        other => panic!("expected function def, got {other:?}"),
     }
 
     assert_eq!(main.closure.closures.len(), 2);

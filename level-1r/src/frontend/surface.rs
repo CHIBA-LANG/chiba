@@ -7,6 +7,7 @@ pub struct ProjectSurface {
     pub namespace: String,
     pub imports: Vec<String>,
     pub defs: Vec<SurfaceDef>,
+    pub statics: Vec<SurfaceStatic>,
     pub data: Vec<SurfaceData>,
     pub constructors: Vec<SurfaceConstructor>,
 }
@@ -18,6 +19,13 @@ pub struct SurfaceDef {
     pub arity: usize,
     pub param_types: Vec<Option<String>>,
     pub return_type: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SurfaceStatic {
+    pub owner: String,
+    pub name: String,
+    pub ty: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,6 +48,7 @@ pub struct SurfaceConstructor {
 pub struct InterfaceSummary {
     pub namespace: String,
     pub functions: Vec<InterfaceFunction>,
+    pub statics: Vec<InterfaceStatic>,
     pub data: Vec<InterfaceData>,
     pub constructors: Vec<InterfaceConstructor>,
     pub imports: Vec<String>,
@@ -52,6 +61,12 @@ pub struct InterfaceFunction {
     pub arity: usize,
     pub param_types: Vec<Option<String>>,
     pub return_type: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterfaceStatic {
+    pub symbol: String,
+    pub ty: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,19 +93,32 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
     let defs = program
         .items
         .iter()
-        .map(|item| match item {
+        .filter_map(|item| match item {
             SourceItem::Def {
                 name,
                 params,
                 return_type,
                 ..
-            } => SurfaceDef {
+            } => Some(SurfaceDef {
                 owner: namespace.clone(),
                 name: name.clone(),
                 arity: params.len(),
                 param_types: params.iter().map(|param| param.ty.clone()).collect(),
                 return_type: return_type.clone(),
-            },
+            }),
+            SourceItem::StaticValue { .. } => None,
+        })
+        .collect();
+    let statics = program
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            SourceItem::StaticValue { name, ty, .. } => Some(SurfaceStatic {
+                owner: namespace.clone(),
+                name: name.clone(),
+                ty: ty.clone(),
+            }),
+            SourceItem::Def { .. } => None,
         })
         .collect();
     let data = program
@@ -107,6 +135,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         namespace,
         imports,
         defs,
+        statics,
         data,
         constructors,
     }
@@ -121,6 +150,14 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
             arity: def.arity,
             param_types: def.param_types.clone(),
             return_type: def.return_type.clone(),
+        })
+        .collect();
+    let statics = surface
+        .statics
+        .iter()
+        .map(|static_value| InterfaceStatic {
+            symbol: owned_symbol(&static_value.owner, &static_value.name),
+            ty: static_value.ty.clone(),
         })
         .collect();
     let data = surface
@@ -145,6 +182,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
     InterfaceSummary {
         namespace: surface.namespace.clone(),
         functions,
+        statics,
         data,
         constructors,
         imports: surface.imports.clone(),
@@ -229,6 +267,12 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
         text.push(')');
         text.push_str("->");
         text.push_str(def.return_type.as_deref().unwrap_or("_"));
+    }
+    for static_value in &surface.statics {
+        text.push_str("|static:");
+        text.push_str(&static_value.name);
+        text.push(':');
+        text.push_str(static_value.ty.as_deref().unwrap_or("_"));
     }
     for data in &surface.data {
         text.push_str("|data:");

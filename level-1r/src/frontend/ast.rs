@@ -25,6 +25,11 @@ pub enum SourceItem {
         return_type: Option<String>,
         body: Expr,
     },
+    StaticValue {
+        name: String,
+        ty: Option<String>,
+        body: Expr,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -143,6 +148,31 @@ impl ParamDecl {
         Self::new(name, None)
     }
 }
+
+impl SourceItem {
+    pub fn def(
+        name: impl Into<String>,
+        params: Vec<ParamDecl>,
+        return_type: Option<String>,
+        body: Expr,
+    ) -> Self {
+        Self::Def {
+            name: name.into(),
+            params,
+            return_type,
+            body,
+        }
+    }
+
+    pub fn static_value(name: impl Into<String>, ty: Option<String>, body: Expr) -> Self {
+        Self::StaticValue {
+            name: name.into(),
+            ty,
+            body,
+        }
+    }
+}
+
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {

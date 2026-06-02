@@ -240,15 +240,15 @@ impl FrontendParser {
         let name = self.expect_lexeme("Ident")?;
         if self.peek_name() == Some("Colon") {
             self.pos += 1;
-            let return_type = Some(self.expect_type_name()?);
+            let ty = Some(self.expect_type_name()?);
             self.expect("Eq")?;
             let body = self.parse_expr_bp(0)?;
-            return Ok(SourceItem::Def {
-                name,
-                params: Vec::new(),
-                return_type,
-                body,
-            });
+            return Ok(SourceItem::static_value(name, ty, body));
+        }
+        if self.peek_name() == Some("Eq") {
+            self.pos += 1;
+            let body = self.parse_expr_bp(0)?;
+            return Ok(SourceItem::static_value(name, None, body));
         }
         self.expect("LParen")?;
         let params = self.parse_params()?;
@@ -1108,19 +1108,24 @@ fn enrich_item_with_data_variants(
     item: SourceItem,
     variants: &BTreeMap<String, Vec<String>>,
 ) -> SourceItem {
-    match item {
-        SourceItem::Def {
-            name,
-            params,
-            return_type,
-            body,
-        } => SourceItem::Def {
-            name,
-            params,
-            return_type,
-            body: enrich_expr_with_data_variants(body, variants),
-        },
-    }
+        match item {
+            SourceItem::Def {
+                name,
+                params,
+                return_type,
+                body,
+            } => SourceItem::Def {
+                name,
+                params,
+                return_type,
+                body: enrich_expr_with_data_variants(body, variants),
+            },
+            SourceItem::StaticValue { name, ty, body } => SourceItem::StaticValue {
+                name,
+                ty,
+                body: enrich_expr_with_data_variants(body, variants),
+            },
+        }
 }
 
 fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<String>>) -> Expr {

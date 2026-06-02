@@ -17,6 +17,7 @@ use crate::cps_usage::{
 };
 use crate::debug::{render_visual_report, visual_report, VisualReport};
 use crate::frontend::{parse_source_program, FrontendError, FrontendOutput};
+use crate::global::{analyze_global_init, GlobalInitDiagnostic, GlobalInitPlan};
 use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
 use crate::monomorphize::{schedule_monomorphization, MonomorphizationPlan};
 use crate::nanopass::PassReport;
@@ -71,6 +72,7 @@ pub struct ProgramCompileOutput {
     pub imports: Vec<UseDecl>,
     pub surface: ProjectSurface,
     pub interface: InterfaceSummary,
+    pub global_init: GlobalInitPlan,
     pub defs: Vec<ProgramDefOutput>,
     pub diagnostics: Vec<ProgramDiagnostic>,
     pub entry: Option<String>,
@@ -97,6 +99,9 @@ pub enum ProgramDiagnostic {
     DuplicateDef { name: String },
     DuplicateData { name: String },
     DuplicateConstructor { name: String },
+    DuplicateStatic { name: String },
+    StaticFunctionNameConflict { name: String },
+    StaticInitCycle { cycle: Vec<String> },
     MissingEntry,
     EntryHasParams { name: String, params: Vec<String> },
 }
@@ -302,19 +307,26 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         "ProgramDiagnostics",
         || program_surface_diagnostics(&surface),
     );
+    let global_init = passes.record(
+        "P4GlobalInit",
+        "SourceProgram+ProjectSurface",
+        "GlobalInitPlan",
+        || analyze_global_init(program),
+    );
     let defs = passes.record(
-        "P4ProgramDefs",
+        "P5ProgramDefs",
         "SourceProgram+InterfaceSummary",
         "ProgramDefOutput",
         || compile_program_defs(program, &interface),
     );
     let entry = passes.record(
-        "P5ProgramEntry",
+        "P6ProgramEntry",
         "ProgramDefOutput",
         "EntrySelection",
         || select_program_entry(&defs),
     );
     let mut all_diagnostics = diagnostics;
+    all_diagnostics.extend(global_init.diagnostics.iter().cloned().map(Into::into));
     if entry.is_none() {
         all_diagnostics.push(ProgramDiagnostic::MissingEntry);
     }
@@ -329,13 +341,13 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         }
     }
     let backend_link = passes.record(
-        "P6ProgramBackendLink",
+        "P7ProgramBackendLink",
         "ProgramDefOutput+EntrySelection",
         "BackendLinkedBundle",
         || link_backend_artifacts(program_backend_artifacts(&defs, entry.as_deref())),
     );
     let backend_cache_key = passes.record(
-        "P7ProgramBackendCacheKey",
+        "P8ProgramBackendCacheKey",
         "BackendLinkedBundle",
         "BackendCacheKey",
         || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
@@ -345,6 +357,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         imports: program.imports.clone(),
         surface,
         interface,
+        global_init,
         defs,
         diagnostics: all_diagnostics,
         entry,
@@ -362,14 +375,15 @@ fn compile_program_defs(
     program
         .items
         .iter()
-        .map(|item| match item {
+        .filter_map(|item| match item {
             SourceItem::Def {
                 name, params, body, ..
-            } => ProgramDefOutput {
+            } => Some(ProgramDefOutput {
                 name: name.clone(),
                 params: params.iter().map(|param| param.name.clone()).collect(),
                 output: compile_expr_with_name_index(body, names.clone()),
-            },
+            }),
+            SourceItem::StaticValue { .. } => None,
         })
         .collect()
 }
@@ -395,6 +409,22 @@ fn program_surface_diagnostics(surface: &ProjectSurface) -> Vec<ProgramDiagnosti
             .map(|name| ProgramDiagnostic::DuplicateConstructor { name }),
     );
     diagnostics
+}
+
+impl From<GlobalInitDiagnostic> for ProgramDiagnostic {
+    fn from(diagnostic: GlobalInitDiagnostic) -> Self {
+        match diagnostic {
+            GlobalInitDiagnostic::DuplicateStatic { name } => {
+                ProgramDiagnostic::DuplicateStatic { name }
+            }
+            GlobalInitDiagnostic::StaticFunctionNameConflict { name } => {
+                ProgramDiagnostic::StaticFunctionNameConflict { name }
+            }
+            GlobalInitDiagnostic::StaticInitCycle { cycle } => {
+                ProgramDiagnostic::StaticInitCycle { cycle }
+            }
+        }
+    }
 }
 
 fn select_program_entry(defs: &[ProgramDefOutput]) -> Option<String> {
@@ -474,6 +504,7 @@ impl ProgramCompileOutput {
                 .collect::<Vec<_>>()
         ));
         out.push_str(&format!("  defs={}\n", self.defs.len()));
+        out.push_str(&format!("  global-init={:#?}\n", self.global_init));
         out.push_str(&format!("  surface={:#?}\n", self.surface));
         out.push_str(&format!("  interface={:#?}\n", self.interface));
         out.push_str(&format!("  entry={:?}\n", self.entry));

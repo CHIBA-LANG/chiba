@@ -12,6 +12,14 @@ fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
     }
 }
 
+fn static_value(name: &str, ty: Option<&str>, body: Expr) -> SourceItem {
+    SourceItem::StaticValue {
+        name: name.to_string(),
+        ty: ty.map(str::to_string),
+        body,
+    }
+}
+
 #[test]
 fn compile_program_keeps_legacy_per_def_outputs() {
     let program = SourceProgram::new(vec![
@@ -154,6 +162,106 @@ fn interface_summary_preserves_function_signature_types() {
 }
 
 #[test]
+fn program_surface_and_interface_preserve_static_values_separately_from_functions() {
+    let program = SourceProgram::new(vec![
+        static_value("ONE", Some("i64"), Expr::i64(1)),
+        def("main", vec![], Expr::var("ONE")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.surface.defs.len(), 1);
+    assert_eq!(bundle.surface.defs[0].name, "main");
+    assert_eq!(bundle.surface.statics.len(), 1);
+    assert_eq!(bundle.surface.statics[0].name, "ONE");
+    assert_eq!(bundle.surface.statics[0].ty, Some("i64".to_string()));
+    assert_eq!(bundle.interface.functions[0].symbol, "root::main");
+    assert_eq!(bundle.interface.statics[0].symbol, "root::ONE");
+    assert_eq!(bundle.interface.statics[0].ty, Some("i64".to_string()));
+    assert_eq!(bundle.defs.len(), 1);
+    assert_eq!(bundle.defs[0].name, "main");
+}
+
+#[test]
+fn global_init_allows_ordered_and_forward_static_dependencies() {
+    let program = SourceProgram::new(vec![
+        static_value("THREE", Some("i64"), Expr::var("TWO")),
+        static_value("ONE", Some("i64"), Expr::i64(1)),
+        static_value(
+            "TWO",
+            Some("i64"),
+            Expr::binary(chiba_level1r::ast::BinaryOp::Add, Expr::var("ONE"), Expr::i64(1)),
+        ),
+        def("main", vec![], Expr::var("THREE")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_eq!(
+        bundle
+            .global_init
+            .statics
+            .iter()
+            .map(|static_value| {
+                (
+                    static_value.name.as_str(),
+                    static_value.dependencies.as_slice(),
+                )
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            ("THREE", &["TWO".to_string()][..]),
+            ("ONE", &[][..]),
+            ("TWO", &["ONE".to_string()][..]),
+        ]
+    );
+    assert_eq!(
+        bundle.global_init.init_order,
+        vec!["ONE".to_string(), "TWO".to_string(), "THREE".to_string()]
+    );
+}
+
+#[test]
+fn global_init_reports_cycles_and_duplicate_static_names() {
+    let program = SourceProgram::new(vec![
+        static_value("A", None, Expr::var("B")),
+        static_value("B", None, Expr::var("A")),
+        static_value("A", None, Expr::i64(0)),
+        def("main", vec![], Expr::i64(0)),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(bundle.diagnostics.contains(&ProgramDiagnostic::DuplicateStatic {
+        name: "A".to_string(),
+    }));
+    assert!(bundle.diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic,
+            ProgramDiagnostic::StaticInitCycle { cycle }
+                if cycle == &vec!["A".to_string(), "B".to_string(), "A".to_string()]
+        )
+    }));
+}
+
+#[test]
+fn global_init_reports_static_function_name_conflict() {
+    let program = SourceProgram::new(vec![
+        static_value("main", Some("i64"), Expr::i64(1)),
+        def("main", vec![], Expr::i64(0)),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(bundle.diagnostics.contains(
+        &ProgramDiagnostic::StaticFunctionNameConflict {
+            name: "main".to_string(),
+        }
+    ));
+}
+
+#[test]
 fn program_surface_reports_duplicate_data_and_constructor_names() {
     let program = SourceProgram::with_surface(
         None,
@@ -274,12 +382,14 @@ fn program_summary_contains_program_level_nanopass_events() {
     assert!(summary.contains("P1ProjectSurface: SourceProgram -> ProjectSurface"));
     assert!(summary.contains("P2InterfaceSummary: ProjectSurface -> InterfaceSummary"));
     assert!(summary.contains("P3ProgramDiagnostics: ProjectSurface -> ProgramDiagnostics"));
+    assert!(summary.contains("P4GlobalInit: SourceProgram+ProjectSurface -> GlobalInitPlan"));
     assert!(summary.contains(
-        "P4ProgramDefs: SourceProgram+InterfaceSummary -> ProgramDefOutput"
+        "P5ProgramDefs: SourceProgram+InterfaceSummary -> ProgramDefOutput"
     ));
-    assert!(summary.contains("P5ProgramEntry: ProgramDefOutput -> EntrySelection"));
+    assert!(summary.contains("P6ProgramEntry: ProgramDefOutput -> EntrySelection"));
     assert!(summary.contains(
-        "P6ProgramBackendLink: ProgramDefOutput+EntrySelection -> BackendLinkedBundle"
+        "P7ProgramBackendLink: ProgramDefOutput+EntrySelection -> BackendLinkedBundle"
     ));
-    assert!(summary.contains("P7ProgramBackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
+    assert!(summary.contains("P8ProgramBackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
+    assert!(summary.contains("global-init=GlobalInitPlan"));
 }
