@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::ast::Literal;
 use crate::control::ContinuationKind;
-use crate::typed::{TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind, Type};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpsProgram {
@@ -104,11 +104,24 @@ fn transform(
             )
         }
         TypedExprKind::Call { callee, arg } => {
-            let callee_controls = controls.clone();
+            transform_call(callee, arg, k, controls, ctx)
+        }
+        TypedExprKind::Field { receiver, name } => transform(
+            receiver,
+            Box::new(|value, ctx| k(CpsAtom::Var(format!("{value}.{name}")), ctx)),
+            controls,
+            ctx,
+        ),
+        TypedExprKind::MethodCall {
+            receiver,
+            name,
+            arg,
+        } => {
+            let receiver_controls = controls.clone();
             let arg_controls = controls;
             transform(
-                callee,
-                Box::new(|func, ctx| {
+                receiver,
+                Box::new(|receiver, ctx| {
                     let arg_controls = arg_controls.clone();
                     transform(
                         arg,
@@ -116,7 +129,7 @@ fn transform(
                             let w = ctx.fresh("w");
                             let kont_body = k(CpsAtom::Var(w.clone()), ctx);
                             CpsTerm::AppFun {
-                                func,
+                                func: CpsAtom::Var(format!("{receiver}.{name}")),
                                 arg,
                                 kont: CpsAtom::ContLambda {
                                     param: w,
@@ -128,9 +141,43 @@ fn transform(
                         ctx,
                     )
                 }),
-                callee_controls,
+                receiver_controls,
                 ctx,
             )
+        }
+        TypedExprKind::Binary { op, lhs, rhs } => {
+            let op_name = format!("operator::{op:?}");
+            let lhs_controls = controls.clone();
+            let rhs_controls = controls;
+            transform(
+                lhs,
+                Box::new(|lhs, ctx| {
+                    let rhs_controls = rhs_controls.clone();
+                    transform(
+                        rhs,
+                        Box::new(|rhs, ctx| {
+                            let w = ctx.fresh("w");
+                            let kont_body = k(CpsAtom::Var(w.clone()), ctx);
+                            CpsTerm::AppFun {
+                                func: CpsAtom::Var(format!("{op_name}({lhs})")),
+                                arg: rhs,
+                                kont: CpsAtom::ContLambda {
+                                    param: w,
+                                    body: Box::new(kont_body),
+                                },
+                            }
+                        }),
+                        rhs_controls,
+                        ctx,
+                    )
+                }),
+                lhs_controls,
+                ctx,
+            )
+        }
+        TypedExprKind::Nominal { expr, .. } => {
+            let _ = nominal_atom_type(expr);
+            transform(expr, k, controls, ctx)
         }
         TypedExprKind::Reset { multi, body } => {
             let mut nested_controls = controls;
@@ -154,6 +201,49 @@ fn transform(
                 body: Box::new(body),
             }
         }
+    }
+}
+
+fn transform_call(
+    callee: &TypedExpr,
+    arg: &TypedExpr,
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    let callee_controls = controls.clone();
+    let arg_controls = controls;
+    transform(
+        callee,
+        Box::new(|func, ctx| {
+            let arg_controls = arg_controls.clone();
+            transform(
+                arg,
+                Box::new(|arg, ctx| {
+                    let w = ctx.fresh("w");
+                    let kont_body = k(CpsAtom::Var(w.clone()), ctx);
+                    CpsTerm::AppFun {
+                        func,
+                        arg,
+                        kont: CpsAtom::ContLambda {
+                            param: w,
+                            body: Box::new(kont_body),
+                        },
+                    }
+                }),
+                arg_controls,
+                ctx,
+            )
+        }),
+        callee_controls,
+        ctx,
+    )
+}
+
+fn nominal_atom_type(expr: &TypedExpr) -> Option<&String> {
+    match &expr.ty {
+        Type::Nominal(name) => Some(name),
+        _ => None,
     }
 }
 

@@ -24,6 +24,24 @@ pub enum Expr {
         callee: Box<Expr>,
         arg: Box<Expr>,
     },
+    Field {
+        receiver: Box<Expr>,
+        name: String,
+    },
+    MethodCall {
+        receiver: Box<Expr>,
+        name: String,
+        arg: Box<Expr>,
+    },
+    Binary {
+        op: BinaryOp,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+    },
+    Nominal {
+        name: String,
+        expr: Box<Expr>,
+    },
     Reset {
         multi: bool,
         body: Box<Expr>,
@@ -38,6 +56,14 @@ pub enum Expr {
 pub enum Literal {
     I64(i64),
     Bool(bool),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
 }
 
 impl Expr {
@@ -64,6 +90,36 @@ impl Expr {
         Self::Call {
             callee: Box::new(callee),
             arg: Box::new(arg),
+        }
+    }
+
+    pub fn field(receiver: Expr, name: impl Into<String>) -> Self {
+        Self::Field {
+            receiver: Box::new(receiver),
+            name: name.into(),
+        }
+    }
+
+    pub fn method_call(receiver: Expr, name: impl Into<String>, arg: Expr) -> Self {
+        Self::MethodCall {
+            receiver: Box::new(receiver),
+            name: name.into(),
+            arg: Box::new(arg),
+        }
+    }
+
+    pub fn binary(op: BinaryOp, lhs: Expr, rhs: Expr) -> Self {
+        Self::Binary {
+            op,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        }
+    }
+
+    pub fn nominal(name: impl Into<String>, expr: Expr) -> Self {
+        Self::Nominal {
+            name: name.into(),
+            expr: Box::new(expr),
         }
     }
 

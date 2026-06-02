@@ -46,6 +46,16 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
             visit(callee, stack, facts);
             visit(arg, stack, facts);
         }
+        TypedExprKind::Field { receiver, .. } => visit(receiver, stack, facts),
+        TypedExprKind::MethodCall { receiver, arg, .. } => {
+            visit(receiver, stack, facts);
+            visit(arg, stack, facts);
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            visit(lhs, stack, facts);
+            visit(rhs, stack, facts);
+        }
+        TypedExprKind::Nominal { expr, .. } => visit(expr, stack, facts),
         TypedExprKind::Reset { multi, body } => {
             stack.push(Boundary {
                 kind: if *multi {

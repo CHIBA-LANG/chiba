@@ -8,6 +8,7 @@ Current baseline:
 
 - source expression model
 - alpha conversion with stable binder ids and undefined-name diagnostics
+- method/operator resolve facts with nominal receiver candidates
 - typed expression skeleton
 - binder-id usage facts
 - one-pass CBV CPS with meta-continuations
@@ -17,7 +18,7 @@ Current baseline:
 - chibalex maximal-munch lexer baseline
 - chibacc token parser baseline
 - chibacc Pratt expression parser baseline
-- visual report across source / alpha / typed / usage / cps
+- visual report across source / alpha / resolve / typed / usage / cps
 
 Run:
 

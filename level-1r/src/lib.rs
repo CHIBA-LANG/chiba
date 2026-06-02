@@ -10,6 +10,7 @@ pub mod debug;
 pub mod nanopass;
 pub mod pipeline;
 pub mod regex;
+pub mod resolve;
 pub mod typed;
 pub mod usage;
 
@@ -18,3 +19,4 @@ pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use cps::{cps_program, CpsProgram};
 pub use debug::{render_visual_report, VisualReport};
 pub use pipeline::{compile_expr, compile_program, CompileOutput};
+pub use resolve::{resolve_expr, MethodIndex, ResolveFacts};

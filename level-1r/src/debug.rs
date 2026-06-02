@@ -7,6 +7,7 @@ use crate::control::ControlFacts;
 use crate::core::CoreProgram;
 use crate::cps::CpsProgram;
 use crate::nanopass::PassReport;
+use crate::resolve::ResolveFacts;
 use crate::typed::TypedExpr;
 use crate::usage::UsageFacts;
 
@@ -14,6 +15,7 @@ use crate::usage::UsageFacts;
 pub struct VisualReport {
     pub source: String,
     pub alpha: String,
+    pub resolve: String,
     pub typed: String,
     pub control: String,
     pub usage: String,
@@ -29,6 +31,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.source).unwrap();
     writeln!(out, "alpha:").unwrap();
     writeln!(out, "  {}", report.alpha).unwrap();
+    writeln!(out, "resolve:").unwrap();
+    writeln!(out, "  {}", report.resolve).unwrap();
     writeln!(out, "typed:").unwrap();
     writeln!(out, "  {}", report.typed).unwrap();
     writeln!(out, "control:").unwrap();
@@ -51,6 +55,7 @@ pub fn render_visual_report(report: &VisualReport) -> String {
 pub fn visual_report(
     source: &Expr,
     alpha: &AlphaFacts,
+    resolve: &ResolveFacts,
     typed: &TypedExpr,
     control: &ControlFacts,
     usage: &UsageFacts,
@@ -62,6 +67,7 @@ pub fn visual_report(
     VisualReport {
         source: format!("{source:?}"),
         alpha: format!("{alpha:#?}"),
+        resolve: format!("{resolve:#?}"),
         typed: format!("{typed:#?}"),
         control: format!("{control:#?}"),
         usage: format!("{usage:#?}"),

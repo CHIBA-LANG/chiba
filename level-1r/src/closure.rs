@@ -49,6 +49,16 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
             collect(callee, scope, facts);
             collect(arg, scope, facts);
         }
+        TypedExprKind::Field { receiver, .. } => collect(receiver, scope, facts),
+        TypedExprKind::MethodCall { receiver, arg, .. } => {
+            collect(receiver, scope, facts);
+            collect(arg, scope, facts);
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            collect(lhs, scope, facts);
+            collect(rhs, scope, facts);
+        }
+        TypedExprKind::Nominal { expr, .. } => collect(expr, scope, facts),
         TypedExprKind::Reset { body, .. } | TypedExprKind::Shift { body, .. } => {
             collect(body, scope, facts);
         }
@@ -89,6 +99,16 @@ fn collect_alpha(expr: &AlphaExpr, scope: &mut BTreeSet<BinderId>, facts: &mut C
             collect_alpha(callee, scope, facts);
             collect_alpha(arg, scope, facts);
         }
+        AlphaExprKind::Field { receiver, .. } => collect_alpha(receiver, scope, facts),
+        AlphaExprKind::MethodCall { receiver, arg, .. } => {
+            collect_alpha(receiver, scope, facts);
+            collect_alpha(arg, scope, facts);
+        }
+        AlphaExprKind::Binary { lhs, rhs, .. } => {
+            collect_alpha(lhs, scope, facts);
+            collect_alpha(rhs, scope, facts);
+        }
+        AlphaExprKind::Nominal { expr, .. } => collect_alpha(expr, scope, facts),
         AlphaExprKind::Reset { body, .. } | AlphaExprKind::Shift { body, .. } => {
             collect_alpha(body, scope, facts);
         }
@@ -140,6 +160,16 @@ fn collect_alpha_free_vars(
             collect_alpha_free_vars(callee, locals, free);
             collect_alpha_free_vars(arg, locals, free);
         }
+        AlphaExprKind::Field { receiver, .. } => collect_alpha_free_vars(receiver, locals, free),
+        AlphaExprKind::MethodCall { receiver, arg, .. } => {
+            collect_alpha_free_vars(receiver, locals, free);
+            collect_alpha_free_vars(arg, locals, free);
+        }
+        AlphaExprKind::Binary { lhs, rhs, .. } => {
+            collect_alpha_free_vars(lhs, locals, free);
+            collect_alpha_free_vars(rhs, locals, free);
+        }
+        AlphaExprKind::Nominal { expr, .. } => collect_alpha_free_vars(expr, locals, free),
         AlphaExprKind::Reset { body, .. } | AlphaExprKind::Shift { body, .. } => {
             collect_alpha_free_vars(body, locals, free);
         }
@@ -167,6 +197,16 @@ fn collect_free_vars(
             collect_free_vars(callee, locals, free);
             collect_free_vars(arg, locals, free);
         }
+        TypedExprKind::Field { receiver, .. } => collect_free_vars(receiver, locals, free),
+        TypedExprKind::MethodCall { receiver, arg, .. } => {
+            collect_free_vars(receiver, locals, free);
+            collect_free_vars(arg, locals, free);
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            collect_free_vars(lhs, locals, free);
+            collect_free_vars(rhs, locals, free);
+        }
+        TypedExprKind::Nominal { expr, .. } => collect_free_vars(expr, locals, free),
         TypedExprKind::Reset { body, .. } | TypedExprKind::Shift { body, .. } => {
             collect_free_vars(body, locals, free);
         }

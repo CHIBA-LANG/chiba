@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Literal};
+use crate::ast::{BinaryOp, Expr, Literal};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypedExpr {
@@ -21,6 +21,24 @@ pub enum TypedExprKind {
         callee: Box<TypedExpr>,
         arg: Box<TypedExpr>,
     },
+    Field {
+        receiver: Box<TypedExpr>,
+        name: String,
+    },
+    MethodCall {
+        receiver: Box<TypedExpr>,
+        name: String,
+        arg: Box<TypedExpr>,
+    },
+    Binary {
+        op: BinaryOp,
+        lhs: Box<TypedExpr>,
+        rhs: Box<TypedExpr>,
+    },
+    Nominal {
+        name: String,
+        expr: Box<TypedExpr>,
+    },
     Reset {
         multi: bool,
         body: Box<TypedExpr>,
@@ -36,6 +54,7 @@ pub enum Type {
     Unknown,
     I64,
     Bool,
+    Nominal(String),
     Func(Box<Type>, Box<Type>),
 }
 
@@ -84,6 +103,54 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                     arg: Box::new(arg),
                 },
                 Type::Unknown,
+            )
+        }
+        Expr::Field { receiver, name } => {
+            let receiver = type_expr(receiver);
+            typed(
+                TypedExprKind::Field {
+                    receiver: Box::new(receiver),
+                    name: name.clone(),
+                },
+                Type::Unknown,
+            )
+        }
+        Expr::MethodCall {
+            receiver,
+            name,
+            arg,
+        } => {
+            let receiver = type_expr(receiver);
+            let arg = type_expr(arg);
+            typed(
+                TypedExprKind::MethodCall {
+                    receiver: Box::new(receiver),
+                    name: name.clone(),
+                    arg: Box::new(arg),
+                },
+                Type::Unknown,
+            )
+        }
+        Expr::Binary { op, lhs, rhs } => {
+            let lhs = type_expr(lhs);
+            let rhs = type_expr(rhs);
+            typed(
+                TypedExprKind::Binary {
+                    op: op.clone(),
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
+                Type::Unknown,
+            )
+        }
+        Expr::Nominal { name, expr } => {
+            let expr = type_expr(expr);
+            typed(
+                TypedExprKind::Nominal {
+                    name: name.clone(),
+                    expr: Box::new(expr),
+                },
+                Type::Nominal(name.clone()),
             )
         }
         Expr::Reset { multi, body } => {

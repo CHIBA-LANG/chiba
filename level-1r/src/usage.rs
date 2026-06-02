@@ -56,6 +56,16 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
             visit(callee, facts);
             visit(arg, facts);
         }
+        TypedExprKind::Field { receiver, .. } => visit(receiver, facts),
+        TypedExprKind::MethodCall { receiver, arg, .. } => {
+            visit(receiver, facts);
+            visit(arg, facts);
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            visit(lhs, facts);
+            visit(rhs, facts);
+        }
+        TypedExprKind::Nominal { expr, .. } => visit(expr, facts),
         TypedExprKind::Reset { body, .. } => visit(body, facts),
         TypedExprKind::Shift { body, .. } => visit(body, facts),
     }
@@ -86,6 +96,16 @@ fn visit_alpha(expr: &AlphaExpr, facts: &mut UsageFacts) {
             visit_alpha(callee, facts);
             visit_alpha(arg, facts);
         }
+        AlphaExprKind::Field { receiver, .. } => visit_alpha(receiver, facts),
+        AlphaExprKind::MethodCall { receiver, arg, .. } => {
+            visit_alpha(receiver, facts);
+            visit_alpha(arg, facts);
+        }
+        AlphaExprKind::Binary { lhs, rhs, .. } => {
+            visit_alpha(lhs, facts);
+            visit_alpha(rhs, facts);
+        }
+        AlphaExprKind::Nominal { expr, .. } => visit_alpha(expr, facts),
         AlphaExprKind::Reset { body, .. } => visit_alpha(body, facts),
         AlphaExprKind::Shift { body, .. } => visit_alpha(body, facts),
     }

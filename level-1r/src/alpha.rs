@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use crate::ast::{Expr, Literal};
+use crate::ast::{BinaryOp, Expr, Literal};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BinderId(pub usize);
@@ -28,6 +28,24 @@ pub enum AlphaExprKind {
     Call {
         callee: Box<AlphaExpr>,
         arg: Box<AlphaExpr>,
+    },
+    Field {
+        receiver: Box<AlphaExpr>,
+        name: String,
+    },
+    MethodCall {
+        receiver: Box<AlphaExpr>,
+        name: String,
+        arg: Box<AlphaExpr>,
+    },
+    Binary {
+        op: BinaryOp,
+        lhs: Box<AlphaExpr>,
+        rhs: Box<AlphaExpr>,
+    },
+    Nominal {
+        name: String,
+        expr: Box<AlphaExpr>,
     },
     Reset {
         multi: bool,
@@ -120,6 +138,36 @@ impl AlphaCtx {
                 kind: AlphaExprKind::Call {
                     callee: Box::new(self.alpha(callee)),
                     arg: Box::new(self.alpha(arg)),
+                },
+            },
+            Expr::Field { receiver, name } => AlphaExpr {
+                kind: AlphaExprKind::Field {
+                    receiver: Box::new(self.alpha(receiver)),
+                    name: name.clone(),
+                },
+            },
+            Expr::MethodCall {
+                receiver,
+                name,
+                arg,
+            } => AlphaExpr {
+                kind: AlphaExprKind::MethodCall {
+                    receiver: Box::new(self.alpha(receiver)),
+                    name: name.clone(),
+                    arg: Box::new(self.alpha(arg)),
+                },
+            },
+            Expr::Binary { op, lhs, rhs } => AlphaExpr {
+                kind: AlphaExprKind::Binary {
+                    op: op.clone(),
+                    lhs: Box::new(self.alpha(lhs)),
+                    rhs: Box::new(self.alpha(rhs)),
+                },
+            },
+            Expr::Nominal { name, expr } => AlphaExpr {
+                kind: AlphaExprKind::Nominal {
+                    name: name.clone(),
+                    expr: Box::new(self.alpha(expr)),
                 },
             },
             Expr::Reset { multi, body } => AlphaExpr {
