@@ -2,6 +2,7 @@ use std::fmt::Write;
 
 use crate::alpha::AlphaFacts;
 use crate::ast::Expr;
+use crate::backend::BackendArtifact;
 use crate::closure::ClosureFacts;
 use crate::closure_core_usage::ClosureCoreUsageFacts;
 use crate::closure_simplify::ClosureSimplificationFacts;
@@ -38,6 +39,7 @@ pub struct VisualReport {
     pub closure_core_usage: String,
     pub closure_simplification: String,
     pub core_validation: String,
+    pub backend: String,
     pub nanopass: String,
 }
 
@@ -79,6 +81,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.closure_simplification).unwrap();
     writeln!(out, "core-validation:").unwrap();
     writeln!(out, "  {}", report.core_validation).unwrap();
+    writeln!(out, "backend:").unwrap();
+    writeln!(out, "  {}", report.backend).unwrap();
     writeln!(out, "nanopass:").unwrap();
     for event in report.nanopass.lines() {
         writeln!(out, "  {event}").unwrap();
@@ -105,6 +109,7 @@ pub fn visual_report(
     closure_core_usage: &ClosureCoreUsageFacts,
     closure_simplification: &ClosureSimplificationFacts,
     core_validation: &CoreValidation,
+    backend: &BackendArtifact,
     passes: &PassReport,
 ) -> VisualReport {
     VisualReport {
@@ -126,6 +131,7 @@ pub fn visual_report(
         closure_core_usage: format!("{closure_core_usage:#?}"),
         closure_simplification: format!("{closure_simplification:#?}"),
         core_validation: format!("{core_validation:#?}"),
+        backend: format!("{backend:#?}"),
         nanopass: render_pass_report(passes),
     }
 }

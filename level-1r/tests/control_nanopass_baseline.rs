@@ -52,7 +52,8 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
             "L14Core",
             "L15ClosureCoreUsage",
             "L16ClosureSimplify",
-            "L17CoreValidate"
+            "L17CoreValidate",
+            "L18BackendEmit"
         ]
     );
 
@@ -70,6 +71,7 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("closure-core-usage:"));
     assert!(visual.contains("closure-simplification:"));
     assert!(visual.contains("core-validation:"));
+    assert!(visual.contains("backend:"));
     assert!(visual.contains("nanopass:"));
     assert!(visual.contains("L1Alpha: SourceExpr -> AlphaFacts"));
     assert!(visual.contains("L3Template: AlphaExpr+ResolveFacts -> TemplateFacts"));
@@ -86,6 +88,9 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
         "L16ClosureSimplify: ClosureCoreUsageFacts -> ClosureSimplificationFacts"
     ));
     assert!(visual.contains("L17CoreValidate: CoreProgram -> CoreValidation"));
+    assert!(visual.contains(
+        "L18BackendEmit: CoreProgram+CoreValidation -> BackendArtifact"
+    ));
 }
 
 #[test]

@@ -1,5 +1,6 @@
 use crate::alpha::{alpha_expr, AlphaFacts};
 use crate::ast::{Expr, SourceItem, SourceProgram};
+use crate::backend::{emit_wasm_gc, BackendArtifact};
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
 use crate::closure_simplify::{simplify_closure_core, ClosureSimplificationFacts};
@@ -38,6 +39,7 @@ pub struct CompileOutput {
     pub closure_core_usage: ClosureCoreUsageFacts,
     pub closure_simplification: ClosureSimplificationFacts,
     pub core_validation: CoreValidation,
+    pub backend: BackendArtifact,
     pub passes: PassReport,
     pub visual: VisualReport,
 }
@@ -110,6 +112,12 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
     let core_validation = passes.record("L17CoreValidate", "CoreProgram", "CoreValidation", || {
         validate_core(&core)
     });
+    let backend = passes.record(
+        "L18BackendEmit",
+        "CoreProgram+CoreValidation",
+        "BackendArtifact",
+        || emit_wasm_gc(&core, &core_validation),
+    );
     let visual = visual_report(
         expr,
         &alpha,
@@ -129,6 +137,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &closure_core_usage,
         &closure_simplification,
         &core_validation,
+        &backend,
         &passes,
     );
     CompileOutput {
@@ -149,6 +158,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         closure_core_usage,
         closure_simplification,
         core_validation,
+        backend,
         passes,
         visual,
     }
