@@ -1,6 +1,8 @@
-## 强制工程规则
+## 最高优先级强制规则
 
-- **字符串操作边界**：除 lexer / chibalex / regex tokenization 之外，禁止通过字符串形状猜语法、identifier、callable、namespace、static/global 名称或语义合法性。后续 pass 必须消费 parser/AST/symbol table/typed facts/core facts；identifier 判断统一来自 lexer 的 UTF-8/XID 规则或共享 XID 表，不允许在 semantic/backend/pipeline 里临时写 `is_ascii*`、split/contains 之类的语义判断。
+- **禁止 lexer 外字符串语义推断**：除 lexer / chibalex / regex tokenization 之外，任何 pass 都不得通过字符串形状推导语法、identifier、callable、namespace、static/global 名称、类型或语义合法性。semantic / pipeline / backend / lowering 必须消费 parser AST、symbol table、typed facts、Core/CIR facts；identifier 合法性统一来自 lexer 的 UTF-8/XID 规则或共享 XID 表。禁止在这些后续阶段临时写 `is_ascii*`、`split`、`contains`、大小写判断、前后缀判断等作为语义依据。
+
+## 强制工程规则
 
 这两个目录是 level-1 的 spec 目录
 - `/home/lemonhx/Desktop/LJVM/chiba-org-web/src/content/chiba-level1-spec`

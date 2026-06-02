@@ -1165,6 +1165,44 @@ fn global_init_allows_ordered_and_forward_static_dependencies() {
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
 }
 
+#[test]
+fn global_init_lowers_pure_const_expressions_into_global_initializers() {
+    let program = SourceProgram::new(vec![
+        static_value(
+            "FORTY_TWO",
+            Some("i64"),
+            Expr::binary(chiba_level1r::ast::BinaryOp::Add, Expr::i64(40), Expr::i64(2)),
+        ),
+        static_value(
+            "CHOSEN",
+            Some("i64"),
+            Expr::if_else(Expr::bool(false), Expr::i64(1), Expr::i64(3)),
+        ),
+        def("main", vec![], Expr::var("FORTY_TWO")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__FORTY_TWO (mut i32) (i32.const 42)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__CHOSEN (mut i32) (i32.const 3)"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__FORTY_TWO"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__CHOSEN"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "42");
+}
+
 fn run_wat_text(wat: &str) -> String {
     run_wat_export(wat, "main")
 }

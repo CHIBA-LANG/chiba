@@ -986,6 +986,27 @@ fn const_global_initializer(expr: &Expr) -> Option<i32> {
     match expr {
         Expr::Lit(crate::ast::Literal::I64(value)) => Some(*value as i32),
         Expr::Lit(crate::ast::Literal::Bool(value)) => Some(i32::from(*value)),
+        Expr::Binary { op, lhs, rhs } => {
+            let lhs = const_global_initializer(lhs)?;
+            let rhs = const_global_initializer(rhs)?;
+            match op {
+                crate::ast::BinaryOp::Add => lhs.checked_add(rhs),
+                crate::ast::BinaryOp::Sub => lhs.checked_sub(rhs),
+                crate::ast::BinaryOp::Mul => lhs.checked_mul(rhs),
+                crate::ast::BinaryOp::Div => (rhs != 0).then(|| lhs / rhs),
+            }
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            if const_global_initializer(cond)? != 0 {
+                const_global_initializer(then_branch)
+            } else {
+                const_global_initializer(else_branch)
+            }
+        }
         _ => None,
     }
 }
