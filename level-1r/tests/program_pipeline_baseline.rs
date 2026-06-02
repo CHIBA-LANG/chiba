@@ -1682,8 +1682,14 @@ fn global_init_lowers_record_field_access_into_executable_initializer() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(bundle.backend_link.linked_wat.contains("(func $__chiba_init"));
-    assert!(bundle.backend_link.linked_wat.contains("global.set $global__PICKED"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $__chiba_init"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__PICKED"));
     assert!(!bundle
         .backend_link
         .linked_wat
@@ -1711,13 +1717,54 @@ fn global_init_lowers_record_update_field_access_into_executable_initializer() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(bundle.backend_link.linked_wat.contains("(func $__chiba_init"));
-    assert!(bundle.backend_link.linked_wat.contains("global.set $global__PICKED"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $__chiba_init"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__PICKED"));
     assert!(!bundle
         .backend_link
         .linked_wat
         .contains("unsupported static init"));
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
+#[test]
+fn global_init_lowers_if_let_adt_payload_into_executable_initializer() {
+    let program = SourceProgram::new(vec![
+        static_value(
+            "PICKED",
+            Some("i64"),
+            Expr::if_let(
+                chiba_level1r::ast::Pattern::qualified_ctor(
+                    "Option",
+                    "Some",
+                    vec![chiba_level1r::ast::Pattern::bind("value")],
+                ),
+                Expr::adt_ctor("Option", "Some", vec!["None", "Some"], vec![Expr::i64(6)]),
+                Expr::var("value"),
+                Expr::i64(0),
+            ),
+        ),
+        def("main", vec![], Expr::var("PICKED")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $__chiba_init"));
+    assert!(bundle.backend_link.linked_wat.contains("if (result i32)"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("unsupported static init"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "6");
 }
 
 fn run_wat_text(wat: &str) -> String {

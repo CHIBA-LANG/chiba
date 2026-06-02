@@ -1122,6 +1122,23 @@ fn render_global_init_expr_with_bindings(
             );
             wat.push_str("    end\n");
         }
+        Expr::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => {
+            render_global_if_let_expr(
+                wat,
+                pattern,
+                scrutinee,
+                then_branch,
+                else_branch,
+                global_init,
+                bindings,
+                4,
+            );
+        }
         Expr::Match { scrutinee, arms } => {
             render_global_match_expr(wat, scrutinee, arms, global_init, bindings, 4);
         }
@@ -1201,6 +1218,74 @@ fn render_global_match_expr(
         return;
     };
     render_global_match_arm(wat, scrutinee, first, rest, global_init, bindings, indent);
+}
+
+fn render_global_if_let_expr(
+    wat: &mut String,
+    pattern: &Pattern,
+    scrutinee: &Expr,
+    then_branch: &Expr,
+    else_branch: &Expr,
+    global_init: &GlobalInitPlan,
+    bindings: &BTreeMap<String, Expr>,
+    indent: usize,
+) {
+    match global_pattern_bindings(pattern, scrutinee, bindings) {
+        Some(GlobalPatternMatch::Always(next_bindings)) => {
+            render_global_init_expr_nested_with_bindings(
+                wat,
+                then_branch,
+                global_init,
+                &next_bindings,
+                indent,
+            );
+        }
+        Some(GlobalPatternMatch::Conditional {
+            expected,
+            bindings: next_bindings,
+        }) => {
+            render_global_init_expr_nested_with_bindings(
+                wat,
+                scrutinee,
+                global_init,
+                bindings,
+                indent,
+            );
+            push_global_indent(wat, indent);
+            wat.push_str(&format!("i32.const {expected}\n"));
+            push_global_indent(wat, indent);
+            wat.push_str("i32.eq\n");
+            push_global_indent(wat, indent);
+            wat.push_str("if (result i32)\n");
+            render_global_init_expr_nested_with_bindings(
+                wat,
+                then_branch,
+                global_init,
+                &next_bindings,
+                indent + 2,
+            );
+            push_global_indent(wat, indent);
+            wat.push_str("else\n");
+            render_global_init_expr_nested_with_bindings(
+                wat,
+                else_branch,
+                global_init,
+                bindings,
+                indent + 2,
+            );
+            push_global_indent(wat, indent);
+            wat.push_str("end\n");
+        }
+        None => {
+            render_global_init_expr_nested_with_bindings(
+                wat,
+                else_branch,
+                global_init,
+                bindings,
+                indent,
+            );
+        }
+    }
 }
 
 fn render_global_match_arm(
