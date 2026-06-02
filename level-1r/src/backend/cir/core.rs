@@ -110,6 +110,10 @@ pub enum CorePattern {
     Wildcard,
     I64(i64),
     Bool(bool),
+    Constructor {
+        data: Option<String>,
+        ctor: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -493,6 +497,12 @@ fn core_pattern(pattern: &crate::ast::Pattern) -> Option<CorePattern> {
         crate::ast::Pattern::Lit(crate::ast::Literal::I64(value)) => Some(CorePattern::I64(*value)),
         crate::ast::Pattern::Lit(crate::ast::Literal::Bool(value)) => {
             Some(CorePattern::Bool(*value))
+        }
+        crate::ast::Pattern::Constructor { data, ctor, args } if args.is_empty() => {
+            Some(CorePattern::Constructor {
+                data: data.clone(),
+                ctor: ctor.clone(),
+            })
         }
         _ => None,
     }

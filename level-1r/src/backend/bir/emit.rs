@@ -488,7 +488,36 @@ fn render_match_arm_i32(
             push_indent(wat, indent);
             wat.push_str("end\n");
         }
+        CorePattern::Constructor { data, ctor } => {
+            if let Some(tag) = constructor_tag(scrutinee, data.as_deref(), ctor) {
+                render_core_value_i32_indented(wat, scrutinee, indent);
+                push_indent(wat, indent);
+                wat.push_str(&format!("i32.const {tag}\n"));
+                push_indent(wat, indent);
+                wat.push_str("i32.eq\n");
+                push_indent(wat, indent);
+                wat.push_str("if (result i32)\n");
+                render_core_value_i32_indented(wat, &arm.value, indent + 2);
+                push_indent(wat, indent);
+                wat.push_str("else\n");
+                render_match_arms_i32(wat, scrutinee, rest, indent + 2);
+                push_indent(wat, indent);
+                wat.push_str("end\n");
+            } else {
+                render_match_arms_i32(wat, scrutinee, rest, indent);
+            }
+        }
     }
+}
+
+fn constructor_tag(scrutinee: &CoreValue, pattern_data: Option<&str>, ctor: &str) -> Option<usize> {
+    let CoreValue::Adt { data, variants, .. } = scrutinee else {
+        return None;
+    };
+    if pattern_data.is_some_and(|pattern_data| pattern_data != data) {
+        return None;
+    }
+    variants.iter().position(|variant| variant == ctor)
 }
 
 fn push_indent(wat: &mut String, indent: usize) {
