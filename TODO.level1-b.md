@@ -132,12 +132,15 @@
 	- [x] continuation boundary obligations：usage facts 已转成 world/thread/send boundary scan obligations；真实表达式级 boundary scan 仍未完成。
 - [ ] ContN replay safety：capture classification、Ref[T] shared-reference、non-replay reject 没做。
 	- [x] ContN replay obligations：UseMany continuation usage 已转成 `ContNReplaySafetyObligation`，明确 Ref[T] capture 是 shared-reference semantics；真实 capture classification/non-replay reject 仍未完成。
-- [ ] one-pass CPS + beta：没做。现在还是 fail-closed，不是 level0 那条真实 CPS。
+- [ ] one-pass CPS + beta：level0 已有真实 one-pass CPS 参考；level-1b 还没完成。当前 level-1b 只是事实流/窄 typed term threading，不能算完成；`src/backend/cir/cps.chiba` 也只是 wrapper/synthetic continuation package，不是可迁移的真实算法。
+	- [ ] 参考源：`level0/src/backend/cir/lower.chiba` 的 `lower_expr(expr, k_meta, ...)`，文件头明确写了 one-pass CPS + beta-reduction；`level-1r/src/cps.rs` 现在有 Rust meta-continuation 骨架，可用于测试算法形状，但最终 level-1b 必须在 Chiba pass 中实现。
 	- [ ] 真实算法必须照 level0 `level0/src/backend/cir/lower.chiba` 的 one-pass 形态实现，而不是 naive CPS 后 cleanup：`lower_expr(expr, k_meta)` 中 `k_meta` 是编译期函数 `(Val) => CpsExpr`，不是 IR continuation id；atom/var/literal 必须直接调用 `k_meta(atom)`，不生成 runtime continuation。
 	- [ ] call lowering 必须按 CBV left-to-right 递归：先 lower callee 得到 meta 值 `f`，再 lower arg 得到 meta 值 `v`，最后只生成真实 call `f(v, kont)`；只有当前 meta-continuation 必须跨运行时调用边界时才 materialize object-level continuation `lambda w. k_meta(w)`。
+	- [ ] lambda lowering 必须区分 object-level lambda 和 meta-level lambda：函数值保留 object-level continuation 参数；函数体内部用新的 meta-continuation 把 body result 应用到 object-level continuation 参数。
 	- [ ] 禁止形状：`(lambda a. (lambda b. a(b, k)) x) f`、`LetCont + AppCont` administrative chain、为普通 atom/field/tuple access 单独生成 continuation block；这些必须在变换过程中由 meta-level beta 消掉。
 	- [ ] 分支 lowering 必须把 `if`/`match`/short-circuit 的 join 表达成明确 CPS join continuation，但 join continuation 本身仍遵守 one-pass 规则：arm 内普通表达式不能再引入 administrative continuation，非 `ContN` 普通 call 最终保持 tail form。
 	- [ ] `reset` / `shift` / `shiftn` 是语义控制点：`reset` 建 answer boundary，`shift` 物化 `Cont1`，`shiftn`/`resetn` 物化 `ContN` frame/package；除这些真实控制点外，不允许把 ordinary evaluation context 都 package 成 continuation。
+	- [ ] 验收样例：`f(x)` 的 CPS dump 应接近 `f(x, cont w => k_meta(w))`，不能出现 `(\a. (\b. a b k) x) f`；`f(g(x), y)`、operator call、ADT ctor、tuple/record args 必须左到右求值且没有 administrative continuation 链。
 	- [x] no-continuation CPS baseline：无 control obligations 的 module 现在生成空 `CpsModule`；真实 expression CPS + beta 仍未完成。
 	- [x] CPS tail-form invariant facts：无 multi-shot continuation 的普通函数现在生成 `CpsTailFormFact`，明确 `all_non_multishot_calls_are_tail`；真实 call graph CPS / administrative beta 仍未完成。
 	- [x] CPS tail-call fact：`TypedFunctionTailCall(target)` 会在 C09 标成 `CpsTailCall(target)`，普通非 multi-shot 调用必须保持尾位置。

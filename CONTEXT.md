@@ -284,6 +284,14 @@ these back to `i64` just to satisfy a narrow WAT validator issue.
   Ordinary calls should be tail-form after CPS; `if`/`match`/short-circuit joins
   must become explicit continuations; `ContN` materialized frames are the
   explicit non-tail exception.
+  Current status: level0 already has the real reference algorithm in
+  `level0/src/backend/cir/lower.chiba` using `lower_expr(expr, k_meta, ...)`
+  where `k_meta` is a compiler-time `(Val) => CpsExpr` closure. `level-1r`
+  has a Rust reference skeleton in `level-1r/src/cps.rs`. level-1b C09 still
+  does not have the full algorithm; current facts and typed-term threading are
+  evidence plumbing only. Do not mark one-pass CPS complete until atom/call/
+  lambda/branch/reset/shift/shiftn lowering uses the meta-continuation shape
+  and rejects administrative `LetCont + AppCont` / object-lambda beta chains.
 - **Closure/continuation path**: closure capture/env extraction, call-site
   rewrite, boxed `Cont1` consumed-state lowering, and `ContN` stackless frame
   body/capture projection must be derived from real CPS inputs, not shell facts.

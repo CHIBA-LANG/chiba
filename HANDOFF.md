@@ -473,6 +473,13 @@ Likely next work, in order:
 	 ordinary expressions must become tail-form after CPS; branch/match arms join
 	 through explicit continuations; multi-shot `ContN` is the explicit materialized
 	 frame exception.
+	 Use `level0/src/backend/cir/lower.chiba` as the algorithmic reference, not
+	 `src/backend/cir/cps.chiba`: level0's `lower_expr(expr, k_meta, ...)` uses a
+	 compiler-time meta-continuation and beta-reduces administrative redex during
+	 lowering. `level-1r/src/cps.rs` mirrors this shape in Rust as a reference
+	 skeleton. level-1b currently has C09 facts and narrow typed-term threading,
+	 but not the complete atom/call/lambda/branch/reset/shift/shiftn one-pass CPS
+	 transform.
 4. Feed CPS into C10 closure/continuation lowering:
 	 free-var capture extraction, no-capture direct closure path, boxed `Cont1`
 	 consumed-state lowering, `ContN` stackless frame bodies, frame chain, and
