@@ -913,8 +913,14 @@ fn frontend_parses_range_value_as_shared_ast_node() {
         matches!(
             op,
             chiba_level1r::core::CoreOp::ReturnValue(
-                chiba_level1r::core::CoreValue::Rendered { debug }
-            ) if debug == "start..end"
+                chiba_level1r::core::CoreValue::Range { start, end }
+            ) if matches!(
+                (start.as_ref(), end.as_ref()),
+                (
+                    chiba_level1r::core::CoreValue::Var(start),
+                    chiba_level1r::core::CoreValue::Var(end),
+                ) if start == "start" && end == "end"
+            )
         )
     }));
 }

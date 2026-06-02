@@ -129,6 +129,10 @@ pub enum CoreValue {
         tuple: Box<CoreValue>,
         field: String,
     },
+    Range {
+        start: Box<CoreValue>,
+        end: Box<CoreValue>,
+    },
     Record {
         fields: Vec<CoreRecordValueField>,
     },
@@ -170,6 +174,9 @@ impl CoreValue {
             }
             CoreValue::TupleField { tuple, field } => {
                 format!("{}.{}", tuple.debug_name(), field)
+            }
+            CoreValue::Range { start, end } => {
+                format!("{}..{}", start.debug_name(), end.debug_name())
             }
             CoreValue::Record { fields } => {
                 let fields = fields
@@ -911,6 +918,10 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
             tuple: Box::new(core_value(tuple)),
             field: field.clone(),
         },
+        CpsAtom::Range { start, end } => CoreValue::Range {
+            start: Box::new(core_value(start)),
+            end: Box::new(core_value(end)),
+        },
         CpsAtom::Record { fields, .. } => CoreValue::Record {
             fields: fields
                 .iter()
@@ -964,9 +975,7 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             }
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
-        CpsAtom::Range { start, end } => {
-            lower_atom_value(start, ops);
-            lower_atom_value(end, ops);
+        CpsAtom::Range { .. } => {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Record { layout, fields } => {
