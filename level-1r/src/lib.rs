@@ -57,6 +57,8 @@ pub mod typed;
 pub mod usage;
 #[path = "semantic/usage_audit.rs"]
 pub mod usage_audit;
+#[path = "frontend/xid.rs"]
+pub mod xid;
 
 pub use ast::{
     DataDecl, DataVariant, Expr, Literal, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem,

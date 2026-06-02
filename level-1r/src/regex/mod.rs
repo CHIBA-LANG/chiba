@@ -1,4 +1,4 @@
-use crate::symbol::{is_chiba_identifier_continue, is_chiba_identifier_start};
+use crate::xid::{is_chiba_identifier_continue, is_chiba_identifier_start};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RegexAst {
