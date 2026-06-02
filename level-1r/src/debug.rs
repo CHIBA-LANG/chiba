@@ -16,6 +16,7 @@ use crate::nanopass::PassReport;
 use crate::pattern::PatternFacts;
 use crate::resolve::ResolveFacts;
 use crate::specialize::SpecializationFacts;
+use crate::std_audit::StdAuditReport;
 use crate::template::TemplateFacts;
 use crate::typed::TypedExpr;
 use crate::usage::UsageFacts;
@@ -42,6 +43,7 @@ pub struct VisualReport {
     pub closure_core_usage: String,
     pub closure_simplification: String,
     pub usage_audit: String,
+    pub std_audit: String,
     pub core_validation: String,
     pub backend: String,
     pub backend_link: String,
@@ -89,6 +91,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.closure_simplification).unwrap();
     writeln!(out, "usage-audit:").unwrap();
     writeln!(out, "  {}", report.usage_audit).unwrap();
+    writeln!(out, "std-audit:").unwrap();
+    writeln!(out, "  {}", report.std_audit).unwrap();
     writeln!(out, "core-validation:").unwrap();
     writeln!(out, "  {}", report.core_validation).unwrap();
     writeln!(out, "backend:").unwrap();
@@ -124,6 +128,7 @@ pub fn visual_report(
     closure_core_usage: &ClosureCoreUsageFacts,
     closure_simplification: &ClosureSimplificationFacts,
     usage_audit: &UsageAuditReport,
+    std_audit: &StdAuditReport,
     core_validation: &CoreValidation,
     backend: &BackendArtifact,
     backend_link: &BackendLinkedBundle,
@@ -150,6 +155,7 @@ pub fn visual_report(
         closure_core_usage: format!("{closure_core_usage:#?}"),
         closure_simplification: format!("{closure_simplification:#?}"),
         usage_audit: format!("{usage_audit:#?}"),
+        std_audit: format!("{std_audit:#?}"),
         core_validation: format!("{core_validation:#?}"),
         backend: format!("{backend:#?}"),
         backend_link: format!("{backend_link:#?}"),

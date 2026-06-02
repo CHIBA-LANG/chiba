@@ -179,8 +179,8 @@ fn pipeline_records_backend_link_artifact() {
     assert!(visual.contains("backend-cache-key:"));
     assert!(visual.contains("BackendLinkedBundle"));
     assert!(visual.contains("BackendCacheKey"));
-    assert!(visual.contains("L21BackendLink: BackendArtifact -> BackendLinkedBundle"));
-    assert!(visual.contains("L22BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
+    assert!(visual.contains("L22BackendLink: BackendArtifact -> BackendLinkedBundle"));
+    assert!(visual.contains("L23BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
 }
 
 #[test]

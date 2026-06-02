@@ -20,6 +20,7 @@ use crate::nanopass::PassReport;
 use crate::pattern::{analyze_patterns, PatternFacts};
 use crate::resolve::{resolve_expr, MethodIndex, ResolveFacts};
 use crate::specialize::{plan_specialization, SpecializationFacts};
+use crate::std_audit::{audit_std_dependencies, StdAuditReport};
 use crate::template::{analyze_template, TemplateFacts};
 use crate::typed::{type_expr, TypedExpr};
 use crate::usage::{analyze_alpha_usage, UsageFacts};
@@ -45,6 +46,7 @@ pub struct CompileOutput {
     pub closure_core_usage: ClosureCoreUsageFacts,
     pub closure_simplification: ClosureSimplificationFacts,
     pub usage_audit: UsageAuditReport,
+    pub std_audit: StdAuditReport,
     pub core_validation: CoreValidation,
     pub backend: BackendArtifact,
     pub backend_link: BackendLinkedBundle,
@@ -127,23 +129,26 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         "UsageAuditReport",
         || audit_usage_lowering(expr, &typed, &usage, &control, &core),
     );
-    let core_validation = passes.record("L19CoreValidate", "CoreProgram", "CoreValidation", || {
+    let std_audit = passes.record("L19StdAudit", "CompilerCrate", "StdAuditReport", || {
+        audit_std_dependencies()
+    });
+    let core_validation = passes.record("L20CoreValidate", "CoreProgram", "CoreValidation", || {
         validate_core(&core)
     });
     let backend = passes.record(
-        "L20BackendEmit",
+        "L21BackendEmit",
         "CoreProgram+CoreValidation",
         "BackendArtifact",
         || emit_wasm_gc(&core, &core_validation),
     );
     let backend_link = passes.record(
-        "L21BackendLink",
+        "L22BackendLink",
         "BackendArtifact",
         "BackendLinkedBundle",
         || link_backend_artifacts(vec![backend.clone()]),
     );
     let backend_cache_key = passes.record(
-        "L22BackendCacheKey",
+        "L23BackendCacheKey",
         "BackendLinkedBundle",
         "BackendCacheKey",
         || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
@@ -168,6 +173,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &closure_core_usage,
         &closure_simplification,
         &usage_audit,
+        &std_audit,
         &core_validation,
         &backend,
         &backend_link,
@@ -193,6 +199,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         closure_core_usage,
         closure_simplification,
         usage_audit,
+        std_audit,
         core_validation,
         backend,
         backend_link,

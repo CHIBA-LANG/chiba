@@ -19,6 +19,7 @@ pub mod pipeline;
 pub mod regex;
 pub mod resolve;
 pub mod specialize;
+pub mod std_audit;
 pub mod template;
 pub mod typed;
 pub mod usage;
