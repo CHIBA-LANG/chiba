@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod chibalex;
+pub mod chibacc;
 pub mod closure;
 pub mod control;
 pub mod core;

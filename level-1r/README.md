@@ -13,6 +13,8 @@ Current baseline:
 - delimiter-driven Cont1/ContN facts
 - closure capture facts
 - target-neutral CoreIR skeleton
+- chibalex maximal-munch lexer baseline
+- chibacc token parser baseline
 - visual report across source / typed / usage / cps
 
 Run:
