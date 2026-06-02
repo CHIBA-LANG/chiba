@@ -59,6 +59,26 @@ pub enum OwnershipDecision {
     DynPackage,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CoreValidation {
+    pub diagnostics: Vec<CoreDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CoreDiagnostic {
+    TargetSpecificTerm { term: String },
+    LayoutHashMismatch {
+        key: String,
+        expected: u64,
+        actual: u64,
+    },
+    DuplicateLayoutKey { key: String },
+    MissingContNPackage { binder: String },
+    Cont1HasPackageLayout { key: String },
+    SharedSendSubjectUsesRc { subject: String },
+    DynPayloadMustUseDynPackage { subject: String },
+}
+
 pub fn lower_core(cps: &CpsProgram, continuations: &[ContinuationFact]) -> CoreProgram {
     lower_core_with_facts(
         cps,
@@ -82,6 +102,21 @@ pub fn lower_core_with_facts(
         ops,
         layouts,
         ownership,
+    }
+}
+
+pub fn validate_core(program: &CoreProgram) -> CoreValidation {
+    let mut diagnostics = Vec::new();
+    validate_target_neutral(program, &mut diagnostics);
+    validate_layouts(program, &mut diagnostics);
+    validate_continuation_packages(program, &mut diagnostics);
+    validate_ownership(program, &mut diagnostics);
+    CoreValidation { diagnostics }
+}
+
+impl CoreValidation {
+    pub fn is_ok(&self) -> bool {
+        self.diagnostics.is_empty()
     }
 }
 
@@ -114,6 +149,81 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                 kind,
             });
             lower_term(body, continuations, ops);
+        }
+    }
+}
+
+fn validate_target_neutral(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    const FORBIDDEN: [&str; 5] = ["Wasm", "WAT", "Binaryen", "funcref", "eqref"];
+    let rendered = format!("{program:#?}");
+    for term in FORBIDDEN {
+        if rendered.contains(term) {
+            diagnostics.push(CoreDiagnostic::TargetSpecificTerm {
+                term: term.to_string(),
+            });
+        }
+    }
+}
+
+fn validate_layouts(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    let mut keys = Vec::new();
+    for layout in &program.layouts {
+        let expected = stable_hash(&layout.key);
+        if layout.hash != expected {
+            diagnostics.push(CoreDiagnostic::LayoutHashMismatch {
+                key: layout.key.clone(),
+                expected,
+                actual: layout.hash,
+            });
+        }
+        if keys.contains(&layout.key) {
+            diagnostics.push(CoreDiagnostic::DuplicateLayoutKey {
+                key: layout.key.clone(),
+            });
+        } else {
+            keys.push(layout.key.clone());
+        }
+        if matches!(layout.kind, LayoutKind::ContinuationPackage(ContinuationKind::Cont1)) {
+            diagnostics.push(CoreDiagnostic::Cont1HasPackageLayout {
+                key: layout.key.clone(),
+            });
+        }
+    }
+}
+
+fn validate_continuation_packages(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    for op in &program.ops {
+        if let CoreOp::CaptureContinuation {
+            binder,
+            kind: ContinuationKind::ContN,
+        } = op
+        {
+            let has_package = program.layouts.iter().any(|layout| {
+                matches!(
+                    layout.kind,
+                    LayoutKind::ContinuationPackage(ContinuationKind::ContN)
+                ) && layout.key.contains(binder)
+            });
+            if !has_package {
+                diagnostics.push(CoreDiagnostic::MissingContNPackage {
+                    binder: binder.clone(),
+                });
+            }
+        }
+    }
+}
+
+fn validate_ownership(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    for fact in &program.ownership {
+        if fact.subject.contains("send") && fact.decision == OwnershipDecision::Rc {
+            diagnostics.push(CoreDiagnostic::SharedSendSubjectUsesRc {
+                subject: fact.subject.clone(),
+            });
+        }
+        if fact.subject.starts_with("dyn::") && fact.decision != OwnershipDecision::DynPackage {
+            diagnostics.push(CoreDiagnostic::DynPayloadMustUseDynPackage {
+                subject: fact.subject.clone(),
+            });
         }
     }
 }
