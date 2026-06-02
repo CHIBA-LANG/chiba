@@ -262,6 +262,23 @@ pub fn duplicate_type_names(surface: &ProjectSurface) -> Vec<String> {
     duplicates(surface.types.iter().map(|ty| ty.name.as_str()))
 }
 
+pub fn duplicate_type_fields(surface: &ProjectSurface) -> Vec<(String, String)> {
+    surface
+        .types
+        .iter()
+        .flat_map(|ty| {
+            duplicates(
+                ty.fields
+                    .iter()
+                    .filter(|field| field.name != "_")
+                    .map(|field| field.name.as_str()),
+            )
+            .into_iter()
+            .map(|field| (ty.name.clone(), field))
+        })
+        .collect()
+}
+
 pub fn duplicate_top_level_names(surface: &ProjectSurface) -> Vec<String> {
     let names = surface
         .types

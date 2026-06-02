@@ -30,8 +30,8 @@ use crate::std_audit::{audit_std_dependencies, StdAuditReport};
 use crate::symbol::encode_debug_symbol;
 use crate::surface::{
     build_interface_summary, duplicate_constructor_names, duplicate_data_names,
-    duplicate_top_level_names, duplicate_type_names, project_surface, InterfaceSummary,
-    ProjectSurface,
+    duplicate_top_level_names, duplicate_type_fields, duplicate_type_names, project_surface,
+    InterfaceSummary, ProjectSurface,
 };
 use crate::template::{analyze_template_with_source, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
@@ -110,6 +110,7 @@ pub struct ProgramDefOutput {
 pub enum ProgramDiagnostic {
     DuplicateDef { name: String },
     DuplicateType { name: String },
+    DuplicateTypeField { type_name: String, field: String },
     DuplicateData { name: String },
     DuplicateConstructor { name: String },
     DuplicateTopLevelName { name: String },
@@ -569,6 +570,14 @@ fn program_surface_diagnostics(surface: &ProjectSurface) -> Vec<ProgramDiagnosti
         duplicate_type_names(surface)
             .into_iter()
             .map(|name| ProgramDiagnostic::DuplicateType { name }),
+    );
+    diagnostics.extend(
+        duplicate_type_fields(surface)
+            .into_iter()
+            .map(|(type_name, field)| ProgramDiagnostic::DuplicateTypeField {
+                type_name,
+                field,
+            }),
     );
     diagnostics.extend(
         duplicate_data_names(surface)

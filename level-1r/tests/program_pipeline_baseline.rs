@@ -580,6 +580,71 @@ fn program_surface_reports_duplicate_type_names() {
 }
 
 #[test]
+fn program_surface_reports_duplicate_ordinary_type_fields() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            Vec::new(),
+            vec![
+                TypeField::new("value", "i64"),
+                TypeField::new("value", "bool"),
+                TypeField::new("_", "PhantomA"),
+                TypeField::new("_", "PhantomB"),
+            ],
+        )],
+        Vec::new(),
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateTypeField {
+            type_name: "Box".to_string(),
+            field: "value".to_string(),
+        }));
+    assert!(!bundle.diagnostics.contains(
+        &ProgramDiagnostic::DuplicateTypeField {
+            type_name: "Box".to_string(),
+            field: "_".to_string(),
+        }
+    ));
+}
+
+#[test]
+fn phantom_type_fields_are_not_available_for_field_access() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            Vec::new(),
+            vec![
+                TypeField::new("_", "PhantomA"),
+                TypeField::new("_", "PhantomB"),
+            ],
+        )],
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "probe".to_string(),
+            params: vec![ParamDecl::new("box", Some("Box".to_string()))],
+            return_type: None,
+            body: Expr::field(Expr::var("box"), "_"),
+        }, def("main", vec![], Expr::i64(0))],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_eq!(bundle.defs[0].output.typed.ty, Type::Unknown);
+}
+
+#[test]
 fn program_surface_reports_type_topdef_name_conflicts() {
     let program = SourceProgram::with_surface(
         None,
