@@ -2,6 +2,7 @@ use chiba_level1r::ast::{
     DataDecl, DataVariant, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
     UseDecl,
 };
+use chiba_level1r::typed::{Type, TypedExprKind};
 use chiba_level1r::{compile_program, compile_program_bundle, Expr, ProgramDiagnostic};
 
 fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
@@ -263,6 +264,14 @@ fn interface_summary_preserves_method_style_receiver_and_self_surface() {
         .output
         .render_visual()
         .contains("typed-signature: def update(self: Box[T], value: T): Box[T]"));
+    assert!(matches!(
+        &bundle.defs[0].output.typed.kind,
+        TypedExprKind::Var(name) if name == "self"
+    ));
+    assert_eq!(
+        bundle.defs[0].output.typed.ty,
+        Type::Nominal("Box[T]".to_string())
+    );
 }
 
 #[test]

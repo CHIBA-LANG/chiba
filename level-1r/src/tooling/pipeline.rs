@@ -34,7 +34,7 @@ use crate::surface::{
 };
 use crate::template::{analyze_template_with_source, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
-use crate::typed::{type_expr, TypedExpr};
+use crate::typed::{type_expr_with_env, Type, TypeEnv, TypedExpr};
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
 
@@ -178,7 +178,10 @@ fn compile_expr_with_indexes_and_generics(
         "TypedSignature",
         || typed_signature(params, return_type, receiver),
     );
-    let typed = passes.record("L7Typed", "SourceExpr", "TypedExpr", || type_expr(expr));
+    let typed_env = typed_signature.type_env();
+    let typed = passes.record("L7Typed", "SourceExpr+TypedSignature", "TypedExpr", || {
+        type_expr_with_env(expr, &typed_env)
+    });
     let pattern = passes.record("L8PatternElab", "TypedExpr", "PatternFacts", || {
         analyze_patterns(&typed)
     });
@@ -458,6 +461,16 @@ impl TypedSignature {
             None => format!("def {name}({params})"),
         }
     }
+
+    pub fn type_env(&self) -> TypeEnv {
+        self.params
+            .iter()
+            .filter_map(|(name, ty)| {
+                let ty = header_type_to_type(ty);
+                (ty != Type::Unknown).then(|| (name.clone(), ty))
+            })
+            .collect()
+    }
 }
 
 fn typed_signature(
@@ -489,6 +502,15 @@ fn resolve_header_type(ty: Option<&str>, receiver: &Option<MethodReceiver>) -> S
             .unwrap_or_else(|| "Self".to_string()),
         Some(ty) => ty.to_string(),
         None => "Unknown".to_string(),
+    }
+}
+
+fn header_type_to_type(ty: &str) -> Type {
+    match ty {
+        "Unknown" => Type::Unknown,
+        "I64" | "i64" => Type::I64,
+        "Bool" | "bool" => Type::Bool,
+        ty => Type::Nominal(ty.to_string()),
     }
 }
 

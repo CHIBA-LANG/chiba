@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::ast::{BinaryOp, Expr, Literal, Pattern};
 use crate::symbol::encode_debug_symbol;
 
@@ -137,9 +139,18 @@ pub enum SendColor {
     Obligation,
 }
 
+pub type TypeEnv = BTreeMap<String, Type>;
+
 pub fn type_expr(expr: &Expr) -> TypedExpr {
+    type_expr_with_env(expr, &TypeEnv::new())
+}
+
+pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
     match expr {
-        Expr::Var(name) => typed(TypedExprKind::Var(name.clone()), Type::Unknown),
+        Expr::Var(name) => typed(
+            TypedExprKind::Var(name.clone()),
+            env.get(name).cloned().unwrap_or(Type::Unknown),
+        ),
         Expr::Lit(Literal::I64(value)) => {
             typed(TypedExprKind::Lit(Literal::I64(*value)), Type::I64)
         }
@@ -148,7 +159,9 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
         }
         Expr::Lambda { param, body } => {
             let param_ty = Type::Unknown;
-            let body = type_expr(body);
+            let mut env = env.clone();
+            env.insert(param.clone(), param_ty.clone());
+            let body = type_expr_with_env(body, &env);
             let ty = Type::Func(Box::new(param_ty.clone()), Box::new(body.ty.clone()));
             typed(
                 TypedExprKind::Lambda {
@@ -160,8 +173,11 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             )
         }
         Expr::Call { callee, args } => {
-            let callee = type_expr(callee);
-            let args = args.iter().map(type_expr).collect();
+            let callee = type_expr_with_env(callee, env);
+            let args = args
+                .iter()
+                .map(|arg| type_expr_with_env(arg, env))
+                .collect();
             typed(
                 TypedExprKind::Call {
                     callee: Box::new(callee),
@@ -170,9 +186,12 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                 Type::Unknown,
             )
         }
-        Expr::Instantiate { callee, .. } => type_expr(callee),
+        Expr::Instantiate { callee, .. } => type_expr_with_env(callee, env),
         Expr::Tuple(fields) => {
-            let fields: Vec<_> = fields.iter().map(type_expr).collect();
+            let fields: Vec<_> = fields
+                .iter()
+                .map(|field| type_expr_with_env(field, env))
+                .collect();
             let field_types = fields
                 .iter()
                 .map(|field| field.ty.clone())
@@ -190,19 +209,19 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                 .iter()
                 .map(|field| TypedRecordField {
                     name: field.name.clone(),
-                    value: type_expr(&field.value),
+                    value: type_expr_with_env(&field.value, env),
                 })
                 .collect::<Vec<_>>();
             let ty = Type::Record(record_type_fields(&fields));
             typed(TypedExprKind::Record { fields }, ty)
         }
         Expr::RecordUpdate { base, fields } => {
-            let base = type_expr(base);
+            let base = type_expr_with_env(base, env);
             let fields = fields
                 .iter()
                 .map(|field| TypedRecordField {
                     name: field.name.clone(),
-                    value: type_expr(&field.value),
+                    value: type_expr_with_env(&field.value, env),
                 })
                 .collect::<Vec<_>>();
             let ty = record_update_type(&base.ty, &fields);
@@ -220,7 +239,10 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             variants,
             args,
         } => {
-            let args = args.iter().map(type_expr).collect::<Vec<_>>();
+            let args = args
+                .iter()
+                .map(|arg| type_expr_with_env(arg, env))
+                .collect::<Vec<_>>();
             typed(
                 TypedExprKind::AdtCtor {
                     data: data.clone(),
@@ -235,7 +257,7 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             )
         }
         Expr::Field { receiver, name } => {
-            let receiver = type_expr(receiver);
+            let receiver = type_expr_with_env(receiver, env);
             let ty = tuple_field_type(&receiver.ty, name)
                 .or_else(|| record_field_type(&receiver.ty, name))
                 .unwrap_or(Type::Unknown);
@@ -252,8 +274,11 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             name,
             args,
         } => {
-            let receiver = type_expr(receiver);
-            let args = args.iter().map(type_expr).collect();
+            let receiver = type_expr_with_env(receiver, env);
+            let args = args
+                .iter()
+                .map(|arg| type_expr_with_env(arg, env))
+                .collect();
             typed(
                 TypedExprKind::MethodCall {
                     receiver: Box::new(receiver),
@@ -264,8 +289,8 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             )
         }
         Expr::Index { receiver, index } => {
-            let receiver = type_expr(receiver);
-            let index = type_expr(index);
+            let receiver = type_expr_with_env(receiver, env);
+            let index = type_expr_with_env(index, env);
             typed(
                 TypedExprKind::Index {
                     receiver: Box::new(receiver),
@@ -275,8 +300,8 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             )
         }
         Expr::Range { start, end } => {
-            let start = type_expr(start);
-            let end = type_expr(end);
+            let start = type_expr_with_env(start, env);
+            let end = type_expr_with_env(end, env);
             typed(
                 TypedExprKind::Range {
                     start: Box::new(start),
@@ -286,8 +311,8 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             )
         }
         Expr::Binary { op, lhs, rhs } => {
-            let lhs = type_expr(lhs);
-            let rhs = type_expr(rhs);
+            let lhs = type_expr_with_env(lhs, env);
+            let rhs = type_expr_with_env(rhs, env);
             typed(
                 TypedExprKind::Binary {
                     op: op.clone(),
@@ -302,9 +327,9 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             then_branch,
             else_branch,
         } => {
-            let cond = type_expr(cond);
-            let then_branch = type_expr(then_branch);
-            let else_branch = type_expr(else_branch);
+            let cond = type_expr_with_env(cond, env);
+            let then_branch = type_expr_with_env(then_branch, env);
+            let else_branch = type_expr_with_env(else_branch, env);
             let ty = common_type(&then_branch.ty, &else_branch.ty);
             typed(
                 TypedExprKind::If {
@@ -321,9 +346,9 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             then_branch,
             else_branch,
         } => {
-            let scrutinee = type_expr(scrutinee);
-            let then_branch = type_expr(then_branch);
-            let else_branch = type_expr(else_branch);
+            let scrutinee = type_expr_with_env(scrutinee, env);
+            let then_branch = type_expr_with_env(then_branch, env);
+            let else_branch = type_expr_with_env(else_branch, env);
             let ty = common_type(&then_branch.ty, &else_branch.ty);
             typed(
                 TypedExprKind::IfLet {
@@ -336,12 +361,12 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             )
         }
         Expr::Match { scrutinee, arms } => {
-            let scrutinee = type_expr(scrutinee);
+            let scrutinee = type_expr_with_env(scrutinee, env);
             let arms: Vec<_> = arms
                 .iter()
                 .map(|arm| TypedMatchArm {
                     pattern: arm.pattern.clone(),
-                    body: type_expr(&arm.body),
+                    body: type_expr_with_env(&arm.body, env),
                 })
                 .collect();
             let ty = arms
@@ -358,7 +383,7 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             )
         }
         Expr::Nominal { name, expr } => {
-            let expr = type_expr(expr);
+            let expr = type_expr_with_env(expr, env);
             typed(
                 TypedExprKind::Nominal {
                     name: name.clone(),
@@ -368,7 +393,7 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             )
         }
         Expr::Reset { multi, body } => {
-            let body = type_expr(body);
+            let body = type_expr_with_env(body, env);
             typed(
                 TypedExprKind::Reset {
                     multi: *multi,
@@ -378,7 +403,7 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
             )
         }
         Expr::Shift { binder, body } => {
-            let body = type_expr(body);
+            let body = type_expr_with_env(body, env);
             typed(
                 TypedExprKind::Shift {
                     binder: binder.clone(),
