@@ -17,6 +17,7 @@ use crate::debug::{render_visual_report, visual_report, VisualReport};
 use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
 use crate::monomorphize::{schedule_monomorphization, MonomorphizationPlan};
 use crate::nanopass::PassReport;
+use crate::pattern::{analyze_patterns, PatternFacts};
 use crate::resolve::{resolve_expr, MethodIndex, ResolveFacts};
 use crate::specialize::{plan_specialization, SpecializationFacts};
 use crate::template::{analyze_template, TemplateFacts};
@@ -31,6 +32,7 @@ pub struct CompileOutput {
     pub specialize: SpecializationFacts,
     pub monomorphize: MonomorphizationPlan,
     pub typed: TypedExpr,
+    pub pattern: PatternFacts,
     pub control: ControlFacts,
     pub usage: UsageFacts,
     pub cps: CpsProgram,
@@ -68,31 +70,34 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         || schedule_monomorphization(&specialize),
     );
     let typed = passes.record("L6Typed", "SourceExpr", "TypedExpr", || type_expr(expr));
-    let control = passes.record("L7AnswerControl", "TypedExpr", "ControlFacts", || {
+    let pattern = passes.record("L7PatternElab", "TypedExpr", "PatternFacts", || {
+        analyze_patterns(&typed)
+    });
+    let control = passes.record("L8AnswerControl", "TypedExpr", "ControlFacts", || {
         analyze_control(&typed)
     });
-    let usage = passes.record("L8Usage", "AlphaExpr", "UsageFacts", || {
+    let usage = passes.record("L9Usage", "AlphaExpr", "UsageFacts", || {
         analyze_alpha_usage(&alpha.expr)
     });
-    let cps = passes.record("L9OnePassCps", "TypedExpr", "CpsProgram", || {
+    let cps = passes.record("L10OnePassCps", "TypedExpr", "CpsProgram", || {
         cps_program(&typed)
     });
-    let cps_usage = passes.record("L10CpsUsage", "CpsProgram", "CpsUsageFacts", || {
+    let cps_usage = passes.record("L11CpsUsage", "CpsProgram", "CpsUsageFacts", || {
         analyze_cps_usage(&cps)
     });
     let continuation_simplification = passes.record(
-        "L11ContSimplify",
+        "L12ContSimplify",
         "CpsUsageFacts",
         "ContinuationSimplificationFacts",
         || simplify_continuations(&cps_usage),
     );
-    let closure = passes.record("L12Closure", "AlphaExpr", "ClosureFacts", || {
+    let closure = passes.record("L13Closure", "AlphaExpr", "ClosureFacts", || {
         analyze_alpha_closures(&alpha.expr)
     });
-    let lambda_lift = passes.record("L13LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
+    let lambda_lift = passes.record("L14LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
         lift_lambdas(&closure)
     });
-    let core = passes.record("L14Core", "CpsProgram", "CoreProgram", || {
+    let core = passes.record("L15Core", "CpsProgram", "CoreProgram", || {
         lower_core_with_facts(
             &cps,
             &control.continuations,
@@ -103,34 +108,34 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         )
     });
     let closure_core_usage = passes.record(
-        "L15ClosureCoreUsage",
+        "L16ClosureCoreUsage",
         "CoreProgram",
         "ClosureCoreUsageFacts",
         || analyze_closure_core_usage(&core),
     );
     let closure_simplification = passes.record(
-        "L16ClosureSimplify",
+        "L17ClosureSimplify",
         "ClosureCoreUsageFacts",
         "ClosureSimplificationFacts",
         || simplify_closure_core(&closure_core_usage),
     );
-    let core_validation = passes.record("L17CoreValidate", "CoreProgram", "CoreValidation", || {
+    let core_validation = passes.record("L18CoreValidate", "CoreProgram", "CoreValidation", || {
         validate_core(&core)
     });
     let backend = passes.record(
-        "L18BackendEmit",
+        "L19BackendEmit",
         "CoreProgram+CoreValidation",
         "BackendArtifact",
         || emit_wasm_gc(&core, &core_validation),
     );
     let backend_link = passes.record(
-        "L19BackendLink",
+        "L20BackendLink",
         "BackendArtifact",
         "BackendLinkedBundle",
         || link_backend_artifacts(vec![backend.clone()]),
     );
     let backend_cache_key = passes.record(
-        "L20BackendCacheKey",
+        "L21BackendCacheKey",
         "BackendLinkedBundle",
         "BackendCacheKey",
         || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
@@ -143,6 +148,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &specialize,
         &monomorphize,
         &typed,
+        &pattern,
         &control,
         &usage,
         &cps,
@@ -166,6 +172,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         specialize,
         monomorphize,
         typed,
+        pattern,
         control,
         usage,
         cps,

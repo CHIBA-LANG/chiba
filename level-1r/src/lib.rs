@@ -14,6 +14,7 @@ pub mod debug;
 pub mod lambda_lift;
 pub mod monomorphize;
 pub mod nanopass;
+pub mod pattern;
 pub mod pipeline;
 pub mod regex;
 pub mod resolve;

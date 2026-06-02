@@ -42,20 +42,21 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
             "L4Specialize",
             "L5Monomorphize",
             "L6Typed",
-            "L7AnswerControl",
-            "L8Usage",
-            "L9OnePassCps",
-            "L10CpsUsage",
-            "L11ContSimplify",
-            "L12Closure",
-            "L13LambdaLift",
-            "L14Core",
-            "L15ClosureCoreUsage",
-            "L16ClosureSimplify",
-            "L17CoreValidate",
-            "L18BackendEmit",
-            "L19BackendLink",
-            "L20BackendCacheKey"
+            "L7PatternElab",
+            "L8AnswerControl",
+            "L9Usage",
+            "L10OnePassCps",
+            "L11CpsUsage",
+            "L12ContSimplify",
+            "L13Closure",
+            "L14LambdaLift",
+            "L15Core",
+            "L16ClosureCoreUsage",
+            "L17ClosureSimplify",
+            "L18CoreValidate",
+            "L19BackendEmit",
+            "L20BackendLink",
+            "L21BackendCacheKey"
         ]
     );
 
@@ -64,6 +65,7 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("template:"));
     assert!(visual.contains("specialize:"));
     assert!(visual.contains("monomorphize:"));
+    assert!(visual.contains("pattern:"));
     assert!(visual.contains("control:"));
     assert!(visual.contains("cps-usage:"));
     assert!(visual.contains("continuation-simplification:"));
@@ -81,25 +83,26 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("L3Template: AlphaExpr+ResolveFacts -> TemplateFacts"));
     assert!(visual.contains("L4Specialize: TemplateFacts -> SpecializationFacts"));
     assert!(visual.contains("L5Monomorphize: SpecializationFacts -> MonomorphizationPlan"));
-    assert!(visual.contains("L9OnePassCps: TypedExpr -> CpsProgram"));
-    assert!(visual.contains("L10CpsUsage: CpsProgram -> CpsUsageFacts"));
+    assert!(visual.contains("L7PatternElab: TypedExpr -> PatternFacts"));
+    assert!(visual.contains("L10OnePassCps: TypedExpr -> CpsProgram"));
+    assert!(visual.contains("L11CpsUsage: CpsProgram -> CpsUsageFacts"));
     assert!(visual.contains(
-        "L11ContSimplify: CpsUsageFacts -> ContinuationSimplificationFacts"
+        "L12ContSimplify: CpsUsageFacts -> ContinuationSimplificationFacts"
     ));
-    assert!(visual.contains("L13LambdaLift: ClosureFacts -> LambdaLiftFacts"));
-    assert!(visual.contains("L15ClosureCoreUsage: CoreProgram -> ClosureCoreUsageFacts"));
+    assert!(visual.contains("L14LambdaLift: ClosureFacts -> LambdaLiftFacts"));
+    assert!(visual.contains("L16ClosureCoreUsage: CoreProgram -> ClosureCoreUsageFacts"));
     assert!(visual.contains(
-        "L16ClosureSimplify: ClosureCoreUsageFacts -> ClosureSimplificationFacts"
+        "L17ClosureSimplify: ClosureCoreUsageFacts -> ClosureSimplificationFacts"
     ));
-    assert!(visual.contains("L17CoreValidate: CoreProgram -> CoreValidation"));
+    assert!(visual.contains("L18CoreValidate: CoreProgram -> CoreValidation"));
     assert!(visual.contains(
-        "L18BackendEmit: CoreProgram+CoreValidation -> BackendArtifact"
-    ));
-    assert!(visual.contains(
-        "L19BackendLink: BackendArtifact -> BackendLinkedBundle"
+        "L19BackendEmit: CoreProgram+CoreValidation -> BackendArtifact"
     ));
     assert!(visual.contains(
-        "L20BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"
+        "L20BackendLink: BackendArtifact -> BackendLinkedBundle"
+    ));
+    assert!(visual.contains(
+        "L21BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"
     ));
 }
 

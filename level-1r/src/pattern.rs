@@ -1,0 +1,126 @@
+use crate::ast::{Literal, Pattern};
+use crate::typed::{TypedExpr, TypedExprKind, Type};
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PatternFacts {
+    pub matches: Vec<MatchExhaustivenessFact>,
+    pub diagnostics: Vec<PatternDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MatchExhaustivenessFact {
+    pub scrutinee_type: Type,
+    pub covered_literals: Vec<Literal>,
+    pub has_wildcard: bool,
+    pub exhaustive: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PatternDiagnostic {
+    NonExhaustiveMatch {
+        scrutinee_type: Type,
+        missing: Vec<Pattern>,
+    },
+}
+
+pub fn analyze_patterns(expr: &TypedExpr) -> PatternFacts {
+    let mut facts = PatternFacts::default();
+    visit(expr, &mut facts);
+    facts
+}
+
+fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
+    match &expr.kind {
+        TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
+        TypedExprKind::Lambda { body, .. } => visit(body, facts),
+        TypedExprKind::Call { callee, arg } => {
+            visit(callee, facts);
+            visit(arg, facts);
+        }
+        TypedExprKind::Field { receiver, .. } => visit(receiver, facts),
+        TypedExprKind::MethodCall { receiver, arg, .. } => {
+            visit(receiver, facts);
+            visit(arg, facts);
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            visit(lhs, facts);
+            visit(rhs, facts);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            visit(cond, facts);
+            visit(then_branch, facts);
+            visit(else_branch, facts);
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            visit(scrutinee, facts);
+            for arm in arms {
+                visit(&arm.body, facts);
+            }
+            let fact = exhaustiveness(scrutinee, arms);
+            if !fact.exhaustive {
+                facts.diagnostics.push(PatternDiagnostic::NonExhaustiveMatch {
+                    scrutinee_type: fact.scrutinee_type.clone(),
+                    missing: missing_patterns(&fact),
+                });
+            }
+            facts.matches.push(fact);
+        }
+        TypedExprKind::Nominal { expr, .. } => visit(expr, facts),
+        TypedExprKind::Reset { body, .. } => visit(body, facts),
+        TypedExprKind::Shift { body, .. } => visit(body, facts),
+    }
+}
+
+fn exhaustiveness(
+    scrutinee: &TypedExpr,
+    arms: &[crate::typed::TypedMatchArm],
+) -> MatchExhaustivenessFact {
+    let mut covered_literals = Vec::new();
+    let mut has_wildcard = false;
+    for arm in arms {
+        match &arm.pattern {
+            Pattern::Wildcard => has_wildcard = true,
+            Pattern::Lit(lit) if !covered_literals.contains(lit) => {
+                covered_literals.push(lit.clone());
+            }
+            Pattern::Lit(_) => {}
+        }
+    }
+    let exhaustive = has_wildcard || bool_is_exhaustive(&scrutinee.ty, &covered_literals);
+    MatchExhaustivenessFact {
+        scrutinee_type: scrutinee.ty.clone(),
+        covered_literals,
+        has_wildcard,
+        exhaustive,
+    }
+}
+
+fn bool_is_exhaustive(ty: &Type, covered: &[Literal]) -> bool {
+    if *ty != Type::Bool {
+        return false;
+    }
+    covered.contains(&Literal::Bool(true)) && covered.contains(&Literal::Bool(false))
+}
+
+fn missing_patterns(fact: &MatchExhaustivenessFact) -> Vec<Pattern> {
+    if fact.has_wildcard {
+        return vec![];
+    }
+    match fact.scrutinee_type {
+        Type::Bool => {
+            let mut missing = Vec::new();
+            if !fact.covered_literals.contains(&Literal::Bool(true)) {
+                missing.push(Pattern::Lit(Literal::Bool(true)));
+            }
+            if !fact.covered_literals.contains(&Literal::Bool(false)) {
+                missing.push(Pattern::Lit(Literal::Bool(false)));
+            }
+            missing
+        }
+        _ => vec![Pattern::Wildcard],
+    }
+}
