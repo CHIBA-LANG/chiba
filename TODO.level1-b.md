@@ -139,8 +139,10 @@
 	- [ ] call lowering 必须按 CBV left-to-right 递归：先 lower callee 得到 meta 值 `f`，再 lower arg 得到 meta 值 `v`，最后只生成真实 call `f(v, kont)`；只有当前 meta-continuation 必须跨运行时调用边界时才 materialize object-level continuation `lambda w. k_meta(w)`。
 	- [ ] lambda lowering 必须区分 object-level lambda 和 meta-level lambda：函数值保留 object-level continuation 参数；函数体内部用新的 meta-continuation 把 body result 应用到 object-level continuation 参数。
 	- [ ] 三条基础规则必须直接落地：变量/atom 为 `T[x](k_meta) = k_meta(x)`；lambda 为 `k_meta(object_lambda x k => T[body](fn v => object_app k v))`；call 为 `T[e1](fn f => T[e2](fn v => object_app (object_app f v) (object_lambda w => k_meta(w))))`。多参数 call / operator / tuple / record / ADT ctor 只是把这条 CBV 规则按左到右参数列表推广。
+	- [ ] `k_meta` 不是 IR 节点、不是 `ContId`、不是后续 pass 可见的 CPS term；它只能是 pass 实现里的宿主函数/闭包。变换完成后，meta-level lambda/app 必须全部被宿主求值消掉，CPS dump 里只能剩 object-level lambda/app/control 节点。
 	- [ ] `f(x)` 的推导必须在编译期完成两次 meta-level beta：`T(f, fn f2 => T(x, fn v => object_app(object_app f2 v, object_lambda w => k_meta(w))))` 直接输出真实 call，不允许留下 `lambda f2` / `lambda v` 这种 administrative object-level 节点。
 	- [ ] 禁止形状：`(lambda a. (lambda b. a(b, k)) x) f`、`LetCont + AppCont` administrative chain、为普通 atom/field/tuple access 单独生成 continuation block；这些必须在变换过程中由 meta-level beta 消掉。
+	- [ ] 验收必须包含显式反例检查：`f(x)` 不得出现 `lambda a` / `lambda b` / `LetCont` / `AppCont`；`f(g(x), y)` 不得把 `g(x)` 的返回再包一层 administrative continuation；branch arm 内的 atom/field/tuple/record access 不得产生专属 continuation block。
 	- [ ] 实现时必须给 CPS dump / debug map 显示哪些 continuation 是真实 object-level continuation，哪些 evaluation continuation 已经被 meta-level beta 消去；不能用后置 optimizer 把 naive CPS 清干净后再宣称 one-pass。
 	- [ ] 分支 lowering 必须把 `if`/`match`/short-circuit 的 join 表达成明确 CPS join continuation，但 join continuation 本身仍遵守 one-pass 规则：arm 内普通表达式不能再引入 administrative continuation，非 `ContN` 普通 call 最终保持 tail form。
 	- [ ] `reset` / `shift` / `shiftn` 是语义控制点：`reset` 建 answer boundary，`shift` 物化 `Cont1`，`shiftn`/`resetn` 物化 `ContN` frame/package；除这些真实控制点外，不允许把 ordinary evaluation context 都 package 成 continuation。
