@@ -1,7 +1,7 @@
 use crate::alpha::{alpha_expr, AlphaFacts};
 use std::collections::BTreeSet;
 
-use crate::ast::{Expr, NamespaceDecl, SourceItem, SourceProgram, UseDecl};
+use crate::ast::{Expr, NamespaceDecl, ParamDecl, SourceItem, SourceProgram, UseDecl};
 use crate::backend::{
     backend_cache_key, emit_wasm_gc, link_backend_artifacts, BackendArtifact, BackendCacheConfig,
     BackendCacheKey, BackendLinkedBundle,
@@ -107,13 +107,15 @@ pub enum ProgramDiagnostic {
 }
 
 pub fn compile_expr(expr: &Expr) -> CompileOutput {
-    compile_expr_with_name_index_and_generics(expr, NameIndex::default(), &[])
+    compile_expr_with_name_index_and_generics(expr, NameIndex::default(), &[], &[], &None)
 }
 
 fn compile_expr_with_name_index_and_generics(
     expr: &Expr,
     names: NameIndex,
     explicit_generics: &[String],
+    params: &[ParamDecl],
+    return_type: &Option<String>,
 ) -> CompileOutput {
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || alpha_expr(expr));
@@ -125,7 +127,14 @@ fn compile_expr_with_name_index_and_generics(
         }
     });
     let template = passes.record("L3Template", "AlphaExpr+ResolveFacts", "TemplateFacts", || {
-        analyze_template_with_source(expr, explicit_generics, &alpha.expr, &resolve)
+        analyze_template_with_source(
+            expr,
+            explicit_generics,
+            params,
+            return_type,
+            &alpha.expr,
+            &resolve,
+        )
     });
     let specialize = passes.record("L4Specialize", "TemplateFacts", "SpecializationFacts", || {
         plan_specialization("<expr>", &template)
@@ -384,12 +393,19 @@ fn compile_program_defs(
                 name,
                 generics,
                 params,
+                return_type,
                 body,
                 ..
             } => Some(ProgramDefOutput {
                 name: name.clone(),
                 params: params.iter().map(|param| param.name.clone()).collect(),
-                output: compile_expr_with_name_index_and_generics(body, names.clone(), generics),
+                output: compile_expr_with_name_index_and_generics(
+                    body,
+                    names.clone(),
+                    generics,
+                    params,
+                    return_type,
+                ),
             }),
             SourceItem::StaticValue { .. } => None,
         })

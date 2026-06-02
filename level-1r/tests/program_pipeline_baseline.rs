@@ -204,6 +204,32 @@ fn interface_summary_preserves_explicit_checked_template_params() {
 }
 
 #[test]
+fn auto_generic_is_lowering_fact_not_source_surface_generic() {
+    let program = SourceProgram::new(vec![def("id", vec!["x"], Expr::var("x"))]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.surface.defs[0].generics, Vec::<String>::new());
+    assert_eq!(bundle.interface.functions[0].generics, Vec::<String>::new());
+    assert_eq!(
+        bundle.defs[0].output.template.explicit_params,
+        vec![chiba_level1r::TemplateParam {
+            name: "T_x".to_string(),
+            source: chiba_level1r::TemplateParamSource::SyntheticAutoGeneric,
+        }]
+    );
+    assert_eq!(
+        bundle.defs[0]
+            .output
+            .specialize
+            .work_items[0]
+            .key
+            .template_params,
+        bundle.defs[0].output.template.explicit_params
+    );
+}
+
+#[test]
 fn program_surface_and_interface_preserve_static_values_separately_from_functions() {
     let program = SourceProgram::new(vec![
         static_value("ONE", Some("i64"), Expr::i64(1)),

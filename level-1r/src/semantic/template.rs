@@ -1,5 +1,5 @@
 use crate::alpha::{AlphaExpr, AlphaExprKind};
-use crate::ast::Expr;
+use crate::ast::{Expr, ParamDecl};
 use crate::resolve::{
     OperatorObligation, OperatorSurface, ResolveFacts, ResolvedCall, ResolvedName,
 };
@@ -111,6 +111,8 @@ pub fn analyze_template(expr: &AlphaExpr, resolve: &ResolveFacts) -> TemplateFac
 pub fn analyze_template_with_source(
     source: &Expr,
     explicit_params: &[String],
+    source_params: &[ParamDecl],
+    return_type: &Option<String>,
     expr: &AlphaExpr,
     resolve: &ResolveFacts,
 ) -> TemplateFacts {
@@ -122,8 +124,73 @@ pub fn analyze_template_with_source(
             source: TemplateParamSource::ExplicitHeader,
         })
         .collect();
+    collect_auto_template_params(source, source_params, return_type, &mut facts);
     collect_source_instantiations(source, &mut facts);
     facts
+}
+
+fn collect_auto_template_params(
+    source: &Expr,
+    source_params: &[ParamDecl],
+    return_type: &Option<String>,
+    facts: &mut TemplateFacts,
+) {
+    for param in source_params.iter().filter(|param| param.ty.is_none()) {
+        push_template_param_once(
+            facts,
+            TemplateParam {
+                name: format!("T_{}", param.name),
+                source: TemplateParamSource::SyntheticAutoGeneric,
+            },
+        );
+    }
+
+    if return_type.is_none() && source_needs_auto_return_param(source, source_params) {
+        push_template_param_once(
+            facts,
+            TemplateParam {
+                name: "T_return".to_string(),
+                source: TemplateParamSource::SyntheticAutoGeneric,
+            },
+        );
+    }
+}
+
+fn source_needs_auto_return_param(source: &Expr, source_params: &[ParamDecl]) -> bool {
+    match source {
+        Expr::Lit(_) => false,
+        Expr::Var(name) => !source_params
+            .iter()
+            .any(|param| param.name == *name && param.ty.is_none()),
+        Expr::Tuple(fields) => fields
+            .iter()
+            .any(|field| source_needs_auto_return_param(field, source_params)),
+        Expr::Record(fields) => fields
+            .iter()
+            .any(|field| source_needs_auto_return_param(&field.value, source_params)),
+        Expr::RecordUpdate { .. }
+        | Expr::AdtCtor { .. }
+        | Expr::Field { .. }
+        | Expr::MethodCall { .. }
+        | Expr::Index { .. }
+        | Expr::Range { .. }
+        | Expr::Binary { .. }
+        | Expr::If { .. }
+        | Expr::IfLet { .. }
+        | Expr::Match { .. }
+        | Expr::Nominal { .. }
+        | Expr::Reset { .. }
+        | Expr::Shift { .. }
+        | Expr::Lambda { .. }
+        | Expr::Call { .. }
+        | Expr::Instantiate { .. } => true,
+    }
+}
+
+fn push_template_param_once(facts: &mut TemplateFacts, param: TemplateParam) {
+    if !facts.explicit_params.iter().any(|existing| existing == &param) {
+        facts.explicit_params.push(param);
+    }
 }
 
 fn collect_source_instantiations(expr: &Expr, facts: &mut TemplateFacts) {

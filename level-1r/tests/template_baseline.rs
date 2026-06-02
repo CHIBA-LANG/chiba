@@ -132,3 +132,55 @@ fn explicit_template_header_enters_program_template_facts() {
     );
     assert!(def.render_visual().contains("explicit_params"));
 }
+
+#[test]
+fn unannotated_identity_function_promotes_boundary_to_auto_generic() {
+    let output =
+        chiba_level1r::compile_source_program_bundle("def id(x) = x").expect("compile source");
+    let def = &output.program.defs[0].output;
+
+    assert_eq!(
+        def.template.explicit_params,
+        vec![TemplateParam {
+            name: "T_x".to_string(),
+            source: TemplateParamSource::SyntheticAutoGeneric,
+        }]
+    );
+    assert_eq!(
+        def.specialize.work_items[0].key.template_params,
+        def.template.explicit_params
+    );
+    assert!(def.render_visual().contains("SyntheticAutoGeneric"));
+}
+
+#[test]
+fn unannotated_row_field_function_keeps_auto_generic_and_row_obligation() {
+    let output = chiba_level1r::compile_source_program_bundle("def get_name(x) = x.name")
+        .expect("compile source");
+    let def = &output.program.defs[0].output;
+
+    assert!(def.template.explicit_params.contains(&TemplateParam {
+        name: "T_x".to_string(),
+        source: TemplateParamSource::SyntheticAutoGeneric,
+    }));
+    assert!(def.template.explicit_params.contains(&TemplateParam {
+        name: "T_return".to_string(),
+        source: TemplateParamSource::SyntheticAutoGeneric,
+    }));
+    assert!(def
+        .template
+        .obligations
+        .contains(&TemplateObligation::Field {
+            shape: canonical_open_row(vec![("name", ShapeType::Unknown)]),
+            field: "name".to_string(),
+        }));
+}
+
+#[test]
+fn annotated_function_boundary_does_not_create_auto_generic_params() {
+    let output = chiba_level1r::compile_source_program_bundle("def id(x: I64): I64 = x")
+        .expect("compile source");
+    let def = &output.program.defs[0].output;
+
+    assert!(def.template.explicit_params.is_empty());
+}
