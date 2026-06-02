@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::core::{CoreOp, CoreProgram, CoreValidation, OwnershipDecision};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -6,6 +8,14 @@ pub struct BackendArtifact {
     pub wat: String,
     pub manifest: BackendManifest,
     pub diagnostics: Vec<BackendDiagnostic>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BackendLinkedBundle {
+    pub target: BackendTarget,
+    pub linked_wat: String,
+    pub manifest: BackendManifest,
+    pub diagnostics: Vec<BackendLinkDiagnostic>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -30,6 +40,17 @@ pub struct BackendManifestEntry {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BackendDiagnostic {
     CoreValidationFailed { diagnostics: usize },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BackendLinkDiagnostic {
+    ArtifactEmitFailed { artifact_index: usize },
+    DuplicateFinalSymbol { symbol: String },
+    TargetMismatch {
+        artifact_index: usize,
+        expected: BackendTarget,
+        actual: BackendTarget,
+    },
 }
 
 pub fn emit_wasm_gc(core: &CoreProgram, validation: &CoreValidation) -> BackendArtifact {
@@ -123,4 +144,82 @@ fn final_symbol(symbol: &str) -> String {
             }
         })
         .collect()
+}
+
+pub fn link_backend_artifacts(mut artifacts: Vec<BackendArtifact>) -> BackendLinkedBundle {
+    let target = artifacts
+        .first()
+        .map(|artifact| artifact.target)
+        .unwrap_or_default();
+    let mut diagnostics = Vec::new();
+    let mut seen_symbols = BTreeSet::new();
+    let mut entries = Vec::new();
+
+    for (artifact_index, artifact) in artifacts.iter().enumerate() {
+        if artifact.target != target {
+            diagnostics.push(BackendLinkDiagnostic::TargetMismatch {
+                artifact_index,
+                expected: target,
+                actual: artifact.target,
+            });
+        }
+        if !artifact.diagnostics.is_empty() {
+            diagnostics.push(BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index });
+        }
+        for entry in &artifact.manifest.entries {
+            if !seen_symbols.insert(entry.final_symbol.clone()) {
+                diagnostics.push(BackendLinkDiagnostic::DuplicateFinalSymbol {
+                    symbol: entry.final_symbol.clone(),
+                });
+            }
+            entries.push(entry.clone());
+        }
+    }
+
+    entries.sort_by(|left, right| left.final_symbol.cmp(&right.final_symbol));
+
+    if !diagnostics.is_empty() {
+        return BackendLinkedBundle {
+            target,
+            linked_wat: String::new(),
+            manifest: BackendManifest { entries },
+            diagnostics,
+        };
+    }
+
+    artifacts.sort_by(|left, right| {
+        let left_key = left
+            .manifest
+            .entries
+            .first()
+            .map(|entry| entry.final_symbol.as_str())
+            .unwrap_or("");
+        let right_key = right
+            .manifest
+            .entries
+            .first()
+            .map(|entry| entry.final_symbol.as_str())
+            .unwrap_or("");
+        left_key.cmp(right_key)
+    });
+
+    let mut linked_wat = String::from("(module\n");
+    for (artifact_index, artifact) in artifacts.iter().enumerate() {
+        linked_wat.push_str(&format!("  ;; linked artifact {artifact_index}\n"));
+        for line in artifact.wat.lines() {
+            if line == "(module" || line == ")" {
+                continue;
+            }
+            linked_wat.push_str(line);
+            linked_wat.push('\n');
+        }
+    }
+    linked_wat.push_str(")\n");
+
+    BackendLinkedBundle {
+        target,
+        linked_wat,
+        manifest: BackendManifest { entries },
+        diagnostics,
+    }
 }

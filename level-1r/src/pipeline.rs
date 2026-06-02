@@ -1,6 +1,6 @@
 use crate::alpha::{alpha_expr, AlphaFacts};
 use crate::ast::{Expr, SourceItem, SourceProgram};
-use crate::backend::{emit_wasm_gc, BackendArtifact};
+use crate::backend::{emit_wasm_gc, link_backend_artifacts, BackendArtifact, BackendLinkedBundle};
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
 use crate::closure_simplify::{simplify_closure_core, ClosureSimplificationFacts};
@@ -40,6 +40,7 @@ pub struct CompileOutput {
     pub closure_simplification: ClosureSimplificationFacts,
     pub core_validation: CoreValidation,
     pub backend: BackendArtifact,
+    pub backend_link: BackendLinkedBundle,
     pub passes: PassReport,
     pub visual: VisualReport,
 }
@@ -118,6 +119,12 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         "BackendArtifact",
         || emit_wasm_gc(&core, &core_validation),
     );
+    let backend_link = passes.record(
+        "L19BackendLink",
+        "BackendArtifact",
+        "BackendLinkedBundle",
+        || link_backend_artifacts(vec![backend.clone()]),
+    );
     let visual = visual_report(
         expr,
         &alpha,
@@ -138,6 +145,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &closure_simplification,
         &core_validation,
         &backend,
+        &backend_link,
         &passes,
     );
     CompileOutput {
@@ -159,6 +167,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         closure_simplification,
         core_validation,
         backend,
+        backend_link,
         passes,
         visual,
     }
