@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::core::{CoreOp, CoreProgram, CoreValidation, OwnershipDecision};
+use crate::core::{CoreOp, CoreProgram, CoreValidation, CoreValue, OwnershipDecision};
 use crate::symbol::encode_debug_symbol;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -9,6 +9,7 @@ pub struct BackendArtifact {
     pub wat: String,
     pub manifest: BackendManifest,
     pub diagnostics: Vec<BackendDiagnostic>,
+    pub return_value: Option<CoreValue>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -113,6 +114,7 @@ pub fn emit_wasm_gc(core: &CoreProgram, validation: &CoreValidation) -> BackendA
             diagnostics: vec![BackendDiagnostic::CoreValidationFailed {
                 diagnostics: validation.diagnostics.len(),
             }],
+            return_value: None,
         };
     }
 
@@ -122,7 +124,15 @@ pub fn emit_wasm_gc(core: &CoreProgram, validation: &CoreValidation) -> BackendA
         wat: render_wat(core, &manifest),
         manifest,
         diagnostics: vec![],
+        return_value: first_return_value(core),
     }
+}
+
+fn first_return_value(core: &CoreProgram) -> Option<CoreValue> {
+    core.ops.iter().find_map(|op| match op {
+        CoreOp::ReturnValue(value) => Some(value.clone()),
+        _ => None,
+    })
 }
 
 fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
@@ -147,7 +157,7 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
                 pass_origin: "L16Core".to_string(),
                 ownership: ownership_for_subject(core, target),
             }),
-            CoreOp::ReturnAtom(_)
+            CoreOp::ReturnValue(_)
             | CoreOp::DynamicCallableTarget { .. }
             | CoreOp::TupleConstruct { .. }
             | CoreOp::TupleFieldGet { .. }
@@ -187,18 +197,20 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
     }
     for op in &core.ops {
         match op {
-            CoreOp::ReturnAtom(atom) => {
+            CoreOp::ReturnValue(value) => {
                 let symbol = if return_index == 0 {
                     "main".to_string()
                 } else {
                     format!("chiba_return_{return_index}")
                 };
+                let debug_name = value.debug_name();
                 wat.push_str(&format!(
                     "  ;; core-return atom={}\n",
-                    escape_wat_comment(atom)
+                    escape_wat_comment(&debug_name)
                 ));
                 wat.push_str(&format!("  (func ${symbol} (export \"{symbol}\") (result i32)\n"));
-                wat.push_str(&format!("    i32.const {})\n", atom_i32_result(atom)));
+                render_core_value_i32(&mut wat, value);
+                wat.push_str(")\n");
                 return_index += 1;
             }
             CoreOp::TailCall { func, args } => {
@@ -304,23 +316,12 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
     wat
 }
 
-fn atom_i32_result(atom: &str) -> i32 {
-    if atom == "Unit" || atom == "unit" {
-        0
-    } else if atom == "Bool(true)" || atom == "true" {
-        1
-    } else if atom == "Bool(false)" || atom == "false" {
-        0
-    } else if let Some(value) = atom
-        .strip_prefix("I64(")
-        .and_then(|rest| rest.strip_suffix(')'))
-        .and_then(|digits| digits.parse::<i64>().ok())
-    {
-        value as i32
-    } else if let Ok(value) = atom.parse::<i64>() {
-        value as i32
-    } else {
-        0
+fn render_core_value_i32(wat: &mut String, value: &CoreValue) {
+    match value {
+        CoreValue::Unit => wat.push_str("    i32.const 0\n"),
+        CoreValue::I64(value) => wat.push_str(&format!("    i32.const {}\n", *value as i32)),
+        CoreValue::Bool(value) => wat.push_str(&format!("    i32.const {}\n", i32::from(*value))),
+        CoreValue::Var(_) | CoreValue::Rendered { .. } => wat.push_str("    i32.const 0\n"),
     }
 }
 
@@ -392,8 +393,12 @@ pub fn link_backend_artifacts(mut artifacts: Vec<BackendArtifact>) -> BackendLin
     let mut linked_wat = String::from("(module\n");
     for (artifact_index, artifact) in artifacts.iter().enumerate() {
         linked_wat.push_str(&format!("  ;; linked artifact {artifact_index}\n"));
-        for line in artifact.wat.lines() {
-            if line == "(module" || line == ")" {
+        let lines = artifact.wat.lines().collect::<Vec<_>>();
+        for (line_index, line) in lines.iter().enumerate() {
+            if line_index == 0 && *line == "(module" {
+                continue;
+            }
+            if line_index + 1 == lines.len() && *line == ")" {
                 continue;
             }
             linked_wat.push_str(line);

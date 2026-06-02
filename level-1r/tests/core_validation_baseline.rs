@@ -1,7 +1,7 @@
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
     validate_core, CallableStorageFact, CallableStorageKind, ClosureEnvField, ClosureEnvLayout,
-    ContinuationEnvLayout, CoreDiagnostic, CoreOp, CoreProgram, LayoutFact, LayoutKind,
+    ContinuationEnvLayout, CoreDiagnostic, CoreOp, CoreProgram, CoreValue, LayoutFact, LayoutKind,
     OwnershipDecision, OwnershipFact, TupleLayout,
 };
 use chiba_level1r::template::{canonical_open_row, ShapeType};
@@ -24,7 +24,9 @@ fn validator_rejects_target_specific_core_terms() {
     output
         .core
         .ops
-        .push(CoreOp::ReturnAtom("funcref-leak".to_string()));
+        .push(CoreOp::ReturnValue(CoreValue::Rendered {
+            debug: "funcref-leak".to_string(),
+        }));
 
     let validation = validate_core(&output.core);
 

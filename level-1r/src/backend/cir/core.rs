@@ -17,7 +17,7 @@ pub struct CoreProgram {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoreOp {
-    ReturnAtom(String),
+    ReturnValue(CoreValue),
     TailCall {
         func: String,
         args: Vec<String>,
@@ -88,6 +88,29 @@ pub enum CoreOp {
         env_params: Vec<String>,
         direct: bool,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CoreValue {
+    Unit,
+    I64(i64),
+    Bool(bool),
+    Var(String),
+    Rendered {
+        debug: String,
+    },
+}
+
+impl CoreValue {
+    pub fn debug_name(&self) -> String {
+        match self {
+            CoreValue::Unit => "unit".to_string(),
+            CoreValue::I64(value) => value.to_string(),
+            CoreValue::Bool(value) => value.to_string(),
+            CoreValue::Var(name) => name.clone(),
+            CoreValue::Rendered { debug } => debug.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -513,7 +536,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         CoreOp::DirectMethodTarget { target, .. } => target == func,
         CoreOp::OperatorTarget { target, .. } => target == func,
         CoreOp::LiftedFunction { symbol, .. } => symbol == func,
-        CoreOp::ReturnAtom(_)
+        CoreOp::ReturnValue(_)
         | CoreOp::TupleConstruct { .. }
         | CoreOp::TupleFieldGet { .. }
         | CoreOp::RecordConstruct { .. }
@@ -737,6 +760,18 @@ fn render_atom(atom: &CpsAtom) -> String {
     }
 }
 
+fn core_value(atom: &CpsAtom) -> CoreValue {
+    match atom {
+        CpsAtom::Lit(crate::ast::Literal::I64(value)) => CoreValue::I64(*value),
+        CpsAtom::Lit(crate::ast::Literal::Bool(value)) => CoreValue::Bool(*value),
+        CpsAtom::Var(name) if name == "Unit" || name == "unit" => CoreValue::Unit,
+        CpsAtom::Var(name) => CoreValue::Var(name.clone()),
+        _ => CoreValue::Rendered {
+            debug: render_atom(atom),
+        },
+    }
+}
+
 fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
     match atom {
         CpsAtom::Tuple { nominal, fields } => {
@@ -745,7 +780,7 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 layout,
                 fields: fields.iter().map(render_atom).collect(),
             });
-            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::TupleField { tuple, field } => {
             if let CpsAtom::Tuple { nominal, .. } = tuple.as_ref() {
@@ -755,19 +790,19 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 });
             }
             lower_atom_value(tuple, ops);
-            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Range { start, end } => {
             lower_atom_value(start, ops);
             lower_atom_value(end, ops);
-            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Record { layout, fields } => {
             ops.push(CoreOp::RecordConstruct {
                 layout: layout.clone(),
                 fields: fields.iter().map(|field| field.name.clone()).collect(),
             });
-            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::RecordUpdate {
             base,
@@ -780,7 +815,7 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 fields: fields.iter().map(|field| field.name.clone()).collect(),
             });
             lower_atom_value(base, ops);
-            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::RecordField { record, field } => {
             if let CpsAtom::Record { layout, .. } = record.as_ref() {
@@ -790,7 +825,7 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 });
             }
             lower_atom_value(record, ops);
-            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::AdtCtor {
             data,
@@ -804,9 +839,9 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 variants: variants.clone(),
                 args: args.iter().map(render_atom).collect(),
             });
-            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
-        _ => ops.push(CoreOp::ReturnAtom(render_atom(atom))),
+        _ => ops.push(CoreOp::ReturnValue(core_value(atom))),
     }
 }
 

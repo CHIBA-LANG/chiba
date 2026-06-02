@@ -12,7 +12,7 @@ use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
 use crate::closure_simplify::{simplify_closure_core, ClosureSimplificationFacts};
 use crate::control::{analyze_control, ControlFacts};
-use crate::core::{lower_core_with_facts, validate_core, CoreProgram, CoreValidation};
+use crate::core::{lower_core_with_facts, validate_core, CoreProgram, CoreValidation, CoreValue};
 use crate::cps::{cps_program, CpsProgram};
 use crate::cps_usage::{
     analyze_cps_usage, simplify_continuations, ContinuationSimplificationFacts, CpsUsageFacts,
@@ -890,7 +890,7 @@ fn program_backend_artifacts(
                 entry_exported = true;
             }
             artifact.wat = relabel_program_wat(
-                &artifact.wat,
+                &artifact,
                 &def_symbol(&def.name, index),
                 is_entry,
                 &static_names,
@@ -901,24 +901,28 @@ fn program_backend_artifacts(
 }
 
 fn relabel_program_wat(
-    wat: &str,
+    artifact: &BackendArtifact,
     symbol: &str,
     is_entry: bool,
     static_names: &BTreeSet<&str>,
 ) -> String {
+    let wat = &artifact.wat;
+    let relabeled = if is_entry {
+        wat.replace(
+            "(func $main (export \"main\")",
+            &format!("(func ${symbol} (export \"main\")"),
+        )
+    } else {
+        wat.replace("(func $main (export \"main\")", &format!("(func ${symbol}"))
+    };
     if is_entry {
-        replace_static_return(
-            &wat.replace(
-                "(func $main (export \"main\")",
-                &format!("(func ${symbol} (export \"main\")"),
-            ),
+        replace_static_return_from_fact(
+            &relabeled,
+            artifact.return_value.as_ref(),
             static_names,
         )
     } else {
-        replace_static_return(&wat.replace(
-            "(func $main (export \"main\")",
-            &format!("(func ${symbol}"),
-        ), static_names)
+        relabeled
     }
 }
 
@@ -973,23 +977,22 @@ fn lower_global_init_into_linked_wat(
     bundle
 }
 
-fn replace_static_return(wat: &str, static_names: &BTreeSet<&str>) -> String {
-    let Some(start) = wat.find(";; core-return atom=") else {
+fn replace_static_return_from_fact(
+    wat: &str,
+    return_value: Option<&CoreValue>,
+    static_names: &BTreeSet<&str>,
+) -> String {
+    let Some(CoreValue::Var(name)) = return_value else {
         return wat.to_string();
     };
-    let atom_start = start + ";; core-return atom=".len();
-    let Some(atom_end) = wat[atom_start..].find('\n').map(|offset| atom_start + offset) else {
-        return wat.to_string();
-    };
-    let atom = &wat[atom_start..atom_end];
-    if !static_names.contains(atom) {
+    if !static_names.contains(name.as_str()) {
         return wat.to_string();
     }
-    let Some(const_start) = wat[atom_end..].find("    i32.const 0").map(|offset| atom_end + offset) else {
+    let Some(const_start) = wat.find("    i32.const 0") else {
         return wat.to_string();
     };
     let const_end = const_start + "    i32.const 0".len();
-    let replacement = format!("    global.get ${}", global_symbol(atom));
+    let replacement = format!("    global.get ${}", global_symbol(name));
     let mut out = String::new();
     out.push_str(&wat[..const_start]);
     out.push_str(&replacement);

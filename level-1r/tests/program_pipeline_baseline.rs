@@ -792,6 +792,10 @@ fn global_init_allows_ordered_and_forward_static_dependencies() {
         bundle.global_init.init_order,
         vec!["ONE".to_string(), "TWO".to_string(), "THREE".to_string()]
     );
+    assert_eq!(
+        bundle.defs[0].output.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::Var("THREE".to_string()))
+    );
     assert!(bundle
         .backend_link
         .linked_wat

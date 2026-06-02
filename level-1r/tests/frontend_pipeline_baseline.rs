@@ -910,7 +910,12 @@ fn frontend_parses_range_value_as_shared_ast_node() {
     let main = &bundle.defs[0].output;
     assert!(main.cps.to_string().contains("start..end"));
     assert!(main.core.ops.iter().any(|op| {
-        matches!(op, chiba_level1r::core::CoreOp::ReturnAtom(atom) if atom == "start..end")
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ReturnValue(
+                chiba_level1r::core::CoreValue::Rendered { debug }
+            ) if debug == "start..end"
+        )
     }));
 }
 
