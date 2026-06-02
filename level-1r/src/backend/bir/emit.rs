@@ -193,6 +193,7 @@ fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipD
 fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
     let mut wat = String::from("(module\n");
     let mut return_index = 0usize;
+    let mut tailcall_index = 0usize;
     for entry in &manifest.entries {
         wat.push_str(&format!(
             "  ;; source={} origin={}\n",
@@ -270,6 +271,13 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
+                if args.is_empty() {
+                    let symbol = format!("chiba_tailcall_{tailcall_index}");
+                    wat.push_str(&format!("  (func ${symbol} (result i32)\n"));
+                    wat.push_str(&format!("    call ${}\n", final_symbol(func)));
+                    wat.push_str("  )\n");
+                    tailcall_index += 1;
+                }
             }
             CoreOp::Branch { cond } => {
                 wat.push_str(&format!("  ;; branch cond={}\n", escape_wat_comment(cond)));

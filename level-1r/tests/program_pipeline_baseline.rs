@@ -229,6 +229,40 @@ fn program_record_field_return_lowers_to_executable_wat_value() {
 }
 
 #[test]
+fn program_zero_arg_tailcall_lowers_to_executable_direct_call_wat() {
+    let program = SourceProgram::new(vec![
+        def("helper", vec![], Expr::i64(7)),
+        def("main", vec![], Expr::call_args(Expr::var("helper"), Vec::new())),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.backend_link.linked_wat
+    );
+    assert!(bundle.defs[1].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "helper" && args.is_empty()
+        )
+    }));
+    assert!(bundle.backend_link.linked_wat.contains(";; tailcall helper args=[]"));
+    assert!(bundle.backend_link.linked_wat.contains("call $helper"));
+
+    let callable_wat = export_func_for_test(
+        &bundle.backend_link.linked_wat,
+        "$chiba_tailcall_0",
+        "tailcall_main",
+    );
+    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "7");
+}
+
+#[test]
 fn program_bundle_reports_duplicate_defs_and_entry_params() {
     let program = SourceProgram::new(vec![
         def("main", vec!["x"], Expr::var("x")),
@@ -982,6 +1016,10 @@ fn global_init_allows_ordered_and_forward_static_dependencies() {
 }
 
 fn run_wat_text(wat: &str) -> String {
+    run_wat_export(wat, "main")
+}
+
+fn run_wat_export(wat: &str, export: &str) -> String {
     let path = std::env::temp_dir().join(format!(
         "level1r-global-init-{}-{}.wat",
         std::process::id(),
@@ -994,6 +1032,8 @@ fn run_wat_text(wat: &str) -> String {
     let output = Command::new("node")
         .arg("tools/node/run-wat.mjs")
         .arg(&path)
+        .arg("--invoke")
+        .arg(export)
         .current_dir(repo_root)
         .output()
         .expect("run generated wat");
@@ -1008,6 +1048,13 @@ fn run_wat_text(wat: &str) -> String {
         .expect("wat stdout utf8")
         .trim()
         .to_string()
+}
+
+fn export_func_for_test(wat: &str, symbol: &str, export: &str) -> String {
+    wat.replace(
+        &format!("(func {symbol} (result i32)"),
+        &format!("(func {symbol} (export \"{export}\") (result i32)"),
+    )
 }
 
 #[test]
