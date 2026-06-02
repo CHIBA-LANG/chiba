@@ -136,6 +136,7 @@ pub enum CoreDiagnostic {
     DynRowLayoutKindMismatch { layout: String },
     MissingStaticRowLayout { layout: String },
     StaticRowLayoutKindMismatch { layout: String },
+    DanglingTailCallTarget { target: String },
     EnvClosureMissingLayout { subject: String },
     ClosureEnvLayoutHasNoFields { layout: String },
     SendableCallableContainsContinuation { subject: String },
@@ -187,6 +188,7 @@ pub fn validate_core(program: &CoreProgram) -> CoreValidation {
     validate_target_neutral(program, &mut diagnostics);
     validate_layouts(program, &mut diagnostics);
     validate_continuation_packages(program, &mut diagnostics);
+    validate_tail_calls(program, &mut diagnostics);
     validate_static_row_access(program, &mut diagnostics);
     validate_dyn_adapter_layouts(program, &mut diagnostics);
     validate_lifted_functions(program, &mut diagnostics);
@@ -363,6 +365,40 @@ fn validate_continuation_packages(program: &CoreProgram, diagnostics: &mut Vec<C
             }
         }
     }
+}
+
+fn validate_tail_calls(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    for op in &program.ops {
+        if let CoreOp::TailCall { func, .. } = op {
+            if !is_known_tail_target(program, func) {
+                diagnostics.push(CoreDiagnostic::DanglingTailCallTarget {
+                    target: func.clone(),
+                });
+            }
+        }
+    }
+}
+
+fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
+    if func.starts_with("lambda#") || func.starts_with("cont#") || is_dynamic_callable_value(func) {
+        return true;
+    }
+    program.ops.iter().any(|op| match op {
+        CoreOp::DirectMethodTarget { target, .. } => target == func,
+        CoreOp::OperatorTarget { target, .. } => target == func,
+        CoreOp::LiftedFunction { symbol, .. } => symbol == func,
+        CoreOp::ReturnAtom(_)
+        | CoreOp::TailCall { .. }
+        | CoreOp::Prompt { .. }
+        | CoreOp::CaptureContinuation { .. }
+        | CoreOp::StaticRowAccess { .. }
+        | CoreOp::DynRowAdapterAccess { .. } => false,
+    })
+}
+
+fn is_dynamic_callable_value(func: &str) -> bool {
+    func.chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
 }
 
 fn validate_static_row_access(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {

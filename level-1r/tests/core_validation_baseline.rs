@@ -138,6 +138,57 @@ fn validator_rejects_cont1_package_and_send_rc_contradiction() {
 }
 
 #[test]
+fn validator_rejects_dangling_direct_tailcall_target() {
+    let program = CoreProgram {
+        ops: vec![CoreOp::TailCall {
+            func: "module::missing".to_string(),
+            arg: "x".to_string(),
+        }],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    assert_eq!(
+        validate_core(&program).diagnostics,
+        vec![CoreDiagnostic::DanglingTailCallTarget {
+            target: "module::missing".to_string()
+        }]
+    );
+}
+
+#[test]
+fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
+    let known = CoreProgram {
+        ops: vec![
+            CoreOp::DirectMethodTarget {
+                name: "norm".to_string(),
+                target: "math.Vec2.norm".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "math.Vec2.norm".to_string(),
+                arg: "v".to_string(),
+            },
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+    assert_eq!(validate_core(&known).diagnostics, vec![]);
+
+    let dynamic = CoreProgram {
+        ops: vec![CoreOp::TailCall {
+            func: "f".to_string(),
+            arg: "x".to_string(),
+        }],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+    assert_eq!(validate_core(&dynamic).diagnostics, vec![]);
+}
+
+#[test]
 fn validator_rejects_dyn_adapter_missing_or_wrong_layout_ref() {
     let missing = CoreProgram {
         ops: vec![CoreOp::DynRowAdapterAccess {
