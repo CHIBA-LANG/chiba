@@ -3,7 +3,7 @@ pub enum RegexAst {
     Empty,
     Literal(char),
     Any,
-    Class(Vec<char>, bool),
+    Class(Vec<ClassAtom>, bool),
     Seq(Vec<RegexAst>),
     Alt(Box<RegexAst>, Box<RegexAst>),
     Repeat {
@@ -35,10 +35,18 @@ pub struct RegexProgram {
 pub enum RegexInst {
     Char(char),
     Any,
-    Class { chars: Vec<char>, negated: bool },
+    Class { atoms: Vec<ClassAtom>, negated: bool },
     Split(usize, usize),
     Jump(usize),
     Accept,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ClassAtom {
+    Char(char),
+    Range(char, char),
+    XidStart,
+    XidContinue,
 }
 
 pub fn parse(pattern: &str) -> Result<RegexAst, RegexError> {
@@ -87,11 +95,11 @@ impl RegexProgram {
                     None
                 }
             }
-            RegexInst::Class { chars: set, negated } => {
+            RegexInst::Class { atoms, negated } => {
                 let Some(ch) = chars.get(offset) else {
                     return None;
                 };
-                let hit = set.contains(ch);
+                let hit = atoms.iter().any(|atom| atom.matches(*ch));
                 if hit != *negated {
                     self.step(pc + 1, offset + 1, chars, depth + 1)
                 } else {
@@ -111,8 +119,8 @@ fn compile_into(ast: &RegexAst, code: &mut Vec<RegexInst>) {
         RegexAst::Empty => {}
         RegexAst::Literal(ch) => code.push(RegexInst::Char(*ch)),
         RegexAst::Any => code.push(RegexInst::Any),
-        RegexAst::Class(chars, negated) => code.push(RegexInst::Class {
-            chars: chars.clone(),
+        RegexAst::Class(atoms, negated) => code.push(RegexInst::Class {
+            atoms: atoms.clone(),
             negated: *negated,
         }),
         RegexAst::Seq(items) => {
@@ -242,15 +250,17 @@ impl Parser {
                 Ok(ast)
             }
             '\\' => match self.next().ok_or(RegexError::UnexpectedEnd)? {
-                'd' => Ok(RegexAst::Class(('0'..='9').collect(), false)),
+                'd' => Ok(RegexAst::Class(vec![ClassAtom::Range('0', '9')], false)),
                 'w' => Ok(RegexAst::Class(
-                    ('a'..='z')
-                        .chain('A'..='Z')
-                        .chain('0'..='9')
-                        .chain(std::iter::once('_'))
-                        .collect(),
+                    vec![
+                        ClassAtom::Range('a', 'z'),
+                        ClassAtom::Range('A', 'Z'),
+                        ClassAtom::Range('0', '9'),
+                        ClassAtom::Char('_'),
+                    ],
                     false,
                 )),
+                'p' if self.peek() == Some('{') => self.parse_property_escape(),
                 other @ ('1'..='9') => {
                     let _ = other;
                     Err(RegexError::UnsupportedPcreFeature("backref"))
@@ -268,22 +278,38 @@ impl Parser {
         } else {
             false
         };
-        let mut chars = Vec::new();
+        let mut atoms = Vec::new();
         while let Some(ch) = self.next() {
             if ch == ']' {
-                return Ok(RegexAst::Class(chars, negated));
+                return Ok(RegexAst::Class(atoms, negated));
             }
             if self.peek() == Some('-') {
                 self.pos += 1;
                 let end = self.next().ok_or(RegexError::UnclosedClass)?;
-                for item in ch..=end {
-                    chars.push(item);
-                }
+                atoms.push(ClassAtom::Range(ch, end));
             } else {
-                chars.push(ch);
+                atoms.push(ClassAtom::Char(ch));
             }
         }
         Err(RegexError::UnclosedClass)
+    }
+
+    fn parse_property_escape(&mut self) -> Result<RegexAst, RegexError> {
+        self.pos += 1;
+        let start = self.pos;
+        while let Some(ch) = self.peek() {
+            if ch == '}' {
+                let name = self.chars[start..self.pos].iter().collect::<String>();
+                self.pos += 1;
+                return match name.as_str() {
+                    "XID_START" => Ok(RegexAst::Class(vec![ClassAtom::XidStart], false)),
+                    "XID_CONTINUE" => Ok(RegexAst::Class(vec![ClassAtom::XidContinue], false)),
+                    _ => Err(RegexError::UnsupportedPcreFeature("property")),
+                };
+            }
+            self.pos += 1;
+        }
+        Err(RegexError::UnexpectedEnd)
     }
 
     fn peek(&self) -> Option<char> {
@@ -295,4 +321,28 @@ impl Parser {
         self.pos += 1;
         Some(ch)
     }
+}
+
+impl ClassAtom {
+    fn matches(&self, ch: char) -> bool {
+        match self {
+            ClassAtom::Char(expected) => *expected == ch,
+            ClassAtom::Range(start, end) => *start <= ch && ch <= *end,
+            ClassAtom::XidStart => ch == '_' || ch.is_alphabetic(),
+            ClassAtom::XidContinue => {
+                ch == '_' || ch.is_alphanumeric() || is_unicode_mark(ch)
+            }
+        }
+    }
+}
+
+fn is_unicode_mark(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x0300..=0x036F
+            | 0x1AB0..=0x1AFF
+            | 0x1DC0..=0x1DFF
+            | 0x20D0..=0x20FF
+            | 0xFE20..=0xFE2F
+    )
 }

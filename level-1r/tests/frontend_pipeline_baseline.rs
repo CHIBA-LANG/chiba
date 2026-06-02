@@ -833,15 +833,22 @@ fn frontend_parses_nested_tuple_record_and_at_patterns() {
 
 #[test]
 fn frontend_parses_qualified_adt_constructor_expression() {
-    let output =
-        compile_source_program_bundle("def main() = Option.Some(1)").expect("compile source");
+    let output = compile_source_program_bundle(
+        "data Option[T] = { Some(T), None } def main() = Option.Some(1)",
+    )
+    .expect("compile source");
     let main = &output.program.defs[0].output;
 
     match &output.frontend.program.items[0] {
         SourceItem::Def { body, .. } => {
             assert_eq!(
                 body,
-                &Expr::adt_ctor("Option", "Some", vec!["Some"], vec![Expr::i64(1)])
+                &Expr::adt_ctor(
+                    "Option",
+                    "Some",
+                    vec!["Some", "None"],
+                    vec![Expr::i64(1)]
+                )
             );
         }
     }
@@ -857,7 +864,76 @@ fn frontend_parses_qualified_adt_constructor_expression() {
                 args
             } if data == "Option"
                 && ctor == "Some"
-                && variants == &vec!["Some".to_string()]
+                && variants == &vec!["None".to_string(), "Some".to_string()]
+                && args == &vec!["1".to_string()]
+        )
+    }));
+}
+
+#[test]
+fn frontend_unknown_qualified_call_is_not_guessed_as_adt_ctor() {
+    let output =
+        compile_source_program_bundle("def main() = Option.Some(1)").expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::method_call_args(Expr::var("Option"), "Some", vec![Expr::i64(1)])
+            );
+        }
+    }
+
+    assert!(main.cps.to_string().contains("Option.Some(1,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "Option.Some" && args == &vec!["1".to_string()]
+        )
+    }));
+}
+
+#[test]
+fn frontend_utf8_identifiers_and_ctors_are_not_ascii_case_guessed() {
+    let output = compile_source_program_bundle(
+        "data 选项 = { 成功(i64), 失败 } def main() = 选项.成功(1)",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert!(output
+        .frontend
+        .tokens
+        .iter()
+        .any(|token| token.name == "Ident" && token.lexeme == "选项"));
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::adt_ctor(
+                    "选项",
+                    "成功",
+                    vec!["成功", "失败"],
+                    vec![Expr::i64(1)]
+                )
+            );
+        }
+    }
+
+    assert_eq!(main.cps.to_string(), "halt 选项.成功(1)");
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::AdtConstruct {
+                data,
+                ctor,
+                variants,
+                args
+            } if data == "选项"
+                && ctor == "成功"
+                && variants == &vec!["失败".to_string(), "成功".to_string()]
                 && args == &vec!["1".to_string()]
         )
     }));
@@ -866,7 +942,7 @@ fn frontend_parses_qualified_adt_constructor_expression() {
 #[test]
 fn frontend_parses_qualified_constructor_patterns() {
     let output = compile_source_program_bundle(
-        "def main() = match Option.Some(1) { Option.Some(value) => value, Option.None => 0 }",
+        "data Option[T] = { Some(T), None } def main() = match Option.Some(1) { Option.Some(value) => value, Option.None => 0 }",
     )
     .expect("compile source");
     let main = &output.program.defs[0].output;
@@ -876,7 +952,12 @@ fn frontend_parses_qualified_constructor_patterns() {
             assert_eq!(
                 body,
                 &Expr::match_expr(
-                    Expr::adt_ctor("Option", "Some", vec!["Some"], vec![Expr::i64(1)]),
+                    Expr::adt_ctor(
+                        "Option",
+                        "Some",
+                        vec!["Some", "None"],
+                        vec![Expr::i64(1)]
+                    ),
                     vec![
                         (
                             Pattern::qualified_ctor(

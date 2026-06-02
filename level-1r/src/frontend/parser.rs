@@ -113,7 +113,7 @@ fn chiba_lexer_spec() -> LexerSpec {
             },
             LexerRule {
                 name: "Ident".to_string(),
-                pattern: "[a-zA-Z_][a-zA-Z0-9_]*".to_string(),
+                pattern: "\\p{XID_START}\\p{XID_CONTINUE}*".to_string(),
                 skip: false,
             },
             LexerRule {
@@ -414,7 +414,7 @@ impl FrontendParser {
                         let args = self.parse_expr_args()?;
                         self.expect("RParen")?;
                         expr = match expr {
-                            Expr::Var(data) if is_big_camel(&name) => {
+                            Expr::Var(data) if self.is_known_ctor(&data, &name) => {
                                 let variants = self.known_variants(&data, &name);
                                 Expr::adt_ctor(data, name.clone(), variants, args)
                             }
@@ -422,7 +422,7 @@ impl FrontendParser {
                         };
                     } else {
                         expr = match expr {
-                            Expr::Var(data) if is_big_camel(&name) => {
+                            Expr::Var(data) if self.is_known_ctor(&data, &name) => {
                                 let variants = self.known_variants(&data, &name);
                                 Expr::adt_ctor(data, name.clone(), variants, Vec::new())
                             }
@@ -712,7 +712,7 @@ impl FrontendParser {
                     let ctor = self.expect_lexeme("Ident")?;
                     let args = self.parse_constructor_pattern_args()?;
                     Ok(Pattern::qualified_ctor(name, ctor, args))
-                } else if is_big_camel(&name) {
+                } else if self.is_known_bare_ctor(&name) {
                     let args = self.parse_constructor_pattern_args()?;
                     Ok(Pattern::ctor(name, args))
                 } else {
@@ -880,13 +880,19 @@ impl FrontendParser {
             .cloned()
             .unwrap_or_else(|| vec![fallback_ctor.to_string()])
     }
-}
 
-fn is_big_camel(name: &str) -> bool {
-    name.chars()
-        .next()
-        .map(|ch| ch.is_ascii_uppercase())
-        .unwrap_or(false)
+    fn is_known_ctor(&self, data: &str, ctor: &str) -> bool {
+        self.data_variants
+            .get(data)
+            .map(|variants| variants.iter().any(|variant| variant == ctor))
+            .unwrap_or(false)
+    }
+
+    fn is_known_bare_ctor(&self, ctor: &str) -> bool {
+        self.data_variants
+            .values()
+            .any(|variants| variants.iter().any(|variant| variant == ctor))
+    }
 }
 
 fn desugar_pipe(input: Expr, rhs: Expr) -> Expr {
@@ -1086,7 +1092,7 @@ fn pipe_default_insert(input: Expr, rhs: Expr) -> Expr {
 
 fn is_type_or_namespace_path(expr: &Expr) -> bool {
     match expr {
-        Expr::Var(name) => is_big_camel(name),
+        Expr::Var(_) => true,
         Expr::Field { receiver, .. } => is_type_or_namespace_path(receiver),
         _ => false,
     }
@@ -1174,13 +1180,20 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
             receiver,
             name,
             args,
-        } => Expr::method_call_args(
-            enrich_expr_with_data_variants(*receiver, variants),
-            name,
-            args.into_iter()
+        } => {
+            let receiver = enrich_expr_with_data_variants(*receiver, variants);
+            let args = args
+                .into_iter()
                 .map(|arg| enrich_expr_with_data_variants(arg, variants))
-                .collect(),
-        ),
+                .collect::<Vec<_>>();
+            match receiver {
+                Expr::Var(data) if data_ctor_known(variants, &data, &name) => {
+                    let ctor_variants = variants[&data].clone();
+                    Expr::adt_ctor(data, name.clone(), ctor_variants, args)
+                }
+                receiver => Expr::method_call_args(receiver, name, args),
+            }
+        }
         Expr::Index { receiver, index } => Expr::index(
             enrich_expr_with_data_variants(*receiver, variants),
             enrich_expr_with_data_variants(*index, variants),
@@ -1241,4 +1254,11 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
         }
         Expr::Var(_) | Expr::Lit(_) => expr,
     }
+}
+
+fn data_ctor_known(variants: &BTreeMap<String, Vec<String>>, data: &str, ctor: &str) -> bool {
+    variants
+        .get(data)
+        .map(|items| items.iter().any(|item| item == ctor))
+        .unwrap_or(false)
 }

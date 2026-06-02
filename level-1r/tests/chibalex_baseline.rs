@@ -68,6 +68,38 @@ fn lexer_tracks_codepoint_offsets_for_utf8() {
 }
 
 #[test]
+fn lexer_supports_xid_property_classes_for_utf8_identifiers() {
+    let lexer = compile_lexer(LexerSpec {
+        rules: vec![
+            LexerRule {
+                name: "Whitespace".to_string(),
+                pattern: "[ ]+".to_string(),
+                skip: true,
+            },
+            LexerRule {
+                name: "Ident".to_string(),
+                pattern: "\\p{XID_START}\\p{XID_CONTINUE}*".to_string(),
+                skip: false,
+            },
+        ],
+    })
+    .unwrap();
+
+    let tokens = lexer.lex("λ é 中_2").unwrap();
+    assert_eq!(
+        tokens
+            .iter()
+            .map(|token| (token.name.as_str(), token.lexeme.as_str(), token.start, token.end))
+            .collect::<Vec<_>>(),
+        vec![
+            ("Ident", "λ", 0, 1),
+            ("Ident", "é", 2, 4),
+            ("Ident", "中_2", 5, 8),
+        ]
+    );
+}
+
+#[test]
 fn lexer_reports_no_rule_without_scanner_fallback() {
     let lexer = basic_lexer();
     let err = lexer.lex("@").unwrap_err();
