@@ -6,6 +6,7 @@ pub mod closure;
 pub mod control;
 pub mod core;
 pub mod cps;
+pub mod cps_usage;
 pub mod debug;
 pub mod nanopass;
 pub mod pipeline;

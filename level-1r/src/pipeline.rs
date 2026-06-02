@@ -4,6 +4,9 @@ use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::control::{analyze_control, ControlFacts};
 use crate::core::{lower_core_with_facts, validate_core, CoreProgram, CoreValidation};
 use crate::cps::{cps_program, CpsProgram};
+use crate::cps_usage::{
+    analyze_cps_usage, simplify_continuations, ContinuationSimplificationFacts, CpsUsageFacts,
+};
 use crate::debug::{render_visual_report, visual_report, VisualReport};
 use crate::nanopass::PassReport;
 use crate::resolve::{resolve_expr, MethodIndex, ResolveFacts};
@@ -22,6 +25,8 @@ pub struct CompileOutput {
     pub control: ControlFacts,
     pub usage: UsageFacts,
     pub cps: CpsProgram,
+    pub cps_usage: CpsUsageFacts,
+    pub continuation_simplification: ContinuationSimplificationFacts,
     pub closure: ClosureFacts,
     pub core: CoreProgram,
     pub core_validation: CoreValidation,
@@ -51,13 +56,22 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
     let cps = passes.record("L8OnePassCps", "TypedExpr", "CpsProgram", || {
         cps_program(&typed)
     });
-    let closure = passes.record("L9Closure", "AlphaExpr", "ClosureFacts", || {
+    let cps_usage = passes.record("L9CpsUsage", "CpsProgram", "CpsUsageFacts", || {
+        analyze_cps_usage(&cps)
+    });
+    let continuation_simplification = passes.record(
+        "L10ContSimplify",
+        "CpsUsageFacts",
+        "ContinuationSimplificationFacts",
+        || simplify_continuations(&cps_usage),
+    );
+    let closure = passes.record("L11Closure", "AlphaExpr", "ClosureFacts", || {
         analyze_alpha_closures(&alpha.expr)
     });
-    let core = passes.record("L10Core", "CpsProgram", "CoreProgram", || {
+    let core = passes.record("L12Core", "CpsProgram", "CoreProgram", || {
         lower_core_with_facts(&cps, &control.continuations, &closure, &specialize, &usage)
     });
-    let core_validation = passes.record("L11CoreValidate", "CoreProgram", "CoreValidation", || {
+    let core_validation = passes.record("L13CoreValidate", "CoreProgram", "CoreValidation", || {
         validate_core(&core)
     });
     let visual = visual_report(
@@ -70,6 +84,8 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &control,
         &usage,
         &cps,
+        &cps_usage,
+        &continuation_simplification,
         &closure,
         &core,
         &core_validation,
@@ -84,6 +100,8 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         control,
         usage,
         cps,
+        cps_usage,
+        continuation_simplification,
         closure,
         core,
         core_validation,

@@ -6,6 +6,7 @@ use crate::closure::ClosureFacts;
 use crate::control::ControlFacts;
 use crate::core::{CoreProgram, CoreValidation};
 use crate::cps::CpsProgram;
+use crate::cps_usage::{ContinuationSimplificationFacts, CpsUsageFacts};
 use crate::nanopass::PassReport;
 use crate::resolve::ResolveFacts;
 use crate::specialize::SpecializationFacts;
@@ -24,6 +25,8 @@ pub struct VisualReport {
     pub control: String,
     pub usage: String,
     pub cps: String,
+    pub cps_usage: String,
+    pub continuation_simplification: String,
     pub closure: String,
     pub core: String,
     pub core_validation: String,
@@ -50,6 +53,10 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.usage).unwrap();
     writeln!(out, "cps:").unwrap();
     writeln!(out, "  {}", report.cps).unwrap();
+    writeln!(out, "cps-usage:").unwrap();
+    writeln!(out, "  {}", report.cps_usage).unwrap();
+    writeln!(out, "continuation-simplification:").unwrap();
+    writeln!(out, "  {}", report.continuation_simplification).unwrap();
     writeln!(out, "closure:").unwrap();
     writeln!(out, "  {}", report.closure).unwrap();
     writeln!(out, "core:").unwrap();
@@ -73,6 +80,8 @@ pub fn visual_report(
     control: &ControlFacts,
     usage: &UsageFacts,
     cps: &CpsProgram,
+    cps_usage: &CpsUsageFacts,
+    continuation_simplification: &ContinuationSimplificationFacts,
     closure: &ClosureFacts,
     core: &CoreProgram,
     core_validation: &CoreValidation,
@@ -88,6 +97,8 @@ pub fn visual_report(
         control: format!("{control:#?}"),
         usage: format!("{usage:#?}"),
         cps: cps.to_string(),
+        cps_usage: format!("{cps_usage:#?}"),
+        continuation_simplification: format!("{continuation_simplification:#?}"),
         closure: format!("{closure:#?}"),
         core: format!("{core:#?}"),
         core_validation: format!("{core_validation:#?}"),
