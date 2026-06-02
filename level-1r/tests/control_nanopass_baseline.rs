@@ -45,7 +45,8 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
             "L7Usage",
             "L8OnePassCps",
             "L9Closure",
-            "L10Core"
+            "L10Core",
+            "L11CoreValidate"
         ]
     );
 
@@ -56,11 +57,13 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("control:"));
     assert!(visual.contains("closure:"));
     assert!(visual.contains("core:"));
+    assert!(visual.contains("core-validation:"));
     assert!(visual.contains("nanopass:"));
     assert!(visual.contains("L1Alpha: SourceExpr -> AlphaFacts"));
     assert!(visual.contains("L3Template: AlphaExpr+ResolveFacts -> TemplateFacts"));
     assert!(visual.contains("L4Specialize: TemplateFacts -> SpecializationFacts"));
     assert!(visual.contains("L8OnePassCps: TypedExpr -> CpsProgram"));
+    assert!(visual.contains("L11CoreValidate: CoreProgram -> CoreValidation"));
 }
 
 #[test]

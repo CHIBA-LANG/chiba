@@ -4,7 +4,7 @@ use crate::alpha::AlphaFacts;
 use crate::ast::Expr;
 use crate::closure::ClosureFacts;
 use crate::control::ControlFacts;
-use crate::core::CoreProgram;
+use crate::core::{CoreProgram, CoreValidation};
 use crate::cps::CpsProgram;
 use crate::nanopass::PassReport;
 use crate::resolve::ResolveFacts;
@@ -26,6 +26,7 @@ pub struct VisualReport {
     pub cps: String,
     pub closure: String,
     pub core: String,
+    pub core_validation: String,
     pub nanopass: String,
 }
 
@@ -53,6 +54,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.closure).unwrap();
     writeln!(out, "core:").unwrap();
     writeln!(out, "  {}", report.core).unwrap();
+    writeln!(out, "core-validation:").unwrap();
+    writeln!(out, "  {}", report.core_validation).unwrap();
     writeln!(out, "nanopass:").unwrap();
     for event in report.nanopass.lines() {
         writeln!(out, "  {event}").unwrap();
@@ -72,6 +75,7 @@ pub fn visual_report(
     cps: &CpsProgram,
     closure: &ClosureFacts,
     core: &CoreProgram,
+    core_validation: &CoreValidation,
     passes: &PassReport,
 ) -> VisualReport {
     VisualReport {
@@ -86,6 +90,7 @@ pub fn visual_report(
         cps: cps.to_string(),
         closure: format!("{closure:#?}"),
         core: format!("{core:#?}"),
+        core_validation: format!("{core_validation:#?}"),
         nanopass: render_pass_report(passes),
     }
 }

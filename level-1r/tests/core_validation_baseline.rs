@@ -12,6 +12,7 @@ fn lowered_core_program_validates_when_facts_are_consistent() {
 
     assert_eq!(validation.diagnostics, vec![]);
     assert!(validation.is_ok());
+    assert_eq!(output.core_validation.diagnostics, vec![]);
 }
 
 #[test]
