@@ -1,9 +1,10 @@
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
-    validate_core, CoreDiagnostic, CoreOp, CoreProgram, LayoutFact, LayoutKind, OwnershipDecision,
-    OwnershipFact,
+    validate_core, CallableStorageFact, CallableStorageKind, ClosureEnvLayout, CoreDiagnostic,
+    CoreOp, CoreProgram, LayoutFact, LayoutKind, OwnershipDecision, OwnershipFact,
 };
 use chiba_level1r::template::{canonical_open_row, ShapeType};
+use chiba_level1r::typed::{SendColor, UsageColor};
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -177,6 +178,55 @@ fn validator_rejects_dyn_adapter_missing_or_wrong_layout_ref() {
             .diagnostics
             .contains(&CoreDiagnostic::DynRowLayoutKindMismatch {
                 layout: "row::user".to_string()
+            })
+    );
+}
+
+#[test]
+fn validator_rejects_env_closure_missing_or_empty_env_layout() {
+    let missing = CoreProgram {
+        ops: vec![],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![CallableStorageFact {
+            subject: "closure::f".to_string(),
+            kind: CallableStorageKind::EnvClosure,
+            usage: UsageColor::Many,
+            send: SendColor::Obligation,
+        }],
+    };
+
+    assert_eq!(
+        validate_core(&missing).diagnostics,
+        vec![CoreDiagnostic::EnvClosureMissingLayout {
+            subject: "closure::f".to_string()
+        }]
+    );
+
+    let empty_layout = CoreProgram {
+        ops: vec![],
+        layouts: vec![LayoutFact {
+            key: "closure-env::closure::f".to_string(),
+            hash: 0,
+            kind: LayoutKind::ClosureEnv(ClosureEnvLayout {
+                closure: "closure::f".to_string(),
+                fields: vec![],
+            }),
+        }],
+        ownership: vec![],
+        callable_storage: vec![CallableStorageFact {
+            subject: "closure::f".to_string(),
+            kind: CallableStorageKind::EnvClosure,
+            usage: UsageColor::Many,
+            send: SendColor::Obligation,
+        }],
+    };
+
+    assert!(
+        validate_core(&empty_layout)
+            .diagnostics
+            .contains(&CoreDiagnostic::ClosureEnvLayoutHasNoFields {
+                layout: "closure-env::closure::f".to_string()
             })
     );
 }

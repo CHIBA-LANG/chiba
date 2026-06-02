@@ -1,6 +1,6 @@
 use chiba_level1r::closure::ClosureStorageKind;
 use chiba_level1r::control::ContinuationKind;
-use chiba_level1r::core::CoreOp;
+use chiba_level1r::core::{CoreOp, LayoutKind};
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -32,6 +32,33 @@ fn nested_lambda_captures_outer_binder_with_stable_env_field() {
     assert_eq!(inner.storage, ClosureStorageKind::EnvClosure);
     assert_eq!(inner.captures.len(), 1);
     assert_eq!(inner.captures[0].name, "x");
+
+    let layout = output
+        .core
+        .layouts
+        .iter()
+        .find(|layout| layout.key == "closure-env::closure::y")
+        .unwrap();
+    match &layout.kind {
+        LayoutKind::ClosureEnv(env) => {
+            assert_eq!(env.closure, "closure::y");
+            assert_eq!(env.fields.len(), 1);
+            assert_eq!(env.fields[0].name, "x");
+        }
+        other => panic!("expected closure env layout, got {other:?}"),
+    }
+    assert_eq!(output.core_validation.diagnostics, vec![]);
+}
+
+#[test]
+fn no_capture_lambda_does_not_allocate_closure_env_layout() {
+    let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
+
+    assert!(!output
+        .core
+        .layouts
+        .iter()
+        .any(|layout| matches!(&layout.kind, LayoutKind::ClosureEnv(_))));
 }
 
 #[test]

@@ -1,6 +1,6 @@
 use crate::control::{ContinuationFact, ContinuationKind};
 use crate::cps::{CpsAtom, CpsProgram, CpsTerm};
-use crate::closure::{ClosureFacts, ClosureStorageKind};
+use crate::closure::{CaptureFact, ClosureFacts, ClosureStorageKind};
 use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{DynRowContract, RowShape};
 use crate::typed::{SendColor, UsageColor};
@@ -54,6 +54,20 @@ pub enum LayoutKind {
     RowShape(RowShape),
     DynRowPackage(DynRowContract),
     ContinuationPackage(ContinuationKind),
+    ClosureEnv(ClosureEnvLayout),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClosureEnvLayout {
+    pub closure: String,
+    pub fields: Vec<ClosureEnvField>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClosureEnvField {
+    pub name: String,
+    pub usage: UsageColor,
+    pub send: SendColor,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -109,6 +123,8 @@ pub enum CoreDiagnostic {
     Cont1HasPackageLayout { key: String },
     MissingDynRowLayout { layout: String },
     DynRowLayoutKindMismatch { layout: String },
+    EnvClosureMissingLayout { subject: String },
+    ClosureEnvLayoutHasNoFields { layout: String },
     SendableCallableContainsContinuation { subject: String },
     SharedSendSubjectUsesRc { subject: String },
     DynPayloadMustUseDynPackage { subject: String },
@@ -133,7 +149,7 @@ pub fn lower_core_with_facts(
 ) -> CoreProgram {
     let mut ops = Vec::new();
     lower_term(&cps.term, continuations, &mut ops);
-    let layouts = lower_layouts(continuations, specialize);
+    let layouts = lower_layouts(continuations, closures, specialize);
     let ownership = lower_ownership(continuations, specialize, usage);
     let callable_storage = lower_callable_storage(continuations, closures);
     lower_specialization_ops(specialize, &layouts, &mut ops);
@@ -268,9 +284,14 @@ fn validate_layouts(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>
         } else {
             keys.push(layout.key.clone());
         }
-        if matches!(layout.kind, LayoutKind::ContinuationPackage(ContinuationKind::Cont1)) {
+        if matches!(&layout.kind, LayoutKind::ContinuationPackage(ContinuationKind::Cont1)) {
             diagnostics.push(CoreDiagnostic::Cont1HasPackageLayout {
                 key: layout.key.clone(),
+            });
+        }
+        if matches!(&layout.kind, LayoutKind::ClosureEnv(ClosureEnvLayout { fields, .. }) if fields.is_empty()) {
+            diagnostics.push(CoreDiagnostic::ClosureEnvLayoutHasNoFields {
+                layout: layout.key.clone(),
             });
         }
     }
@@ -302,7 +323,7 @@ fn validate_dyn_adapter_layouts(program: &CoreProgram, diagnostics: &mut Vec<Cor
     for op in &program.ops {
         if let CoreOp::DynRowAdapterAccess { layout, .. } = op {
             match program.layouts.iter().find(|fact| fact.key == *layout) {
-                Some(fact) if matches!(fact.kind, LayoutKind::DynRowPackage(_)) => {}
+                Some(fact) if matches!(&fact.kind, LayoutKind::DynRowPackage(_)) => {}
                 Some(_) => diagnostics.push(CoreDiagnostic::DynRowLayoutKindMismatch {
                     layout: layout.clone(),
                 }),
@@ -324,6 +345,17 @@ fn validate_callable_storage(program: &CoreProgram, diagnostics: &mut Vec<CoreDi
             diagnostics.push(CoreDiagnostic::SendableCallableContainsContinuation {
                 subject: fact.subject.clone(),
             });
+        }
+        if fact.kind == CallableStorageKind::EnvClosure {
+            let expected_layout = format!("closure-env::{}", fact.subject);
+            let has_layout = program.layouts.iter().any(|layout| {
+                layout.key == expected_layout && matches!(&layout.kind, LayoutKind::ClosureEnv(_))
+            });
+            if !has_layout {
+                diagnostics.push(CoreDiagnostic::EnvClosureMissingLayout {
+                    subject: fact.subject.clone(),
+                });
+            }
         }
     }
 }
@@ -354,6 +386,7 @@ fn render_atom(atom: &CpsAtom) -> String {
 
 fn lower_layouts(
     continuations: &[ContinuationFact],
+    closures: &ClosureFacts,
     specialize: &SpecializationFacts,
 ) -> Vec<LayoutFact> {
     let mut layouts = Vec::new();
@@ -382,6 +415,17 @@ fn lower_layouts(
                 hash: stable_hash(&key),
                 key,
                 kind: LayoutKind::ContinuationPackage(fact.kind),
+            });
+        }
+    }
+    for closure in &closures.closures {
+        if closure.storage == ClosureStorageKind::EnvClosure {
+            let env = closure_env_layout(&closure.param, &closure.captures);
+            let key = format!("closure-env::closure::{}", closure.param);
+            layouts.push(LayoutFact {
+                hash: stable_hash(&key),
+                key,
+                kind: LayoutKind::ClosureEnv(env),
             });
         }
     }
@@ -481,6 +525,21 @@ fn lower_callable_storage(
         });
     }
     facts
+}
+
+fn closure_env_layout(closure: &str, captures: &[CaptureFact]) -> ClosureEnvLayout {
+    let fields = captures
+        .iter()
+        .map(|capture| ClosureEnvField {
+            name: capture.name.clone(),
+            usage: capture.usage,
+            send: SendColor::Obligation,
+        })
+        .collect::<Vec<_>>();
+    ClosureEnvLayout {
+        closure: format!("closure::{closure}"),
+        fields,
+    }
 }
 
 fn ownership_from_usage(usage: UsageColor, send: SendColor) -> OwnershipDecision {
