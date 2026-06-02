@@ -797,8 +797,10 @@ impl FrontendParser {
             arms.push((pattern, body));
             if self.peek_name() == Some("Comma") {
                 self.pos += 1;
-            } else {
+            } else if self.peek_name() == Some("RBrace") {
                 break;
+            } else {
+                self.expect("Comma")?;
             }
         }
         self.expect("RBrace")?;

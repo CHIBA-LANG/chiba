@@ -1876,3 +1876,17 @@ fn frontend_rejects_adjacent_top_level_items_without_newline() {
         ));
     }
 }
+
+#[test]
+fn frontend_rejects_adjacent_match_arms_without_comma() {
+    let err = parse_source_program("def main() = match tag { 0 => 1 _ => 2 }").unwrap_err();
+
+    assert!(matches!(
+        err,
+        FrontendError::UnexpectedToken {
+            found,
+            lexeme,
+            expected,
+        } if found == "Ident" && lexeme == "_" && expected == vec!["Comma".to_string()]
+    ));
+}
