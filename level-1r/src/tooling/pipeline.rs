@@ -955,9 +955,11 @@ fn lower_global_init_into_linked_wat(
 
     let mut wat = String::from("(module\n");
     for static_value in &global_init.statics {
+        let initializer = const_global_initializer(&static_value.body).unwrap_or(0);
         wat.push_str(&format!(
-            "  (global ${} (mut i32) (i32.const 0))\n",
-            global_symbol(&static_value.name)
+            "  (global ${} (mut i32) (i32.const {}))\n",
+            global_symbol(&static_value.name),
+            initializer
         ));
     }
     wat.push_str("  (func $__chiba_init\n");
@@ -965,6 +967,9 @@ fn lower_global_init_into_linked_wat(
         let Some(static_value) = global_init.statics.iter().find(|item| item.name == *name) else {
             continue;
         };
+        if const_global_initializer(&static_value.body).is_some() {
+            continue;
+        }
         wat.push_str(&format!("    ;; init static {}\n", static_value.name));
         render_global_init_expr(&mut wat, &static_value.body, global_init);
         wat.push_str(&format!("    global.set ${}\n", global_symbol(&static_value.name)));
@@ -975,6 +980,14 @@ fn lower_global_init_into_linked_wat(
     wat.push_str(")\n");
     bundle.linked_wat = wat;
     bundle
+}
+
+fn const_global_initializer(expr: &Expr) -> Option<i32> {
+    match expr {
+        Expr::Lit(crate::ast::Literal::I64(value)) => Some(*value as i32),
+        Expr::Lit(crate::ast::Literal::Bool(value)) => Some(i32::from(*value)),
+        _ => None,
+    }
 }
 
 fn replace_static_return_from_fact(

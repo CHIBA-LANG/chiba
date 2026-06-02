@@ -1145,7 +1145,7 @@ fn global_init_allows_ordered_and_forward_static_dependencies() {
     assert!(bundle
         .backend_link
         .linked_wat
-        .contains("(global $global__ONE (mut i32) (i32.const 0)"));
+        .contains("(global $global__ONE (mut i32) (i32.const 1)"));
     assert!(bundle
         .backend_link
         .linked_wat
@@ -1156,7 +1156,7 @@ fn global_init_allows_ordered_and_forward_static_dependencies() {
         .contains("(global $global__THREE (mut i32) (i32.const 0)"));
     assert!(bundle.backend_link.linked_wat.contains("(func $__chiba_init"));
     assert!(bundle.backend_link.linked_wat.contains("(start $__chiba_init)"));
-    assert!(bundle.backend_link.linked_wat.contains("global.set $global__ONE"));
+    assert!(!bundle.backend_link.linked_wat.contains("global.set $global__ONE"));
     assert!(bundle.backend_link.linked_wat.contains("global.get $global__ONE"));
     assert!(bundle.backend_link.linked_wat.contains("i32.add"));
     assert!(bundle.backend_link.linked_wat.contains("global.set $global__TWO"));
