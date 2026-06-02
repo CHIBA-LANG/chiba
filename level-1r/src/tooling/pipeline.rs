@@ -938,6 +938,18 @@ impl SourceCompileOutput {
                 .collect::<Vec<_>>()
         ));
         out.push_str(&format!("  items={}\n", self.frontend.program.items.len()));
+        out.push_str("  item-spans:\n");
+        for item in &self.frontend.item_spans {
+            out.push_str(&format!(
+                "    {} {} @ {}:{}..{}:{}\n",
+                item.kind,
+                item.name,
+                item.span.line,
+                item.span.column,
+                item.span.end_line,
+                item.span.end_column
+            ));
+        }
         out.push_str(&format!(
             "  data={}\n",
             self.frontend.program.data.len()

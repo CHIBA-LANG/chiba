@@ -262,6 +262,13 @@ def main() = helper(2)")
 
     assert_eq!(output.frontend.tokens.len(), 19);
     assert_eq!(output.frontend.program.items.len(), 2);
+    assert_eq!(output.frontend.item_spans.len(), 2);
+    assert_eq!(output.frontend.item_spans[0].name, "helper");
+    assert_eq!(output.frontend.item_spans[0].span.line, 1);
+    assert_eq!(output.frontend.item_spans[0].span.column, 1);
+    assert_eq!(output.frontend.item_spans[1].name, "main");
+    assert_eq!(output.frontend.item_spans[1].span.line, 2);
+    assert_eq!(output.frontend.item_spans[1].span.column, 1);
     assert_eq!(output.program.entry, Some("main".to_string()));
     assert!(output.program.backend_link.diagnostics.is_empty());
     assert!(output
@@ -310,6 +317,9 @@ def main() = helper(2)")
     assert!(summary.contains("source-program:"));
     assert!(summary.contains("tokens=19"));
     assert!(summary.contains("items=2"));
+    assert!(summary.contains("item-spans:"));
+    assert!(summary.contains("def helper @ 1:1..1:21"));
+    assert!(summary.contains("def main @ 2:1..2:23"));
     assert!(summary.contains("data=0"));
     assert!(summary.contains("P1ProjectSurface"));
 }

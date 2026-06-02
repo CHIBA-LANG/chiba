@@ -10,6 +10,24 @@ use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
 pub struct FrontendOutput {
     pub tokens: Vec<Token>,
     pub program: SourceProgram,
+    pub item_spans: Vec<SourceItemSpan>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceItemSpan {
+    pub kind: String,
+    pub name: String,
+    pub span: SourceSpan,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SourceSpan {
+    pub start: usize,
+    pub end: usize,
+    pub line: usize,
+    pub column: usize,
+    pub end_line: usize,
+    pub end_column: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -102,7 +120,11 @@ pub fn parse_source_program(source: &str) -> Result<FrontendOutput, FrontendErro
     let tokens = lexer.lex(source).map_err(FrontendError::Lex)?;
     let mut parser = FrontendParser::new(tokens.clone(), source);
     let program = parser.parse_program()?;
-    Ok(FrontendOutput { tokens, program })
+    Ok(FrontendOutput {
+        tokens,
+        program,
+        item_spans: parser.item_spans,
+    })
 }
 
 fn chiba_lexer_spec() -> LexerSpec {
@@ -241,6 +263,7 @@ struct FrontendParser {
     source_chars: Vec<char>,
     pos: usize,
     data_variants: BTreeMap<String, Vec<String>>,
+    item_spans: Vec<SourceItemSpan>,
 }
 
 impl FrontendParser {
@@ -250,6 +273,7 @@ impl FrontendParser {
             source_chars: source.chars().collect(),
             pos: 0,
             data_variants: BTreeMap::new(),
+            item_spans: Vec::new(),
         }
     }
 
@@ -281,7 +305,11 @@ impl FrontendParser {
                 }
                 Some("KwDef") | Some("KwPrivate") => {
                     imports_closed = true;
-                    items.push(self.parse_def()?);
+                    let start = self.tokens[self.pos].start;
+                    let item = self.parse_def()?;
+                    let end = self.previous_token_end().unwrap_or(start);
+                    self.item_spans.push(self.source_item_span(&item, start, end));
+                    items.push(item);
                 }
                 Some(found) => {
                     let token = self.tokens[self.pos].clone();
@@ -1131,6 +1159,41 @@ impl FrontendParser {
             .map(|token| token.end)
     }
 
+    fn source_item_span(&self, item: &SourceItem, start: usize, end: usize) -> SourceItemSpan {
+        let (line, column) = self.line_column_at(start);
+        let (end_line, end_column) = self.line_column_at(end);
+        let (kind, name) = source_item_kind_name(item);
+        SourceItemSpan {
+            kind,
+            name,
+            span: SourceSpan {
+                start,
+                end,
+                line,
+                column,
+                end_line,
+                end_column,
+            },
+        }
+    }
+
+    fn line_column_at(&self, offset: usize) -> (usize, usize) {
+        let mut line = 1;
+        let mut column = 1;
+        for (index, ch) in self.source_chars.iter().enumerate() {
+            if index == offset {
+                return (line, column);
+            }
+            if *ch == '\n' {
+                line += 1;
+                column = 1;
+            } else {
+                column += 1;
+            }
+        }
+        (line, column)
+    }
+
     fn expect_lexeme(&mut self, name: &str) -> Result<String, FrontendError> {
         self.expect(name).map(|token| token.lexeme)
     }
@@ -1479,6 +1542,13 @@ fn enrich_item_with_data_variants(
             ty,
             body: enrich_expr_with_data_variants(body, variants),
         },
+    }
+}
+
+fn source_item_kind_name(item: &SourceItem) -> (String, String) {
+    match item {
+        SourceItem::Def { name, .. } => ("def".to_string(), name.clone()),
+        SourceItem::StaticValue { name, .. } => ("static".to_string(), name.clone()),
     }
 }
 
