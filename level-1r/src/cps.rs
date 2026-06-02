@@ -462,6 +462,14 @@ fn display_pattern(pattern: &Pattern) -> String {
     match pattern {
         Pattern::Wildcard => "_".to_string(),
         Pattern::Bind(name) => name.clone(),
+        Pattern::Tuple(fields) => {
+            let fields = fields
+                .iter()
+                .map(display_pattern)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({fields})")
+        }
         Pattern::Lit(Literal::I64(value)) => value.to_string(),
         Pattern::Lit(Literal::Bool(value)) => value.to_string(),
     }

@@ -108,6 +108,7 @@ fn exhaustiveness(
         match &arm.pattern {
             Pattern::Wildcard => has_wildcard = true,
             Pattern::Bind(_) => has_wildcard = true,
+            Pattern::Tuple(_) => {}
             Pattern::Lit(lit) if !covered_literals.contains(lit) => {
                 covered_literals.push(lit.clone());
             }
@@ -152,6 +153,10 @@ fn missing_patterns(fact: &MatchExhaustivenessFact) -> Vec<Pattern> {
 fn pattern_bindings(pattern: &Pattern) -> Vec<String> {
     match pattern {
         Pattern::Bind(name) => vec![name.clone()],
+        Pattern::Tuple(fields) => fields
+            .iter()
+            .flat_map(pattern_bindings)
+            .collect::<Vec<_>>(),
         Pattern::Wildcard | Pattern::Lit(_) => vec![],
     }
 }

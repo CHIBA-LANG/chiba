@@ -87,3 +87,24 @@ fn if_let_records_success_only_pattern_environment() {
     assert_eq!(env.success_branch_binds, true);
     assert_eq!(env.failure_branch_binds, false);
 }
+
+#[test]
+fn tuple_pattern_collects_nested_bindings_in_source_order() {
+    let output = compile_expr(&Expr::if_let(
+        Pattern::tuple(vec![
+            Pattern::bind("head"),
+            Pattern::tuple(vec![Pattern::wildcard(), Pattern::bind("tail")]),
+        ]),
+        Expr::var("pair"),
+        Expr::var("head"),
+        Expr::i64(0),
+    ));
+
+    assert_eq!(output.pattern.envs.len(), 1);
+    assert_eq!(
+        output.pattern.envs[0].bindings,
+        vec!["head".to_string(), "tail".to_string()]
+    );
+    assert_eq!(output.pattern.envs[0].failure_branch_binds, false);
+    assert!(output.cps.to_string().contains("(head, (_, tail)) => join"));
+}

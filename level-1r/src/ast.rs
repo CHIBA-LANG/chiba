@@ -77,6 +77,7 @@ pub struct MatchArm {
 pub enum Pattern {
     Wildcard,
     Bind(String),
+    Tuple(Vec<Pattern>),
     Lit(Literal),
 }
 
@@ -207,6 +208,10 @@ impl Pattern {
 
     pub fn bind(name: impl Into<String>) -> Self {
         Self::Bind(name.into())
+    }
+
+    pub fn tuple(fields: Vec<Pattern>) -> Self {
+        Self::Tuple(fields)
     }
 
     pub fn lit_i64(value: i64) -> Self {

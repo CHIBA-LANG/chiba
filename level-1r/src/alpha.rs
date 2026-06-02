@@ -82,6 +82,7 @@ pub struct AlphaMatchArm {
 pub enum AlphaPattern {
     Wildcard,
     Bind(AlphaBinder),
+    Tuple(Vec<AlphaPattern>),
     Lit(Literal),
 }
 
@@ -296,6 +297,12 @@ impl AlphaCtx {
         match pattern {
             Pattern::Wildcard => AlphaPattern::Wildcard,
             Pattern::Bind(name) => AlphaPattern::Bind(self.bind(name)),
+            Pattern::Tuple(fields) => AlphaPattern::Tuple(
+                fields
+                    .iter()
+                    .map(|field| self.alpha_pattern(field))
+                    .collect(),
+            ),
             Pattern::Lit(lit) => AlphaPattern::Lit(lit.clone()),
         }
     }
