@@ -71,6 +71,52 @@ fn frontend_supports_parameters_and_variables() {
 }
 
 #[test]
+fn frontend_parses_call_before_infix_and_reaches_cps_shape() {
+    let parsed = parse_source_program("def main() = f(x) + 1").expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::binary(
+                    BinaryOp::Add,
+                    Expr::call(Expr::var("f"), Expr::var("x")),
+                    Expr::i64(1),
+                )
+            );
+        }
+    }
+
+    let bundle = compile_program_bundle(&parsed.program);
+    let main = &bundle.defs[0].output;
+    assert!(main.cps.to_string().contains("f(x,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, arg }
+                if func.contains("operator::Add")
+                    && func.contains("f(x,")
+                    && arg == "I64(1)"
+        )
+    }));
+    assert!(bundle.backend_link.linked_wat.contains(";; tailcall"));
+}
+
+#[test]
+fn frontend_rejects_empty_call_argument() {
+    let err = parse_source_program("def main() = f()").unwrap_err();
+
+    assert!(matches!(
+        err,
+        FrontendError::UnexpectedToken {
+            found,
+            expected,
+            ..
+        } if found == "RParen" && expected.contains(&"Number".to_string())
+    ));
+}
+
+#[test]
 fn frontend_reports_unexpected_token_without_scanner_fallback() {
     let err = parse_source_program("def main() = +").unwrap_err();
 

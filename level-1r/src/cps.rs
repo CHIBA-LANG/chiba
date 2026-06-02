@@ -110,6 +110,8 @@ impl CpsCtx {
     }
 }
 
+// Compiler-level continuation. It is evaluated by the Rust transform itself,
+// so administrative beta redexes never become object-level CPS nodes.
 type MetaKont<'a> = Box<dyn FnOnce(CpsAtom, &mut CpsCtx) -> CpsTerm + 'a>;
 
 pub fn cps_program(expr: &TypedExpr) -> CpsProgram {

@@ -126,7 +126,7 @@ impl FrontendParser {
     }
 
     fn parse_expr_bp(&mut self, min_bp: u32) -> Result<Expr, FrontendError> {
-        let mut lhs = self.parse_primary()?;
+        let mut lhs = self.parse_postfix()?;
         loop {
             let Some((op, lbp, rbp)) = self.peek_infix() else {
                 break;
@@ -139,6 +139,17 @@ impl FrontendParser {
             lhs = Expr::binary(op, lhs, rhs);
         }
         Ok(lhs)
+    }
+
+    fn parse_postfix(&mut self) -> Result<Expr, FrontendError> {
+        let mut expr = self.parse_primary()?;
+        while self.peek_name() == Some("LParen") {
+            self.pos += 1;
+            let arg = self.parse_expr_bp(0)?;
+            self.expect("RParen")?;
+            expr = Expr::call(expr, arg);
+        }
+        Ok(expr)
     }
 
     fn parse_primary(&mut self) -> Result<Expr, FrontendError> {

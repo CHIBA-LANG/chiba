@@ -202,6 +202,50 @@ Level-1R must treat delimiter-driven continuation kind as hard semantics:
 
 When Rust reference lowering needs `Rc` for `ContN` or an escaping shared continuation, Chiba lowering must show the corresponding `N`.
 
+## 5.1 One-Pass CPS / Beta Reduction
+
+Level-1R 的 CPS pass 必须使用 one-pass CBV CPS，不允许先生成 naive CPS 再靠后续 pass 清理 administrative redex。
+
+核心签名形态是：
+
+```text
+T(expr, k_meta)
+k_meta: CpsAtom -> CpsTerm
+```
+
+这里 `k_meta` 是编译器内部 continuation。在 Rust reference 中它对应 `MetaKont = FnOnce(CpsAtom, &mut CpsCtx) -> CpsTerm`；在 Chiba level0 参考实现中对应 `level0/src/backend/cir/lower.chiba` 的 `lower_expr(expr, k: (Val) => CpsExpr, ...)`。它不是 object-level continuation，也不应该作为 runtime lambda/app 出现在 CPS Core 中。
+
+必须保持以下规则：
+
+- atom / variable 直接执行 `k_meta(atom)`，不产生 `LetCont`、`AppCont`、object lambda 或 runtime call。
+- lambda 生成 object-level function value，函数体内部才通过 object-level continuation parameter 返回。
+- call 先通过 meta-continuation 计算 callee，再计算 argument，最后只 materialize 真实 object-level call 和必要 object-level continuation。
+- tuple / record / ADT ctor / operator / 多参数 call 必须按 CBV 左到右用嵌套 meta-continuation 串联。
+- `if` / `match` 只在真实 branch join 需要时 materialize continuation；不能给 atom 分支制造 administrative join。
+- `reset` / `resetn` / `shift` 是真实控制边界，必须 materialize CPS semantic node，并保留 answer type、continuation kind、usage/send/escape/replay facts。
+
+反例：
+
+```text
+(\a. (\b. a b k) x) f
+```
+
+这种 object-level administrative beta-redex 不允许作为中间 CPS 结果出现。`f(x)` 应直接接近：
+
+```text
+f(x, cont w => k_meta(w))
+```
+
+其中 `cont w => ...` 只有在必须把 `k_meta` reify 成 runtime continuation 时才生成。
+
+## 5.1 One-Pass CPS / Beta Reduction
+
+Level-1R's CPS pass must use one-pass CBV CPS. It must not generate naive CPS first and rely on later passes to remove administrative redexes.
+
+The core shape is `T(expr, k_meta)`, where `k_meta: CpsAtom -> CpsTerm` is a compiler-level continuation. In the Rust reference this is `MetaKont = FnOnce(CpsAtom, &mut CpsCtx) -> CpsTerm`; in the level0 reference it is `level0/src/backend/cir/lower.chiba`'s `lower_expr(expr, k: (Val) => CpsExpr, ...)`. It is not an object-level continuation and must not leak into CPS Core as runtime lambda/app.
+
+Atoms execute `k_meta(atom)` directly. Calls evaluate callee and arguments left-to-right through nested meta-continuations, then materialize only the real object-level call and the necessary runtime continuation. Branches materialize joins only for real control joins. `reset` / `resetn` / `shift` are real control boundaries and must preserve answer type, continuation kind, usage, send, escape, and replay facts.
+
 ## 6. `std` 反推规则
 
 Level-1R 的 Rust compiler 不应随意使用 Rust `std` 后再忽略。
