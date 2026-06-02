@@ -60,6 +60,14 @@ pub enum CoreOp {
         layout: String,
         field: String,
     },
+    RecordConstruct {
+        layout: String,
+        fields: Vec<String>,
+    },
+    RecordFieldGet {
+        layout: String,
+        field: String,
+    },
     LiftedFunction {
         source: String,
         symbol: String,
@@ -82,11 +90,17 @@ pub enum LayoutKind {
     ContinuationPackage(ContinuationKind),
     ClosureEnv(ClosureEnvLayout),
     TupleStruct(TupleLayout),
+    RecordStruct(RecordLayout),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TupleLayout {
     pub nominal: String,
+    pub fields: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordLayout {
     pub fields: Vec<String>,
 }
 
@@ -164,6 +178,12 @@ pub enum CoreDiagnostic {
         layout: String,
         field: String,
     },
+    MissingRecordLayout { layout: String },
+    RecordLayoutKindMismatch { layout: String },
+    RecordFieldMissing {
+        layout: String,
+        field: String,
+    },
     DanglingTailCallTarget { target: String },
     EnvClosureMissingLayout { subject: String },
     ClosureEnvLayoutHasNoFields { layout: String },
@@ -219,6 +239,7 @@ pub fn validate_core(program: &CoreProgram) -> CoreValidation {
     validate_tail_calls(program, &mut diagnostics);
     validate_static_row_access(program, &mut diagnostics);
     validate_tuple_field_access(program, &mut diagnostics);
+    validate_record_field_access(program, &mut diagnostics);
     validate_dyn_adapter_layouts(program, &mut diagnostics);
     validate_lifted_functions(program, &mut diagnostics);
     validate_callable_storage(program, &mut diagnostics);
@@ -443,6 +464,8 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         CoreOp::ReturnAtom(_)
         | CoreOp::TupleConstruct { .. }
         | CoreOp::TupleFieldGet { .. }
+        | CoreOp::RecordConstruct { .. }
+        | CoreOp::RecordFieldGet { .. }
         | CoreOp::TailCall { .. }
         | CoreOp::Prompt { .. }
         | CoreOp::CaptureContinuation { .. }
@@ -451,6 +474,28 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         | CoreOp::StaticRowAccess { .. }
         | CoreOp::DynRowAdapterAccess { .. } => false,
     })
+}
+
+fn validate_record_field_access(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    for op in &program.ops {
+        if let CoreOp::RecordFieldGet { layout, field } = op {
+            match program.layouts.iter().find(|fact| fact.key == *layout) {
+                Some(fact) => match &fact.kind {
+                    LayoutKind::RecordStruct(record) if record.fields.contains(field) => {}
+                    LayoutKind::RecordStruct(_) => diagnostics.push(CoreDiagnostic::RecordFieldMissing {
+                        layout: layout.clone(),
+                        field: field.clone(),
+                    }),
+                    _ => diagnostics.push(CoreDiagnostic::RecordLayoutKindMismatch {
+                        layout: layout.clone(),
+                    }),
+                },
+                None => diagnostics.push(CoreDiagnostic::MissingRecordLayout {
+                    layout: layout.clone(),
+                }),
+            }
+        }
+    }
 }
 
 fn is_dynamic_callable_value(func: &str) -> bool {
@@ -595,6 +640,8 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::ContLambda { param, .. } => format!("cont#{param}"),
         CpsAtom::Tuple { nominal, .. } => format!("tuple#{nominal}"),
         CpsAtom::TupleField { tuple, field } => format!("{}.{}", render_atom(tuple), field),
+        CpsAtom::Record { layout, .. } => format!("record#{layout}"),
+        CpsAtom::RecordField { record, field } => format!("{}.{}", render_atom(record), field),
     }
 }
 
@@ -616,6 +663,23 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 });
             }
             lower_atom_value(tuple, ops);
+            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+        }
+        CpsAtom::Record { layout, fields } => {
+            ops.push(CoreOp::RecordConstruct {
+                layout: layout.clone(),
+                fields: fields.iter().map(|field| field.name.clone()).collect(),
+            });
+            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+        }
+        CpsAtom::RecordField { record, field } => {
+            if let CpsAtom::Record { layout, .. } = record.as_ref() {
+                ops.push(CoreOp::RecordFieldGet {
+                    layout: layout.clone(),
+                    field: field.clone(),
+                });
+            }
+            lower_atom_value(record, ops);
             ops.push(CoreOp::ReturnAtom(render_atom(atom)));
         }
         _ => ops.push(CoreOp::ReturnAtom(render_atom(atom))),
@@ -658,6 +722,7 @@ fn lower_layouts(
         }
     }
     collect_tuple_layouts(&mut layouts, ops);
+    collect_record_layouts(&mut layouts, ops);
     for closure in &closures.closures {
         if closure.storage == ClosureStorageKind::EnvClosure {
             let env = closure_env_layout(&closure.param, &closure.captures);
@@ -670,6 +735,26 @@ fn lower_layouts(
         }
     }
     layouts
+}
+
+fn collect_record_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
+    for op in ops {
+        let (layout, fields) = match op {
+            CoreOp::RecordConstruct { layout, fields } => (layout, fields),
+            CoreOp::RecordFieldGet { .. } => continue,
+            _ => continue,
+        };
+        if layouts.iter().any(|fact| fact.key == *layout) {
+            continue;
+        }
+        layouts.push(LayoutFact {
+            key: layout.clone(),
+            hash: stable_hash(layout),
+            kind: LayoutKind::RecordStruct(RecordLayout {
+                fields: fields.clone(),
+            }),
+        });
+    }
 }
 
 fn collect_tuple_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {

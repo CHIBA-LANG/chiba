@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::ast::{Literal, Pattern};
 use crate::control::ContinuationKind;
-use crate::typed::{TypedExpr, TypedExprKind, Type};
+use crate::typed::{TypedExpr, TypedExprKind, TypedRecordField, Type};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpsProgram {
@@ -30,6 +30,20 @@ pub enum CpsAtom {
         tuple: Box<CpsAtom>,
         field: String,
     },
+    RecordField {
+        record: Box<CpsAtom>,
+        field: String,
+    },
+    Record {
+        layout: String,
+        fields: Vec<CpsRecordField>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpsRecordField {
+    pub name: String,
+    pub value: CpsAtom,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -134,12 +148,17 @@ fn transform(
         TypedExprKind::Tuple { fields, nominal } => {
             transform_tuple(fields, nominal, k, controls, ctx)
         }
+        TypedExprKind::Record { fields } => transform_record(fields, k, controls, ctx),
         TypedExprKind::Field { receiver, name } => transform(
             receiver,
             Box::new(|value, ctx| {
                 let atom = match value {
                     CpsAtom::Tuple { .. } if name.starts_with('_') => CpsAtom::TupleField {
                         tuple: Box::new(value),
+                        field: name.clone(),
+                    },
+                    CpsAtom::Record { .. } => CpsAtom::RecordField {
+                        record: Box::new(value),
                         field: name.clone(),
                     },
                     _ => CpsAtom::Var(format!("{value}.{name}")),
@@ -412,6 +431,53 @@ fn transform_tuple_fields(
     )
 }
 
+fn transform_record(
+    fields: &[TypedRecordField],
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    transform_record_fields(fields, 0, Vec::new(), k, controls, ctx)
+}
+
+fn transform_record_fields(
+    fields: &[TypedRecordField],
+    index: usize,
+    values: Vec<CpsRecordField>,
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    if index == fields.len() {
+        let mut fields = values;
+        fields.sort_by(|left, right| left.name.cmp(&right.name));
+        let layout = format!(
+            "record::{}",
+            fields
+                .iter()
+                .map(|field| field.name.as_str())
+                .collect::<Vec<_>>()
+                .join("+")
+        );
+        return k(CpsAtom::Record { layout, fields }, ctx);
+    }
+
+    let field_controls = controls.clone();
+    transform(
+        &fields[index].value,
+        Box::new(move |value, ctx| {
+            let mut values = values;
+            values.push(CpsRecordField {
+                name: fields[index].name.clone(),
+                value,
+            });
+            transform_record_fields(fields, index + 1, values, k, controls, ctx)
+        }),
+        field_controls,
+        ctx,
+    )
+}
+
 fn transform_call(
     callee: &TypedExpr,
     arg: &TypedExpr,
@@ -488,6 +554,17 @@ impl fmt::Display for CpsAtom {
                 write!(f, ")")
             }
             CpsAtom::TupleField { tuple, field } => write!(f, "{tuple}.{field}"),
+            CpsAtom::RecordField { record, field } => write!(f, "{record}.{field}"),
+            CpsAtom::Record { layout, fields } => {
+                write!(f, "{layout}{{")?;
+                for (index, field) in fields.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}={}", field.name, field.value)?;
+                }
+                write!(f, "}}")
+            }
         }
     }
 }

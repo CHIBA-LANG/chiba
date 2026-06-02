@@ -30,6 +30,7 @@ pub enum AlphaExprKind {
         arg: Box<AlphaExpr>,
     },
     Tuple(Vec<AlphaExpr>),
+    Record(Vec<AlphaRecordField>),
     Field {
         receiver: Box<AlphaExpr>,
         name: String,
@@ -77,6 +78,12 @@ pub enum AlphaExprKind {
 pub struct AlphaMatchArm {
     pub pattern: AlphaPattern,
     pub body: AlphaExpr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AlphaRecordField {
+    pub name: String,
+    pub value: AlphaExpr,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -173,6 +180,17 @@ impl AlphaCtx {
             Expr::Tuple(fields) => AlphaExpr {
                 kind: AlphaExprKind::Tuple(
                     fields.iter().map(|field| self.alpha(field)).collect(),
+                ),
+            },
+            Expr::Record(fields) => AlphaExpr {
+                kind: AlphaExprKind::Record(
+                    fields
+                        .iter()
+                        .map(|field| AlphaRecordField {
+                            name: field.name.clone(),
+                            value: self.alpha(&field.value),
+                        })
+                        .collect(),
                 ),
             },
             Expr::Field { receiver, name } => AlphaExpr {

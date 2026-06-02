@@ -53,6 +53,11 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
                 visit(field, facts);
             }
         }
+        TypedExprKind::Record { fields } => {
+            for field in fields {
+                visit(&field.value, facts);
+            }
+        }
         TypedExprKind::Field { receiver, .. } => visit(receiver, facts),
         TypedExprKind::MethodCall { receiver, arg, .. } => {
             visit(receiver, facts);

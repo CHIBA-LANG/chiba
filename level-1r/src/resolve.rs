@@ -115,6 +115,11 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
                 visit(field, facts);
             }
         }
+        AlphaExprKind::Record(fields) => {
+            for field in fields {
+                visit(&field.value, facts);
+            }
+        }
         AlphaExprKind::Field { receiver, .. } => visit(receiver, facts),
         AlphaExprKind::MethodCall {
             receiver,

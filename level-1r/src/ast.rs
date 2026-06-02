@@ -25,6 +25,7 @@ pub enum Expr {
         arg: Box<Expr>,
     },
     Tuple(Vec<Expr>),
+    Record(Vec<RecordField>),
     Field {
         receiver: Box<Expr>,
         name: String,
@@ -72,6 +73,12 @@ pub enum Expr {
 pub struct MatchArm {
     pub pattern: Pattern,
     pub body: Expr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordField {
+    pub name: String,
+    pub value: Expr,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -125,6 +132,18 @@ impl Expr {
 
     pub fn tuple(fields: Vec<Expr>) -> Self {
         Self::Tuple(fields)
+    }
+
+    pub fn record(fields: Vec<(impl Into<String>, Expr)>) -> Self {
+        Self::Record(
+            fields
+                .into_iter()
+                .map(|(name, value)| RecordField {
+                    name: name.into(),
+                    value,
+                })
+                .collect(),
+        )
     }
 
     pub fn field(receiver: Expr, name: impl Into<String>) -> Self {

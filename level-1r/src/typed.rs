@@ -25,6 +25,9 @@ pub enum TypedExprKind {
         fields: Vec<TypedExpr>,
         nominal: String,
     },
+    Record {
+        fields: Vec<TypedRecordField>,
+    },
     Field {
         receiver: Box<TypedExpr>,
         name: String,
@@ -74,14 +77,27 @@ pub struct TypedMatchArm {
     pub body: TypedExpr,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypedRecordField {
+    pub name: String,
+    pub value: TypedExpr,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     Unknown,
     I64,
     Bool,
     Tuple(Vec<Type>),
+    Record(Vec<RecordTypeField>),
     Nominal(String),
     Func(Box<Type>, Box<Type>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RecordTypeField {
+    pub name: String,
+    pub ty: Type,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -145,9 +161,22 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                 Type::Tuple(field_types),
             )
         }
+        Expr::Record(fields) => {
+            let fields = fields
+                .iter()
+                .map(|field| TypedRecordField {
+                    name: field.name.clone(),
+                    value: type_expr(&field.value),
+                })
+                .collect::<Vec<_>>();
+            let ty = Type::Record(record_type_fields(&fields));
+            typed(TypedExprKind::Record { fields }, ty)
+        }
         Expr::Field { receiver, name } => {
             let receiver = type_expr(receiver);
-            let ty = tuple_field_type(&receiver.ty, name).unwrap_or(Type::Unknown);
+            let ty = tuple_field_type(&receiver.ty, name)
+                .or_else(|| record_field_type(&receiver.ty, name))
+                .unwrap_or(Type::Unknown);
             typed(
                 TypedExprKind::Field {
                     receiver: Box::new(receiver),
@@ -296,6 +325,33 @@ fn tuple_field_type(receiver: &Type, name: &str) -> Option<Type> {
     fields.get(index - 1).cloned()
 }
 
+fn record_field_type(receiver: &Type, name: &str) -> Option<Type> {
+    let Type::Record(fields) = receiver else {
+        return None;
+    };
+    fields
+        .iter()
+        .find(|field| field.name == name)
+        .map(|field| field.ty.clone())
+}
+
+fn record_type_fields(fields: &[TypedRecordField]) -> Vec<RecordTypeField> {
+    let mut fields = fields
+        .iter()
+        .map(|field| RecordTypeField {
+            name: field.name.clone(),
+            ty: field.value.ty.clone(),
+        })
+        .collect::<Vec<_>>();
+    fields.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| type_stable_name(&left.ty).cmp(&type_stable_name(&right.ty)))
+    });
+    fields.dedup_by(|left, right| left.name == right.name);
+    fields
+}
+
 fn typed(kind: TypedExprKind, ty: Type) -> TypedExpr {
     TypedExpr {
         kind,
@@ -320,6 +376,16 @@ fn type_stable_name(ty: &Type) -> String {
         Type::I64 => "I64".to_string(),
         Type::Bool => "Bool".to_string(),
         Type::Tuple(fields) => tuple_nominal_name(fields),
+        Type::Record(fields) => {
+            let mut name = "Record".to_string();
+            for field in fields {
+                name.push('_');
+                name.push_str(&sanitize_type_name(&field.name));
+                name.push('_');
+                name.push_str(&type_stable_name(&field.ty));
+            }
+            name
+        }
         Type::Nominal(name) => format!("Nominal{}", sanitize_type_name(name)),
         Type::Func(arg, ret) => format!("Fn_{}_{}", type_stable_name(arg), type_stable_name(ret)),
     }

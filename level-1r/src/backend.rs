@@ -149,6 +149,8 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
             CoreOp::ReturnAtom(_)
             | CoreOp::TupleConstruct { .. }
             | CoreOp::TupleFieldGet { .. }
+            | CoreOp::RecordConstruct { .. }
+            | CoreOp::RecordFieldGet { .. }
             | CoreOp::TailCall { .. }
             | CoreOp::Prompt { .. }
             | CoreOp::CaptureContinuation { .. }
