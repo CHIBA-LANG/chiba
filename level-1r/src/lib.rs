@@ -21,6 +21,7 @@ pub mod regex;
 pub mod resolve;
 pub mod specialize;
 pub mod std_audit;
+pub mod surface;
 pub mod template;
 pub mod template_audit;
 pub mod typed;
@@ -38,5 +39,9 @@ pub use pipeline::{
 };
 pub use resolve::{resolve_expr, MethodIndex, ResolveFacts};
 pub use specialize::{plan_specialization, SpecializationFacts};
+pub use surface::{
+    build_interface_summary, project_surface, InterfaceSummary, ProjectSurface, SurfaceConstructor,
+    SurfaceData, SurfaceDef,
+};
 pub use template::{analyze_template, TemplateFacts};
 pub use template_audit::{audit_checked_templates, TemplateAuditReport};

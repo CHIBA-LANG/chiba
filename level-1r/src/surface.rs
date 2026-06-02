@@ -1,0 +1,237 @@
+use std::collections::BTreeMap;
+
+use crate::ast::{DataDecl, SourceItem, SourceProgram};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProjectSurface {
+    pub namespace: String,
+    pub imports: Vec<String>,
+    pub defs: Vec<SurfaceDef>,
+    pub data: Vec<SurfaceData>,
+    pub constructors: Vec<SurfaceConstructor>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SurfaceDef {
+    pub owner: String,
+    pub name: String,
+    pub arity: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SurfaceData {
+    pub owner: String,
+    pub name: String,
+    pub generics: Vec<String>,
+    pub variants: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SurfaceConstructor {
+    pub owner: String,
+    pub data: String,
+    pub name: String,
+    pub arity: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterfaceSummary {
+    pub namespace: String,
+    pub functions: Vec<InterfaceFunction>,
+    pub data: Vec<InterfaceData>,
+    pub constructors: Vec<InterfaceConstructor>,
+    pub imports: Vec<String>,
+    pub stable_hash: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterfaceFunction {
+    pub symbol: String,
+    pub arity: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterfaceData {
+    pub symbol: String,
+    pub generics: Vec<String>,
+    pub variants: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterfaceConstructor {
+    pub symbol: String,
+    pub data_symbol: String,
+    pub arity: usize,
+}
+
+pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
+    let namespace = program
+        .namespace
+        .as_ref()
+        .map(|namespace| namespace.dotted())
+        .unwrap_or_else(|| "root".to_string());
+    let imports = program.imports.iter().map(|import| import.dotted()).collect();
+    let defs = program
+        .items
+        .iter()
+        .map(|item| match item {
+            SourceItem::Def { name, params, .. } => SurfaceDef {
+                owner: namespace.clone(),
+                name: name.clone(),
+                arity: params.len(),
+            },
+        })
+        .collect();
+    let data = program
+        .data
+        .iter()
+        .map(|decl| surface_data(&namespace, decl))
+        .collect::<Vec<_>>();
+    let constructors = program
+        .data
+        .iter()
+        .flat_map(|decl| surface_constructors(&namespace, decl))
+        .collect();
+    ProjectSurface {
+        namespace,
+        imports,
+        defs,
+        data,
+        constructors,
+    }
+}
+
+pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
+    let functions = surface
+        .defs
+        .iter()
+        .map(|def| InterfaceFunction {
+            symbol: owned_symbol(&def.owner, &def.name),
+            arity: def.arity,
+        })
+        .collect();
+    let data = surface
+        .data
+        .iter()
+        .map(|data| InterfaceData {
+            symbol: owned_symbol(&data.owner, &data.name),
+            generics: data.generics.clone(),
+            variants: data.variants.clone(),
+        })
+        .collect();
+    let constructors = surface
+        .constructors
+        .iter()
+        .map(|ctor| InterfaceConstructor {
+            symbol: format!("{}::{}.{}", ctor.owner, ctor.data, ctor.name),
+            data_symbol: owned_symbol(&ctor.owner, &ctor.data),
+            arity: ctor.arity,
+        })
+        .collect();
+    let stable_hash = stable_summary_hash(surface);
+    InterfaceSummary {
+        namespace: surface.namespace.clone(),
+        functions,
+        data,
+        constructors,
+        imports: surface.imports.clone(),
+        stable_hash,
+    }
+}
+
+pub fn duplicate_data_names(surface: &ProjectSurface) -> Vec<String> {
+    duplicates(surface.data.iter().map(|data| data.name.as_str()))
+}
+
+pub fn duplicate_constructor_names(surface: &ProjectSurface) -> Vec<String> {
+    let mut by_data = BTreeMap::<String, Vec<&str>>::new();
+    for ctor in &surface.constructors {
+        by_data
+            .entry(format!("{}::{}", ctor.owner, ctor.data))
+            .or_default()
+            .push(ctor.name.as_str());
+    }
+    by_data
+        .into_values()
+        .flat_map(|names| duplicates(names.into_iter()))
+        .collect()
+}
+
+fn surface_data(owner: &str, decl: &DataDecl) -> SurfaceData {
+    SurfaceData {
+        owner: owner.to_string(),
+        name: decl.name.clone(),
+        generics: decl.generics.clone(),
+        variants: decl.variant_names(),
+    }
+}
+
+fn surface_constructors(owner: &str, decl: &DataDecl) -> Vec<SurfaceConstructor> {
+    decl.variants
+        .iter()
+        .map(|variant| SurfaceConstructor {
+            owner: owner.to_string(),
+            data: decl.name.clone(),
+            name: variant.name.clone(),
+            arity: variant.fields.len(),
+        })
+        .collect()
+}
+
+fn owned_symbol(owner: &str, name: &str) -> String {
+    format!("{owner}::{name}")
+}
+
+fn duplicates<'a>(names: impl Iterator<Item = &'a str>) -> Vec<String> {
+    let mut counts = BTreeMap::<String, usize>::new();
+    for name in names {
+        *counts.entry(name.to_string()).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .filter_map(|(name, count)| if count > 1 { Some(name) } else { None })
+        .collect()
+}
+
+fn stable_summary_hash(surface: &ProjectSurface) -> String {
+    let mut text = String::new();
+    text.push_str(&surface.namespace);
+    for import in &surface.imports {
+        text.push_str("|use:");
+        text.push_str(import);
+    }
+    for def in &surface.defs {
+        text.push_str("|def:");
+        text.push_str(&def.name);
+        text.push(':');
+        text.push_str(&def.arity.to_string());
+    }
+    for data in &surface.data {
+        text.push_str("|data:");
+        text.push_str(&data.name);
+        text.push('[');
+        text.push_str(&data.generics.join(","));
+        text.push(']');
+        text.push('{');
+        text.push_str(&data.variants.join(","));
+        text.push('}');
+    }
+    for ctor in &surface.constructors {
+        text.push_str("|ctor:");
+        text.push_str(&ctor.data);
+        text.push('.');
+        text.push_str(&ctor.name);
+        text.push(':');
+        text.push_str(&ctor.arity.to_string());
+    }
+    format!("{:016x}", fnv1a64(text.as_bytes()))
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}

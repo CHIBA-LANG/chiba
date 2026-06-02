@@ -160,7 +160,7 @@ fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
     assert!(summary.contains("tokens=18"));
     assert!(summary.contains("items=2"));
     assert!(summary.contains("data=0"));
-    assert!(summary.contains("P1ProgramSurface"));
+    assert!(summary.contains("P1ProjectSurface"));
 }
 
 #[test]

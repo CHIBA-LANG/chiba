@@ -24,6 +24,10 @@ use crate::pattern::{analyze_patterns, PatternFacts};
 use crate::resolve::{resolve_expr, MethodIndex, ResolveFacts};
 use crate::specialize::{plan_specialization, SpecializationFacts};
 use crate::std_audit::{audit_std_dependencies, StdAuditReport};
+use crate::surface::{
+    build_interface_summary, duplicate_constructor_names, duplicate_data_names, project_surface,
+    InterfaceSummary, ProjectSurface,
+};
 use crate::template::{analyze_template, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{type_expr, TypedExpr};
@@ -64,6 +68,8 @@ pub struct CompileOutput {
 pub struct ProgramCompileOutput {
     pub namespace: Option<NamespaceDecl>,
     pub imports: Vec<UseDecl>,
+    pub surface: ProjectSurface,
+    pub interface: InterfaceSummary,
     pub defs: Vec<ProgramDefOutput>,
     pub diagnostics: Vec<ProgramDiagnostic>,
     pub entry: Option<String>,
@@ -88,6 +94,8 @@ pub struct ProgramDefOutput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProgramDiagnostic {
     DuplicateDef { name: String },
+    DuplicateData { name: String },
+    DuplicateConstructor { name: String },
     MissingEntry,
     EntryHasParams { name: String, params: Vec<String> },
 }
@@ -270,20 +278,29 @@ pub fn compile_source_program_bundle(source: &str) -> Result<SourceCompileOutput
 
 pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     let mut passes = PassReport::default();
+    let surface = passes.record("P1ProjectSurface", "SourceProgram", "ProjectSurface", || {
+        project_surface(program)
+    });
+    let interface = passes.record(
+        "P2InterfaceSummary",
+        "ProjectSurface",
+        "InterfaceSummary",
+        || build_interface_summary(&surface),
+    );
     let diagnostics = passes.record(
-        "P1ProgramSurface",
-        "SourceProgram",
+        "P3ProgramDiagnostics",
+        "ProjectSurface",
         "ProgramDiagnostics",
-        || program_surface_diagnostics(program),
+        || program_surface_diagnostics(&surface),
     );
     let defs = passes.record(
-        "P2ProgramDefs",
+        "P4ProgramDefs",
         "SourceProgram",
         "ProgramDefOutput",
         || compile_program_defs(program),
     );
     let entry = passes.record(
-        "P3ProgramEntry",
+        "P5ProgramEntry",
         "ProgramDefOutput",
         "EntrySelection",
         || select_program_entry(&defs),
@@ -303,13 +320,13 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         }
     }
     let backend_link = passes.record(
-        "P4ProgramBackendLink",
+        "P6ProgramBackendLink",
         "ProgramDefOutput+EntrySelection",
         "BackendLinkedBundle",
         || link_backend_artifacts(program_backend_artifacts(&defs, entry.as_deref())),
     );
     let backend_cache_key = passes.record(
-        "P5ProgramBackendCacheKey",
+        "P7ProgramBackendCacheKey",
         "BackendLinkedBundle",
         "BackendCacheKey",
         || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
@@ -317,6 +334,8 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     ProgramCompileOutput {
         namespace: program.namespace.clone(),
         imports: program.imports.clone(),
+        surface,
+        interface,
         defs,
         diagnostics: all_diagnostics,
         entry,
@@ -340,18 +359,26 @@ fn compile_program_defs(program: &SourceProgram) -> Vec<ProgramDefOutput> {
         .collect()
 }
 
-fn program_surface_diagnostics(program: &SourceProgram) -> Vec<ProgramDiagnostic> {
+fn program_surface_diagnostics(surface: &ProjectSurface) -> Vec<ProgramDiagnostic> {
     let mut seen = BTreeSet::new();
     let mut diagnostics = Vec::new();
-    for item in &program.items {
-        match item {
-            SourceItem::Def { name, .. } => {
-                if !seen.insert(name.clone()) {
-                    diagnostics.push(ProgramDiagnostic::DuplicateDef { name: name.clone() });
-                }
-            }
+    for def in &surface.defs {
+        if !seen.insert(def.name.clone()) {
+            diagnostics.push(ProgramDiagnostic::DuplicateDef {
+                name: def.name.clone(),
+            });
         }
     }
+    diagnostics.extend(
+        duplicate_data_names(surface)
+            .into_iter()
+            .map(|name| ProgramDiagnostic::DuplicateData { name }),
+    );
+    diagnostics.extend(
+        duplicate_constructor_names(surface)
+            .into_iter()
+            .map(|name| ProgramDiagnostic::DuplicateConstructor { name }),
+    );
     diagnostics
 }
 
@@ -440,6 +467,8 @@ impl ProgramCompileOutput {
                 .collect::<Vec<_>>()
         ));
         out.push_str(&format!("  defs={}\n", self.defs.len()));
+        out.push_str(&format!("  surface={:#?}\n", self.surface));
+        out.push_str(&format!("  interface={:#?}\n", self.interface));
         out.push_str(&format!("  entry={:?}\n", self.entry));
         out.push_str(&format!("  diagnostics={:?}\n", self.diagnostics));
         out.push_str("  passes:\n");
