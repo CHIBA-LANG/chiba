@@ -1665,6 +1665,61 @@ fn global_init_lowers_adt_match_into_executable_initializer() {
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "5");
 }
 
+#[test]
+fn global_init_lowers_record_field_access_into_executable_initializer() {
+    let program = SourceProgram::new(vec![
+        static_value(
+            "PICKED",
+            Some("i64"),
+            Expr::field(
+                Expr::record(vec![("x", Expr::i64(1)), ("y", Expr::i64(7))]),
+                "y",
+            ),
+        ),
+        def("main", vec![], Expr::var("PICKED")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.linked_wat.contains("(func $__chiba_init"));
+    assert!(bundle.backend_link.linked_wat.contains("global.set $global__PICKED"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("unsupported static init"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
+}
+
+#[test]
+fn global_init_lowers_record_update_field_access_into_executable_initializer() {
+    let program = SourceProgram::new(vec![
+        static_value(
+            "PICKED",
+            Some("i64"),
+            Expr::field(
+                Expr::record_update(
+                    Expr::record(vec![("x", Expr::i64(1)), ("y", Expr::i64(2))]),
+                    vec![("x", Expr::i64(9))],
+                ),
+                "x",
+            ),
+        ),
+        def("main", vec![], Expr::var("PICKED")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.linked_wat.contains("(func $__chiba_init"));
+    assert!(bundle.backend_link.linked_wat.contains("global.set $global__PICKED"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("unsupported static init"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
 fn run_wat_text(wat: &str) -> String {
     run_wat_export(wat, "main")
 }

@@ -1125,6 +1125,14 @@ fn render_global_init_expr_with_bindings(
         Expr::Match { scrutinee, arms } => {
             render_global_match_expr(wat, scrutinee, arms, global_init, bindings, 4);
         }
+        Expr::Field { receiver, name } => {
+            if let Some(value) = global_record_field_expr(receiver, name, bindings) {
+                render_global_init_expr_with_bindings(wat, value, global_init, bindings);
+            } else {
+                wat.push_str(&format!("    ;; unsupported static init {:?}\n", expr));
+                wat.push_str("    i32.const 0\n");
+            }
+        }
         Expr::AdtCtor { ctor, variants, .. } => {
             let tag = variants
                 .iter()
@@ -1152,6 +1160,30 @@ fn render_global_init_expr_nested_with_bindings(
         wat.push_str(&" ".repeat(indent));
         wat.push_str(line.trim_start());
         wat.push('\n');
+    }
+}
+
+fn global_record_field_expr<'a>(
+    receiver: &'a Expr,
+    name: &str,
+    bindings: &'a BTreeMap<String, Expr>,
+) -> Option<&'a Expr> {
+    match receiver {
+        Expr::Var(binding) => {
+            let value = bindings.get(binding)?;
+            global_record_field_expr(value, name, bindings)
+        }
+        Expr::Record(fields) => fields
+            .iter()
+            .find(|field| field.name == name)
+            .map(|field| &field.value),
+        Expr::RecordUpdate { base, fields } => fields
+            .iter()
+            .rev()
+            .find(|field| field.name == name)
+            .map(|field| &field.value)
+            .or_else(|| global_record_field_expr(base, name, bindings)),
+        _ => None,
     }
 }
 
