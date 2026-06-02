@@ -44,6 +44,7 @@ pub struct BackendManifestEntry {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BackendDiagnostic {
     CoreValidationFailed { diagnostics: usize },
+    UnsupportedI32ReturnValue { value: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -132,6 +133,16 @@ pub fn emit_wasm_gc_with_params(
         };
     }
 
+    if let Some(diagnostic) = unsupported_i32_return_value(core) {
+        return BackendArtifact {
+            target: BackendTarget::WasmGc,
+            wat: String::new(),
+            manifest: manifest_for_core(core),
+            diagnostics: vec![diagnostic],
+            return_value: first_return_value(core),
+        };
+    }
+
     let manifest = manifest_for_core(core);
     BackendArtifact {
         target: BackendTarget::WasmGc,
@@ -139,6 +150,50 @@ pub fn emit_wasm_gc_with_params(
         manifest,
         diagnostics: vec![],
         return_value: first_return_value(core),
+    }
+}
+
+fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic> {
+    core.ops.iter().find_map(|op| match op {
+        CoreOp::ReturnValue(value) if contains_range_value(value) => {
+            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: value.debug_name(),
+            })
+        }
+        CoreOp::ReturnBranch {
+            cond,
+            then_value,
+            else_value,
+        } => [cond, then_value, else_value]
+            .into_iter()
+            .find(|value| contains_range_value(value))
+            .map(|value| BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: value.debug_name(),
+            }),
+        CoreOp::ReturnMatch { scrutinee, .. } if contains_range_value(scrutinee) => {
+            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: scrutinee.debug_name(),
+            })
+        }
+        _ => None,
+    })
+}
+
+fn contains_range_value(value: &CoreValue) -> bool {
+    match value {
+        CoreValue::Range { .. } => true,
+        CoreValue::Tuple { fields } => fields.iter().any(contains_range_value),
+        CoreValue::TupleField { tuple, .. } => contains_range_value(tuple),
+        CoreValue::Record { fields } => fields
+            .iter()
+            .any(|field| contains_range_value(&field.value)),
+        CoreValue::RecordField { record, .. } => contains_range_value(record),
+        CoreValue::Adt { args, .. } => args.iter().any(contains_range_value),
+        CoreValue::Unit
+        | CoreValue::I64(_)
+        | CoreValue::Bool(_)
+        | CoreValue::Var(_)
+        | CoreValue::Rendered { .. } => false,
     }
 }
 

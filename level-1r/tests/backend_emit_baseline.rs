@@ -113,6 +113,29 @@ fn backend_emits_params_and_local_get_for_param_return_core() {
 }
 
 #[test]
+fn backend_rejects_range_return_instead_of_faking_i32_zero() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::Range {
+            start: Box::new(CoreValue::I64(1)),
+            end: Box::new(CoreValue::I64(3)),
+        })],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(
+        artifact.diagnostics,
+        vec![BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: "1..3".to_string(),
+        }]
+    );
+    assert_eq!(artifact.wat, "");
+}
+
+#[test]
 fn backend_serializes_structural_core_ops_as_debuggable_wat_comments() {
     let output = compile_expr(&Expr::record(vec![
         ("x", Expr::i64(1)),
