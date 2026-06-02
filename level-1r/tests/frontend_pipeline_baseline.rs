@@ -103,6 +103,43 @@ fn frontend_supports_parameters_and_variables() {
 }
 
 #[test]
+fn frontend_parses_typed_global_value_def_surface() {
+    let output = compile_source_program_bundle("def ANSWER: I64 = 42 def main() = ANSWER")
+        .expect("compile source");
+
+    assert_eq!(output.frontend.program.items.len(), 2);
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { name, params, body } => {
+            assert_eq!(name, "ANSWER");
+            assert_eq!(params, &Vec::<String>::new());
+            assert_eq!(body, &Expr::i64(42));
+        }
+    }
+
+    assert_eq!(output.program.entry, Some("main".to_string()));
+    assert_eq!(output.program.defs[0].name, "ANSWER");
+    assert!(output.program.defs[0].output.backend.wat.contains("i32.const 42"));
+    assert!(output
+        .program
+        .backend_link
+        .linked_wat
+        .contains("(func $ANSWER (result i32)"));
+}
+
+#[test]
+fn frontend_consumes_parameter_and_return_type_annotations() {
+    let parsed = parse_source_program("def id(x: I64): I64 = x").expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { name, params, body } => {
+            assert_eq!(name, "id");
+            assert_eq!(params, &vec!["x".to_string()]);
+            assert_eq!(body, &Expr::var("x"));
+        }
+    }
+}
+
+#[test]
 fn frontend_parses_call_before_infix_and_reaches_cps_shape() {
     let parsed = parse_source_program("def main() = f(x) + 1").expect("parse");
 

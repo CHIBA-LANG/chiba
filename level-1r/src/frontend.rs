@@ -150,9 +150,24 @@ impl FrontendParser {
     fn parse_def(&mut self) -> Result<SourceItem, FrontendError> {
         self.expect("KwDef")?;
         let name = self.expect_lexeme("Ident")?;
+        if self.peek_name() == Some("Colon") {
+            self.pos += 1;
+            self.expect_type_name()?;
+            self.expect("Eq")?;
+            let body = self.parse_expr_bp(0)?;
+            return Ok(SourceItem::Def {
+                name,
+                params: Vec::new(),
+                body,
+            });
+        }
         self.expect("LParen")?;
         let params = self.parse_params()?;
         self.expect("RParen")?;
+        if self.peek_name() == Some("Colon") {
+            self.pos += 1;
+            self.expect_type_name()?;
+        }
         self.expect("Eq")?;
         let body = self.parse_expr_bp(0)?;
         Ok(SourceItem::Def { name, params, body })
@@ -165,6 +180,10 @@ impl FrontendParser {
         }
         loop {
             params.push(self.expect_lexeme("Ident")?);
+            if self.peek_name() == Some("Colon") {
+                self.pos += 1;
+                self.expect_type_name()?;
+            }
             if self.peek_name() != Some("Comma") {
                 break;
             }
