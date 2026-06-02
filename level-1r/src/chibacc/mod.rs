@@ -55,20 +55,20 @@ pub struct PrattInfix {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ast {
-    Token {
-        name: String,
-        lexeme: String,
-    },
-    Node {
-        label: String,
-        children: Vec<Ast>,
-    },
+    Token { name: String, lexeme: String },
+    Node { label: String, children: Vec<Ast> },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LabeledAst {
-    Ok { ast: Ast, consumed: usize },
-    Err { partial: Option<Ast>, skipped: usize },
+    Ok {
+        ast: Ast,
+        consumed: usize,
+    },
+    Err {
+        partial: Option<Ast>,
+        skipped: usize,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,7 +79,9 @@ pub struct ParseError {
 
 pub fn parse_tokens(grammar: &Grammar, tokens: &[Token]) -> LabeledAst {
     match parse_rule(grammar, &grammar.start, tokens, 0) {
-        ParseAttempt::Ok { ast, pos } if pos == tokens.len() => LabeledAst::Ok { ast, consumed: pos },
+        ParseAttempt::Ok { ast, pos } if pos == tokens.len() => {
+            LabeledAst::Ok { ast, consumed: pos }
+        }
         ParseAttempt::Ok { ast, pos } => LabeledAst::Err {
             partial: Some(ast),
             skipped: tokens.len().saturating_sub(pos),
@@ -93,7 +95,9 @@ pub fn parse_tokens(grammar: &Grammar, tokens: &[Token]) -> LabeledAst {
 
 pub fn parse_pratt_tokens(spec: &PrattSpec, tokens: &[Token]) -> LabeledAst {
     match parse_pratt_expr(spec, tokens, 0, 0) {
-        ParseAttempt::Ok { ast, pos } if pos == tokens.len() => LabeledAst::Ok { ast, consumed: pos },
+        ParseAttempt::Ok { ast, pos } if pos == tokens.len() => {
+            LabeledAst::Ok { ast, consumed: pos }
+        }
         ParseAttempt::Ok { ast, pos } => LabeledAst::Err {
             partial: Some(ast),
             skipped: tokens.len().saturating_sub(pos),
@@ -115,7 +119,11 @@ fn parse_pratt_expr(spec: &PrattSpec, tokens: &[Token], pos: usize, min_bp: u32)
         let Some(op_token) = tokens.get(lhs.pos) else {
             break;
         };
-        let Some(infix) = spec.infixes.iter().find(|infix| infix.token == op_token.name) else {
+        let Some(infix) = spec
+            .infixes
+            .iter()
+            .find(|infix| infix.token == op_token.name)
+        else {
             break;
         };
         if infix.lbp < min_bp {
@@ -150,7 +158,11 @@ fn parse_pratt_expr(spec: &PrattSpec, tokens: &[Token], pos: usize, min_bp: u32)
 
 fn parse_pratt_prefix(spec: &PrattSpec, tokens: &[Token], pos: usize) -> ParseAttempt {
     match tokens.get(pos) {
-        Some(token) => match spec.prefixes.iter().find(|prefix| prefix.token == token.name) {
+        Some(token) => match spec
+            .prefixes
+            .iter()
+            .find(|prefix| prefix.token == token.name)
+        {
             Some(prefix) => ParseAttempt::Ok {
                 ast: Ast::Node {
                     label: prefix.label.clone(),

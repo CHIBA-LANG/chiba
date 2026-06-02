@@ -63,13 +63,11 @@ fn validator_rejects_invalid_layout_hash_and_duplicate_keys() {
             } if key == "continuation::ContN::retry"
         )
     }));
-    assert!(
-        validation
-            .diagnostics
-            .contains(&CoreDiagnostic::DuplicateLayoutKey {
-                key: "continuation::ContN::retry".to_string()
-            })
-    );
+    assert!(validation
+        .diagnostics
+        .contains(&CoreDiagnostic::DuplicateLayoutKey {
+            key: "continuation::ContN::retry".to_string()
+        }));
 }
 
 #[test]
@@ -118,26 +116,20 @@ fn validator_rejects_cont1_package_and_send_rc_contradiction() {
 
     let validation = validate_core(&program);
 
-    assert!(
-        validation
-            .diagnostics
-            .iter()
-            .any(|diagnostic| matches!(diagnostic, CoreDiagnostic::Cont1HasPackageLayout { .. }))
-    );
-    assert!(
-        validation
-            .diagnostics
-            .contains(&CoreDiagnostic::SharedSendSubjectUsesRc {
-                subject: "send::shared-value".to_string()
-            })
-    );
-    assert!(
-        validation
-            .diagnostics
-            .contains(&CoreDiagnostic::DynPayloadMustUseDynPackage {
-                subject: "dyn::user".to_string()
-            })
-    );
+    assert!(validation
+        .diagnostics
+        .iter()
+        .any(|diagnostic| matches!(diagnostic, CoreDiagnostic::Cont1HasPackageLayout { .. })));
+    assert!(validation
+        .diagnostics
+        .contains(&CoreDiagnostic::SharedSendSubjectUsesRc {
+            subject: "send::shared-value".to_string()
+        }));
+    assert!(validation
+        .diagnostics
+        .contains(&CoreDiagnostic::DynPayloadMustUseDynPackage {
+            subject: "dyn::user".to_string()
+        }));
 }
 
 fn continuation_env(binder: &str, kind: ContinuationKind) -> ContinuationEnvLayout {
@@ -297,22 +289,17 @@ fn validator_rejects_dyn_adapter_missing_or_wrong_layout_ref() {
         layouts: vec![LayoutFact {
             key: "row::user".to_string(),
             hash: 0,
-            kind: LayoutKind::RowShape(canonical_open_row(vec![(
-                "name",
-                ShapeType::Unknown,
-            )])),
+            kind: LayoutKind::RowShape(canonical_open_row(vec![("name", ShapeType::Unknown)])),
         }],
         ownership: vec![],
         callable_storage: vec![],
     };
 
-    assert!(
-        validate_core(&wrong_kind)
-            .diagnostics
-            .contains(&CoreDiagnostic::DynRowLayoutKindMismatch {
-                layout: "row::user".to_string()
-            })
-    );
+    assert!(validate_core(&wrong_kind).diagnostics.contains(
+        &CoreDiagnostic::DynRowLayoutKindMismatch {
+            layout: "row::user".to_string()
+        }
+    ));
 }
 
 #[test]
@@ -351,13 +338,11 @@ fn validator_rejects_static_row_access_missing_or_wrong_layout_ref() {
         callable_storage: vec![],
     };
 
-    assert!(
-        validate_core(&wrong_kind)
-            .diagnostics
-            .contains(&CoreDiagnostic::StaticRowLayoutKindMismatch {
-                layout: "dyn-row::user".to_string()
-            })
-    );
+    assert!(validate_core(&wrong_kind).diagnostics.contains(
+        &CoreDiagnostic::StaticRowLayoutKindMismatch {
+            layout: "dyn-row::user".to_string()
+        }
+    ));
 }
 
 #[test]
@@ -396,14 +381,12 @@ fn validator_rejects_tuple_field_access_missing_layout_or_field() {
         callable_storage: vec![],
     };
 
-    assert!(
-        validate_core(&missing_field)
-            .diagnostics
-            .contains(&CoreDiagnostic::TupleFieldMissing {
-                layout: "tuple::Tuple1_I64".to_string(),
-                field: "_2".to_string(),
-            })
-    );
+    assert!(validate_core(&missing_field).diagnostics.contains(
+        &CoreDiagnostic::TupleFieldMissing {
+            layout: "tuple::Tuple1_I64".to_string(),
+            field: "_2".to_string(),
+        }
+    ));
 }
 
 #[test]
@@ -446,13 +429,11 @@ fn validator_rejects_env_closure_missing_or_empty_env_layout() {
         }],
     };
 
-    assert!(
-        validate_core(&empty_layout)
-            .diagnostics
-            .contains(&CoreDiagnostic::ClosureEnvLayoutHasNoFields {
-                layout: "closure-env::closure::f".to_string()
-            })
-    );
+    assert!(validate_core(&empty_layout).diagnostics.contains(
+        &CoreDiagnostic::ClosureEnvLayoutHasNoFields {
+            layout: "closure-env::closure::f".to_string()
+        }
+    ));
 }
 
 #[test]
@@ -501,11 +482,15 @@ fn validator_rejects_duplicate_lifted_symbol_and_missing_env_layout() {
 
     let diagnostics = validate_core(&program).diagnostics;
 
-    assert!(diagnostics.contains(&CoreDiagnostic::LiftedFunctionMissingClosureEnv {
-        source: "closure::y".to_string(),
-        expected_layout: "closure-env::closure::y".to_string(),
-    }));
-    assert!(diagnostics.contains(&CoreDiagnostic::DuplicateLiftedFunctionSymbol {
-        symbol: "lift::0001::closure__y".to_string(),
-    }));
+    assert!(
+        diagnostics.contains(&CoreDiagnostic::LiftedFunctionMissingClosureEnv {
+            source: "closure::y".to_string(),
+            expected_layout: "closure-env::closure::y".to_string(),
+        })
+    );
+    assert!(
+        diagnostics.contains(&CoreDiagnostic::DuplicateLiftedFunctionSymbol {
+            symbol: "lift::0001::closure__y".to_string(),
+        })
+    );
 }

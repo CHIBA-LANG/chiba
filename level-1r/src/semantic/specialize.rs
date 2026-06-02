@@ -48,13 +48,35 @@ pub struct SpecializationWorkItem {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DischargedObligation {
-    Field { field: String, shape: RowShape },
-    Method { name: String, target: Option<String> },
-    Function { name: String, target: String },
-    Static { name: String, target: String },
-    Constructor { data: String, ctor: String, target: String, arity: usize },
-    Operator { protocol: String, receiver: Option<String> },
-    DynAdapter { contract: DynRowContract },
+    Field {
+        field: String,
+        shape: RowShape,
+    },
+    Method {
+        name: String,
+        target: Option<String>,
+    },
+    Function {
+        name: String,
+        target: String,
+    },
+    Static {
+        name: String,
+        target: String,
+    },
+    Constructor {
+        data: String,
+        ctor: String,
+        target: String,
+        arity: usize,
+    },
+    Operator {
+        protocol: String,
+        receiver: Option<String>,
+    },
+    DynAdapter {
+        contract: DynRowContract,
+    },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -69,7 +91,10 @@ pub enum InstantiationStatus {
     Failed { diagnostic: String },
 }
 
-pub fn plan_specialization(generic_symbol: impl Into<String>, template: &TemplateFacts) -> SpecializationFacts {
+pub fn plan_specialization(
+    generic_symbol: impl Into<String>,
+    template: &TemplateFacts,
+) -> SpecializationFacts {
     let key = specialization_key(generic_symbol, template);
     let obligations = discharge_obligations(template);
     let mut registry = InstantiationRegistry::default();
@@ -80,7 +105,10 @@ pub fn plan_specialization(generic_symbol: impl Into<String>, template: &Templat
     }
 }
 
-pub fn specialization_key(generic_symbol: impl Into<String>, template: &TemplateFacts) -> SpecializationKey {
+pub fn specialization_key(
+    generic_symbol: impl Into<String>,
+    template: &TemplateFacts,
+) -> SpecializationKey {
     let mut normalized_shapes = template.row_shapes.clone();
     normalized_shapes.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
     normalized_shapes.dedup();
@@ -97,16 +125,13 @@ pub fn specialization_key(generic_symbol: impl Into<String>, template: &Template
                 ..
             }
             | TemplateObligation::Function {
-                resolved: receiver,
-                ..
+                resolved: receiver, ..
             }
             | TemplateObligation::Static {
-                resolved: receiver,
-                ..
+                resolved: receiver, ..
             }
             | TemplateObligation::Constructor {
-                resolved: receiver,
-                ..
+                resolved: receiver, ..
             }
             | TemplateObligation::Operator {
                 receiver: Some(receiver),
@@ -125,7 +150,10 @@ pub fn specialization_key(generic_symbol: impl Into<String>, template: &Template
         concrete_nominals,
         normalized_shapes,
         capabilities: CapabilityFacts {
-            usage: dyn_contracts.iter().map(|contract| contract.payload_usage).collect(),
+            usage: dyn_contracts
+                .iter()
+                .map(|contract| contract.payload_usage)
+                .collect(),
             send: dyn_contracts.iter().map(|contract| contract.send).collect(),
         },
         continuations: Vec::new(),
@@ -147,12 +175,10 @@ pub fn discharge_obligations(template: &TemplateFacts) -> Vec<DischargedObligati
                 name: name.clone(),
                 target: resolved.clone(),
             },
-            TemplateObligation::Function { name, resolved } => {
-                DischargedObligation::Function {
-                    name: name.clone(),
-                    target: resolved.clone(),
-                }
-            }
+            TemplateObligation::Function { name, resolved } => DischargedObligation::Function {
+                name: name.clone(),
+                target: resolved.clone(),
+            },
             TemplateObligation::Static { name, resolved } => DischargedObligation::Static {
                 name: name.clone(),
                 target: resolved.clone(),
@@ -169,9 +195,7 @@ pub fn discharge_obligations(template: &TemplateFacts) -> Vec<DischargedObligati
                 arity: *arity,
             },
             TemplateObligation::Operator {
-                protocol,
-                receiver,
-                ..
+                protocol, receiver, ..
             } => DischargedObligation::Operator {
                 protocol: protocol.clone(),
                 receiver: receiver.clone(),

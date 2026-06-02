@@ -5,11 +5,7 @@ use chiba_level1r::{compile_expr, Expr};
 
 #[test]
 fn repeated_value_has_usage_n_and_rust_rc_reference() {
-    let output = compile_expr(&Expr::binary(
-        BinaryOp::Add,
-        Expr::var("x"),
-        Expr::var("x"),
-    ));
+    let output = compile_expr(&Expr::binary(BinaryOp::Add, Expr::var("x"), Expr::var("x")));
 
     let entry = output
         .usage_audit
@@ -81,11 +77,7 @@ fn cont1_usage_one_stays_non_rc_in_audit() {
 
 #[test]
 fn visual_report_contains_four_layer_usage_audit() {
-    let output = compile_expr(&Expr::binary(
-        BinaryOp::Add,
-        Expr::var("x"),
-        Expr::var("x"),
-    ));
+    let output = compile_expr(&Expr::binary(BinaryOp::Add, Expr::var("x"), Expr::var("x")));
     let visual = output.render_visual();
 
     assert!(visual.contains("usage-audit:"));

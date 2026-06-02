@@ -355,11 +355,7 @@ fn collect_alpha_free_vars(
     }
 }
 
-fn collect_free_vars(
-    expr: &TypedExpr,
-    locals: &mut BTreeSet<String>,
-    free: &mut BTreeSet<String>,
-) {
+fn collect_free_vars(expr: &TypedExpr, locals: &mut BTreeSet<String>, free: &mut BTreeSet<String>) {
     match &expr.kind {
         TypedExprKind::Var(name) => {
             if !locals.contains(name) {

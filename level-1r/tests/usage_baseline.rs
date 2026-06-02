@@ -27,7 +27,10 @@ fn method_call_usage_visits_receiver_and_all_arguments() {
         vec![Expr::var("key"), Expr::var("value")],
     ));
 
-    assert_eq!(output.usage.vars.get("receiver").copied(), Some(UseCount::One));
+    assert_eq!(
+        output.usage.vars.get("receiver").copied(),
+        Some(UseCount::One)
+    );
     assert_eq!(output.usage.vars.get("key").copied(), Some(UseCount::One));
     assert_eq!(output.usage.vars.get("value").copied(), Some(UseCount::One));
 }

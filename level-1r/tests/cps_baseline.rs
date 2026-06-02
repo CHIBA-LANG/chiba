@@ -1,5 +1,5 @@
-use chiba_level1r::cps::{cps_program, CpsAtom, CpsTerm};
 use chiba_level1r::core::CoreOp;
+use chiba_level1r::cps::{cps_program, CpsAtom, CpsTerm};
 use chiba_level1r::typed::type_expr;
 use chiba_level1r::usage::UseCount;
 use chiba_level1r::{compile_expr, Expr};
@@ -39,7 +39,11 @@ fn lambda_adds_object_level_continuation_parameter() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
 
     match output.cps.term {
-        CpsTerm::Halt(CpsAtom::FunLambda { param, k_param, body }) => {
+        CpsTerm::Halt(CpsAtom::FunLambda {
+            param,
+            k_param,
+            body,
+        }) => {
             assert_eq!(param, "x");
             assert!(k_param.starts_with('k'));
             assert_eq!(body.to_string(), format!("{k_param}(x)"));
@@ -130,7 +134,10 @@ fn branch_usage_traverses_condition_and_all_arms() {
         Expr::call(Expr::var("shared"), Expr::var("else_arg")),
     ));
 
-    assert_eq!(output.usage.vars.get("shared").copied(), Some(UseCount::Many));
+    assert_eq!(
+        output.usage.vars.get("shared").copied(),
+        Some(UseCount::Many)
+    );
     assert_eq!(
         output.usage.vars.get("success_only").copied(),
         Some(UseCount::One)

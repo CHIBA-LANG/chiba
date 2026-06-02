@@ -2,10 +2,8 @@ use std::fs;
 use std::process::Command;
 
 fn write_fixture(name: &str, source: &str) -> std::path::PathBuf {
-    let path = std::env::temp_dir().join(format!(
-        "chiba-level1r-{}-{name}.chiba",
-        std::process::id()
-    ));
+    let path =
+        std::env::temp_dir().join(format!("chiba-level1r-{}-{name}.chiba", std::process::id()));
     fs::write(&path, source).expect("write fixture");
     path
 }
@@ -64,10 +62,7 @@ _ => 2
 
 #[test]
 fn cli_reports_frontend_errors_with_source_location() {
-    let source = write_fixture(
-        "error",
-        "def main() = match tag { 0 => 1 _ => 2 }",
-    );
+    let source = write_fixture("error", "def main() = match tag { 0 => 1 _ => 2 }");
 
     let output = Command::new(env!("CARGO_BIN_EXE_chiba-level1r"))
         .arg(&source)
@@ -77,7 +72,16 @@ fn cli_reports_frontend_errors_with_source_location() {
     assert!(!output.status.success(), "{output:?}");
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
     assert!(stderr.contains("frontend error at 1:33"), "{stderr}");
-    assert!(stderr.contains("unexpected token Ident `_`, expected Comma"), "{stderr}");
-    assert!(stderr.contains("def main() = match tag { 0 => 1 _ => 2 }"), "{stderr}");
-    assert!(stderr.contains("                                ^"), "{stderr}");
+    assert!(
+        stderr.contains("unexpected token Ident `_`, expected Comma"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("def main() = match tag { 0 => 1 _ => 2 }"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("                                ^"),
+        "{stderr}"
+    );
 }

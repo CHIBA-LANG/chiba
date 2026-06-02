@@ -181,9 +181,8 @@ impl AlphaCtx {
             Expr::Var(name) => {
                 let target = self.lookup(name);
                 if target.is_none() {
-                    self.diagnostics.push(AlphaDiagnostic::UndefinedVar {
-                        name: name.clone(),
-                    });
+                    self.diagnostics
+                        .push(AlphaDiagnostic::UndefinedVar { name: name.clone() });
                 }
                 AlphaExpr {
                     kind: AlphaExprKind::Var(ResolvedVar {
@@ -213,9 +212,7 @@ impl AlphaCtx {
             },
             Expr::Instantiate { callee, .. } => self.alpha(callee),
             Expr::Tuple(fields) => AlphaExpr {
-                kind: AlphaExprKind::Tuple(
-                    fields.iter().map(|field| self.alpha(field)).collect(),
-                ),
+                kind: AlphaExprKind::Tuple(fields.iter().map(|field| self.alpha(field)).collect()),
             },
             Expr::Record(fields) => AlphaExpr {
                 kind: AlphaExprKind::Record(

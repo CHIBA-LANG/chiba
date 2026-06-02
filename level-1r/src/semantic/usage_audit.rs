@@ -186,7 +186,11 @@ fn render_type(ty: &Type) -> String {
         Type::I64 => "i64".to_string(),
         Type::Bool => "bool".to_string(),
         Type::Tuple(fields) => {
-            let fields = fields.iter().map(render_type).collect::<Vec<_>>().join(", ");
+            let fields = fields
+                .iter()
+                .map(render_type)
+                .collect::<Vec<_>>()
+                .join(", ");
             format!("({fields})")
         }
         Type::Record(fields) => {
@@ -216,13 +220,19 @@ fn type_for_var(expr: &TypedExpr, name: &str) -> Option<Type> {
             .iter()
             .find_map(|field| type_for_var(&field.value, name)),
         crate::typed::TypedExprKind::RecordUpdate { base, fields } => type_for_var(base, name)
-            .or_else(|| fields.iter().find_map(|field| type_for_var(&field.value, name))),
+            .or_else(|| {
+                fields
+                    .iter()
+                    .find_map(|field| type_for_var(&field.value, name))
+            }),
         crate::typed::TypedExprKind::AdtCtor { args, .. } => {
             args.iter().find_map(|arg| type_for_var(arg, name))
         }
         crate::typed::TypedExprKind::Field { receiver, .. } => type_for_var(receiver, name),
-        crate::typed::TypedExprKind::MethodCall { receiver, args, .. } => type_for_var(receiver, name)
-            .or_else(|| args.iter().find_map(|arg| type_for_var(arg, name))),
+        crate::typed::TypedExprKind::MethodCall { receiver, args, .. } => {
+            type_for_var(receiver, name)
+                .or_else(|| args.iter().find_map(|arg| type_for_var(arg, name)))
+        }
         crate::typed::TypedExprKind::Index { receiver, index } => {
             type_for_var(receiver, name).or_else(|| type_for_var(index, name))
         }

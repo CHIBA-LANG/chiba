@@ -33,18 +33,10 @@ pub enum TemplateObligationSource {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TemplateAuditDiagnostic {
-    MissingDefinitionTimeCheck {
-        source: TemplateObligationSource,
-    },
-    MissingInstantiationDischarge {
-        source: TemplateObligationSource,
-    },
-    MissingMonomorphization {
-        source: TemplateObligationSource,
-    },
-    RustTraitSolverLeak {
-        source: TemplateObligationSource,
-    },
+    MissingDefinitionTimeCheck { source: TemplateObligationSource },
+    MissingInstantiationDischarge { source: TemplateObligationSource },
+    MissingMonomorphization { source: TemplateObligationSource },
+    RustTraitSolverLeak { source: TemplateObligationSource },
 }
 
 pub fn audit_checked_templates(
@@ -93,10 +85,7 @@ pub fn audit_checked_templates(
         });
     }
 
-    let diagnostics = entries
-        .iter()
-        .flat_map(validate_entry)
-        .collect::<Vec<_>>();
+    let diagnostics = entries.iter().flat_map(validate_entry).collect::<Vec<_>>();
 
     TemplateAuditReport {
         obligations: entries,

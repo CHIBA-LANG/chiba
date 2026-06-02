@@ -1,6 +1,6 @@
+use chiba_level1r::closure::ClosureFacts;
 use chiba_level1r::core::{lower_core_with_facts, CoreOp};
 use chiba_level1r::cps::{CpsAtom, CpsProgram, CpsTerm};
-use chiba_level1r::closure::ClosureFacts;
 use chiba_level1r::lambda_lift::LambdaLiftFacts;
 use chiba_level1r::specialize::plan_specialization;
 use chiba_level1r::template::{
@@ -80,8 +80,7 @@ fn dyn_row_adapter_access_refs_dyn_package_layout() {
         &specialize,
         &UsageFacts::default(),
     );
-    let expected_shape =
-        canonical_open_row(vec![("name", ShapeType::Named("String".to_string()))]);
+    let expected_shape = canonical_open_row(vec![("name", ShapeType::Named("String".to_string()))]);
 
     assert!(core.ops.iter().any(|op| {
         matches!(

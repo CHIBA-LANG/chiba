@@ -1,7 +1,7 @@
 use chiba_level1r::alpha::{alpha_expr, AlphaDiagnostic, AlphaExprKind};
+use chiba_level1r::ast::Pattern;
 use chiba_level1r::closure::ClosureStorageKind;
 use chiba_level1r::usage::UseCount;
-use chiba_level1r::ast::Pattern;
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -16,11 +16,19 @@ fn local_shadowing_gets_distinct_stable_binder_ids() {
     assert_eq!(output.alpha.binders[0].name, "x");
     assert_eq!(output.alpha.binders[1].name, "x");
     assert_eq!(
-        output.usage.binders.get(&output.alpha.binders[0].id).copied(),
+        output
+            .usage
+            .binders
+            .get(&output.alpha.binders[0].id)
+            .copied(),
         None
     );
     assert_eq!(
-        output.usage.binders.get(&output.alpha.binders[1].id).copied(),
+        output
+            .usage
+            .binders
+            .get(&output.alpha.binders[1].id)
+            .copied(),
         Some(UseCount::Many)
     );
 }

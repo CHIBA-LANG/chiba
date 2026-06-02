@@ -21,8 +21,14 @@ fn captured_lambda_lifts_with_stable_env_params() {
 
     assert_eq!(output.lambda_lift.functions.len(), 2);
     assert_eq!(output.lambda_lift.functions[0].source, "closure::x");
-    assert_eq!(output.lambda_lift.functions[0].symbol, "lift::0000::closure__x");
-    assert_eq!(output.lambda_lift.functions[0].env_params, Vec::<String>::new());
+    assert_eq!(
+        output.lambda_lift.functions[0].symbol,
+        "lift::0000::closure__x"
+    );
+    assert_eq!(
+        output.lambda_lift.functions[0].env_params,
+        Vec::<String>::new()
+    );
     assert!(output.lambda_lift.functions[0].direct);
 
     let inner = &output.lambda_lift.functions[1];

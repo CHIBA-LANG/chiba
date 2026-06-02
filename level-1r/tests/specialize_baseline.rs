@@ -58,9 +58,10 @@ fn specialization_key_keeps_nominal_identity_even_for_same_shape() {
 #[test]
 fn dyn_contract_enters_specialization_key_and_capability_facts() {
     let mut template = TemplateFacts::default();
-    template
-        .dyn_contracts
-        .push(dyn_row_contract(vec![("name", ShapeType::Named("String".to_string()))]));
+    template.dyn_contracts.push(dyn_row_contract(vec![(
+        "name",
+        ShapeType::Named("String".to_string()),
+    )]));
 
     let key = specialization_key("render", &template);
 
@@ -86,7 +87,10 @@ fn explicit_template_params_and_instantiations_enter_specialization_key() {
     let key = specialization_key("id", &template);
 
     assert_eq!(key.template_params, template.explicit_params);
-    assert_eq!(key.explicit_instantiations, template.explicit_instantiations);
+    assert_eq!(
+        key.explicit_instantiations,
+        template.explicit_instantiations
+    );
     assert_ne!(key, specialization_key("id", &TemplateFacts::default()));
 }
 
@@ -96,8 +100,14 @@ fn registry_joins_duplicate_specialization_requests() {
     let key = specialization_key("id", &template);
     let mut registry = InstantiationRegistry::default();
 
-    assert_eq!(registry.request(key.clone()), InstantiationStatus::InProgress);
-    assert_eq!(registry.request(key.clone()), InstantiationStatus::InProgress);
+    assert_eq!(
+        registry.request(key.clone()),
+        InstantiationStatus::InProgress
+    );
+    assert_eq!(
+        registry.request(key.clone()),
+        InstantiationStatus::InProgress
+    );
     assert_eq!(registry.len(), 1);
 
     registry.finish(key.clone(), "artifact#id");
@@ -114,9 +124,7 @@ fn compile_output_contains_specialization_work_item() {
     let output = compile_expr(&Expr::field(Expr::var("user"), "name"));
 
     assert_eq!(output.specialize.work_items.len(), 1);
-    assert!(output
-        .specialize
-        .work_items[0]
+    assert!(output.specialize.work_items[0]
         .key
         .normalized_shapes
         .contains(&canonical_open_row(vec![("name", ShapeType::Unknown)])));

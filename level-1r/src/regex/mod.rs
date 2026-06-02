@@ -37,7 +37,10 @@ pub struct RegexProgram {
 pub enum RegexInst {
     Char(char),
     Any,
-    Class { atoms: Vec<ClassAtom>, negated: bool },
+    Class {
+        atoms: Vec<ClassAtom>,
+        negated: bool,
+    },
     Split(usize, usize),
     Jump(usize),
     Accept,
@@ -78,7 +81,12 @@ impl RegexProgram {
     }
 
     fn step(&self, pc: usize, offset: usize, chars: &[char], depth: usize) -> Option<usize> {
-        if depth > self.code.len().saturating_mul(chars.len().saturating_add(1)) {
+        if depth
+            > self
+                .code
+                .len()
+                .saturating_mul(chars.len().saturating_add(1))
+        {
             return None;
         }
         match self.code.get(pc)? {

@@ -37,9 +37,7 @@ pub enum ContinuationPackageDecision {
     KeepRepeatablePackage,
 }
 
-pub fn simplify_closure_core(
-    usage: &ClosureCoreUsageFacts,
-) -> ClosureSimplificationFacts {
+pub fn simplify_closure_core(usage: &ClosureCoreUsageFacts) -> ClosureSimplificationFacts {
     ClosureSimplificationFacts {
         closure_packages: simplify_closure_packages(usage),
         env_fields: simplify_env_fields(usage),
@@ -94,9 +92,7 @@ fn simplify_env_fields(usage: &ClosureCoreUsageFacts) -> BTreeMap<String, EnvFie
         .collect()
 }
 
-fn simplify_code_pointers(
-    usage: &ClosureCoreUsageFacts,
-) -> BTreeMap<String, CodePointerDecision> {
+fn simplify_code_pointers(usage: &ClosureCoreUsageFacts) -> BTreeMap<String, CodePointerDecision> {
     usage
         .code_pointers
         .iter()

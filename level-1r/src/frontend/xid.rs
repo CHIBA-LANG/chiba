@@ -96,7 +96,10 @@ mod tests {
     #[test]
     fn chiba_identifier_accepts_chinese_greek_emoji_and_combining_marks() {
         for ident in ["函数α", "标量名", "🚀Ctor", "Ωmega", "e\u{301}"] {
-            assert!(is_chiba_identifier(ident), "{ident} should be a Chiba identifier");
+            assert!(
+                is_chiba_identifier(ident),
+                "{ident} should be a Chiba identifier"
+            );
         }
     }
 

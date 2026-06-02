@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::ast::{Literal, Pattern};
 use crate::control::ContinuationKind;
-use crate::typed::{TypedExpr, TypedExprKind, TypedRecordField, Type};
+use crate::typed::{Type, TypedExpr, TypedExprKind, TypedRecordField};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpsProgram {
@@ -159,9 +159,7 @@ fn transform(
                 ctx,
             )
         }
-        TypedExprKind::Call { callee, args } => {
-            transform_call(callee, args, k, controls, ctx)
-        }
+        TypedExprKind::Call { callee, args } => transform_call(callee, args, k, controls, ctx),
         TypedExprKind::Tuple { fields, nominal } => {
             transform_tuple(fields, nominal, k, controls, ctx)
         }
@@ -455,15 +453,7 @@ fn transform_tuple(
     controls: Vec<ContinuationKind>,
     ctx: &mut CpsCtx,
 ) -> CpsTerm {
-    transform_tuple_fields(
-        fields,
-        nominal,
-        0,
-        Vec::new(),
-        k,
-        controls,
-        ctx,
-    )
+    transform_tuple_fields(fields, nominal, 0, Vec::new(), k, controls, ctx)
 }
 
 fn transform_tuple_fields(
@@ -632,9 +622,7 @@ fn transform_call(
     let callee_controls = controls.clone();
     transform(
         callee,
-        Box::new(|func, ctx| {
-            transform_call_args(args, 0, Vec::new(), func, k, controls, ctx)
-        }),
+        Box::new(|func, ctx| transform_call_args(args, 0, Vec::new(), func, k, controls, ctx)),
         callee_controls,
         ctx,
     )
@@ -716,7 +704,17 @@ fn transform_adt_ctor_args(
         Box::new(move |value, ctx| {
             let mut values = values;
             values.push(value);
-            transform_adt_ctor_args(data, ctor, variants, args, index + 1, values, k, controls, ctx)
+            transform_adt_ctor_args(
+                data,
+                ctor,
+                variants,
+                args,
+                index + 1,
+                values,
+                k,
+                controls,
+                ctx,
+            )
         }),
         arg_controls,
         ctx,
@@ -848,7 +846,10 @@ impl fmt::Display for CpsTerm {
                 else_term,
                 join,
             } => {
-                write!(f, "if {cond} {{ {then_term} }} else {{ {else_term} }} join {join}")
+                write!(
+                    f,
+                    "if {cond} {{ {then_term} }} else {{ {else_term} }} join {join}"
+                )
             }
             CpsTerm::Match {
                 scrutinee,

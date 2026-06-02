@@ -1,6 +1,6 @@
+use crate::closure::{CaptureFact, ClosureFacts, ClosureStorageKind};
 use crate::control::{ContinuationFact, ContinuationKind};
 use crate::cps::{CpsAtom, CpsProgram, CpsTerm};
-use crate::closure::{CaptureFact, ClosureFacts, ClosureStorageKind};
 use crate::lambda_lift::LambdaLiftFacts;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{DynRowContract, RowShape};
@@ -306,39 +306,79 @@ pub struct CoreValidation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoreDiagnostic {
-    TargetSpecificTerm { term: String },
+    TargetSpecificTerm {
+        term: String,
+    },
     LayoutHashMismatch {
         key: String,
         expected: u64,
         actual: u64,
     },
-    DuplicateLayoutKey { key: String },
-    MissingContNPackage { binder: String },
-    Cont1HasPackageLayout { key: String },
-    MissingDynRowLayout { layout: String },
-    DynRowLayoutKindMismatch { layout: String },
-    MissingStaticRowLayout { layout: String },
-    StaticRowLayoutKindMismatch { layout: String },
-    MissingTupleLayout { layout: String },
-    TupleLayoutKindMismatch { layout: String },
+    DuplicateLayoutKey {
+        key: String,
+    },
+    MissingContNPackage {
+        binder: String,
+    },
+    Cont1HasPackageLayout {
+        key: String,
+    },
+    MissingDynRowLayout {
+        layout: String,
+    },
+    DynRowLayoutKindMismatch {
+        layout: String,
+    },
+    MissingStaticRowLayout {
+        layout: String,
+    },
+    StaticRowLayoutKindMismatch {
+        layout: String,
+    },
+    MissingTupleLayout {
+        layout: String,
+    },
+    TupleLayoutKindMismatch {
+        layout: String,
+    },
     TupleFieldMissing {
         layout: String,
         field: String,
     },
-    MissingRecordLayout { layout: String },
-    RecordLayoutKindMismatch { layout: String },
+    MissingRecordLayout {
+        layout: String,
+    },
+    RecordLayoutKindMismatch {
+        layout: String,
+    },
     RecordFieldMissing {
         layout: String,
         field: String,
     },
-    DanglingTailCallTarget { target: String },
-    EnvClosureMissingLayout { subject: String },
-    ClosureEnvLayoutHasNoFields { layout: String },
-    SendableCallableContainsContinuation { subject: String },
-    Cont1CallableUsedMoreThanOnce { subject: String },
-    SharedSendSubjectUsesRc { subject: String },
-    DynPayloadMustUseDynPackage { subject: String },
-    DuplicateLiftedFunctionSymbol { symbol: String },
+    DanglingTailCallTarget {
+        target: String,
+    },
+    EnvClosureMissingLayout {
+        subject: String,
+    },
+    ClosureEnvLayoutHasNoFields {
+        layout: String,
+    },
+    SendableCallableContainsContinuation {
+        subject: String,
+    },
+    Cont1CallableUsedMoreThanOnce {
+        subject: String,
+    },
+    SharedSendSubjectUsesRc {
+        subject: String,
+    },
+    DynPayloadMustUseDynPackage {
+        subject: String,
+    },
+    DuplicateLiftedFunctionSymbol {
+        symbol: String,
+    },
     LiftedFunctionMissingClosureEnv {
         source: String,
         expected_layout: String,
@@ -444,9 +484,10 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             else_term,
             ..
         } => {
-            if let (Some(then_value), Some(else_value)) =
-                (direct_return_value(then_term), direct_return_value(else_term))
-            {
+            if let (Some(then_value), Some(else_value)) = (
+                direct_return_value(then_term),
+                direct_return_value(else_term),
+            ) {
                 ops.push(CoreOp::ReturnBranch {
                     cond: core_value(cond),
                     then_value,
@@ -460,7 +501,9 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             lower_term(then_term, continuations, ops);
             lower_term(else_term, continuations, ops);
         }
-        CpsTerm::Match { scrutinee, arms, .. } => {
+        CpsTerm::Match {
+            scrutinee, arms, ..
+        } => {
             if let Some(arms) = direct_match_arms(arms) {
                 ops.push(CoreOp::ReturnMatch {
                     scrutinee: core_value(scrutinee),
@@ -508,13 +551,11 @@ fn core_pattern(pattern: &crate::ast::Pattern) -> Option<CorePattern> {
         crate::ast::Pattern::Lit(crate::ast::Literal::Bool(value)) => {
             Some(CorePattern::Bool(*value))
         }
-        crate::ast::Pattern::Constructor { data, ctor, args } => {
-            Some(CorePattern::Constructor {
-                data: data.clone(),
-                ctor: ctor.clone(),
-                args: args.iter().map(core_pattern).collect::<Option<Vec<_>>>()?,
-            })
-        }
+        crate::ast::Pattern::Constructor { data, ctor, args } => Some(CorePattern::Constructor {
+            data: data.clone(),
+            ctor: ctor.clone(),
+            args: args.iter().map(core_pattern).collect::<Option<Vec<_>>>()?,
+        }),
         _ => None,
     }
 }
@@ -634,7 +675,8 @@ fn validate_layouts(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>
                 key: layout.key.clone(),
             });
         }
-        if matches!(&layout.kind, LayoutKind::ClosureEnv(ClosureEnvLayout { fields, .. }) if fields.is_empty()) {
+        if matches!(&layout.kind, LayoutKind::ClosureEnv(ClosureEnvLayout { fields, .. }) if fields.is_empty())
+        {
             diagnostics.push(CoreDiagnostic::ClosureEnvLayoutHasNoFields {
                 layout: layout.key.clone(),
             });
@@ -708,10 +750,12 @@ fn validate_record_field_access(program: &CoreProgram, diagnostics: &mut Vec<Cor
             match program.layouts.iter().find(|fact| fact.key == *layout) {
                 Some(fact) => match &fact.kind {
                     LayoutKind::RecordStruct(record) if record.fields.contains(field) => {}
-                    LayoutKind::RecordStruct(_) => diagnostics.push(CoreDiagnostic::RecordFieldMissing {
-                        layout: layout.clone(),
-                        field: field.clone(),
-                    }),
+                    LayoutKind::RecordStruct(_) => {
+                        diagnostics.push(CoreDiagnostic::RecordFieldMissing {
+                            layout: layout.clone(),
+                            field: field.clone(),
+                        })
+                    }
                     _ => diagnostics.push(CoreDiagnostic::RecordLayoutKindMismatch {
                         layout: layout.clone(),
                     }),
@@ -746,10 +790,12 @@ fn validate_tuple_field_access(program: &CoreProgram, diagnostics: &mut Vec<Core
             match program.layouts.iter().find(|fact| fact.key == *layout) {
                 Some(fact) => match &fact.kind {
                     LayoutKind::TupleStruct(tuple) if tuple.fields.contains(field) => {}
-                    LayoutKind::TupleStruct(_) => diagnostics.push(CoreDiagnostic::TupleFieldMissing {
-                        layout: layout.clone(),
-                        field: field.clone(),
-                    }),
+                    LayoutKind::TupleStruct(_) => {
+                        diagnostics.push(CoreDiagnostic::TupleFieldMissing {
+                            layout: layout.clone(),
+                            field: field.clone(),
+                        })
+                    }
                     _ => diagnostics.push(CoreDiagnostic::TupleLayoutKindMismatch {
                         layout: layout.clone(),
                     }),
@@ -901,10 +947,7 @@ fn render_atom(atom: &CpsAtom) -> String {
             data, ctor, args, ..
         } => format!(
             "{data}.{ctor}({})",
-            args.iter()
-                .map(render_atom)
-                .collect::<Vec<_>>()
-                .join(", ")
+            args.iter().map(render_atom).collect::<Vec<_>>().join(", ")
         ),
     }
 }
@@ -1089,10 +1132,7 @@ fn lower_layouts(
 
 fn collect_adt_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
     for op in ops {
-        let CoreOp::AdtConstruct {
-            data, variants, ..
-        } = op
-        else {
+        let CoreOp::AdtConstruct { data, variants, .. } = op else {
             continue;
         };
         let key = format!("adt::{data}");
@@ -1141,10 +1181,7 @@ fn collect_tuple_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
         if layouts.iter().any(|fact| fact.key == *layout) {
             continue;
         }
-        let nominal = layout
-            .strip_prefix("tuple::")
-            .unwrap_or(layout)
-            .to_string();
+        let nominal = layout.strip_prefix("tuple::").unwrap_or(layout).to_string();
         let field_names = (1..=fields_len)
             .map(|index| format!("_{index}"))
             .collect::<Vec<_>>();

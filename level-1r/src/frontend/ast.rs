@@ -142,11 +142,7 @@ impl UseDecl {
 }
 
 impl DataDecl {
-    pub fn new(
-        name: impl Into<String>,
-        generics: Vec<String>,
-        variants: Vec<DataVariant>,
-    ) -> Self {
+    pub fn new(name: impl Into<String>, generics: Vec<String>, variants: Vec<DataVariant>) -> Self {
         Self {
             name: name.into(),
             generics,
@@ -163,11 +159,7 @@ impl DataDecl {
 }
 
 impl TypeDecl {
-    pub fn new(
-        name: impl Into<String>,
-        generics: Vec<String>,
-        fields: Vec<TypeField>,
-    ) -> Self {
+    pub fn new(name: impl Into<String>, generics: Vec<String>, fields: Vec<TypeField>) -> Self {
         Self {
             name: name.into(),
             generics,
@@ -319,7 +311,6 @@ impl SourceItem {
         }
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {
@@ -661,7 +652,11 @@ impl Pattern {
         }
     }
 
-    pub fn qualified_ctor(data: impl Into<String>, ctor: impl Into<String>, args: Vec<Pattern>) -> Self {
+    pub fn qualified_ctor(
+        data: impl Into<String>,
+        ctor: impl Into<String>,
+        args: Vec<Pattern>,
+    ) -> Self {
         Self::Constructor {
             data: Some(data.into()),
             ctor: ctor.into(),

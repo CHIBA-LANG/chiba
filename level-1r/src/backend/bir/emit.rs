@@ -48,8 +48,12 @@ pub enum BackendDiagnostic {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BackendLinkDiagnostic {
-    ArtifactEmitFailed { artifact_index: usize },
-    DuplicateFinalSymbol { symbol: String },
+    ArtifactEmitFailed {
+        artifact_index: usize,
+    },
+    DuplicateFinalSymbol {
+        symbol: String,
+    },
     TargetMismatch {
         artifact_index: usize,
         expected: BackendTarget,
@@ -281,7 +285,10 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest, params: &[String])
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                if args.iter().all(|arg| core_value_is_renderable_i32(arg, &env)) {
+                if args
+                    .iter()
+                    .all(|arg| core_value_is_renderable_i32(arg, &env))
+                {
                     let symbol = format!("chiba_tailcall_{tailcall_index}");
                     render_func_header(&mut wat, &symbol, None, &env);
                     for arg in args {
@@ -295,7 +302,10 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest, params: &[String])
             CoreOp::Branch { cond } => {
                 wat.push_str(&format!("  ;; branch cond={}\n", escape_wat_comment(cond)));
             }
-            CoreOp::Match { scrutinee, patterns } => {
+            CoreOp::Match {
+                scrutinee,
+                patterns,
+            } => {
                 wat.push_str(&format!(
                     "  ;; match scrutinee={} arms={}\n",
                     escape_wat_comment(scrutinee),
@@ -466,12 +476,11 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue, env: &RenderEnv) {
                 wat.push_str("    i32.const 0\n");
             }
         }
-        CoreValue::Var(_) | CoreValue::Tuple { .. }
+        CoreValue::Var(_)
+        | CoreValue::Tuple { .. }
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
-        | CoreValue::Rendered { .. } => {
-            wat.push_str("    i32.const 0\n")
-        }
+        | CoreValue::Rendered { .. } => wat.push_str("    i32.const 0\n"),
     }
 }
 
@@ -499,7 +508,11 @@ fn tuple_field_value<'a>(tuple: &'a CoreValue, field: &str) -> Option<&'a CoreVa
     let CoreValue::Tuple { fields } = tuple else {
         return None;
     };
-    let index = field.strip_prefix('_')?.parse::<usize>().ok()?.checked_sub(1)?;
+    let index = field
+        .strip_prefix('_')?
+        .parse::<usize>()
+        .ok()?
+        .checked_sub(1)?;
     fields.get(index)
 }
 
@@ -588,7 +601,9 @@ fn render_match_arm_i32(
             wat.push_str("end\n");
         }
         CorePattern::Constructor { data, ctor, args } => {
-            if let Some((tag, arm_env)) = constructor_match_env(scrutinee, data.as_deref(), ctor, args, env) {
+            if let Some((tag, arm_env)) =
+                constructor_match_env(scrutinee, data.as_deref(), ctor, args, env)
+            {
                 render_core_value_i32_indented(wat, scrutinee, env, indent);
                 push_indent(wat, indent);
                 wat.push_str(&format!("i32.const {tag}\n"));
@@ -770,7 +785,11 @@ pub fn backend_cache_key(
         "no-tailcall"
     });
     encoded.push(',');
-    encoded.push_str(if config.features.wasi { "wasi" } else { "no-wasi" });
+    encoded.push_str(if config.features.wasi {
+        "wasi"
+    } else {
+        "no-wasi"
+    });
     encoded.push(',');
     encoded.push_str(if config.features.thread {
         "thread"

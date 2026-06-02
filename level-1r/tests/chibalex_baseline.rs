@@ -89,7 +89,12 @@ fn lexer_supports_xid_property_classes_for_utf8_identifiers() {
     assert_eq!(
         tokens
             .iter()
-            .map(|token| (token.name.as_str(), token.lexeme.as_str(), token.start, token.end))
+            .map(|token| (
+                token.name.as_str(),
+                token.lexeme.as_str(),
+                token.start,
+                token.end
+            ))
             .collect::<Vec<_>>(),
         vec![
             ("Ident", "λ", 0, 1),
@@ -123,11 +128,7 @@ fn lexer_accepts_chiba_symbol_identifiers_beyond_strict_xid() {
             .iter()
             .map(|token| (token.name.as_str(), token.lexeme.as_str()))
             .collect::<Vec<_>>(),
-        vec![
-            ("Ident", "函数α"),
-            ("Ident", "标量名"),
-            ("Ident", "🚀Ctor"),
-        ]
+        vec![("Ident", "函数α"), ("Ident", "标量名"), ("Ident", "🚀Ctor"),]
     );
 }
 

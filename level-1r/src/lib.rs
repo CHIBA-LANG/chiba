@@ -1,11 +1,11 @@
-#[path = "frontend/ast.rs"]
-pub mod ast;
 #[path = "semantic/alpha.rs"]
 pub mod alpha;
+#[path = "frontend/ast.rs"]
+pub mod ast;
 #[path = "backend/bir/emit.rs"]
 pub mod backend;
-pub mod chibalex;
 pub mod chibacc;
+pub mod chibalex;
 #[path = "backend/pass/closure.rs"]
 pub mod closure;
 #[path = "backend/pass/closure_core_usage.rs"]
@@ -43,10 +43,10 @@ pub mod resolve;
 pub mod specialize;
 #[path = "tooling/std_audit.rs"]
 pub mod std_audit;
-#[path = "tooling/symbol.rs"]
-pub mod symbol;
 #[path = "frontend/surface.rs"]
 pub mod surface;
+#[path = "tooling/symbol.rs"]
+pub mod symbol;
 #[path = "semantic/template.rs"]
 pub mod template;
 #[path = "semantic/template_audit.rs"]
@@ -60,11 +60,11 @@ pub mod usage_audit;
 #[path = "frontend/xid.rs"]
 pub mod xid;
 
+pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use ast::{
     DataDecl, DataVariant, Expr, Literal, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem,
     SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
 };
-pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use cps::{cps_program, CpsProgram};
 pub use debug::{render_visual_report, VisualReport};
 pub use frontend::{

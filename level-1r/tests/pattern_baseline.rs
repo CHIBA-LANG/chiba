@@ -132,7 +132,12 @@ fn tuple_pattern_reports_duplicate_binding_once() {
     );
     assert_eq!(
         output.pattern.envs[0].bindings,
-        vec!["x".to_string(), "x".to_string(), "y".to_string(), "x".to_string()]
+        vec![
+            "x".to_string(),
+            "x".to_string(),
+            "y".to_string(),
+            "x".to_string()
+        ]
     );
 }
 
@@ -141,7 +146,10 @@ fn record_pattern_collects_bindings_by_field_pattern_order() {
     let output = compile_expr(&Expr::if_let(
         Pattern::record(vec![
             ("y", Pattern::bind("py")),
-            ("x", Pattern::tuple(vec![Pattern::bind("px"), Pattern::wildcard()])),
+            (
+                "x",
+                Pattern::tuple(vec![Pattern::bind("px"), Pattern::wildcard()]),
+            ),
         ]),
         Expr::var("point"),
         Expr::var("px"),
@@ -152,13 +160,19 @@ fn record_pattern_collects_bindings_by_field_pattern_order() {
         output.pattern.envs[0].bindings,
         vec!["py".to_string(), "px".to_string()]
     );
-    assert!(output.cps.to_string().contains("{y: py, x: (px, _)} => join"));
+    assert!(output
+        .cps
+        .to_string()
+        .contains("{y: py, x: (px, _)} => join"));
 }
 
 #[test]
 fn at_pattern_binds_inner_pattern_then_whole_value_alias() {
     let output = compile_expr(&Expr::if_let(
-        Pattern::at("whole", Pattern::record(vec![("x", Pattern::bind("inner"))])),
+        Pattern::at(
+            "whole",
+            Pattern::record(vec![("x", Pattern::bind("inner"))]),
+        ),
         Expr::var("point"),
         Expr::var("whole"),
         Expr::i64(0),

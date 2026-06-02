@@ -33,22 +33,32 @@ pub struct SourceSpan {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FrontendError {
     Lex(LexError),
-    UnexpectedEof { expected: Vec<String> },
+    UnexpectedEof {
+        expected: Vec<String>,
+    },
     UnexpectedToken {
         found: String,
         lexeme: String,
         expected: Vec<String>,
         offset: usize,
     },
-    InvalidInteger { lexeme: String, offset: usize },
-    TrailingTokens { offset: usize },
+    InvalidInteger {
+        lexeme: String,
+        offset: usize,
+    },
+    TrailingTokens {
+        offset: usize,
+    },
 }
 
 pub fn render_frontend_error(source: &str, error: &FrontendError) -> String {
     match error {
         FrontendError::Lex(error) => render_lex_error(source, error),
         FrontendError::UnexpectedEof { expected } => {
-            format!("frontend error at end of file: expected {}", expected.join(", "))
+            format!(
+                "frontend error at end of file: expected {}",
+                expected.join(", ")
+            )
         }
         FrontendError::UnexpectedToken {
             found,
@@ -83,9 +93,11 @@ fn render_lex_error(source: &str, error: &LexError) -> String {
                 found.map_or("end of file".to_string(), |ch| format!("`{ch}`"))
             ),
         ),
-        LexError::EmptyMatch { rule, offset } => {
-            render_source_error(source, *offset, format!("lexer rule `{rule}` matched empty text"))
-        }
+        LexError::EmptyMatch { rule, offset } => render_source_error(
+            source,
+            *offset,
+            format!("lexer rule `{rule}` matched empty text"),
+        ),
     }
 }
 
@@ -303,7 +315,8 @@ impl FrontendParser {
                     let start = self.tokens[self.pos].start;
                     let item = self.parse_def()?;
                     let end = self.previous_token_end().unwrap_or(start);
-                    self.item_spans.push(self.source_item_span(&item, start, end));
+                    self.item_spans
+                        .push(self.source_item_span(&item, start, end));
                     items.push(item);
                 }
                 Some(found) => {
@@ -330,7 +343,9 @@ impl FrontendParser {
             .into_iter()
             .map(|item| enrich_item_with_data_variants(item, &variants))
             .collect();
-        Ok(SourceProgram::with_surface(namespace, imports, types, data, items))
+        Ok(SourceProgram::with_surface(
+            namespace, imports, types, data, items,
+        ))
     }
 
     fn parse_namespace(&mut self) -> Result<NamespaceDecl, FrontendError> {
@@ -453,7 +468,8 @@ impl FrontendParser {
         }
         self.expect("RBrace")?;
         let data = DataDecl::new(name, generics, variants);
-        self.data_variants.insert(data.name.clone(), data.variant_names());
+        self.data_variants
+            .insert(data.name.clone(), data.variant_names());
         Ok(data)
     }
 
@@ -846,7 +862,10 @@ impl FrontendParser {
         Ok(Expr::record_update(base, fields))
     }
 
-    fn parse_record_fields_until(&mut self, end: &str) -> Result<Vec<(String, Expr)>, FrontendError> {
+    fn parse_record_fields_until(
+        &mut self,
+        end: &str,
+    ) -> Result<Vec<(String, Expr)>, FrontendError> {
         let mut fields = Vec::new();
         while self.peek_name() != Some(end) {
             let name = self.expect_lexeme("Ident")?;
@@ -968,13 +987,12 @@ impl FrontendParser {
             Some("Number") => {
                 let token = self.expect("Number")?;
                 let lexeme = token.lexeme;
-                lexeme
-                    .parse::<i64>()
-                    .map(Pattern::lit_i64)
-                    .map_err(|_| FrontendError::InvalidInteger {
+                lexeme.parse::<i64>().map(Pattern::lit_i64).map_err(|_| {
+                    FrontendError::InvalidInteger {
                         lexeme,
                         offset: token.start,
-                    })
+                    }
+                })
             }
             Some("True") => {
                 self.pos += 1;
@@ -1256,11 +1274,15 @@ impl FrontendParser {
     }
 
     fn peek_next_name(&self) -> Option<&str> {
-        self.tokens.get(self.pos + 1).map(|token| token.name.as_str())
+        self.tokens
+            .get(self.pos + 1)
+            .map(|token| token.name.as_str())
     }
 
     fn peek_n_name(&self, offset: usize) -> Option<&str> {
-        self.tokens.get(self.pos + offset).map(|token| token.name.as_str())
+        self.tokens
+            .get(self.pos + offset)
+            .map(|token| token.name.as_str())
     }
 
     fn is_eof(&self) -> bool {
@@ -1496,7 +1518,10 @@ fn is_type_or_namespace_path(expr: &Expr) -> bool {
 }
 
 fn is_instantiable_callee(expr: &Expr) -> bool {
-    matches!(expr, Expr::Var(_) | Expr::Field { .. } | Expr::MethodCall { .. })
+    matches!(
+        expr,
+        Expr::Var(_) | Expr::Field { .. } | Expr::MethodCall { .. }
+    )
 }
 
 fn data_variant_map(data: &[DataDecl]) -> BTreeMap<String, Vec<String>> {
@@ -1572,10 +1597,9 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
                 .map(|arg| enrich_expr_with_data_variants(arg, variants))
                 .collect(),
         ),
-        Expr::Instantiate { callee, type_args } => Expr::instantiate(
-            enrich_expr_with_data_variants(*callee, variants),
-            type_args,
-        ),
+        Expr::Instantiate { callee, type_args } => {
+            Expr::instantiate(enrich_expr_with_data_variants(*callee, variants), type_args)
+        }
         Expr::Tuple(fields) => Expr::tuple(
             fields
                 .into_iter()
@@ -1601,10 +1625,9 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
                 })
                 .collect(),
         },
-        Expr::Field { receiver, name } => Expr::field(
-            enrich_expr_with_data_variants(*receiver, variants),
-            name,
-        ),
+        Expr::Field { receiver, name } => {
+            Expr::field(enrich_expr_with_data_variants(*receiver, variants), name)
+        }
         Expr::MethodCall {
             receiver,
             name,

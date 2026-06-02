@@ -131,7 +131,11 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .as_ref()
         .map(|namespace| namespace.dotted())
         .unwrap_or_else(|| "root".to_string());
-    let imports = program.imports.iter().map(|import| import.dotted()).collect();
+    let imports = program
+        .imports
+        .iter()
+        .map(|import| import.dotted())
+        .collect();
     let defs = program
         .items
         .iter()
@@ -333,12 +337,18 @@ fn sort_defs(defs: &mut [SurfaceDef]) {
 
 fn sort_statics(statics: &mut [SurfaceStatic]) {
     statics.sort_by(|left, right| {
-        (left.owner.as_str(), left.name.as_str(), left.visibility, &left.ty).cmp(&(
-            right.owner.as_str(),
-            right.name.as_str(),
-            right.visibility,
-            &right.ty,
-        ))
+        (
+            left.owner.as_str(),
+            left.name.as_str(),
+            left.visibility,
+            &left.ty,
+        )
+            .cmp(&(
+                right.owner.as_str(),
+                right.name.as_str(),
+                right.visibility,
+                &right.ty,
+            ))
     });
 }
 
@@ -418,7 +428,12 @@ pub fn duplicate_top_level_names(surface: &ProjectSurface) -> Vec<String> {
         .map(|ty| ty.name.as_str())
         .chain(surface.data.iter().map(|data| data.name.as_str()))
         .chain(surface.defs.iter().map(|def| def.name.as_str()))
-        .chain(surface.statics.iter().map(|static_value| static_value.name.as_str()));
+        .chain(
+            surface
+                .statics
+                .iter()
+                .map(|static_value| static_value.name.as_str()),
+        );
     duplicates(names)
 }
 

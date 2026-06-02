@@ -111,10 +111,7 @@ pub enum Type {
     Bool,
     Tuple(Vec<Type>),
     Record(Vec<RecordTypeField>),
-    Adt {
-        name: String,
-        variants: Vec<String>,
-    },
+    Adt { name: String, variants: Vec<String> },
     Nominal(String),
     Func(Box<Type>, Box<Type>),
 }
@@ -161,12 +158,9 @@ impl TypeContext {
         Self::default()
     }
 
-    pub fn insert_nominal_row(
-        &mut self,
-        nominal: impl Into<String>,
-        fields: Vec<RecordTypeField>,
-    ) {
-        self.nominal_rows.insert(nominal.into(), canonical_fields(fields));
+    pub fn insert_nominal_row(&mut self, nominal: impl Into<String>, fields: Vec<RecordTypeField>) {
+        self.nominal_rows
+            .insert(nominal.into(), canonical_fields(fields));
     }
 
     pub fn insert_generic_nominal_row(
@@ -229,7 +223,12 @@ impl TypeContext {
         let substitutions = nominal_type_name(subject)
             .and_then(|nominal| self.substitutions_for_subject(nominal))
             .unwrap_or_default();
-        self.pattern_bindings(pattern, subject.clone(), subject_data.as_deref(), &substitutions)
+        self.pattern_bindings(
+            pattern,
+            subject.clone(),
+            subject_data.as_deref(),
+            &substitutions,
+        )
     }
 
     pub fn adt_variants_for_type(&self, ty: &Type) -> Option<(String, Vec<String>)> {
@@ -670,7 +669,10 @@ fn record_update_type(base: &Type, fields: &[TypedRecordField]) -> Type {
         _ => Vec::new(),
     };
     for field in fields {
-        if let Some(existing) = merged.iter_mut().find(|existing| existing.name == field.name) {
+        if let Some(existing) = merged
+            .iter_mut()
+            .find(|existing| existing.name == field.name)
+        {
             existing.ty = field.value.ty.clone();
         } else {
             merged.push(RecordTypeField {

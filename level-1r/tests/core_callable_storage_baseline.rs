@@ -10,7 +10,10 @@ use chiba_level1r::{compile_expr, Expr};
 fn no_capture_closure_lowers_to_sendable_direct_callable_storage() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
 
-    assert_eq!(output.closure.closures[0].storage, ClosureStorageKind::DirectNoCapture);
+    assert_eq!(
+        output.closure.closures[0].storage,
+        ClosureStorageKind::DirectNoCapture
+    );
     assert!(output.core.callable_storage.contains(&CallableStorageFact {
         subject: "closure::x".to_string(),
         kind: CallableStorageKind::NoCaptureClosure,

@@ -194,7 +194,11 @@ fn source_needs_auto_return_param(source: &Expr, source_params: &[ParamDecl]) ->
 }
 
 fn push_template_param_once(facts: &mut TemplateFacts, param: TemplateParam) {
-    if !facts.explicit_params.iter().any(|existing| existing == &param) {
+    if !facts
+        .explicit_params
+        .iter()
+        .any(|existing| existing == &param)
+    {
         facts.explicit_params.push(param);
     }
 }

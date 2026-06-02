@@ -25,11 +25,7 @@ fn core_layout_hash_is_stable_for_canonical_row_shape() {
 
 #[test]
 fn repeated_value_lowers_to_rc_when_not_send() {
-    let output = compile_expr(&Expr::binary(
-        BinaryOp::Add,
-        Expr::var("x"),
-        Expr::var("x"),
-    ));
+    let output = compile_expr(&Expr::binary(BinaryOp::Add, Expr::var("x"), Expr::var("x")));
 
     assert!(output.core.ownership.contains(&OwnershipFact {
         subject: "var::x".to_string(),
@@ -40,9 +36,10 @@ fn repeated_value_lowers_to_rc_when_not_send() {
 #[test]
 fn dyn_row_contract_lowers_to_dyn_package_and_payload_decision() {
     let mut template = TemplateFacts::default();
-    template
-        .dyn_contracts
-        .push(dyn_row_contract(vec![("name", ShapeType::Named("String".to_string()))]));
+    template.dyn_contracts.push(dyn_row_contract(vec![(
+        "name",
+        ShapeType::Named("String".to_string()),
+    )]));
     let output = compile_expr(&Expr::field(Expr::var("user"), "name"));
     let facts = chiba_level1r::specialize::plan_specialization("render", &template);
     let core = lower_core_with_facts(

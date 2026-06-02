@@ -26,8 +26,17 @@ mod tests {
 
     #[test]
     fn debug_symbol_encoding_keeps_unicode_names_collision_free() {
-        assert_eq!(encode_debug_symbol("模块::函数α"), "_u6A21__u5757____u51FD__u6570__u3B1_");
-        assert_eq!(encode_debug_symbol("模块::函数β"), "_u6A21__u5757____u51FD__u6570__u3B2_");
-        assert_eq!(encode_debug_symbol("结果.🚀Ok"), "_u7ED3__u679C___u1F680_Ok");
+        assert_eq!(
+            encode_debug_symbol("模块::函数α"),
+            "_u6A21__u5757____u51FD__u6570__u3B1_"
+        );
+        assert_eq!(
+            encode_debug_symbol("模块::函数β"),
+            "_u6A21__u5757____u51FD__u6570__u3B2_"
+        );
+        assert_eq!(
+            encode_debug_symbol("结果.🚀Ok"),
+            "_u7ED3__u679C___u1F680_Ok"
+        );
     }
 }

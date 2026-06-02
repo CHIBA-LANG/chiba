@@ -81,7 +81,10 @@ fn adt_match_is_exhaustive_when_all_known_variants_are_covered() {
     let output = compile_expr(&Expr::match_expr(
         option_some(Expr::i64(1)),
         vec![
-            (Pattern::ctor("Some", vec![Pattern::bind("value")]), Expr::var("value")),
+            (
+                Pattern::ctor("Some", vec![Pattern::bind("value")]),
+                Expr::var("value"),
+            ),
             (Pattern::ctor("None", vec![]), Expr::i64(0)),
         ],
     ));
@@ -100,7 +103,10 @@ fn adt_match_is_exhaustive_when_all_known_variants_are_covered() {
 fn adt_match_reports_missing_constructor_with_qualified_pattern() {
     let output = compile_expr(&Expr::match_expr(
         option_some(Expr::i64(1)),
-        vec![(Pattern::ctor("Some", vec![Pattern::bind("value")]), Expr::var("value"))],
+        vec![(
+            Pattern::ctor("Some", vec![Pattern::bind("value")]),
+            Expr::var("value"),
+        )],
     ));
 
     assert_eq!(
@@ -124,11 +130,17 @@ fn qualified_constructor_pattern_displays_stably() {
                 Pattern::qualified_ctor("Option", "Some", vec![Pattern::bind("value")]),
                 Expr::var("value"),
             ),
-            (Pattern::qualified_ctor("Option", "None", vec![]), Expr::i64(0)),
+            (
+                Pattern::qualified_ctor("Option", "None", vec![]),
+                Expr::i64(0),
+            ),
         ],
     ));
 
-    assert!(output.cps.to_string().contains("Option.Some(value) => join"));
+    assert!(output
+        .cps
+        .to_string()
+        .contains("Option.Some(value) => join"));
     assert!(output.cps.to_string().contains("Option.None => join"));
     assert_eq!(output.pattern.diagnostics, vec![]);
 }

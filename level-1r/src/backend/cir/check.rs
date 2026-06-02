@@ -1,4 +1,4 @@
-use crate::typed::{TypedExpr, TypedExprKind, Type, UsageColor};
+use crate::typed::{Type, TypedExpr, TypedExprKind, UsageColor};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ControlFacts {

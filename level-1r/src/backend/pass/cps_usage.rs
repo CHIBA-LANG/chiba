@@ -80,10 +80,12 @@ fn visit_term(term: &CpsTerm, facts: &mut CpsUsageFacts) {
             };
             let count = count_binder_uses(body, binder);
             if kind == ContinuationKind::Cont1 && count == UseCount::Many {
-                facts.diagnostics.push(CpsUsageDiagnostic::Cont1ResumedMoreThanOnce {
-                    binder: binder.clone(),
-                    count,
-                });
+                facts
+                    .diagnostics
+                    .push(CpsUsageDiagnostic::Cont1ResumedMoreThanOnce {
+                        binder: binder.clone(),
+                        count,
+                    });
             }
             facts.continuations.insert(
                 binder.clone(),

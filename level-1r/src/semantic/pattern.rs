@@ -1,5 +1,5 @@
 use crate::ast::{Literal, ParamDecl, Pattern};
-use crate::typed::{TypedExpr, TypedExprKind, Type, TypeContext};
+use crate::typed::{Type, TypeContext, TypedExpr, TypedExprKind};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PatternFacts {
@@ -179,10 +179,12 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts, context: &TypeContext) {
             }
             let fact = exhaustiveness(scrutinee, arms, context);
             if !fact.exhaustive {
-                facts.diagnostics.push(PatternDiagnostic::NonExhaustiveMatch {
-                    scrutinee_type: fact.scrutinee_type.clone(),
-                    missing: missing_patterns(&fact),
-                });
+                facts
+                    .diagnostics
+                    .push(PatternDiagnostic::NonExhaustiveMatch {
+                        scrutinee_type: fact.scrutinee_type.clone(),
+                        missing: missing_patterns(&fact),
+                    });
             }
             facts.matches.push(fact);
         }
@@ -289,18 +291,14 @@ fn missing_patterns(fact: &MatchExhaustivenessFact) -> Vec<Pattern> {
 fn pattern_bindings(pattern: &Pattern) -> Vec<String> {
     match pattern {
         Pattern::Bind(name) => vec![name.clone()],
-        Pattern::Tuple(fields) => fields
-            .iter()
-            .flat_map(pattern_bindings)
-            .collect::<Vec<_>>(),
+        Pattern::Tuple(fields) => fields.iter().flat_map(pattern_bindings).collect::<Vec<_>>(),
         Pattern::Record(fields) => fields
             .iter()
             .flat_map(|field| pattern_bindings(&field.pattern))
             .collect::<Vec<_>>(),
-        Pattern::Constructor { args, .. } => args
-            .iter()
-            .flat_map(pattern_bindings)
-            .collect::<Vec<_>>(),
+        Pattern::Constructor { args, .. } => {
+            args.iter().flat_map(pattern_bindings).collect::<Vec<_>>()
+        }
         Pattern::At { name, pattern } => {
             let mut bindings = pattern_bindings(pattern);
             bindings.push(name.clone());
@@ -365,9 +363,9 @@ fn diagnose_chained_at_patterns(pattern: &Pattern, facts: &mut PatternFacts) {
     match pattern {
         Pattern::At { pattern, .. } => {
             if let Pattern::At { name, .. } = pattern.as_ref() {
-                facts.diagnostics.push(PatternDiagnostic::ChainedAtPattern {
-                    name: name.clone(),
-                });
+                facts
+                    .diagnostics
+                    .push(PatternDiagnostic::ChainedAtPattern { name: name.clone() });
             }
             diagnose_chained_at_patterns(pattern, facts);
         }

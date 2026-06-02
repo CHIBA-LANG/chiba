@@ -1,6 +1,7 @@
 use chiba_level1r::backend::{
-    backend_cache_key, emit_wasm_gc, emit_wasm_gc_with_params, link_backend_artifacts, BackendCacheConfig,
-    BackendDiagnostic, BackendExternImport, BackendLinkDiagnostic, BackendTarget,
+    backend_cache_key, emit_wasm_gc, emit_wasm_gc_with_params, link_backend_artifacts,
+    BackendCacheConfig, BackendDiagnostic, BackendExternImport, BackendLinkDiagnostic,
+    BackendTarget,
 };
 use chiba_level1r::core::{CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue};
 use chiba_level1r::{compile_expr, Expr};
@@ -86,7 +87,10 @@ fn backend_emits_exported_main_for_return_atom_core() {
 
     assert_eq!(output.backend.diagnostics, vec![]);
     assert!(output.backend.wat.contains(";; core-return atom=7"));
-    assert!(output.backend.wat.contains("(func $main (export \"main\") (result i32)"));
+    assert!(output
+        .backend
+        .wat
+        .contains("(func $main (export \"main\") (result i32)"));
     assert!(output.backend.wat.contains("i32.const 7"));
 }
 
@@ -98,11 +102,7 @@ fn backend_emits_params_and_local_get_for_param_return_core() {
         ownership: vec![],
         callable_storage: vec![],
     };
-    let artifact = emit_wasm_gc_with_params(
-        &core,
-        &CoreValidation::default(),
-        &["x".to_string()],
-    );
+    let artifact = emit_wasm_gc_with_params(&core, &CoreValidation::default(), &["x".to_string()]);
 
     assert_eq!(artifact.diagnostics, vec![]);
     assert!(artifact
@@ -120,8 +120,14 @@ fn backend_serializes_structural_core_ops_as_debuggable_wat_comments() {
     ]));
 
     assert_eq!(output.backend.diagnostics, vec![]);
-    assert!(output.backend.wat.contains(";; record layout=record::x+y fields=2"));
-    assert!(output.backend.wat.contains(";; core-return atom={x=1, y=true}"));
+    assert!(output
+        .backend
+        .wat
+        .contains(";; record layout=record::x+y fields=2"));
+    assert!(output
+        .backend
+        .wat
+        .contains(";; core-return atom={x=1, y=true}"));
 }
 
 #[test]

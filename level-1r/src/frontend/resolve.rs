@@ -173,7 +173,10 @@ impl NameIndex {
         Self::from_interface_for_namespace(interface, &interface.namespace)
     }
 
-    pub fn from_interface_for_namespace(interface: &InterfaceSummary, current_namespace: &str) -> Self {
+    pub fn from_interface_for_namespace(
+        interface: &InterfaceSummary,
+        current_namespace: &str,
+    ) -> Self {
         let mut index = Self::default();
         for function in &interface.functions {
             if function.receiver.is_none() {
@@ -400,10 +403,7 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
             }
         }
         AlphaExprKind::AdtCtor {
-            data,
-            ctor,
-            args,
-            ..
+            data, ctor, args, ..
         } => {
             resolve_constructor_name(data, ctor, args.len(), facts);
             for arg in args {
@@ -491,7 +491,10 @@ fn resolve_var_name(name: &str, facts: &mut ResolveFacts) {
         [candidate] => push_resolved_name(name, candidate, facts),
         many => facts.diagnostics.push(ResolveDiagnostic::AmbiguousName {
             name: name.to_string(),
-            candidates: many.iter().map(|candidate| candidate.symbol.clone()).collect(),
+            candidates: many
+                .iter()
+                .map(|candidate| candidate.symbol.clone())
+                .collect(),
         }),
     }
 }
@@ -506,18 +509,20 @@ fn resolve_function_call(name: &str, arity: usize, facts: &mut ResolveFacts) {
         .collect::<Vec<_>>();
     match candidates.as_slice() {
         [] => {}
-        [candidate] if candidate.arity == arity => facts.resolved_names.push(
-            ResolvedName::Function {
+        [candidate] if candidate.arity == arity => {
+            facts.resolved_names.push(ResolvedName::Function {
                 name: name.to_string(),
                 symbol: candidate.symbol.clone(),
-            },
-        ),
-        [candidate] => facts.diagnostics.push(ResolveDiagnostic::FunctionArityMismatch {
-            name: name.to_string(),
-            symbol: candidate.symbol.clone(),
-            expected: candidate.arity,
-            actual: arity,
-        }),
+            })
+        }
+        [candidate] => facts
+            .diagnostics
+            .push(ResolveDiagnostic::FunctionArityMismatch {
+                name: name.to_string(),
+                symbol: candidate.symbol.clone(),
+                expected: candidate.arity,
+                actual: arity,
+            }),
         many => {
             let arity_matches = many
                 .iter()
@@ -530,7 +535,10 @@ fn resolve_function_call(name: &str, arity: usize, facts: &mut ResolveFacts) {
                 }),
                 [] => facts.diagnostics.push(ResolveDiagnostic::AmbiguousName {
                     name: name.to_string(),
-                    candidates: many.iter().map(|candidate| candidate.symbol.clone()).collect(),
+                    candidates: many
+                        .iter()
+                        .map(|candidate| candidate.symbol.clone())
+                        .collect(),
                 }),
                 matches => facts.diagnostics.push(ResolveDiagnostic::AmbiguousName {
                     name: name.to_string(),
@@ -562,10 +570,12 @@ fn resolve_constructor_name(data: &str, ctor: &str, arity: usize, facts: &mut Re
     match candidates.as_slice() {
         [] => {
             if !facts.names.constructors.is_empty() {
-                facts.diagnostics.push(ResolveDiagnostic::MissingConstructor {
-                    data: data.to_string(),
-                    ctor: ctor.to_string(),
-                });
+                facts
+                    .diagnostics
+                    .push(ResolveDiagnostic::MissingConstructor {
+                        data: data.to_string(),
+                        ctor: ctor.to_string(),
+                    });
             }
         }
         [candidate] if candidate.arity == arity => {
@@ -576,17 +586,24 @@ fn resolve_constructor_name(data: &str, ctor: &str, arity: usize, facts: &mut Re
                 arity: candidate.arity,
             });
         }
-        [candidate] => facts.diagnostics.push(ResolveDiagnostic::ConstructorArityMismatch {
-            data: data.to_string(),
-            ctor: ctor.to_string(),
-            expected: candidate.arity,
-            actual: arity,
-        }),
-        many => facts.diagnostics.push(ResolveDiagnostic::AmbiguousConstructor {
-            data: data.to_string(),
-            ctor: ctor.to_string(),
-            candidates: many.iter().map(|candidate| candidate.symbol.clone()).collect(),
-        }),
+        [candidate] => facts
+            .diagnostics
+            .push(ResolveDiagnostic::ConstructorArityMismatch {
+                data: data.to_string(),
+                ctor: ctor.to_string(),
+                expected: candidate.arity,
+                actual: arity,
+            }),
+        many => facts
+            .diagnostics
+            .push(ResolveDiagnostic::AmbiguousConstructor {
+                data: data.to_string(),
+                ctor: ctor.to_string(),
+                candidates: many
+                    .iter()
+                    .map(|candidate| candidate.symbol.clone())
+                    .collect(),
+            }),
     }
 }
 
@@ -613,7 +630,10 @@ fn resolve_method_call(receiver: &AlphaExpr, name: &str, facts: &mut ResolveFact
             many => facts.diagnostics.push(ResolveDiagnostic::AmbiguousMethod {
                 receiver: receiver_name,
                 name: name.to_string(),
-                candidates: many.iter().map(|candidate| candidate.symbol.clone()).collect(),
+                candidates: many
+                    .iter()
+                    .map(|candidate| candidate.symbol.clone())
+                    .collect(),
             }),
         }
         return;

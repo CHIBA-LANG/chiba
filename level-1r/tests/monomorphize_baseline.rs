@@ -31,7 +31,10 @@ fn scheduler_deduplicates_identical_specialization_keys() {
     let plan = schedule_monomorphization(&facts);
 
     assert_eq!(plan.jobs.len(), 1);
-    assert_eq!(plan.jobs[0].call_sites, vec!["call-site::0", "call-site::1"]);
+    assert_eq!(
+        plan.jobs[0].call_sites,
+        vec!["call-site::0", "call-site::1"]
+    );
     assert_eq!(plan.duplicates.len(), 1);
     assert_eq!(plan.duplicates[0].call_site, "call-site::1");
     assert_eq!(plan.duplicates[0].joined_artifact, plan.jobs[0].artifact);
@@ -43,9 +46,10 @@ fn scheduler_artifact_name_is_stable_and_keeps_shape_dyn_abi_dimensions() {
     template
         .row_shapes
         .push(canonical_open_row(vec![("name", ShapeType::Unknown)]));
-    template
-        .dyn_contracts
-        .push(dyn_row_contract(vec![("name", ShapeType::Named("String".to_string()))]));
+    template.dyn_contracts.push(dyn_row_contract(vec![(
+        "name",
+        ShapeType::Named("String".to_string()),
+    )]));
     template.obligations.push(TemplateObligation::Method {
         receiver: Some("User".to_string()),
         name: "render".to_string(),
@@ -110,7 +114,9 @@ fn compile_output_contains_monomorphization_plan_and_visual_dump() {
     let output = compile_expr(&Expr::field(Expr::var("user"), "name"));
 
     assert_eq!(output.monomorphize.jobs.len(), 1);
-    assert!(output.monomorphize.jobs[0].artifact.starts_with("mono::<expr>"));
+    assert!(output.monomorphize.jobs[0]
+        .artifact
+        .starts_with("mono::<expr>"));
     assert!(output.render_visual().contains("monomorphize:"));
     assert!(output.render_visual().contains("MonomorphizationPlan"));
 }

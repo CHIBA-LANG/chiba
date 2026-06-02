@@ -177,7 +177,10 @@ fn interface_summary_resolves_global_function_owner_symbol() {
 #[test]
 fn name_index_filters_private_functions_by_namespace_visibility() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["demo".to_string(), "math".to_string()])),
+        Some(NamespaceDecl::new(vec![
+            "demo".to_string(),
+            "math".to_string(),
+        ])),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -227,7 +230,10 @@ fn name_index_filters_private_functions_by_namespace_visibility() {
 #[test]
 fn name_index_resolves_static_values_with_namespace_visibility() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["demo".to_string(), "math".to_string()])),
+        Some(NamespaceDecl::new(vec![
+            "demo".to_string(),
+            "math".to_string(),
+        ])),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -277,7 +283,10 @@ fn name_index_resolves_static_values_with_namespace_visibility() {
 #[test]
 fn method_index_filters_private_methods_by_namespace_visibility() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["demo".to_string(), "math".to_string()])),
+        Some(NamespaceDecl::new(vec![
+            "demo".to_string(),
+            "math".to_string(),
+        ])),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -547,7 +556,10 @@ fn binary_operator_records_protocol_obligation_without_numeric_default() {
 
     assert_eq!(output.resolve.operator_obligations.len(), 1);
     let obligation = &output.resolve.operator_obligations[0];
-    assert_eq!(obligation.op, chiba_level1r::resolve::OperatorSurface::Binary(BinaryOp::Add));
+    assert_eq!(
+        obligation.op,
+        chiba_level1r::resolve::OperatorSurface::Binary(BinaryOp::Add)
+    );
     assert_eq!(obligation.protocol, "op_add");
     assert_eq!(obligation.receiver.as_deref(), Some("Vec2"));
 }

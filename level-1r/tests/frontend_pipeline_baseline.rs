@@ -65,9 +65,8 @@ fn frontend_lexes_and_parses_def_source_to_program() {
 
 #[test]
 fn frontend_parses_method_style_def_with_generic_receiver_and_self_type() {
-    let output =
-        parse_source_program("def Box[T].update(self: Self, value: T): Self = self")
-            .expect("frontend parse");
+    let output = parse_source_program("def Box[T].update(self: Self, value: T): Self = self")
+        .expect("frontend parse");
 
     match &output.program.items[0] {
         SourceItem::Def {
@@ -101,9 +100,11 @@ fn frontend_parses_method_style_def_with_generic_receiver_and_self_type() {
 
 #[test]
 fn frontend_parses_row_style_type_decl_with_generics() {
-    let output = parse_source_program("type Box[T] = { value: T }
-def main() = 0")
-        .expect("frontend parse");
+    let output = parse_source_program(
+        "type Box[T] = { value: T }
+def main() = 0",
+    )
+    .expect("frontend parse");
 
     assert_eq!(
         output.program.types,
@@ -118,9 +119,11 @@ def main() = 0")
 
 #[test]
 fn frontend_parses_type_alias_decl() {
-    let output = parse_source_program("type UserId = i64
-def main(id: UserId) = id")
-        .expect("frontend parse");
+    let output = parse_source_program(
+        "type UserId = i64
+def main(id: UserId) = id",
+    )
+    .expect("frontend parse");
 
     assert_eq!(
         output.program.types,
@@ -161,8 +164,11 @@ def main() = 0",
 
 #[test]
 fn frontend_source_program_enters_program_bundle_pipeline() {
-    let parsed = parse_source_program("def helper() = true
-def main() = 7").expect("parse");
+    let parsed = parse_source_program(
+        "def helper() = true
+def main() = 7",
+    )
+    .expect("parse");
     let bundle = compile_program_bundle(&parsed.program);
 
     assert_eq!(bundle.entry, Some("main".to_string()));
@@ -187,13 +193,22 @@ def main() = 7",
     .expect("frontend parse");
 
     let namespace = output.program.namespace.as_ref().expect("namespace");
-    assert_eq!(namespace.path, vec!["parser".to_string(), "chiba".to_string()]);
+    assert_eq!(
+        namespace.path,
+        vec!["parser".to_string(), "chiba".to_string()]
+    );
     assert_eq!(namespace.dotted(), "parser.chiba");
     assert_eq!(output.program.imports.len(), 2);
-    assert_eq!(output.program.imports[0].path, vec!["frontend".to_string(), "ast".to_string()]);
+    assert_eq!(
+        output.program.imports[0].path,
+        vec!["frontend".to_string(), "ast".to_string()]
+    );
     assert!(output.program.imports[0].glob);
     assert_eq!(output.program.imports[0].dotted(), "frontend.ast.*");
-    assert_eq!(output.program.imports[1].path, vec!["std".to_string(), "regex".to_string()]);
+    assert_eq!(
+        output.program.imports[1].path,
+        vec!["std".to_string(), "regex".to_string()]
+    );
     assert!(!output.program.imports[1].glob);
     assert_eq!(output.program.items.len(), 1);
 
@@ -233,7 +248,11 @@ def main() = 7",
 
     assert_eq!(output.program.entry, Some("main".to_string()));
     assert_eq!(
-        output.program.namespace.as_ref().map(|namespace| namespace.dotted()),
+        output
+            .program
+            .namespace
+            .as_ref()
+            .map(|namespace| namespace.dotted()),
         Some("parser.chiba".to_string())
     );
     assert_eq!(
@@ -257,9 +276,11 @@ def main() = 7",
 
 #[test]
 fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
-    let output = compile_source_program_bundle("def helper(x) = f(1)
-def main() = helper(2)")
-        .expect("compile source");
+    let output = compile_source_program_bundle(
+        "def helper(x) = f(1)
+def main() = helper(2)",
+    )
+    .expect("compile source");
 
     assert_eq!(output.frontend.tokens.len(), 19);
     assert_eq!(output.frontend.program.items.len(), 2);
@@ -277,7 +298,11 @@ def main() = helper(2)")
         .backend_link
         .linked_wat
         .contains("(func $main__def1 (export \"main\") (result i32)"));
-    assert!(output.program.defs[0].output.cps.to_string().contains("f(1,"));
+    assert!(output.program.defs[0]
+        .output
+        .cps
+        .to_string()
+        .contains("f(1,"));
     assert!(output.program.defs[1]
         .output
         .cps
@@ -291,18 +316,13 @@ def main() = helper(2)")
             name: "helper".to_string(),
             symbol: "root::helper".to_string(),
         }));
-    assert!(output.program.defs[1]
-        .output
-        .template
-        .obligations
-        .contains(&TemplateObligation::Function {
+    assert!(output.program.defs[1].output.template.obligations.contains(
+        &TemplateObligation::Function {
             name: "helper".to_string(),
             resolved: "root::helper".to_string(),
-        }));
-    assert!(output.program.defs[1]
-        .output
-        .specialize
-        .work_items[0]
+        }
+    ));
+    assert!(output.program.defs[1].output.specialize.work_items[0]
         .obligations
         .contains(&DischargedObligation::Function {
             name: "helper".to_string(),
@@ -339,7 +359,10 @@ def main() = Option.Some(1)",
     let data = &output.frontend.program.data[0];
     assert_eq!(data.name, "Option");
     assert_eq!(data.generics, vec!["T".to_string()]);
-    assert_eq!(data.variant_names(), vec!["Some".to_string(), "None".to_string()]);
+    assert_eq!(
+        data.variant_names(),
+        vec!["Some".to_string(), "None".to_string()]
+    );
     assert_eq!(data.variants[0].fields, vec!["T".to_string()]);
     assert_eq!(data.variants[1].fields, Vec::<String>::new());
 
@@ -347,12 +370,7 @@ def main() = Option.Some(1)",
         SourceItem::Def { body, .. } => {
             assert_eq!(
                 body,
-                &Expr::adt_ctor(
-                    "Option",
-                    "Some",
-                    vec!["Some", "None"],
-                    vec![Expr::i64(1)]
-                )
+                &Expr::adt_ctor("Option", "Some", vec!["Some", "None"], vec![Expr::i64(1)])
             );
         }
         other => panic!("expected function def, got {other:?}"),
@@ -372,12 +390,15 @@ def main() = Option.Some(1)",
                 && args == &vec!["1".to_string()]
         )
     }));
-    assert!(main.resolve.resolved_names.contains(&ResolvedName::Constructor {
-        data: "Option".to_string(),
-        ctor: "Some".to_string(),
-        symbol: "root::Option.Some".to_string(),
-        arity: 1,
-    }));
+    assert!(main
+        .resolve
+        .resolved_names
+        .contains(&ResolvedName::Constructor {
+            data: "Option".to_string(),
+            ctor: "Some".to_string(),
+            symbol: "root::Option.Some".to_string(),
+            arity: 1,
+        }));
     assert!(main
         .template
         .obligations
@@ -387,14 +408,14 @@ def main() = Option.Some(1)",
             resolved: "root::Option.Some".to_string(),
             arity: 1,
         }));
-    assert!(main.specialize.work_items[0]
-        .obligations
-        .contains(&DischargedObligation::Constructor {
+    assert!(main.specialize.work_items[0].obligations.contains(
+        &DischargedObligation::Constructor {
             data: "Option".to_string(),
             ctor: "Some".to_string(),
             target: "root::Option.Some".to_string(),
             arity: 1,
-        }));
+        }
+    ));
     let visual = main.render_visual();
     assert!(visual.contains("resolve constructor Option.Some/1 -> root::Option.Some"));
     assert!(visual.contains("template constructor Option.Some/1 -> root::Option.Some"));
@@ -419,11 +440,7 @@ def main() = match Option.None { Option.Some(value) => value, Option.None => 0 }
                     Expr::adt_ctor("Option", "None", vec!["Some", "None"], Vec::<Expr>::new()),
                     vec![
                         (
-                            Pattern::qualified_ctor(
-                                "Option",
-                                "Some",
-                                vec![Pattern::bind("value")]
-                            ),
+                            Pattern::qualified_ctor("Option", "Some", vec![Pattern::bind("value")]),
                             Expr::var("value"),
                         ),
                         (
@@ -456,12 +473,7 @@ data Option[T] = { Some(T), None }",
         SourceItem::Def { body, .. } => {
             assert_eq!(
                 body,
-                &Expr::adt_ctor(
-                    "Option",
-                    "Some",
-                    vec!["Some", "None"],
-                    vec![Expr::i64(1)]
-                )
+                &Expr::adt_ctor("Option", "Some", vec!["Some", "None"], vec![Expr::i64(1)])
             );
         }
         other => panic!("expected function def, got {other:?}"),
@@ -504,10 +516,7 @@ fn frontend_parses_wildcard_parameter_as_pattern_not_binding() {
 
     match &parsed.program.items[0] {
         SourceItem::Def { params, .. } => {
-            assert_eq!(
-                params,
-                &vec![ParamDecl::pattern(Pattern::wildcard(), None)]
-            );
+            assert_eq!(params, &vec![ParamDecl::pattern(Pattern::wildcard(), None)]);
             assert_eq!(params[0].name, "_");
         }
         other => panic!("expected function def, got {other:?}"),
@@ -539,9 +548,11 @@ def get(Some(x): Option[i64]) = x",
 
 #[test]
 fn frontend_parses_typed_global_value_def_surface() {
-    let output = compile_source_program_bundle("def ANSWER: I64 = 42
-def main() = ANSWER")
-        .expect("compile source");
+    let output = compile_source_program_bundle(
+        "def ANSWER: I64 = 42
+def main() = ANSWER",
+    )
+    .expect("compile source");
 
     assert_eq!(output.frontend.program.items.len(), 2);
     assert_eq!(
@@ -561,7 +572,10 @@ def main() = ANSWER")
         output.program.global_init.init_order,
         vec!["ANSWER".to_string()]
     );
-    assert_eq!(output.program.global_init.statics[0].ty, Some("I64".to_string()));
+    assert_eq!(
+        output.program.global_init.statics[0].ty,
+        Some("I64".to_string())
+    );
     let main = &output.program.defs[0].output;
     assert!(main.resolve.resolved_names.contains(&ResolvedName::Static {
         name: "ANSWER".to_string(),
@@ -634,10 +648,11 @@ fn frontend_parses_explicit_checked_template_def_header() {
 
 #[test]
 fn frontend_parses_explicit_call_site_instantiation_without_breaking_index() {
-    let parsed =
-        parse_source_program("def main() = id[T](value)
-def at(values, i) = values[i]")
-            .expect("parse");
+    let parsed = parse_source_program(
+        "def main() = id[T](value)
+def at(values, i) = values[i]",
+    )
+    .expect("parse");
 
     match &parsed.program.items[0] {
         SourceItem::Def { body, .. } => {
@@ -661,10 +676,12 @@ def at(values, i) = values[i]")
 
 #[test]
 fn frontend_parses_static_value_defs_separately_from_zero_arg_functions() {
-    let output = parse_source_program("def ONE: i64 = 1
+    let output = parse_source_program(
+        "def ONE: i64 = 1
 def TWO = ONE
-def main() = TWO")
-        .expect("frontend parse");
+def main() = TWO",
+    )
+    .expect("frontend parse");
 
     assert_eq!(output.program.items.len(), 3);
     assert_eq!(
@@ -686,7 +703,9 @@ def main() = TWO")
         }
     );
     match &output.program.items[2] {
-        SourceItem::Def { name, params, body, .. } => {
+        SourceItem::Def {
+            name, params, body, ..
+        } => {
             assert_eq!(name, "main");
             assert_eq!(params, &Vec::<ParamDecl>::new());
             assert_eq!(body, &Expr::var("TWO"));
@@ -808,8 +827,7 @@ fn frontend_pipe_defaults_to_first_argument_call() {
 
 #[test]
 fn frontend_pipe_placeholder_replaces_each_hole_with_input() {
-    let parsed = parse_source_program("def main() = value |> f(prefix, _, _)")
-        .expect("parse");
+    let parsed = parse_source_program("def main() = value |> f(prefix, _, _)").expect("parse");
 
     match &parsed.program.items[0] {
         SourceItem::Def { body, .. } => {
@@ -817,11 +835,7 @@ fn frontend_pipe_placeholder_replaces_each_hole_with_input() {
                 body,
                 &Expr::call_args(
                     Expr::var("f"),
-                    vec![
-                        Expr::var("prefix"),
-                        Expr::var("value"),
-                        Expr::var("value")
-                    ]
+                    vec![Expr::var("prefix"), Expr::var("value"), Expr::var("value")]
                 )
             );
         }
@@ -839,8 +853,7 @@ fn frontend_pipe_placeholder_replaces_each_hole_with_input() {
 
 #[test]
 fn frontend_pipe_method_path_is_receiver_first_desugar() {
-    let parsed = parse_source_program("def main() = value |> Vec.push(1)")
-        .expect("parse");
+    let parsed = parse_source_program("def main() = value |> Vec.push(1)").expect("parse");
 
     match &parsed.program.items[0] {
         SourceItem::Def { body, .. } => {
@@ -866,8 +879,7 @@ fn frontend_pipe_method_path_is_receiver_first_desugar() {
 
 #[test]
 fn frontend_pipe_chains_left_to_right() {
-    let parsed = parse_source_program("def main() = value |> f |> g")
-        .expect("parse");
+    let parsed = parse_source_program("def main() = value |> f |> g").expect("parse");
 
     match &parsed.program.items[0] {
         SourceItem::Def { body, .. } => {
@@ -935,27 +947,22 @@ fn frontend_indexing_enters_operator_obligation_path() {
 
     let bundle = compile_program_bundle(&parsed.program);
     let main = &bundle.defs[0].output;
+    assert!(main.resolve.operator_obligations.iter().any(|obligation| {
+        obligation.op == chiba_level1r::resolve::OperatorSurface::Index
+            && obligation.protocol == "op_index"
+    }));
+    assert!(main.template.obligations.iter().any(|obligation| matches!(
+        obligation,
+        TemplateObligation::Operator {
+            op: chiba_level1r::resolve::OperatorSurface::Index,
+            protocol,
+            ..
+        } if protocol == "op_index"
+    )));
     assert!(main
-        .resolve
-        .operator_obligations
-        .iter()
-        .any(|obligation| {
-            obligation.op == chiba_level1r::resolve::OperatorSurface::Index
-                && obligation.protocol == "op_index"
-        }));
-    assert!(main
-        .template
-        .obligations
-        .iter()
-        .any(|obligation| matches!(
-            obligation,
-            TemplateObligation::Operator {
-                op: chiba_level1r::resolve::OperatorSurface::Index,
-                protocol,
-                ..
-            } if protocol == "op_index"
-        )));
-    assert!(main.cps.to_string().contains("operator::op_index(values)(i,"));
+        .cps
+        .to_string()
+        .contains("operator::op_index(values)(i,"));
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -984,26 +991,18 @@ fn frontend_slice_indexing_uses_index_slice_operator_path() {
 
     let bundle = compile_program_bundle(&parsed.program);
     let main = &bundle.defs[0].output;
-    assert!(main
-        .resolve
-        .operator_obligations
-        .iter()
-        .any(|obligation| {
-            obligation.op == chiba_level1r::resolve::OperatorSurface::IndexSlice
-                && obligation.protocol == "op_index_slice"
-        }));
-    assert!(main
-        .template
-        .obligations
-        .iter()
-        .any(|obligation| matches!(
-            obligation,
-            TemplateObligation::Operator {
-                op: chiba_level1r::resolve::OperatorSurface::IndexSlice,
-                protocol,
-                ..
-            } if protocol == "op_index_slice"
-        )));
+    assert!(main.resolve.operator_obligations.iter().any(|obligation| {
+        obligation.op == chiba_level1r::resolve::OperatorSurface::IndexSlice
+            && obligation.protocol == "op_index_slice"
+    }));
+    assert!(main.template.obligations.iter().any(|obligation| matches!(
+        obligation,
+        TemplateObligation::Operator {
+            op: chiba_level1r::resolve::OperatorSurface::IndexSlice,
+            protocol,
+            ..
+        } if protocol == "op_index_slice"
+    )));
     assert!(main
         .cps
         .to_string()
@@ -1049,15 +1048,18 @@ fn frontend_parses_if_block_else_block_through_branch_cps_and_wat() {
             chiba_level1r::core::CoreOp::Branch { cond } if cond == "flag"
         )
     }));
-    assert!(output.program.backend_link.linked_wat.contains(";; branch cond=flag"));
+    assert!(output
+        .program
+        .backend_link
+        .linked_wat
+        .contains(";; branch cond=flag"));
 }
 
 #[test]
 fn frontend_parses_else_if_as_nested_if_expr() {
-    let output = compile_source_program_bundle(
-        "def main() = if a { 1 } else if b { 2 } else { 3 }",
-    )
-    .expect("compile source");
+    let output =
+        compile_source_program_bundle("def main() = if a { 1 } else if b { 2 } else { 3 }")
+            .expect("compile source");
 
     match &output.frontend.program.items[0] {
         SourceItem::Def { body, .. } => {
@@ -1086,7 +1088,10 @@ fn frontend_parses_match_with_literal_and_wildcard_through_cps_core() {
                 &Expr::match_expr(
                     Expr::var("tag"),
                     vec![
-                        (Pattern::lit_i64(0), Expr::call(Expr::var("f"), Expr::i64(1))),
+                        (
+                            Pattern::lit_i64(0),
+                            Expr::call(Expr::var("f"), Expr::i64(1))
+                        ),
                         (Pattern::wildcard(), Expr::i64(2)),
                     ],
                 )
@@ -1152,7 +1157,10 @@ fn frontend_parses_nested_tuple_record_and_at_patterns() {
         main.pattern.envs[0].bindings,
         vec!["head".to_string(), "rest".to_string(), "whole".to_string()]
     );
-    assert!(main.cps.to_string().contains("whole @ (head, {tail: rest}) =>"));
+    assert!(main
+        .cps
+        .to_string()
+        .contains("whole @ (head, {tail: rest}) =>"));
 }
 
 #[test]
@@ -1168,12 +1176,7 @@ def main() = Option.Some(1)",
         SourceItem::Def { body, .. } => {
             assert_eq!(
                 body,
-                &Expr::adt_ctor(
-                    "Option",
-                    "Some",
-                    vec!["Some", "None"],
-                    vec![Expr::i64(1)]
-                )
+                &Expr::adt_ctor("Option", "Some", vec!["Some", "None"], vec![Expr::i64(1)])
             );
         }
         other => panic!("expected function def, got {other:?}"),
@@ -1240,12 +1243,7 @@ def main() = 选项.成功(1)",
         SourceItem::Def { body, .. } => {
             assert_eq!(
                 body,
-                &Expr::adt_ctor(
-                    "选项",
-                    "成功",
-                    vec!["成功", "失败"],
-                    vec![Expr::i64(1)]
-                )
+                &Expr::adt_ctor("选项", "成功", vec!["成功", "失败"], vec![Expr::i64(1)])
             );
         }
         other => panic!("expected function def, got {other:?}"),
@@ -1293,12 +1291,7 @@ def 函数α() = 结果.🚀Ok(1)",
             assert_eq!(name, "函数α");
             assert_eq!(
                 body,
-                &Expr::adt_ctor(
-                    "结果",
-                    "🚀Ok",
-                    vec!["🚀Ok", "失败"],
-                    vec![Expr::i64(1)]
-                )
+                &Expr::adt_ctor("结果", "🚀Ok", vec!["🚀Ok", "失败"], vec![Expr::i64(1)])
             );
         }
         other => panic!("expected function def, got {other:?}"),
@@ -1331,13 +1324,13 @@ def 计算🚀(值α: i64) = match 结果α.🚀成功(值α) { 结果α.🚀成
 
     match &output.frontend.program.items[0] {
         SourceItem::Def {
-            name,
-            params,
-            body,
-            ..
+            name, params, body, ..
         } => {
             assert_eq!(name, "计算🚀");
-            assert_eq!(params, &vec![ParamDecl::new("值α", Some("i64".to_string()))]);
+            assert_eq!(
+                params,
+                &vec![ParamDecl::new("值α", Some("i64".to_string()))]
+            );
             assert_eq!(
                 body,
                 &Expr::match_expr(
@@ -1349,11 +1342,7 @@ def 计算🚀(值α: i64) = match 结果α.🚀成功(值α) { 结果α.🚀成
                     ),
                     vec![
                         (
-                            Pattern::qualified_ctor(
-                                "结果α",
-                                "🚀成功",
-                                vec![Pattern::bind("内值")]
-                            ),
+                            Pattern::qualified_ctor("结果α", "🚀成功", vec![Pattern::bind("内值")]),
                             Expr::var("内值"),
                         ),
                         (
@@ -1367,12 +1356,15 @@ def 计算🚀(值α: i64) = match 结果α.🚀成功(值α) { 结果α.🚀成
         other => panic!("expected function def, got {other:?}"),
     }
 
-    assert!(main.resolve.resolved_names.contains(&ResolvedName::Constructor {
-        data: "结果α".to_string(),
-        ctor: "🚀成功".to_string(),
-        symbol: "root::结果α.🚀成功".to_string(),
-        arity: 1,
-    }));
+    assert!(main
+        .resolve
+        .resolved_names
+        .contains(&ResolvedName::Constructor {
+            data: "结果α".to_string(),
+            ctor: "🚀成功".to_string(),
+            symbol: "root::结果α.🚀成功".to_string(),
+            arity: 1,
+        }));
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1413,7 +1405,8 @@ def 计算🚀(输入β: i64) = match 结果🚀.🚀成功(标量Ω) { 结果�
     )
     .expect("compile source");
 
-    for expected in ["结果🚀", "🚀成功", "标量Ω", "计算🚀", "输入β", "绑定中文"] {
+    for expected in ["结果🚀", "🚀成功", "标量Ω", "计算🚀", "输入β", "绑定中文"]
+    {
         assert!(
             output
                 .frontend
@@ -1430,13 +1423,13 @@ def 计算🚀(输入β: i64) = match 结果🚀.🚀成功(标量Ω) { 结果�
 
     match &output.frontend.program.items[1] {
         SourceItem::Def {
-            name,
-            params,
-            body,
-            ..
+            name, params, body, ..
         } => {
             assert_eq!(name, "计算🚀");
-            assert_eq!(params, &vec![ParamDecl::new("输入β", Some("i64".to_string()))]);
+            assert_eq!(
+                params,
+                &vec![ParamDecl::new("输入β", Some("i64".to_string()))]
+            );
             assert_eq!(
                 body,
                 &Expr::match_expr(
@@ -1467,12 +1460,15 @@ def 计算🚀(输入β: i64) = match 结果🚀.🚀成功(标量Ω) { 结果�
     }
 
     let main = &output.program.defs[0].output;
-    assert!(main.resolve.resolved_names.contains(&ResolvedName::Constructor {
-        data: "结果🚀".to_string(),
-        ctor: "🚀成功".to_string(),
-        symbol: "root::结果🚀.🚀成功".to_string(),
-        arity: 1,
-    }));
+    assert!(main
+        .resolve
+        .resolved_names
+        .contains(&ResolvedName::Constructor {
+            data: "结果🚀".to_string(),
+            ctor: "🚀成功".to_string(),
+            symbol: "root::结果🚀.🚀成功".to_string(),
+            arity: 1,
+        }));
     assert!(main
         .pattern
         .envs
@@ -1567,12 +1563,15 @@ def 计算🚀(参数盒: 盒子🚀) = match 结果🚀.🚀成功(读取中文
     );
 
     let main = &output.program.defs[1].output;
-    assert!(main.resolve.resolved_names.contains(&ResolvedName::Constructor {
-        data: "结果🚀".to_string(),
-        ctor: "🚀成功".to_string(),
-        symbol: "root::结果🚀.🚀成功".to_string(),
-        arity: 1,
-    }));
+    assert!(main
+        .resolve
+        .resolved_names
+        .contains(&ResolvedName::Constructor {
+            data: "结果🚀".to_string(),
+            ctor: "🚀成功".to_string(),
+            symbol: "root::结果🚀.🚀成功".to_string(),
+            arity: 1,
+        }));
     assert!(main
         .pattern
         .envs
@@ -1621,19 +1620,10 @@ def main() = match Option.Some(1) { Option.Some(value) => value, Option.None => 
             assert_eq!(
                 body,
                 &Expr::match_expr(
-                    Expr::adt_ctor(
-                        "Option",
-                        "Some",
-                        vec!["Some", "None"],
-                        vec![Expr::i64(1)]
-                    ),
+                    Expr::adt_ctor("Option", "Some", vec!["Some", "None"], vec![Expr::i64(1)]),
                     vec![
                         (
-                            Pattern::qualified_ctor(
-                                "Option",
-                                "Some",
-                                vec![Pattern::bind("value")]
-                            ),
+                            Pattern::qualified_ctor("Option", "Some", vec![Pattern::bind("value")]),
                             Expr::var("value"),
                         ),
                         (
@@ -1654,8 +1644,9 @@ def main() = match Option.Some(1) { Option.Some(value) => value, Option.None => 
 
 #[test]
 fn frontend_parses_if_let_block_form_through_pattern_env_and_cps() {
-    let output = compile_source_program_bundle("def main() = if let value = maybe { value } else { 0 }")
-        .expect("compile source");
+    let output =
+        compile_source_program_bundle("def main() = if let value = maybe { value } else { 0 }")
+            .expect("compile source");
 
     match &output.frontend.program.items[0] {
         SourceItem::Def { body, .. } => {
@@ -1726,7 +1717,8 @@ fn frontend_parses_resetn_shift_as_contn_with_rc_usage_audit() {
 
 #[test]
 fn frontend_parses_tuple_and_stable_underscore_field_access() {
-    let output = compile_source_program_bundle("def main() = (1, true)._2").expect("compile source");
+    let output =
+        compile_source_program_bundle("def main() = (1, true)._2").expect("compile source");
     let main = &output.program.defs[0].output;
 
     match &output.frontend.program.items[0] {
@@ -1739,7 +1731,10 @@ fn frontend_parses_tuple_and_stable_underscore_field_access() {
         other => panic!("expected function def, got {other:?}"),
     }
 
-    assert!(main.cps.to_string().contains("Tuple2_I64_Bool(_1=1, _2=true)._2"));
+    assert!(main
+        .cps
+        .to_string()
+        .contains("Tuple2_I64_Bool(_1=1, _2=true)._2"));
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1751,9 +1746,8 @@ fn frontend_parses_tuple_and_stable_underscore_field_access() {
 
 #[test]
 fn frontend_parses_record_literal_field_and_update_through_core() {
-    let output =
-        compile_source_program_bundle("def main() = { {x: 1, y: true} | y: false }.y")
-            .expect("compile source");
+    let output = compile_source_program_bundle("def main() = { {x: 1, y: true} | y: false }.y")
+        .expect("compile source");
     let main = &output.program.defs[0].output;
 
     match &output.frontend.program.items[0] {
@@ -1789,8 +1783,8 @@ fn frontend_parses_record_literal_field_and_update_through_core() {
 
 #[test]
 fn frontend_parses_dot_method_call_as_method_call_ast() {
-    let output = compile_source_program_bundle("def main() = receiver.show(0)")
-        .expect("compile source");
+    let output =
+        compile_source_program_bundle("def main() = receiver.show(0)").expect("compile source");
     let main = &output.program.defs[0].output;
 
     match &output.frontend.program.items[0] {
@@ -1815,8 +1809,8 @@ fn frontend_parses_dot_method_call_as_method_call_ast() {
 
 #[test]
 fn frontend_preserves_multi_argument_method_calls_through_cps_and_core() {
-    let output = compile_source_program_bundle("def main() = receiver.put(1, 2)")
-        .expect("compile source");
+    let output =
+        compile_source_program_bundle("def main() = receiver.put(1, 2)").expect("compile source");
     let main = &output.program.defs[0].output;
 
     match &output.frontend.program.items[0] {
@@ -1842,13 +1836,16 @@ fn frontend_preserves_multi_argument_method_calls_through_cps_and_core() {
                     && args == &vec![CoreValue::I64(1), CoreValue::I64(2)]
         )
     }));
-    assert!(main.backend.wat.contains(";; tailcall receiver_put args=[1, 2]"));
+    assert!(main
+        .backend
+        .wat
+        .contains(";; tailcall receiver_put args=[1, 2]"));
 }
 
 #[test]
 fn frontend_parses_lambda_closure_surface_to_lifted_function() {
-    let output = compile_source_program_bundle("def main() = (x: I64): I64 => x")
-        .expect("compile source");
+    let output =
+        compile_source_program_bundle("def main() = (x: I64): I64 => x").expect("compile source");
     let main = &output.program.defs[0].output;
 
     match &output.frontend.program.items[0] {
@@ -1863,10 +1860,7 @@ fn frontend_parses_lambda_closure_surface_to_lifted_function() {
     assert_eq!(main.lambda_lift.functions.len(), 1);
     assert_eq!(main.lambda_lift.functions[0].source, "closure::x");
     assert!(main.lambda_lift.functions[0].direct);
-    assert!(main
-        .backend
-        .wat
-        .contains("(func $lift__0000__closure__x"));
+    assert!(main.backend.wat.contains("(func $lift__0000__closure__x"));
 }
 
 #[test]
@@ -1899,7 +1893,10 @@ fn frontend_parses_nested_lambda_and_preserves_capture_env() {
         .unwrap();
     assert_eq!(inner.captures.len(), 1);
     assert_eq!(inner.captures[0].name, "x");
-    assert_eq!(main.lambda_lift.functions[1].env_params, vec!["x".to_string()]);
+    assert_eq!(
+        main.lambda_lift.functions[1].env_params,
+        vec!["x".to_string()]
+    );
     assert!(main.render_visual().contains("lift::0001::closure__y"));
 }
 
@@ -1982,7 +1979,11 @@ fn frontend_accepts_semicolon_separated_top_level_items() {
             .expect("semicolon-separated top-level items");
 
     assert_eq!(
-        output.program.namespace.as_ref().map(|namespace| namespace.dotted()),
+        output
+            .program
+            .namespace
+            .as_ref()
+            .map(|namespace| namespace.dotted()),
         Some("demo".to_string())
     );
     assert_eq!(output.program.imports.len(), 1);

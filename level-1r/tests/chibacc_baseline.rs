@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use chiba_level1r::chibacc::{
-    parse_pratt_tokens, parse_tokens, Alt, Ast, Grammar, Item, LabeledAst, PrattInfix,
-    PrattPrefix, PrattSpec, Rule,
+    parse_pratt_tokens, parse_tokens, Alt, Ast, Grammar, Item, LabeledAst, PrattInfix, PrattPrefix,
+    PrattSpec, Rule,
 };
 use chiba_level1r::chibalex::Token;
 

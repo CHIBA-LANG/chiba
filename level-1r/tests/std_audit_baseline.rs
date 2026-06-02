@@ -3,10 +3,7 @@ use chiba_level1r::std_audit::{
 };
 use chiba_level1r::{compile_expr, Expr};
 
-fn find(
-    requirements: &[StdRequirement],
-    capability: StdCapability,
-) -> &StdRequirement {
+fn find(requirements: &[StdRequirement], capability: StdCapability) -> &StdRequirement {
     requirements
         .iter()
         .find(|requirement| requirement.capability == capability)

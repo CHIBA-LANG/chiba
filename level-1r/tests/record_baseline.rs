@@ -39,10 +39,13 @@ fn record_literal_generates_closed_row_shape() {
         ("x", Expr::i64(1)),
     ]));
 
-    assert!(output.template.row_shapes.contains(&canonical_closed_row(vec![
-        ("x", ShapeType::Unknown),
-        ("y", ShapeType::Unknown),
-    ])));
+    assert!(output
+        .template
+        .row_shapes
+        .contains(&canonical_closed_row(vec![
+            ("x", ShapeType::Unknown),
+            ("y", ShapeType::Unknown),
+        ])));
 }
 
 #[test]
@@ -76,10 +79,7 @@ fn record_field_access_infers_type_and_validates_layout() {
     let output = compile_expr(&expr);
 
     assert_eq!(output.typed.ty, Type::Bool);
-    assert_eq!(
-        output.cps.to_string(),
-        "halt record::x+y{x=1, y=true}.y"
-    );
+    assert_eq!(output.cps.to_string(), "halt record::x+y{x=1, y=true}.y");
     assert!(output.core.ops.contains(&CoreOp::RecordFieldGet {
         layout: "record::x+y".to_string(),
         field: "y".to_string(),
@@ -140,16 +140,16 @@ fn record_update_of_unknown_base_reaches_target_neutral_core_update_op() {
     let expr = Expr::record_update(Expr::var("base"), vec![("z", Expr::i64(4))]);
     let output = compile_expr(&expr);
 
-    assert_eq!(
-        output.cps.to_string(),
-        "halt record::z{base=base, z=4}"
-    );
+    assert_eq!(output.cps.to_string(), "halt record::z{base=base, z=4}");
     assert!(output.core.ops.contains(&CoreOp::RecordUpdate {
         base: "base".to_string(),
         layout: "record::z".to_string(),
         fields: vec!["z".to_string()],
     }));
-    assert_eq!(output.usage.vars["base"], chiba_level1r::usage::UseCount::One);
+    assert_eq!(
+        output.usage.vars["base"],
+        chiba_level1r::usage::UseCount::One
+    );
     assert!(output.core_validation.diagnostics.is_empty());
     assert!(!output.cps.to_string().contains("LetCont"));
 }
