@@ -37,6 +37,10 @@ pub enum CoreOp {
         protocol: String,
         target: String,
     },
+    StaticRowAccess {
+        field: String,
+        layout: String,
+    },
     DynRowAdapterAccess {
         subject: String,
         layout: String,
@@ -130,6 +134,8 @@ pub enum CoreDiagnostic {
     Cont1HasPackageLayout { key: String },
     MissingDynRowLayout { layout: String },
     DynRowLayoutKindMismatch { layout: String },
+    MissingStaticRowLayout { layout: String },
+    StaticRowLayoutKindMismatch { layout: String },
     EnvClosureMissingLayout { subject: String },
     ClosureEnvLayoutHasNoFields { layout: String },
     SendableCallableContainsContinuation { subject: String },
@@ -181,6 +187,7 @@ pub fn validate_core(program: &CoreProgram) -> CoreValidation {
     validate_target_neutral(program, &mut diagnostics);
     validate_layouts(program, &mut diagnostics);
     validate_continuation_packages(program, &mut diagnostics);
+    validate_static_row_access(program, &mut diagnostics);
     validate_dyn_adapter_layouts(program, &mut diagnostics);
     validate_lifted_functions(program, &mut diagnostics);
     validate_callable_storage(program, &mut diagnostics);
@@ -262,8 +269,20 @@ fn lower_specialization_ops(
                         layout,
                     });
                 }
-                DischargedObligation::Field { .. }
-                | DischargedObligation::Method { target: None, .. }
+                DischargedObligation::Field { field, shape } => {
+                    let layout = layouts
+                        .iter()
+                        .find(|layout| {
+                            matches!(&layout.kind, LayoutKind::RowShape(candidate) if candidate == shape)
+                        })
+                        .map(|layout| layout.key.clone())
+                        .unwrap_or_else(|| format!("row::{shape:?}"));
+                    ops.push(CoreOp::StaticRowAccess {
+                        field: field.clone(),
+                        layout,
+                    });
+                }
+                DischargedObligation::Method { target: None, .. }
                 | DischargedObligation::Operator { receiver: None, .. } => {}
             }
         }
@@ -341,6 +360,22 @@ fn validate_continuation_packages(program: &CoreProgram, diagnostics: &mut Vec<C
                 diagnostics.push(CoreDiagnostic::MissingContNPackage {
                     binder: binder.clone(),
                 });
+            }
+        }
+    }
+}
+
+fn validate_static_row_access(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    for op in &program.ops {
+        if let CoreOp::StaticRowAccess { layout, .. } = op {
+            match program.layouts.iter().find(|fact| fact.key == *layout) {
+                Some(fact) if matches!(&fact.kind, LayoutKind::RowShape(_)) => {}
+                Some(_) => diagnostics.push(CoreDiagnostic::StaticRowLayoutKindMismatch {
+                    layout: layout.clone(),
+                }),
+                None => diagnostics.push(CoreDiagnostic::MissingStaticRowLayout {
+                    layout: layout.clone(),
+                }),
             }
         }
     }

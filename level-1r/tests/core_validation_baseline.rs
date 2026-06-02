@@ -183,6 +183,51 @@ fn validator_rejects_dyn_adapter_missing_or_wrong_layout_ref() {
 }
 
 #[test]
+fn validator_rejects_static_row_access_missing_or_wrong_layout_ref() {
+    let missing = CoreProgram {
+        ops: vec![CoreOp::StaticRowAccess {
+            field: "name".to_string(),
+            layout: "row::missing".to_string(),
+        }],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    assert_eq!(
+        validate_core(&missing).diagnostics,
+        vec![CoreDiagnostic::MissingStaticRowLayout {
+            layout: "row::missing".to_string()
+        }]
+    );
+
+    let wrong_kind = CoreProgram {
+        ops: vec![CoreOp::StaticRowAccess {
+            field: "name".to_string(),
+            layout: "dyn-row::user".to_string(),
+        }],
+        layouts: vec![LayoutFact {
+            key: "dyn-row::user".to_string(),
+            hash: 0,
+            kind: LayoutKind::DynRowPackage(chiba_level1r::template::dyn_row_contract(vec![(
+                "name",
+                ShapeType::Unknown,
+            )])),
+        }],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    assert!(
+        validate_core(&wrong_kind)
+            .diagnostics
+            .contains(&CoreDiagnostic::StaticRowLayoutKindMismatch {
+                layout: "dyn-row::user".to_string()
+            })
+    );
+}
+
+#[test]
 fn validator_rejects_env_closure_missing_or_empty_env_layout() {
     let missing = CoreProgram {
         ops: vec![],

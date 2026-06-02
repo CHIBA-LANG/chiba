@@ -92,6 +92,36 @@ fn dyn_row_adapter_access_refs_dyn_package_layout() {
     }));
 }
 
+#[test]
+fn field_obligation_enters_core_as_static_row_access() {
+    let mut template = TemplateFacts::default();
+    let shape = canonical_open_row(vec![("name", ShapeType::Unknown)]);
+    template.row_shapes.push(shape);
+    template.obligations.push(TemplateObligation::Field {
+        shape: canonical_open_row(vec![("name", ShapeType::Unknown)]),
+        field: "name".to_string(),
+    });
+    let specialize = plan_specialization("get_name", &template);
+    let cps = halt_unit();
+
+    let core = lower_core_with_facts(
+        &cps,
+        &[],
+        &ClosureFacts::default(),
+        &LambdaLiftFacts::default(),
+        &specialize,
+        &UsageFacts::default(),
+    );
+
+    assert!(core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::StaticRowAccess { field, layout }
+                if field == "name" && layout.starts_with("row::")
+        )
+    }));
+}
+
 fn halt_unit() -> CpsProgram {
     CpsProgram {
         term: CpsTerm::Halt(CpsAtom::Var("unit".to_string())),
