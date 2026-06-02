@@ -22,11 +22,14 @@ const REQUIRED_TEXT = [
   "GrammarTypeContN",
   "type PrattTable",
   "data RecoveryAction",
+  "data ChibaccTokenKind",
+  "type ChibaccParserState",
+  "def chibacc_lex",
+  "def chibacc_parse_file",
   "def chibacc_parse_namespace",
-  "def chibacc_parse_start_name",
-  "def chibacc_parse_rule_name",
-  "def chibacc_parse_balanced_action_source",
-  "def chibacc_action_end_balanced",
+  "def chibacc_capture_action_until",
+  "def chibacc_parse_pratt_blocks",
+  "def chibacc_parse_rule_def",
   "def lower_chibacc",
   "def retry_alternative",
   "def parse_pratt_at",
@@ -178,8 +181,8 @@ function main() {
   if (/def\s+parse_chibacc\s*\(/.test(codegenContract)) {
     fail("chibacc codegen contract fixture must not shadow std.chibacc.parser.parse_chibacc");
   }
-  if (!/parse_chibacc\s*\(\s*source_spec\s*\(\s*\)\s*\)/.test(codegenContract) || !codegenContract.includes("check_source_codegen_spec(spec)")) {
-    fail("chibacc codegen contract fixture must run source_spec through real parse_chibacc -> lower_chibacc -> generate_parser");
+  if (!/parse_chibacc\s*\(\s*source\s*\)/.test(codegenContract) || codegenContract.includes("parse_rule(source)") || !codegenContract.includes("simple_source_spec()") || !codegenContract.includes("pratt_source_spec()") || !codegenContract.includes("list_source_spec()")) {
+    fail("chibacc codegen contract fixture must run mini source specs through real parse_chibacc -> lower_chibacc -> generate_parser");
   }
   pass("chibacc codegen contract fixture");
 

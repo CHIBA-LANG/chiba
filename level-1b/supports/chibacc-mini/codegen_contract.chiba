@@ -72,7 +72,7 @@ def check_generated(generated: String): i64 = {
     else { 0 }
 }
 
-def source_spec(): String =
+def simple_source_spec(): String =
     r#"#![CHIBACC]
 {
     namespace chibaccmini.contract
@@ -84,6 +84,50 @@ rule source ::=
 {
     data AST {
         Assign(Str, Str),
+    }
+}
+"#
+
+def pratt_source_spec(): String =
+    r#"#![CHIBACC]
+{
+    namespace chibaccmini.pratt
+}
+start expr
+rule expr ::= pratt {
+    prefix (100) {
+        n:IntLit => Expr_Int(n) ;
+    }
+    infix(80, 81) {
+        Plus rhs:expr => Expr_Binary(OpAdd, $lhs, rhs) ;
+    }
+} ;
+{
+    data AST {
+        Expr_Int(Str),
+        Expr_Binary(AST, AST, AST),
+        OpAdd,
+    }
+}
+"#
+
+def list_source_spec(): String =
+    r#"#![CHIBACC]
+{
+    namespace chibaccmini.list
+}
+start names
+rule names ::=
+    head:Ident tail:names_tail => Name_Cons(head, tail)
+    ;
+rule names_tail ::=
+    Comma tail:names => tail
+    | => Name_End
+    ;
+{
+    data AST {
+        Name_Cons(Str, AST),
+        Name_End,
     }
 }
 "#
@@ -113,11 +157,46 @@ def check_source_codegen_lowered(lowered: LoweredParser): i64 =
 def check_source_codegen_spec(spec: ChibaccSpec): i64 =
     check_source_codegen_lowered(lower_chibacc(spec))
 
-def check_source_codegen(): i64 =
-    match parse_chibacc(source_spec()) {
-        Ok(spec) => check_source_codegen_spec(spec)
-        Err(_) => 30
+def check_generated_simple(generated: String): i64 =
+    if generated_contains(generated, "def parse_source_alt_0") == false { 40 }
+    else if generated_contains(generated, "Assign(name, value)") == false { 41 }
+    else { 0 }
+
+def check_generated_pratt(generated: String): i64 =
+    if generated_contains(generated, "/// pratt expr") == false { 46 }
+    else if generated_contains(generated, "def parse_expr_bp") == false { 42 }
+    else if generated_contains(generated, "Expr_Binary(OpAdd, lhs, rhs)") == false { 43 }
+    else { 0 }
+
+def check_generated_list(generated: String): i64 =
+    if generated_contains(generated, "def parse_names_tail_alt_1") == false { 44 }
+    else if generated_contains(generated, "Name_End") == false { 45 }
+    else { 0 }
+
+def check_generated_by_kind(generated: String, kind: usize): i64 =
+    if kind == 0 { check_generated_simple(generated) }
+    else if kind == 1 { check_generated_pratt(generated) }
+    else { check_generated_list(generated) }
+
+def check_source_codegen_with(source: String, kind: usize): i64 =
+    match parse_chibacc(source) {
+        Ok(spec) => {
+            let lowered = lower_chibacc(spec)
+            let generated = generated_parser_text(generate_parser(lowered))
+            check_generated_by_kind(generated, kind)
+        },
+        Err(_) => 30,
     }
+
+def check_source_codegen(): i64 = {
+    let simple = check_source_codegen_with(simple_source_spec(), 0)
+    if simple != 0 { simple }
+    else {
+        let pratt = check_source_codegen_with(pratt_source_spec(), 1)
+        if pratt != 0 { pratt }
+        else { check_source_codegen_with(list_source_spec(), 2) }
+    }
+}
 
 #[entry]
 def main(argc: i64, argv: i64): i64 = {
