@@ -24,6 +24,7 @@ use crate::pattern::{analyze_patterns, PatternFacts};
 use crate::resolve::{resolve_expr, resolve_expr_with_names, MethodIndex, NameIndex, ResolveFacts};
 use crate::specialize::{plan_specialization, SpecializationFacts};
 use crate::std_audit::{audit_std_dependencies, StdAuditReport};
+use crate::symbol::encode_debug_symbol;
 use crate::surface::{
     build_interface_summary, duplicate_constructor_names, duplicate_data_names, project_surface,
     InterfaceSummary, ProjectSurface,
@@ -445,15 +446,7 @@ fn def_symbol(name: &str, index: usize) -> String {
 }
 
 fn sanitize_program_symbol(name: &str) -> String {
-    name.chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect()
+    encode_debug_symbol(name)
 }
 
 impl CompileOutput {

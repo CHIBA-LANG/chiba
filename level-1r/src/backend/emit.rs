@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::core::{CoreOp, CoreProgram, CoreValidation, OwnershipDecision};
+use crate::symbol::encode_debug_symbol;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BackendArtifact {
@@ -326,16 +327,7 @@ fn escape_wat_comment(text: &str) -> String {
 }
 
 fn final_symbol(symbol: &str) -> String {
-    symbol
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect()
+    encode_debug_symbol(symbol)
 }
 
 pub fn link_backend_artifacts(mut artifacts: Vec<BackendArtifact>) -> BackendLinkedBundle {

@@ -1,4 +1,5 @@
 use crate::closure::{ClosureFacts, ClosureStorageKind};
+use crate::symbol::encode_debug_symbol_lower;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LambdaLiftFacts {
@@ -38,15 +39,6 @@ pub fn lift_lambdas(closures: &ClosureFacts) -> LambdaLiftFacts {
 }
 
 fn lifted_symbol(index: usize, source: &str) -> String {
-    let clean = source
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch.to_ascii_lowercase()
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
+    let clean = encode_debug_symbol_lower(source);
     format!("lift::{index:04}::{clean}")
 }

@@ -180,6 +180,51 @@ fn backend_link_rejects_duplicate_final_symbols() {
 }
 
 #[test]
+fn backend_utf8_final_symbols_are_encoded_without_collision() {
+    let first = emit_wasm_gc(
+        &CoreProgram {
+            ops: vec![CoreOp::DirectMethodTarget {
+                name: "函数α".to_string(),
+                target: "模块::函数α".to_string(),
+            }],
+            layouts: vec![],
+            ownership: vec![],
+            callable_storage: vec![],
+        },
+        &CoreValidation::default(),
+    );
+    let second = emit_wasm_gc(
+        &CoreProgram {
+            ops: vec![CoreOp::DirectMethodTarget {
+                name: "函数β".to_string(),
+                target: "模块::函数β".to_string(),
+            }],
+            layouts: vec![],
+            ownership: vec![],
+            callable_storage: vec![],
+        },
+        &CoreValidation::default(),
+    );
+
+    let bundle = link_backend_artifacts(vec![first, second]);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    let symbols = bundle
+        .manifest
+        .entries
+        .iter()
+        .map(|entry| entry.final_symbol.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        symbols,
+        vec![
+            "_u6A21__u5757____u51FD__u6570__u3B1_",
+            "_u6A21__u5757____u51FD__u6570__u3B2_",
+        ]
+    );
+}
+
+#[test]
 fn pipeline_records_backend_link_artifact() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
 

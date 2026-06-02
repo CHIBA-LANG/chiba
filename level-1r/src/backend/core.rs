@@ -3,6 +3,7 @@ use crate::cps::{CpsAtom, CpsProgram, CpsTerm};
 use crate::closure::{CaptureFact, ClosureFacts, ClosureStorageKind};
 use crate::lambda_lift::LambdaLiftFacts;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
+use crate::symbol::is_chiba_identifier;
 use crate::template::{DynRowContract, RowShape};
 use crate::typed::{SendColor, UsageColor};
 use crate::usage::UsageFacts;
@@ -540,10 +541,7 @@ fn is_dynamic_callable_value(func: &str) -> bool {
 }
 
 fn is_simple_callable_ident(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    is_chiba_identifier(value)
 }
 
 fn is_field_callable_value(value: &str) -> bool {

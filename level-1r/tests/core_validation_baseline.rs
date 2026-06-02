@@ -208,6 +208,28 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
         callable_storage: vec![],
     };
     assert_eq!(validate_core(&dynamic_operator).diagnostics, vec![]);
+
+    let utf8_dynamic = CoreProgram {
+        ops: vec![CoreOp::TailCall {
+            func: "模块.函数α".to_string(),
+            args: vec!["标量名".to_string()],
+        }],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+    assert_eq!(validate_core(&utf8_dynamic).diagnostics, vec![]);
+
+    let emoji_dynamic = CoreProgram {
+        ops: vec![CoreOp::TailCall {
+            func: "结果.🚀Ok".to_string(),
+            args: vec!["1".to_string()],
+        }],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+    assert_eq!(validate_core(&emoji_dynamic).diagnostics, vec![]);
 }
 
 #[test]

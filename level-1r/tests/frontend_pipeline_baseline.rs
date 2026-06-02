@@ -940,6 +940,56 @@ fn frontend_utf8_identifiers_and_ctors_are_not_ascii_case_guessed() {
 }
 
 #[test]
+fn frontend_accepts_greek_chinese_and_emoji_symbols() {
+    let output = compile_source_program_bundle(
+        "data 结果 = { 🚀Ok(i64), 失败 } def 函数α() = 结果.🚀Ok(1)",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert!(output
+        .frontend
+        .tokens
+        .iter()
+        .any(|token| token.name == "Ident" && token.lexeme == "函数α"));
+    assert!(output
+        .frontend
+        .tokens
+        .iter()
+        .any(|token| token.name == "Ident" && token.lexeme == "🚀Ok"));
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { name, body, .. } => {
+            assert_eq!(name, "函数α");
+            assert_eq!(
+                body,
+                &Expr::adt_ctor(
+                    "结果",
+                    "🚀Ok",
+                    vec!["🚀Ok", "失败"],
+                    vec![Expr::i64(1)]
+                )
+            );
+        }
+    }
+
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::AdtConstruct {
+                data,
+                ctor,
+                variants,
+                args
+            } if data == "结果"
+                && ctor == "🚀Ok"
+                && variants == &vec!["失败".to_string(), "🚀Ok".to_string()]
+                && args == &vec!["1".to_string()]
+        )
+    }));
+}
+
+#[test]
 fn frontend_parses_qualified_constructor_patterns() {
     let output = compile_source_program_bundle(
         "data Option[T] = { Some(T), None } def main() = match Option.Some(1) { Option.Some(value) => value, Option.None => 0 }",

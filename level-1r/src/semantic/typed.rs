@@ -1,4 +1,5 @@
 use crate::ast::{BinaryOp, Expr, Literal, Pattern};
+use crate::symbol::encode_debug_symbol;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypedExpr {
@@ -505,15 +506,7 @@ fn type_stable_name(ty: &Type) -> String {
 }
 
 fn sanitize_type_name(name: &str) -> String {
-    name.chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect()
+    encode_debug_symbol(name)
 }
 
 fn canonical_variants(variants: &[String]) -> Vec<String> {

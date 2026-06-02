@@ -1,3 +1,5 @@
+use crate::symbol::{is_chiba_identifier_continue, is_chiba_identifier_start};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RegexAst {
     Empty,
@@ -328,21 +330,8 @@ impl ClassAtom {
         match self {
             ClassAtom::Char(expected) => *expected == ch,
             ClassAtom::Range(start, end) => *start <= ch && ch <= *end,
-            ClassAtom::XidStart => ch == '_' || ch.is_alphabetic(),
-            ClassAtom::XidContinue => {
-                ch == '_' || ch.is_alphanumeric() || is_unicode_mark(ch)
-            }
+            ClassAtom::XidStart => is_chiba_identifier_start(ch),
+            ClassAtom::XidContinue => is_chiba_identifier_continue(ch),
         }
     }
-}
-
-fn is_unicode_mark(ch: char) -> bool {
-    matches!(
-        ch as u32,
-        0x0300..=0x036F
-            | 0x1AB0..=0x1AFF
-            | 0x1DC0..=0x1DFF
-            | 0x20D0..=0x20FF
-            | 0xFE20..=0xFE2F
-    )
 }

@@ -41,6 +41,8 @@ pub mod resolve;
 pub mod specialize;
 #[path = "tooling/std_audit.rs"]
 pub mod std_audit;
+#[path = "tooling/symbol.rs"]
+pub mod symbol;
 #[path = "frontend/surface.rs"]
 pub mod surface;
 #[path = "semantic/template.rs"]
