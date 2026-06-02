@@ -1,6 +1,6 @@
 use crate::control::{ContinuationFact, ContinuationKind};
 use crate::cps::{CpsAtom, CpsProgram, CpsTerm};
-use crate::specialize::SpecializationFacts;
+use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{DynRowContract, RowShape};
 use crate::typed::{SendColor, UsageColor};
 use crate::usage::UsageFacts;
@@ -25,6 +25,18 @@ pub enum CoreOp {
     CaptureContinuation {
         binder: String,
         kind: ContinuationKind,
+    },
+    DirectMethodTarget {
+        name: String,
+        target: String,
+    },
+    OperatorTarget {
+        protocol: String,
+        target: String,
+    },
+    DynRowAdapterAccess {
+        subject: String,
+        layout: String,
     },
 }
 
@@ -98,6 +110,7 @@ pub fn lower_core_with_facts(
     lower_term(&cps.term, continuations, &mut ops);
     let layouts = lower_layouts(continuations, specialize);
     let ownership = lower_ownership(continuations, specialize, usage);
+    lower_specialization_ops(specialize, &layouts, &mut ops);
     CoreProgram {
         ops,
         layouts,
@@ -149,6 +162,49 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                 kind,
             });
             lower_term(body, continuations, ops);
+        }
+    }
+}
+
+fn lower_specialization_ops(
+    specialize: &SpecializationFacts,
+    layouts: &[LayoutFact],
+    ops: &mut Vec<CoreOp>,
+) {
+    for item in &specialize.work_items {
+        for obligation in &item.obligations {
+            match obligation {
+                DischargedObligation::Method {
+                    name,
+                    target: Some(target),
+                } => ops.push(CoreOp::DirectMethodTarget {
+                    name: name.clone(),
+                    target: target.clone(),
+                }),
+                DischargedObligation::Operator {
+                    protocol,
+                    receiver: Some(receiver),
+                } => ops.push(CoreOp::OperatorTarget {
+                    protocol: protocol.clone(),
+                    target: format!("{receiver}.{protocol}"),
+                }),
+                DischargedObligation::DynAdapter { contract } => {
+                    let layout = layouts
+                        .iter()
+                        .find(|layout| {
+                            matches!(&layout.kind, LayoutKind::DynRowPackage(candidate) if candidate == contract)
+                        })
+                        .map(|layout| layout.key.clone())
+                        .unwrap_or_else(|| format!("dyn-row::{contract:?}"));
+                    ops.push(CoreOp::DynRowAdapterAccess {
+                        subject: format!("{:?}", contract.shape),
+                        layout,
+                    });
+                }
+                DischargedObligation::Field { .. }
+                | DischargedObligation::Method { target: None, .. }
+                | DischargedObligation::Operator { receiver: None, .. } => {}
+            }
         }
     }
 }
