@@ -221,6 +221,11 @@
 	- PCRE2/Perl 兼容目标保留为 std.regex 后续阶段：单独建 feature matrix、oracle corpus、VM bytecode/backtracking stack/capture rollback 设计后再做。
 - [ ] level-1b 最小可执行链必须先复刻 level0 的正确流程，而不是继续扩大 contract gates：
 	- `AST -> one-pass CPS + beta`：meta-level continuation `(Val) => CpsExpr`，atom 直接调用 `k(atom)`，只在 call / switch / reset / shift 处物化 IR continuation。
+	- **level0 参考已存在**：`level0/src/backend/cir/lower.chiba` 已经是 one-pass CPS + administrative beta-reduction 形态，核心签名是 `lower_expr(expr, k: (Val) => CpsExpr, ...)`；atom 直接 `k(atom)`，函数调用/分支/reset/shift 才物化目标 IR continuation。
+	- **level-1r 参考已存在**：`level-1r/src/cps.rs` 已用 Rust `FnOnce(CpsAtom, &mut CpsCtx) -> CpsTerm` 表达 meta-level continuation，覆盖 lambda/call/if/match/tuple/record/reset/shift 的 baseline。
+	- **level-1b 当前未完成**：`level-1b/compiler/control/cps.chiba` 现在主要把窄 `TypedExprKind` fact 转成 `CpsTermKind`，没有对完整 typed AST 做 `T[expr](k)` 式一趟 traversal；复杂 call argument、branch join body、reset/shift/shiftn body、closure/continuation capture 仍不是完整 primary lowering。
+	- **必须补的实现**：给 level-1b 引入真实 CPS builder/context 与 meta-continuation lowering，覆盖 atom、lambda/closure、ordinary call、method/operator call、tuple/record/ADT ctor、field/index、if/else、if-let、match、short-circuit、reset、shift、shiftn；除 `ContN` frame materialization 外，所有 ordinary path 必须输出 tail-form CPS。
+	- **验收形状**：同一个 source AST 需能 dump typed -> CPS -> closure -> Core，且 `f(x)` 这种普通调用不能出现行政级 `let-cont/app-cont` 链；`if/match` 必须物化共享 join continuation 或 tail join，不能只保留 surface fact。
 	- `CPS -> BIR/Core blocks`：continuation block / function return / frame-chain lower 到显式 block terminator，`ContN` 先 emit stackless resume frame，再 emit frame-chain，再 emit repeatable package。
 	- 这一路只能借鉴 `level0/src/backend/cir/lower.chiba`、`level0/src/backend/bir/lower.chiba` 的流程；不能把 level0 的 numeric bool、旧 branching bug、旧 scanner 语义搬进 level-1b。
 - [ ] branching 分析必须作为本轮 primary lowering 的硬门槛：
