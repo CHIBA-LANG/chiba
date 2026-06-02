@@ -2,13 +2,36 @@ use std::collections::BTreeMap;
 
 use crate::alpha::{AlphaExpr, AlphaExprKind};
 use crate::ast::BinaryOp;
+use crate::surface::InterfaceSummary;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ResolveFacts {
     pub methods: MethodIndex,
+    pub names: NameIndex,
+    pub resolved_names: Vec<ResolvedName>,
     pub resolved_calls: Vec<ResolvedCall>,
     pub operator_obligations: Vec<OperatorObligation>,
     pub diagnostics: Vec<ResolveDiagnostic>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NameIndex {
+    functions: BTreeMap<String, Vec<NameCandidate>>,
+    constructors: BTreeMap<(String, String), Vec<ConstructorCandidate>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NameCandidate {
+    pub name: String,
+    pub symbol: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConstructorCandidate {
+    pub data: String,
+    pub ctor: String,
+    pub symbol: String,
+    pub arity: usize,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -41,6 +64,20 @@ pub enum ResolvedCall {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResolvedName {
+    Function {
+        name: String,
+        symbol: String,
+    },
+    Constructor {
+        data: String,
+        ctor: String,
+        symbol: String,
+        arity: usize,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OperatorObligation {
     pub op: BinaryOp,
     pub protocol: String,
@@ -58,6 +95,25 @@ pub enum ResolveDiagnostic {
         receiver: Option<String>,
         name: String,
     },
+    AmbiguousName {
+        name: String,
+        candidates: Vec<String>,
+    },
+    AmbiguousConstructor {
+        data: String,
+        ctor: String,
+        candidates: Vec<String>,
+    },
+    MissingConstructor {
+        data: String,
+        ctor: String,
+    },
+    ConstructorArityMismatch {
+        data: String,
+        ctor: String,
+        expected: usize,
+        actual: usize,
+    },
 }
 
 pub fn resolve_expr(expr: &AlphaExpr, methods: MethodIndex) -> ResolveFacts {
@@ -67,6 +123,78 @@ pub fn resolve_expr(expr: &AlphaExpr, methods: MethodIndex) -> ResolveFacts {
     };
     visit(expr, &mut facts);
     facts
+}
+
+pub fn resolve_expr_with_names(
+    expr: &AlphaExpr,
+    methods: MethodIndex,
+    names: NameIndex,
+) -> ResolveFacts {
+    let mut facts = ResolveFacts {
+        methods,
+        names,
+        ..ResolveFacts::default()
+    };
+    visit(expr, &mut facts);
+    facts
+}
+
+impl NameIndex {
+    pub fn from_interface(interface: &InterfaceSummary) -> Self {
+        let mut index = Self::default();
+        for function in &interface.functions {
+            if let Some(name) = function.symbol.rsplit("::").next() {
+                index.add_function(name, &function.symbol);
+            }
+        }
+        for ctor in &interface.constructors {
+            if let Some((data, ctor_name)) = data_ctor_from_symbol(&ctor.symbol) {
+                index.add_constructor(data, ctor_name, &ctor.symbol, ctor.arity);
+            }
+        }
+        index
+    }
+
+    pub fn add_function(&mut self, name: impl Into<String>, symbol: impl Into<String>) {
+        let name = name.into();
+        let symbol = symbol.into();
+        self.functions
+            .entry(name.clone())
+            .or_default()
+            .push(NameCandidate { name, symbol });
+    }
+
+    pub fn add_constructor(
+        &mut self,
+        data: impl Into<String>,
+        ctor: impl Into<String>,
+        symbol: impl Into<String>,
+        arity: usize,
+    ) {
+        let data = data.into();
+        let ctor = ctor.into();
+        let symbol = symbol.into();
+        self.constructors
+            .entry((data.clone(), ctor.clone()))
+            .or_default()
+            .push(ConstructorCandidate {
+                data,
+                ctor,
+                symbol,
+                arity,
+            });
+    }
+
+    fn find_function(&self, name: &str) -> &[NameCandidate] {
+        self.functions.get(name).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    fn find_constructor(&self, data: &str, ctor: &str) -> &[ConstructorCandidate] {
+        self.constructors
+            .get(&(data.to_string(), ctor.to_string()))
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
 }
 
 impl MethodIndex {
@@ -104,7 +232,12 @@ impl MethodIndex {
 
 fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
     match &expr.kind {
-        AlphaExprKind::Var(_) | AlphaExprKind::Lit(_) => {}
+        AlphaExprKind::Var(var) => {
+            if var.target.is_none() {
+                resolve_var_name(&var.name, facts);
+            }
+        }
+        AlphaExprKind::Lit(_) => {}
         AlphaExprKind::Lambda { body, .. } => visit(body, facts),
         AlphaExprKind::Call { callee, arg } => {
             visit(callee, facts);
@@ -126,7 +259,13 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
                 visit(&field.value, facts);
             }
         }
-        AlphaExprKind::AdtCtor { args, .. } => {
+        AlphaExprKind::AdtCtor {
+            data,
+            ctor,
+            args,
+            ..
+        } => {
+            resolve_constructor_name(data, ctor, args.len(), facts);
             for arg in args {
                 visit(arg, facts);
             }
@@ -178,6 +317,54 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
         }
         AlphaExprKind::Nominal { expr, .. } => visit(expr, facts),
         AlphaExprKind::Reset { body, .. } | AlphaExprKind::Shift { body, .. } => visit(body, facts),
+    }
+}
+
+fn resolve_var_name(name: &str, facts: &mut ResolveFacts) {
+    let candidates = facts.names.find_function(name).to_vec();
+    match candidates.as_slice() {
+        [] => {}
+        [candidate] => facts.resolved_names.push(ResolvedName::Function {
+            name: name.to_string(),
+            symbol: candidate.symbol.clone(),
+        }),
+        many => facts.diagnostics.push(ResolveDiagnostic::AmbiguousName {
+            name: name.to_string(),
+            candidates: many.iter().map(|candidate| candidate.symbol.clone()).collect(),
+        }),
+    }
+}
+
+fn resolve_constructor_name(data: &str, ctor: &str, arity: usize, facts: &mut ResolveFacts) {
+    let candidates = facts.names.find_constructor(data, ctor).to_vec();
+    match candidates.as_slice() {
+        [] => {
+            if !facts.names.constructors.is_empty() {
+                facts.diagnostics.push(ResolveDiagnostic::MissingConstructor {
+                    data: data.to_string(),
+                    ctor: ctor.to_string(),
+                });
+            }
+        }
+        [candidate] if candidate.arity == arity => {
+            facts.resolved_names.push(ResolvedName::Constructor {
+                data: data.to_string(),
+                ctor: ctor.to_string(),
+                symbol: candidate.symbol.clone(),
+                arity: candidate.arity,
+            });
+        }
+        [candidate] => facts.diagnostics.push(ResolveDiagnostic::ConstructorArityMismatch {
+            data: data.to_string(),
+            ctor: ctor.to_string(),
+            expected: candidate.arity,
+            actual: arity,
+        }),
+        many => facts.diagnostics.push(ResolveDiagnostic::AmbiguousConstructor {
+            data: data.to_string(),
+            ctor: ctor.to_string(),
+            candidates: many.iter().map(|candidate| candidate.symbol.clone()).collect(),
+        }),
     }
 }
 
@@ -255,4 +442,9 @@ fn operator_protocol(op: &BinaryOp) -> String {
         BinaryOp::Div => "op_div",
     }
     .to_string()
+}
+
+fn data_ctor_from_symbol(symbol: &str) -> Option<(&str, &str)> {
+    let (_, tail) = symbol.rsplit_once("::")?;
+    tail.split_once('.')
 }

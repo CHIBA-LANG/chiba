@@ -37,7 +37,7 @@ pub use pipeline::{
     compile_expr, compile_program, compile_program_bundle, compile_source_program_bundle,
     CompileOutput, ProgramCompileOutput, ProgramDefOutput, ProgramDiagnostic, SourceCompileOutput,
 };
-pub use resolve::{resolve_expr, MethodIndex, ResolveFacts};
+pub use resolve::{resolve_expr, resolve_expr_with_names, MethodIndex, NameIndex, ResolveFacts};
 pub use specialize::{plan_specialization, SpecializationFacts};
 pub use surface::{
     build_interface_summary, project_surface, InterfaceSummary, ProjectSurface, SurfaceConstructor,

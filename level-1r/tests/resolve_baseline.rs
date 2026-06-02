@@ -1,9 +1,13 @@
 use chiba_level1r::alpha::alpha_expr;
 use chiba_level1r::ast::BinaryOp;
 use chiba_level1r::resolve::{
-    resolve_expr, MethodCandidate, MethodIndex, ResolveDiagnostic, ResolvedCall,
+    resolve_expr, resolve_expr_with_names, MethodCandidate, MethodIndex, NameIndex,
+    ResolveDiagnostic, ResolvedCall, ResolvedName,
 };
-use chiba_level1r::{compile_expr, Expr};
+use chiba_level1r::{
+    build_interface_summary, compile_expr, project_surface, DataDecl, DataVariant, Expr,
+    NamespaceDecl, SourceItem, SourceProgram,
+};
 
 #[test]
 fn nominal_receiver_method_resolves_to_receiver_method_symbol() {
@@ -69,6 +73,141 @@ fn duplicate_nominal_method_candidates_are_ambiguous_not_order_dependent() {
             candidates: vec!["math.Vec2.show".to_string(), "debug.Vec2.show".to_string()],
         }]
     );
+}
+
+#[test]
+fn interface_summary_resolves_global_function_owner_symbol() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            name: "helper".to_string(),
+            params: Vec::new(),
+            body: Expr::i64(1),
+        }],
+    );
+    let interface = build_interface_summary(&project_surface(&program));
+    let alpha = alpha_expr(&Expr::var("helper"));
+
+    let facts = resolve_expr_with_names(
+        &alpha.expr,
+        MethodIndex::default(),
+        NameIndex::from_interface(&interface),
+    );
+
+    assert_eq!(facts.diagnostics, vec![]);
+    assert_eq!(
+        facts.resolved_names,
+        vec![ResolvedName::Function {
+            name: "helper".to_string(),
+            symbol: "parser::helper".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn interface_summary_resolves_qualified_constructor_owner_symbol_and_arity() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            vec!["T".to_string()],
+            vec![
+                DataVariant::new("Some", vec!["T".to_string()]),
+                DataVariant::new("None", Vec::new()),
+            ],
+        )],
+        Vec::new(),
+    );
+    let interface = build_interface_summary(&project_surface(&program));
+    let alpha = alpha_expr(&Expr::adt_ctor(
+        "Option",
+        "Some",
+        vec!["Some", "None"],
+        vec![Expr::i64(1)],
+    ));
+
+    let facts = resolve_expr_with_names(
+        &alpha.expr,
+        MethodIndex::default(),
+        NameIndex::from_interface(&interface),
+    );
+
+    assert_eq!(facts.diagnostics, vec![]);
+    assert_eq!(
+        facts.resolved_names,
+        vec![ResolvedName::Constructor {
+            data: "Option".to_string(),
+            ctor: "Some".to_string(),
+            symbol: "parser::Option.Some".to_string(),
+            arity: 1,
+        }]
+    );
+}
+
+#[test]
+fn interface_summary_does_not_resolve_local_binder_as_global_function() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            name: "x".to_string(),
+            params: Vec::new(),
+            body: Expr::i64(1),
+        }],
+    );
+    let interface = build_interface_summary(&project_surface(&program));
+    let alpha = alpha_expr(&Expr::lambda("x", Expr::var("x")));
+
+    let facts = resolve_expr_with_names(
+        &alpha.expr,
+        MethodIndex::default(),
+        NameIndex::from_interface(&interface),
+    );
+
+    assert_eq!(facts.resolved_names, vec![]);
+    assert_eq!(facts.diagnostics, vec![]);
+}
+
+#[test]
+fn interface_summary_reports_constructor_arity_mismatch() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            Vec::new(),
+            vec![DataVariant::new("Some", vec!["I64".to_string()])],
+        )],
+        Vec::new(),
+    );
+    let interface = build_interface_summary(&project_surface(&program));
+    let alpha = alpha_expr(&Expr::adt_ctor(
+        "Option",
+        "Some",
+        vec!["Some"],
+        Vec::<Expr>::new(),
+    ));
+
+    let facts = resolve_expr_with_names(
+        &alpha.expr,
+        MethodIndex::default(),
+        NameIndex::from_interface(&interface),
+    );
+
+    assert_eq!(
+        facts.diagnostics,
+        vec![ResolveDiagnostic::ConstructorArityMismatch {
+            data: "Option".to_string(),
+            ctor: "Some".to_string(),
+            expected: 1,
+            actual: 0,
+        }]
+    );
+    assert_eq!(facts.resolved_names, vec![]);
 }
 
 #[test]
