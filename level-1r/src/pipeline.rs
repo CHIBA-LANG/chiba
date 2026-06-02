@@ -74,7 +74,14 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         lift_lambdas(&closure)
     });
     let core = passes.record("L13Core", "CpsProgram", "CoreProgram", || {
-        lower_core_with_facts(&cps, &control.continuations, &closure, &specialize, &usage)
+        lower_core_with_facts(
+            &cps,
+            &control.continuations,
+            &closure,
+            &lambda_lift,
+            &specialize,
+            &usage,
+        )
     });
     let core_validation = passes.record("L14CoreValidate", "CoreProgram", "CoreValidation", || {
         validate_core(&core)

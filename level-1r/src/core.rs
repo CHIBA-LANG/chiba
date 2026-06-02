@@ -1,6 +1,7 @@
 use crate::control::{ContinuationFact, ContinuationKind};
 use crate::cps::{CpsAtom, CpsProgram, CpsTerm};
 use crate::closure::{CaptureFact, ClosureFacts, ClosureStorageKind};
+use crate::lambda_lift::LambdaLiftFacts;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{DynRowContract, RowShape};
 use crate::typed::{SendColor, UsageColor};
@@ -39,6 +40,12 @@ pub enum CoreOp {
     DynRowAdapterAccess {
         subject: String,
         layout: String,
+    },
+    LiftedFunction {
+        source: String,
+        symbol: String,
+        env_params: Vec<String>,
+        direct: bool,
     },
 }
 
@@ -128,6 +135,11 @@ pub enum CoreDiagnostic {
     SendableCallableContainsContinuation { subject: String },
     SharedSendSubjectUsesRc { subject: String },
     DynPayloadMustUseDynPackage { subject: String },
+    DuplicateLiftedFunctionSymbol { symbol: String },
+    LiftedFunctionMissingClosureEnv {
+        source: String,
+        expected_layout: String,
+    },
 }
 
 pub fn lower_core(cps: &CpsProgram, continuations: &[ContinuationFact]) -> CoreProgram {
@@ -135,6 +147,7 @@ pub fn lower_core(cps: &CpsProgram, continuations: &[ContinuationFact]) -> CoreP
         cps,
         continuations,
         &ClosureFacts::default(),
+        &LambdaLiftFacts::default(),
         &SpecializationFacts::default(),
         &UsageFacts::default(),
     )
@@ -144,6 +157,7 @@ pub fn lower_core_with_facts(
     cps: &CpsProgram,
     continuations: &[ContinuationFact],
     closures: &ClosureFacts,
+    lambda_lift: &LambdaLiftFacts,
     specialize: &SpecializationFacts,
     usage: &UsageFacts,
 ) -> CoreProgram {
@@ -153,6 +167,7 @@ pub fn lower_core_with_facts(
     let ownership = lower_ownership(continuations, specialize, usage);
     let callable_storage = lower_callable_storage(continuations, closures);
     lower_specialization_ops(specialize, &layouts, &mut ops);
+    lower_lifted_functions(lambda_lift, &mut ops);
     CoreProgram {
         ops,
         layouts,
@@ -167,6 +182,7 @@ pub fn validate_core(program: &CoreProgram) -> CoreValidation {
     validate_layouts(program, &mut diagnostics);
     validate_continuation_packages(program, &mut diagnostics);
     validate_dyn_adapter_layouts(program, &mut diagnostics);
+    validate_lifted_functions(program, &mut diagnostics);
     validate_callable_storage(program, &mut diagnostics);
     validate_ownership(program, &mut diagnostics);
     CoreValidation { diagnostics }
@@ -254,6 +270,17 @@ fn lower_specialization_ops(
     }
 }
 
+fn lower_lifted_functions(lambda_lift: &LambdaLiftFacts, ops: &mut Vec<CoreOp>) {
+    for function in &lambda_lift.functions {
+        ops.push(CoreOp::LiftedFunction {
+            source: function.source.clone(),
+            symbol: function.symbol.clone(),
+            env_params: function.env_params.clone(),
+            direct: function.direct,
+        });
+    }
+}
+
 fn validate_target_neutral(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
     const FORBIDDEN: [&str; 5] = ["Wasm", "WAT", "Binaryen", "funcref", "eqref"];
     let rendered = format!("{program:#?}");
@@ -330,6 +357,41 @@ fn validate_dyn_adapter_layouts(program: &CoreProgram, diagnostics: &mut Vec<Cor
                 None => diagnostics.push(CoreDiagnostic::MissingDynRowLayout {
                     layout: layout.clone(),
                 }),
+            }
+        }
+    }
+}
+
+fn validate_lifted_functions(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    let mut symbols = Vec::new();
+    for op in &program.ops {
+        if let CoreOp::LiftedFunction {
+            source,
+            symbol,
+            env_params,
+            direct,
+        } = op
+        {
+            if symbols.contains(symbol) {
+                diagnostics.push(CoreDiagnostic::DuplicateLiftedFunctionSymbol {
+                    symbol: symbol.clone(),
+                });
+            } else {
+                symbols.push(symbol.clone());
+            }
+
+            if !direct && !env_params.is_empty() {
+                let expected_layout = format!("closure-env::{source}");
+                let has_env_layout = program.layouts.iter().any(|layout| {
+                    layout.key == expected_layout
+                        && matches!(&layout.kind, LayoutKind::ClosureEnv(_))
+                });
+                if !has_env_layout {
+                    diagnostics.push(CoreDiagnostic::LiftedFunctionMissingClosureEnv {
+                        source: source.clone(),
+                        expected_layout,
+                    });
+                }
             }
         }
     }

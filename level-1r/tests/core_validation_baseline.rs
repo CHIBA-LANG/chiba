@@ -230,3 +230,58 @@ fn validator_rejects_env_closure_missing_or_empty_env_layout() {
             })
     );
 }
+
+#[test]
+fn lifted_functions_enter_core_with_target_neutral_symbols() {
+    let output = compile_expr(&Expr::lambda(
+        "x",
+        Expr::lambda("y", Expr::call(Expr::var("x"), Expr::var("y"))),
+    ));
+
+    assert!(output.core.ops.contains(&CoreOp::LiftedFunction {
+        source: "closure::x".to_string(),
+        symbol: "lift::0000::closure__x".to_string(),
+        env_params: vec![],
+        direct: true,
+    }));
+    assert!(output.core.ops.contains(&CoreOp::LiftedFunction {
+        source: "closure::y".to_string(),
+        symbol: "lift::0001::closure__y".to_string(),
+        env_params: vec!["x".to_string()],
+        direct: false,
+    }));
+    assert_eq!(output.core_validation.diagnostics, vec![]);
+}
+
+#[test]
+fn validator_rejects_duplicate_lifted_symbol_and_missing_env_layout() {
+    let program = CoreProgram {
+        ops: vec![
+            CoreOp::LiftedFunction {
+                source: "closure::y".to_string(),
+                symbol: "lift::0001::closure__y".to_string(),
+                env_params: vec!["x".to_string()],
+                direct: false,
+            },
+            CoreOp::LiftedFunction {
+                source: "closure::z".to_string(),
+                symbol: "lift::0001::closure__y".to_string(),
+                env_params: vec![],
+                direct: true,
+            },
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let diagnostics = validate_core(&program).diagnostics;
+
+    assert!(diagnostics.contains(&CoreDiagnostic::LiftedFunctionMissingClosureEnv {
+        source: "closure::y".to_string(),
+        expected_layout: "closure-env::closure::y".to_string(),
+    }));
+    assert!(diagnostics.contains(&CoreDiagnostic::DuplicateLiftedFunctionSymbol {
+        symbol: "lift::0001::closure__y".to_string(),
+    }));
+}

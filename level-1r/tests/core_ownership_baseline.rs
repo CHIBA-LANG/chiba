@@ -2,6 +2,7 @@ use chiba_level1r::ast::BinaryOp;
 use chiba_level1r::closure::ClosureFacts;
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{lower_core_with_facts, LayoutKind, OwnershipDecision, OwnershipFact};
+use chiba_level1r::lambda_lift::LambdaLiftFacts;
 use chiba_level1r::template::{canonical_open_row, dyn_row_contract, ShapeType, TemplateFacts};
 use chiba_level1r::usage::UsageFacts;
 use chiba_level1r::{compile_expr, Expr};
@@ -48,6 +49,7 @@ fn dyn_row_contract_lowers_to_dyn_package_and_payload_decision() {
         &output.cps,
         &output.control.continuations,
         &ClosureFacts::default(),
+        &LambdaLiftFacts::default(),
         &facts,
         &UsageFacts::default(),
     );

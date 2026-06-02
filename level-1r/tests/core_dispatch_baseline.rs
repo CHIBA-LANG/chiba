@@ -1,6 +1,7 @@
 use chiba_level1r::core::{lower_core_with_facts, CoreOp};
 use chiba_level1r::cps::{CpsAtom, CpsProgram, CpsTerm};
 use chiba_level1r::closure::ClosureFacts;
+use chiba_level1r::lambda_lift::LambdaLiftFacts;
 use chiba_level1r::specialize::plan_specialization;
 use chiba_level1r::template::{
     canonical_open_row, dyn_row_contract, ShapeType, TemplateFacts, TemplateObligation,
@@ -22,6 +23,7 @@ fn discharged_method_target_enters_core_without_wasm_terms() {
         &cps,
         &[],
         &ClosureFacts::default(),
+        &LambdaLiftFacts::default(),
         &specialize,
         &UsageFacts::default(),
     );
@@ -48,6 +50,7 @@ fn operator_obligation_enters_core_as_method_protocol_target() {
         &cps,
         &[],
         &ClosureFacts::default(),
+        &LambdaLiftFacts::default(),
         &specialize,
         &UsageFacts::default(),
     );
@@ -73,6 +76,7 @@ fn dyn_row_adapter_access_refs_dyn_package_layout() {
         &cps,
         &[],
         &ClosureFacts::default(),
+        &LambdaLiftFacts::default(),
         &specialize,
         &UsageFacts::default(),
     );
