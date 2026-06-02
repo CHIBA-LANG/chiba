@@ -95,7 +95,9 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains(
         "L6TemplateAudit: TemplateFacts+SpecializationFacts+MonomorphizationPlan -> TemplateAuditReport"
     ));
-    assert!(visual.contains("L8PatternElab: TypedExpr -> PatternFacts"));
+    assert!(visual.contains(
+        "L8PatternElab: TypedExpr+ParamPatterns -> PatternFacts"
+    ));
     assert!(visual.contains("L11OnePassCps: TypedExpr -> CpsProgram"));
     assert!(visual.contains("L12CpsUsage: CpsProgram -> CpsUsageFacts"));
     assert!(visual.contains(

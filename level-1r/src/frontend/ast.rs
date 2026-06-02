@@ -46,6 +46,7 @@ pub enum Visibility {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParamDecl {
     pub name: String,
+    pub pattern: Pattern,
     pub ty: Option<String>,
 }
 
@@ -209,14 +210,21 @@ impl DataVariant {
 
 impl ParamDecl {
     pub fn new(name: impl Into<String>, ty: Option<String>) -> Self {
+        let name = name.into();
         Self {
-            name: name.into(),
+            pattern: Pattern::bind(name.clone()),
+            name,
             ty,
         }
     }
 
     pub fn untyped(name: impl Into<String>) -> Self {
         Self::new(name, None)
+    }
+
+    pub fn pattern(pattern: Pattern, ty: Option<String>) -> Self {
+        let name = pattern.primary_binding_name().unwrap_or("_").to_string();
+        Self { name, pattern, ty }
     }
 }
 
@@ -674,5 +682,37 @@ impl Pattern {
 
     pub fn lit_bool(value: bool) -> Self {
         Self::Lit(Literal::Bool(value))
+    }
+
+    pub fn primary_binding_name(&self) -> Option<&str> {
+        match self {
+            Pattern::Bind(name) | Pattern::At { name, .. } => Some(name.as_str()),
+            Pattern::Tuple(fields) => fields.iter().find_map(Pattern::primary_binding_name),
+            Pattern::Record(fields) => fields
+                .iter()
+                .find_map(|field| field.pattern.primary_binding_name()),
+            Pattern::Constructor { args, .. } => {
+                args.iter().find_map(Pattern::primary_binding_name)
+            }
+            Pattern::Wildcard | Pattern::Lit(_) => None,
+        }
+    }
+
+    pub fn bindings(&self) -> Vec<String> {
+        match self {
+            Pattern::Bind(name) => vec![name.clone()],
+            Pattern::Tuple(fields) => fields.iter().flat_map(Pattern::bindings).collect(),
+            Pattern::Record(fields) => fields
+                .iter()
+                .flat_map(|field| field.pattern.bindings())
+                .collect(),
+            Pattern::Constructor { args, .. } => args.iter().flat_map(Pattern::bindings).collect(),
+            Pattern::At { name, pattern } => {
+                let mut bindings = pattern.bindings();
+                bindings.push(name.clone());
+                bindings
+            }
+            Pattern::Wildcard | Pattern::Lit(_) => Vec::new(),
+        }
     }
 }

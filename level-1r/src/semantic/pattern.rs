@@ -1,4 +1,4 @@
-use crate::ast::{Literal, Pattern};
+use crate::ast::{Literal, ParamDecl, Pattern};
 use crate::typed::{TypedExpr, TypedExprKind, Type};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -42,6 +42,36 @@ pub fn analyze_patterns(expr: &TypedExpr) -> PatternFacts {
     let mut facts = PatternFacts::default();
     visit(expr, &mut facts);
     facts
+}
+
+pub fn analyze_patterns_with_params(expr: &TypedExpr, params: &[ParamDecl]) -> PatternFacts {
+    let mut facts = PatternFacts::default();
+    for param in params {
+        analyze_param_pattern(param, &mut facts);
+    }
+    visit(expr, &mut facts);
+    facts
+}
+
+pub fn analyze_param_patterns(params: &[ParamDecl]) -> PatternFacts {
+    let mut facts = PatternFacts::default();
+    for param in params {
+        analyze_param_pattern(param, &mut facts);
+    }
+    facts
+}
+
+fn analyze_param_pattern(param: &ParamDecl, facts: &mut PatternFacts) {
+    diagnose_duplicate_bindings(&param.pattern, facts);
+    diagnose_chained_at_patterns(&param.pattern, facts);
+    let bindings = pattern_bindings(&param.pattern);
+    if !bindings.is_empty() {
+        facts.envs.push(PatternEnvFact {
+            bindings,
+            success_branch_binds: true,
+            failure_branch_binds: false,
+        });
+    }
 }
 
 fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {

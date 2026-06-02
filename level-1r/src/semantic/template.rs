@@ -140,13 +140,15 @@ fn collect_auto_template_params(
     facts: &mut TemplateFacts,
 ) {
     for param in source_params.iter().filter(|param| param.ty.is_none()) {
-        push_template_param_once(
-            facts,
-            TemplateParam {
-                name: format!("T_{}", param.name),
-                source: TemplateParamSource::SyntheticAutoGeneric,
-            },
-        );
+        for binding in param.pattern.bindings() {
+            push_template_param_once(
+                facts,
+                TemplateParam {
+                    name: format!("T_{binding}"),
+                    source: TemplateParamSource::SyntheticAutoGeneric,
+                },
+            );
+        }
     }
 
     if return_type.is_none() && source_needs_auto_return_param(source, source_params) {
@@ -165,7 +167,7 @@ fn source_needs_auto_return_param(source: &Expr, source_params: &[ParamDecl]) ->
         Expr::Lit(_) => false,
         Expr::Var(name) => !source_params
             .iter()
-            .any(|param| param.name == *name && param.ty.is_none()),
+            .any(|param| param.ty.is_none() && param.pattern.bindings().contains(name)),
         Expr::Tuple(fields) => fields
             .iter()
             .any(|field| source_needs_auto_return_param(field, source_params)),

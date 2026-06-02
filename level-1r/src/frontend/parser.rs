@@ -407,7 +407,7 @@ impl FrontendParser {
             return Ok(args);
         }
         loop {
-            args.push(self.expect_type_name()?);
+            args.push(self.parse_type_name()?);
             if self.peek_name() != Some("Comma") {
                 break;
             }
@@ -492,14 +492,14 @@ impl FrontendParser {
             return Ok(params);
         }
         loop {
-            let name = self.expect_lexeme("Ident")?;
+            let pattern = self.parse_pattern()?;
             let ty = if self.peek_name() == Some("Colon") {
                 self.pos += 1;
                 Some(self.expect_type_name()?)
             } else {
                 None
             };
-            params.push(ParamDecl::new(name, ty));
+            params.push(ParamDecl::pattern(pattern, ty));
             if self.peek_name() != Some("Comma") {
                 break;
             }
@@ -1021,7 +1021,22 @@ impl FrontendParser {
         self.expect(name).map(|token| token.lexeme)
     }
 
+    fn parse_type_name(&mut self) -> Result<String, FrontendError> {
+        let mut name = self.expect_type_atom()?;
+        if self.peek_name() == Some("LBracket") {
+            let args = self.parse_type_args()?;
+            name.push('[');
+            name.push_str(&args.join(","));
+            name.push(']');
+        }
+        Ok(name)
+    }
+
     fn expect_type_name(&mut self) -> Result<String, FrontendError> {
+        self.parse_type_name()
+    }
+
+    fn expect_type_atom(&mut self) -> Result<String, FrontendError> {
         match self.peek_name() {
             Some("Ident") => self.expect_lexeme("Ident"),
             Some("KwReset") => self.expect_lexeme("KwReset"),

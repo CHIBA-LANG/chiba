@@ -487,6 +487,45 @@ fn frontend_supports_parameters_and_variables() {
 }
 
 #[test]
+fn frontend_parses_wildcard_parameter_as_pattern_not_binding() {
+    let parsed = parse_source_program("def ignore(_) = 1").expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { params, .. } => {
+            assert_eq!(
+                params,
+                &vec![ParamDecl::pattern(Pattern::wildcard(), None)]
+            );
+            assert_eq!(params[0].name, "_");
+        }
+        other => panic!("expected function def, got {other:?}"),
+    }
+}
+
+#[test]
+fn frontend_parses_constructor_parameter_pattern_with_whole_value_type() {
+    let parsed = parse_source_program(
+        "data Option[T] = { Some(T), None }
+def get(Some(x): Option[i64]) = x",
+    )
+    .expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { params, body, .. } => {
+            assert_eq!(
+                params,
+                &vec![ParamDecl::pattern(
+                    Pattern::ctor("Some", vec![Pattern::bind("x")]),
+                    Some("Option[i64]".to_string())
+                )]
+            );
+            assert_eq!(body, &Expr::var("x"));
+        }
+        other => panic!("expected function def, got {other:?}"),
+    }
+}
+
+#[test]
 fn frontend_parses_typed_global_value_def_surface() {
     let output = compile_source_program_bundle("def ANSWER: I64 = 42
 def main() = ANSWER")
@@ -1372,7 +1411,11 @@ def 计算🚀(输入β: i64) = match 结果🚀.🚀成功(标量Ω) { 结果�
         symbol: "root::结果🚀.🚀成功".to_string(),
         arity: 1,
     }));
-    assert_eq!(main.pattern.envs[0].bindings, vec!["绑定中文".to_string()]);
+    assert!(main
+        .pattern
+        .envs
+        .iter()
+        .any(|env| env.bindings == vec!["绑定中文".to_string()]));
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1429,7 +1472,13 @@ def 计算🚀(参数盒: 盒子🚀) = match 结果🚀.🚀成功(读取中文
     assert_eq!(output.program.interface.types[1].symbol, "root::盒子🚀");
     assert_eq!(output.program.interface.types[1].fields[0].name, "值中文");
     assert_eq!(
-        output.program.defs[0].output.typed_signature.params,
+        output.program.defs[0]
+            .output
+            .typed_signature
+            .params
+            .iter()
+            .map(|param| (param.name.clone(), param.ty.clone()))
+            .collect::<Vec<_>>(),
         vec![("输入β".to_string(), "盒子🚀".to_string())]
     );
     assert_eq!(
@@ -1444,7 +1493,11 @@ def 计算🚀(参数盒: 盒子🚀) = match 结果🚀.🚀成功(读取中文
         symbol: "root::结果🚀.🚀成功".to_string(),
         arity: 1,
     }));
-    assert_eq!(main.pattern.envs[0].bindings, vec!["绑定中文".to_string()]);
+    assert!(main
+        .pattern
+        .envs
+        .iter()
+        .any(|env| env.bindings == vec!["绑定中文".to_string()]));
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,

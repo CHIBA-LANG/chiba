@@ -1,7 +1,9 @@
 use chiba_level1r::ast::Pattern;
 use chiba_level1r::pattern::PatternDiagnostic;
 use chiba_level1r::typed::Type;
-use chiba_level1r::{compile_expr, Expr, Literal};
+use chiba_level1r::{
+    compile_expr, compile_source_program_bundle, Expr, Literal, TemplateParamSource,
+};
 
 #[test]
 fn bool_match_is_exhaustive_when_both_literals_are_covered() {
@@ -224,4 +226,47 @@ fn chained_at_pattern_is_rejected_but_nested_at_pattern_is_allowed() {
         nested.pattern.envs[0].bindings,
         vec!["v".to_string(), "inner".to_string()]
     );
+}
+
+#[test]
+fn function_parameter_pattern_records_entry_environment() {
+    let output = compile_source_program_bundle(
+        "data Option[T] = { Some(T), None }
+def get(Some(x): Option[i64]): i64 = x",
+    )
+    .expect("compile source");
+
+    let get = &output.program.defs[0].output;
+    assert_eq!(get.pattern.envs.len(), 1);
+    assert_eq!(get.pattern.envs[0].bindings, vec!["x".to_string()]);
+    assert_eq!(get.typed.ty, chiba_level1r::typed::Type::I64);
+    assert_eq!(get.pattern.diagnostics, vec![]);
+}
+
+#[test]
+fn function_parameter_pattern_reports_duplicate_binding() {
+    let output = compile_source_program_bundle("def bad((x, x)) = x").expect("compile source");
+
+    let bad = &output.program.defs[0].output;
+    assert_eq!(
+        bad.pattern.diagnostics,
+        vec![PatternDiagnostic::DuplicateBinding {
+            name: "x".to_string(),
+        }]
+    );
+    assert_eq!(
+        bad.pattern.envs[0].bindings,
+        vec!["x".to_string(), "x".to_string()]
+    );
+}
+
+#[test]
+fn wildcard_parameter_pattern_does_not_create_auto_generic_param() {
+    let output = compile_source_program_bundle("def ignore(_) = 1").expect("compile source");
+
+    let ignore = &output.program.defs[0].output;
+    assert_eq!(ignore.pattern.envs, vec![]);
+    assert!(!ignore.template.explicit_params.iter().any(|param| {
+        param.source == TemplateParamSource::SyntheticAutoGeneric && param.name == "T__"
+    }));
 }

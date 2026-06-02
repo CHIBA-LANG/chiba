@@ -372,7 +372,13 @@ fn typed_signature_resolves_type_alias_headers() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(
-        bundle.defs[0].output.typed_signature.params,
+        bundle.defs[0]
+            .output
+            .typed_signature
+            .params
+            .iter()
+            .map(|param| (param.name.clone(), param.ty.clone()))
+            .collect::<Vec<_>>(),
         vec![("value".to_string(), "i64".to_string())]
     );
     assert_eq!(
@@ -454,7 +460,13 @@ fn interface_summary_preserves_method_style_receiver_and_self_surface() {
         Some("Self".to_string())
     );
     assert_eq!(
-        bundle.defs[0].output.typed_signature.params,
+        bundle.defs[0]
+            .output
+            .typed_signature
+            .params
+            .iter()
+            .map(|param| (param.name.clone(), param.ty.clone()))
+            .collect::<Vec<_>>(),
         vec![
             ("self".to_string(), "Box[T]".to_string()),
             ("value".to_string(), "T".to_string()),
