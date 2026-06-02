@@ -198,6 +198,35 @@ fn frontend_parses_match_with_literal_and_wildcard_through_cps_core() {
 }
 
 #[test]
+fn frontend_parses_if_let_block_form_through_pattern_env_and_cps() {
+    let output = compile_source_program_bundle("def main() = if let value = maybe { value } else { 0 }")
+        .expect("compile source");
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::if_let(
+                    Pattern::bind("value"),
+                    Expr::var("maybe"),
+                    Expr::var("value"),
+                    Expr::i64(0),
+                )
+            );
+        }
+    }
+
+    let main = &output.program.defs[0].output;
+    assert_eq!(main.pattern.envs.len(), 1);
+    assert_eq!(main.pattern.envs[0].bindings, vec!["value".to_string()]);
+    assert_eq!(main.pattern.envs[0].success_branch_binds, true);
+    assert_eq!(main.pattern.envs[0].failure_branch_binds, false);
+    assert!(main.cps.to_string().contains("match maybe"));
+    assert!(main.cps.to_string().contains("value => join"));
+    assert!(main.cps.to_string().contains("_ => join"));
+}
+
+#[test]
 fn frontend_rejects_empty_call_argument() {
     let err = parse_source_program("def main() = f()").unwrap_err();
 

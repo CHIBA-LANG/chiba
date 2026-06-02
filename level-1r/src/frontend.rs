@@ -57,6 +57,11 @@ fn chiba_lexer_spec() -> LexerSpec {
                 skip: false,
             },
             LexerRule {
+                name: "KwLet".to_string(),
+                pattern: "let".to_string(),
+                skip: false,
+            },
+            LexerRule {
                 name: "KwThen".to_string(),
                 pattern: "then".to_string(),
                 skip: false,
@@ -225,12 +230,33 @@ impl FrontendParser {
 
     fn parse_if(&mut self) -> Result<Expr, FrontendError> {
         self.expect("KwIf")?;
+        if self.peek_name() == Some("KwLet") {
+            return self.parse_if_let_after_if();
+        }
         let cond = self.parse_expr_bp(0)?;
         self.expect("KwThen")?;
         let then_branch = self.parse_expr_bp(0)?;
         self.expect("KwElse")?;
         let else_branch = self.parse_expr_bp(0)?;
         Ok(Expr::if_else(cond, then_branch, else_branch))
+    }
+
+    fn parse_if_let_after_if(&mut self) -> Result<Expr, FrontendError> {
+        self.expect("KwLet")?;
+        let pattern = self.parse_pattern()?;
+        self.expect("Eq")?;
+        let scrutinee = self.parse_expr_bp(0)?;
+        let then_branch = self.parse_block_expr()?;
+        self.expect("KwElse")?;
+        let else_branch = self.parse_block_expr()?;
+        Ok(Expr::if_let(pattern, scrutinee, then_branch, else_branch))
+    }
+
+    fn parse_block_expr(&mut self) -> Result<Expr, FrontendError> {
+        self.expect("LBrace")?;
+        let expr = self.parse_expr_bp(0)?;
+        self.expect("RBrace")?;
+        Ok(expr)
     }
 
     fn parse_match(&mut self) -> Result<Expr, FrontendError> {
