@@ -177,6 +177,14 @@ pub enum Expr {
         name: String,
         args: Vec<Expr>,
     },
+    Index {
+        receiver: Box<Expr>,
+        index: Box<Expr>,
+    },
+    Range {
+        start: Box<Expr>,
+        end: Box<Expr>,
+    },
     Binary {
         op: BinaryOp,
         lhs: Box<Expr>,
@@ -351,6 +359,20 @@ impl Expr {
             receiver: Box::new(receiver),
             name: name.into(),
             args,
+        }
+    }
+
+    pub fn index(receiver: Expr, index: Expr) -> Self {
+        Self::Index {
+            receiver: Box::new(receiver),
+            index: Box::new(index),
+        }
+    }
+
+    pub fn range(start: Expr, end: Expr) -> Self {
+        Self::Range {
+            start: Box::new(start),
+            end: Box::new(end),
         }
     }
 

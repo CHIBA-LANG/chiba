@@ -79,6 +79,14 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
                 collect(arg, scope, facts);
             }
         }
+        TypedExprKind::Index { receiver, index } => {
+            collect(receiver, scope, facts);
+            collect(index, scope, facts);
+        }
+        TypedExprKind::Range { start, end } => {
+            collect(start, scope, facts);
+            collect(end, scope, facts);
+        }
         TypedExprKind::Binary { lhs, rhs, .. } => {
             collect(lhs, scope, facts);
             collect(rhs, scope, facts);
@@ -178,6 +186,14 @@ fn collect_alpha(expr: &AlphaExpr, scope: &mut BTreeSet<BinderId>, facts: &mut C
             for arg in args {
                 collect_alpha(arg, scope, facts);
             }
+        }
+        AlphaExprKind::Index { receiver, index } => {
+            collect_alpha(receiver, scope, facts);
+            collect_alpha(index, scope, facts);
+        }
+        AlphaExprKind::Range { start, end } => {
+            collect_alpha(start, scope, facts);
+            collect_alpha(end, scope, facts);
         }
         AlphaExprKind::Binary { lhs, rhs, .. } => {
             collect_alpha(lhs, scope, facts);
@@ -290,6 +306,14 @@ fn collect_alpha_free_vars(
                 collect_alpha_free_vars(arg, locals, free);
             }
         }
+        AlphaExprKind::Index { receiver, index } => {
+            collect_alpha_free_vars(receiver, locals, free);
+            collect_alpha_free_vars(index, locals, free);
+        }
+        AlphaExprKind::Range { start, end } => {
+            collect_alpha_free_vars(start, locals, free);
+            collect_alpha_free_vars(end, locals, free);
+        }
         AlphaExprKind::Binary { lhs, rhs, .. } => {
             collect_alpha_free_vars(lhs, locals, free);
             collect_alpha_free_vars(rhs, locals, free);
@@ -376,6 +400,14 @@ fn collect_free_vars(
             for arg in args {
                 collect_free_vars(arg, locals, free);
             }
+        }
+        TypedExprKind::Index { receiver, index } => {
+            collect_free_vars(receiver, locals, free);
+            collect_free_vars(index, locals, free);
+        }
+        TypedExprKind::Range { start, end } => {
+            collect_free_vars(start, locals, free);
+            collect_free_vars(end, locals, free);
         }
         TypedExprKind::Binary { lhs, rhs, .. } => {
             collect_free_vars(lhs, locals, free);

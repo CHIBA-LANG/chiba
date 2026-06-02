@@ -82,6 +82,14 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
                 visit(arg, facts);
             }
         }
+        TypedExprKind::Index { receiver, index } => {
+            visit(receiver, facts);
+            visit(index, facts);
+        }
+        TypedExprKind::Range { start, end } => {
+            visit(start, facts);
+            visit(end, facts);
+        }
         TypedExprKind::Binary { lhs, rhs, .. } => {
             visit(lhs, facts);
             visit(rhs, facts);

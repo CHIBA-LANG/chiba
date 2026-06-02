@@ -34,6 +34,10 @@ pub enum CpsAtom {
         record: Box<CpsAtom>,
         field: String,
     },
+    Range {
+        start: Box<CpsAtom>,
+        end: Box<CpsAtom>,
+    },
     RecordUpdate {
         base: Box<CpsAtom>,
         layout: String,
@@ -203,6 +207,64 @@ fn transform(
                     transform_call_args(args, 0, Vec::new(), func, k, controls, ctx)
                 }),
                 receiver_controls,
+                ctx,
+            )
+        }
+        TypedExprKind::Index { receiver, index } => {
+            let receiver_controls = controls.clone();
+            transform(
+                receiver,
+                Box::new(|receiver, ctx| {
+                    let index_controls = controls.clone();
+                    transform(
+                        index,
+                        Box::new(|index, ctx| {
+                            let protocol = if matches!(index, CpsAtom::Range { .. }) {
+                                "op_index_slice"
+                            } else {
+                                "op_index"
+                            };
+                            let w = ctx.fresh("w");
+                            let kont_body = k(CpsAtom::Var(w.clone()), ctx);
+                            CpsTerm::AppFun {
+                                func: CpsAtom::Var(format!("operator::{protocol}({receiver})")),
+                                args: vec![index],
+                                kont: CpsAtom::ContLambda {
+                                    param: w,
+                                    body: Box::new(kont_body),
+                                },
+                            }
+                        }),
+                        index_controls,
+                        ctx,
+                    )
+                }),
+                receiver_controls,
+                ctx,
+            )
+        }
+        TypedExprKind::Range { start, end } => {
+            let start_controls = controls.clone();
+            transform(
+                start,
+                Box::new(|start, ctx| {
+                    let end_controls = controls.clone();
+                    transform(
+                        end,
+                        Box::new(|end, ctx| {
+                            k(
+                                CpsAtom::Range {
+                                    start: Box::new(start),
+                                    end: Box::new(end),
+                                },
+                                ctx,
+                            )
+                        }),
+                        end_controls,
+                        ctx,
+                    )
+                }),
+                start_controls,
                 ctx,
             )
         }
@@ -702,6 +764,7 @@ impl fmt::Display for CpsAtom {
             }
             CpsAtom::TupleField { tuple, field } => write!(f, "{tuple}.{field}"),
             CpsAtom::RecordField { record, field } => write!(f, "{record}.{field}"),
+            CpsAtom::Range { start, end } => write!(f, "{start}..{end}"),
             CpsAtom::RecordUpdate {
                 base,
                 layout,

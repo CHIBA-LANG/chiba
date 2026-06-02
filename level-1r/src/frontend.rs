@@ -130,6 +130,7 @@ fn chiba_lexer_spec() -> LexerSpec {
             punct("FatArrow", "=>"),
             punct("Arrow", "->"),
             punct("PipeForward", "\\|>"),
+            punct("DotDot", "\\.\\."),
             punct("Dot", "\\."),
             punct("Colon", ":"),
             punct("Pipe", "\\|"),
@@ -366,6 +367,16 @@ impl FrontendParser {
                 lhs = desugar_pipe(lhs, rhs);
                 continue;
             }
+            if self.peek_name() == Some("DotDot") {
+                let (lbp, rbp) = (5, 6);
+                if lbp < min_bp {
+                    break;
+                }
+                self.pos += 1;
+                let rhs = self.parse_expr_bp(rbp)?;
+                lhs = Expr::range(lhs, rhs);
+                continue;
+            }
             let Some((op, lbp, rbp)) = self.peek_infix() else {
                 break;
             };
@@ -388,6 +399,12 @@ impl FrontendParser {
                     let args = self.parse_expr_args()?;
                     self.expect("RParen")?;
                     expr = Expr::call_args(expr, args);
+                }
+                Some("LBracket") => {
+                    self.pos += 1;
+                    let index = self.parse_expr_bp(0)?;
+                    self.expect("RBracket")?;
+                    expr = Expr::index(expr, index);
                 }
                 Some("Dot") => {
                     self.pos += 1;
@@ -476,6 +493,7 @@ impl FrontendParser {
                 Ok(first)
             }
             Some("LBrace") => self.parse_record_or_update(),
+            Some("LBracket") => self.parse_slice_literal(),
             Some(found) => {
                 let token = self.tokens[self.pos].clone();
                 Err(FrontendError::UnexpectedToken {
@@ -493,6 +511,7 @@ impl FrontendParser {
                         "Ident".to_string(),
                         "LParen".to_string(),
                         "LBrace".to_string(),
+                        "LBracket".to_string(),
                     ],
                 })
             }
@@ -500,6 +519,27 @@ impl FrontendParser {
                 expected: vec!["expr".to_string()],
             }),
         }
+    }
+
+    fn parse_slice_literal(&mut self) -> Result<Expr, FrontendError> {
+        self.expect("LBracket")?;
+        let mut fields = Vec::new();
+        if self.peek_name() == Some("RBracket") {
+            self.pos += 1;
+            return Ok(Expr::call_args(Expr::var("slice"), fields));
+        }
+        loop {
+            fields.push(self.parse_expr_bp(0)?);
+            if self.peek_name() != Some("Comma") {
+                break;
+            }
+            self.pos += 1;
+            if self.peek_name() == Some("RBracket") {
+                break;
+            }
+        }
+        self.expect("RBracket")?;
+        Ok(Expr::call_args(Expr::var("slice"), fields))
     }
 
     fn is_lambda_start(&self) -> bool {
@@ -937,6 +977,16 @@ fn replace_pipe_placeholders(expr: Expr, input: &Expr) -> (Expr, bool) {
                 receiver_used || args_used,
             )
         }
+        Expr::Index { receiver, index } => {
+            let (receiver, receiver_used) = replace_pipe_placeholders(*receiver, input);
+            let (index, index_used) = replace_pipe_placeholders(*index, input);
+            (Expr::index(receiver, index), receiver_used || index_used)
+        }
+        Expr::Range { start, end } => {
+            let (start, start_used) = replace_pipe_placeholders(*start, input);
+            let (end, end_used) = replace_pipe_placeholders(*end, input);
+            (Expr::range(start, end), start_used || end_used)
+        }
         Expr::Binary { op, lhs, rhs } => {
             let (lhs, lhs_used) = replace_pipe_placeholders(*lhs, input);
             let (rhs, rhs_used) = replace_pipe_placeholders(*rhs, input);
@@ -1130,6 +1180,14 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
             args.into_iter()
                 .map(|arg| enrich_expr_with_data_variants(arg, variants))
                 .collect(),
+        ),
+        Expr::Index { receiver, index } => Expr::index(
+            enrich_expr_with_data_variants(*receiver, variants),
+            enrich_expr_with_data_variants(*index, variants),
+        ),
+        Expr::Range { start, end } => Expr::range(
+            enrich_expr_with_data_variants(*start, variants),
+            enrich_expr_with_data_variants(*end, variants),
         ),
         Expr::Binary { op, lhs, rhs } => Expr::binary(
             op,

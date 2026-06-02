@@ -48,7 +48,7 @@ fn operator_resolve_fact_enters_template_obligations() {
         .template
         .obligations
         .contains(&TemplateObligation::Operator {
-            op: BinaryOp::Add,
+            op: chiba_level1r::resolve::OperatorSurface::Binary(BinaryOp::Add),
             protocol: "op_add".to_string(),
             receiver: Some("Vec2".to_string()),
         }));

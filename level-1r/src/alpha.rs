@@ -50,6 +50,14 @@ pub enum AlphaExprKind {
         name: String,
         args: Vec<AlphaExpr>,
     },
+    Index {
+        receiver: Box<AlphaExpr>,
+        index: Box<AlphaExpr>,
+    },
+    Range {
+        start: Box<AlphaExpr>,
+        end: Box<AlphaExpr>,
+    },
     Binary {
         op: BinaryOp,
         lhs: Box<AlphaExpr>,
@@ -259,6 +267,18 @@ impl AlphaCtx {
                     receiver: Box::new(self.alpha(receiver)),
                     name: name.clone(),
                     args: args.iter().map(|arg| self.alpha(arg)).collect(),
+                },
+            },
+            Expr::Index { receiver, index } => AlphaExpr {
+                kind: AlphaExprKind::Index {
+                    receiver: Box::new(self.alpha(receiver)),
+                    index: Box::new(self.alpha(index)),
+                },
+            },
+            Expr::Range { start, end } => AlphaExpr {
+                kind: AlphaExprKind::Range {
+                    start: Box::new(self.alpha(start)),
+                    end: Box::new(self.alpha(end)),
                 },
             },
             Expr::Binary { op, lhs, rhs } => AlphaExpr {

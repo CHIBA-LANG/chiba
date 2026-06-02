@@ -47,6 +47,14 @@ pub enum TypedExprKind {
         name: String,
         args: Vec<TypedExpr>,
     },
+    Index {
+        receiver: Box<TypedExpr>,
+        index: Box<TypedExpr>,
+    },
+    Range {
+        start: Box<TypedExpr>,
+        end: Box<TypedExpr>,
+    },
     Binary {
         op: BinaryOp,
         lhs: Box<TypedExpr>,
@@ -251,6 +259,28 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
                     args,
                 },
                 Type::Unknown,
+            )
+        }
+        Expr::Index { receiver, index } => {
+            let receiver = type_expr(receiver);
+            let index = type_expr(index);
+            typed(
+                TypedExprKind::Index {
+                    receiver: Box::new(receiver),
+                    index: Box::new(index),
+                },
+                Type::Unknown,
+            )
+        }
+        Expr::Range { start, end } => {
+            let start = type_expr(start);
+            let end = type_expr(end);
+            typed(
+                TypedExprKind::Range {
+                    start: Box::new(start),
+                    end: Box::new(end),
+                },
+                Type::Nominal("Range".to_string()),
             )
         }
         Expr::Binary { op, lhs, rhs } => {

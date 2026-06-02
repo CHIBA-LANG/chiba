@@ -80,9 +80,16 @@ pub enum ResolvedName {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OperatorObligation {
-    pub op: BinaryOp,
+    pub op: OperatorSurface,
     pub protocol: String,
     pub receiver: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum OperatorSurface {
+    Binary(BinaryOp),
+    Index,
+    IndexSlice,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -305,10 +312,32 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
                 visit(arg, facts);
             }
         }
+        AlphaExprKind::Index { receiver, index } => {
+            let protocol = if matches!(&index.kind, AlphaExprKind::Range { .. }) {
+                "op_index_slice"
+            } else {
+                "op_index"
+            };
+            facts.operator_obligations.push(OperatorObligation {
+                op: if protocol == "op_index_slice" {
+                    OperatorSurface::IndexSlice
+                } else {
+                    OperatorSurface::Index
+                },
+                protocol: protocol.to_string(),
+                receiver: nominal_name(receiver),
+            });
+            visit(receiver, facts);
+            visit(index, facts);
+        }
+        AlphaExprKind::Range { start, end } => {
+            visit(start, facts);
+            visit(end, facts);
+        }
         AlphaExprKind::Binary { op, lhs, rhs } => {
             let receiver = nominal_name(lhs);
             facts.operator_obligations.push(OperatorObligation {
-                op: op.clone(),
+                op: OperatorSurface::Binary(op.clone()),
                 protocol: operator_protocol(op),
                 receiver,
             });

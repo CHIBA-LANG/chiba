@@ -717,6 +717,7 @@ fn render_atom(atom: &CpsAtom) -> String {
                 .join(", ")
         ),
         CpsAtom::TupleField { tuple, field } => format!("{}.{}", render_atom(tuple), field),
+        CpsAtom::Range { start, end } => format!("{}..{}", render_atom(start), render_atom(end)),
         CpsAtom::Record { layout, fields } => format!(
             "{layout}{{{}}}",
             fields
@@ -769,6 +770,11 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 });
             }
             lower_atom_value(tuple, ops);
+            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+        }
+        CpsAtom::Range { start, end } => {
+            lower_atom_value(start, ops);
+            lower_atom_value(end, ops);
             ops.push(CoreOp::ReturnAtom(render_atom(atom)));
         }
         CpsAtom::Record { layout, fields } => {

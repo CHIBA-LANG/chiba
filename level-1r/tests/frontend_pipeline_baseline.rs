@@ -607,6 +607,122 @@ fn frontend_pipe_chains_left_to_right() {
 }
 
 #[test]
+fn frontend_parses_range_value_as_shared_ast_node() {
+    let parsed = parse_source_program("def main() = start..end").expect("parse");
+
+    assert!(parsed
+        .tokens
+        .iter()
+        .any(|token| token.name == "DotDot" && token.lexeme == ".."));
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(body, &Expr::range(Expr::var("start"), Expr::var("end")));
+        }
+    }
+
+    let bundle = compile_program_bundle(&parsed.program);
+    let main = &bundle.defs[0].output;
+    assert!(main.cps.to_string().contains("start..end"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(op, chiba_level1r::core::CoreOp::ReturnAtom(atom) if atom == "start..end")
+    }));
+}
+
+#[test]
+fn frontend_indexing_enters_operator_obligation_path() {
+    let parsed = parse_source_program("def main() = values[i]").expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(body, &Expr::index(Expr::var("values"), Expr::var("i")));
+        }
+    }
+
+    let bundle = compile_program_bundle(&parsed.program);
+    let main = &bundle.defs[0].output;
+    assert!(main
+        .resolve
+        .operator_obligations
+        .iter()
+        .any(|obligation| {
+            obligation.op == chiba_level1r::resolve::OperatorSurface::Index
+                && obligation.protocol == "op_index"
+        }));
+    assert!(main
+        .template
+        .obligations
+        .iter()
+        .any(|obligation| matches!(
+            obligation,
+            TemplateObligation::Operator {
+                op: chiba_level1r::resolve::OperatorSurface::Index,
+                protocol,
+                ..
+            } if protocol == "op_index"
+        )));
+    assert!(main.cps.to_string().contains("operator::op_index(values)(i,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "operator::op_index(values)" && args == &vec!["i".to_string()]
+        )
+    }));
+}
+
+#[test]
+fn frontend_slice_indexing_uses_index_slice_operator_path() {
+    let parsed = parse_source_program("def main() = values[start..end]").expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::index(
+                    Expr::var("values"),
+                    Expr::range(Expr::var("start"), Expr::var("end"))
+                )
+            );
+        }
+    }
+
+    let bundle = compile_program_bundle(&parsed.program);
+    let main = &bundle.defs[0].output;
+    assert!(main
+        .resolve
+        .operator_obligations
+        .iter()
+        .any(|obligation| {
+            obligation.op == chiba_level1r::resolve::OperatorSurface::IndexSlice
+                && obligation.protocol == "op_index_slice"
+        }));
+    assert!(main
+        .template
+        .obligations
+        .iter()
+        .any(|obligation| matches!(
+            obligation,
+            TemplateObligation::Operator {
+                op: chiba_level1r::resolve::OperatorSurface::IndexSlice,
+                protocol,
+                ..
+            } if protocol == "op_index_slice"
+        )));
+    assert!(main
+        .cps
+        .to_string()
+        .contains("operator::op_index_slice(values)(start..end,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "operator::op_index_slice(values)"
+                    && args == &vec!["start..end".to_string()]
+        )
+    }));
+}
+
+#[test]
 fn frontend_parses_if_then_else_through_branch_cps_and_wat() {
     let output = compile_source_program_bundle("def main() = if flag then f(1) else 2")
         .expect("compile source");

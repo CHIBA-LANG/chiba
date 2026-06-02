@@ -1,6 +1,7 @@
 use crate::alpha::{AlphaExpr, AlphaExprKind};
-use crate::ast::BinaryOp;
-use crate::resolve::{OperatorObligation, ResolveFacts, ResolvedCall, ResolvedName};
+use crate::resolve::{
+    OperatorObligation, OperatorSurface, ResolveFacts, ResolvedCall, ResolvedName,
+};
 use crate::typed::{SendColor, UsageColor};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -56,7 +57,7 @@ pub enum TemplateObligation {
         arity: usize,
     },
     Operator {
-        op: BinaryOp,
+        op: OperatorSurface,
         protocol: String,
         receiver: Option<String>,
     },
@@ -175,6 +176,14 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
             for arg in args {
                 collect_expr_obligations(arg, facts);
             }
+        }
+        AlphaExprKind::Index { receiver, index } => {
+            collect_expr_obligations(receiver, facts);
+            collect_expr_obligations(index, facts);
+        }
+        AlphaExprKind::Range { start, end } => {
+            collect_expr_obligations(start, facts);
+            collect_expr_obligations(end, facts);
         }
         AlphaExprKind::Binary { lhs, rhs, .. } => {
             collect_expr_obligations(lhs, facts);

@@ -39,7 +39,7 @@ fn discharged_method_target_enters_core_without_wasm_terms() {
 fn operator_obligation_enters_core_as_method_protocol_target() {
     let mut template = TemplateFacts::default();
     template.obligations.push(TemplateObligation::Operator {
-        op: chiba_level1r::ast::BinaryOp::Add,
+        op: chiba_level1r::resolve::OperatorSurface::Binary(chiba_level1r::ast::BinaryOp::Add),
         protocol: "op_add".to_string(),
         receiver: Some("Vec2".to_string()),
     });

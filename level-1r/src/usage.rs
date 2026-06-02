@@ -86,6 +86,14 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
                 visit(arg, facts);
             }
         }
+        TypedExprKind::Index { receiver, index } => {
+            visit(receiver, facts);
+            visit(index, facts);
+        }
+        TypedExprKind::Range { start, end } => {
+            visit(start, facts);
+            visit(end, facts);
+        }
         TypedExprKind::Binary { lhs, rhs, .. } => {
             visit(lhs, facts);
             visit(rhs, facts);
@@ -175,6 +183,14 @@ fn visit_alpha(expr: &AlphaExpr, facts: &mut UsageFacts) {
             for arg in args {
                 visit_alpha(arg, facts);
             }
+        }
+        AlphaExprKind::Index { receiver, index } => {
+            visit_alpha(receiver, facts);
+            visit_alpha(index, facts);
+        }
+        AlphaExprKind::Range { start, end } => {
+            visit_alpha(start, facts);
+            visit_alpha(end, facts);
         }
         AlphaExprKind::Binary { lhs, rhs, .. } => {
             visit_alpha(lhs, facts);

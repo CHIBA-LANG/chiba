@@ -289,7 +289,7 @@ fn binary_operator_records_protocol_obligation_without_numeric_default() {
 
     assert_eq!(output.resolve.operator_obligations.len(), 1);
     let obligation = &output.resolve.operator_obligations[0];
-    assert_eq!(obligation.op, BinaryOp::Add);
+    assert_eq!(obligation.op, chiba_level1r::resolve::OperatorSurface::Binary(BinaryOp::Add));
     assert_eq!(obligation.protocol, "op_add");
     assert_eq!(obligation.receiver.as_deref(), Some("Vec2"));
 }

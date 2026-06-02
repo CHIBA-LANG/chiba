@@ -223,6 +223,12 @@ fn type_for_var(expr: &TypedExpr, name: &str) -> Option<Type> {
         crate::typed::TypedExprKind::Field { receiver, .. } => type_for_var(receiver, name),
         crate::typed::TypedExprKind::MethodCall { receiver, args, .. } => type_for_var(receiver, name)
             .or_else(|| args.iter().find_map(|arg| type_for_var(arg, name))),
+        crate::typed::TypedExprKind::Index { receiver, index } => {
+            type_for_var(receiver, name).or_else(|| type_for_var(index, name))
+        }
+        crate::typed::TypedExprKind::Range { start, end } => {
+            type_for_var(start, name).or_else(|| type_for_var(end, name))
+        }
         crate::typed::TypedExprKind::Binary { lhs, rhs, .. } => {
             type_for_var(lhs, name).or_else(|| type_for_var(rhs, name))
         }

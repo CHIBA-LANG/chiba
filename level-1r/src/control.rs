@@ -76,6 +76,14 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
                 visit(arg, stack, facts);
             }
         }
+        TypedExprKind::Index { receiver, index } => {
+            visit(receiver, stack, facts);
+            visit(index, stack, facts);
+        }
+        TypedExprKind::Range { start, end } => {
+            visit(start, stack, facts);
+            visit(end, stack, facts);
+        }
         TypedExprKind::Binary { lhs, rhs, .. } => {
             visit(lhs, stack, facts);
             visit(rhs, stack, facts);
