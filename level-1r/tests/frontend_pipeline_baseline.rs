@@ -1,0 +1,92 @@
+use chiba_level1r::ast::{BinaryOp, Expr, SourceItem};
+use chiba_level1r::{compile_program_bundle, parse_source_program, FrontendError};
+
+#[test]
+fn frontend_lexes_and_parses_def_source_to_program() {
+    let output = parse_source_program("def main() = 2 + 3 * 4").expect("frontend parse");
+
+    assert_eq!(
+        output
+            .tokens
+            .iter()
+            .map(|token| (token.name.as_str(), token.lexeme.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("KwDef", "def"),
+            ("Ident", "main"),
+            ("LParen", "("),
+            ("RParen", ")"),
+            ("Eq", "="),
+            ("Number", "2"),
+            ("Plus", "+"),
+            ("Number", "3"),
+            ("Star", "*"),
+            ("Number", "4"),
+        ]
+    );
+    assert_eq!(output.program.items.len(), 1);
+    match &output.program.items[0] {
+        SourceItem::Def { name, params, body } => {
+            assert_eq!(name, "main");
+            assert_eq!(params, &Vec::<String>::new());
+            assert_eq!(
+                body,
+                &Expr::binary(
+                    BinaryOp::Add,
+                    Expr::i64(2),
+                    Expr::binary(BinaryOp::Mul, Expr::i64(3), Expr::i64(4)),
+                )
+            );
+        }
+    }
+}
+
+#[test]
+fn frontend_source_program_enters_program_bundle_pipeline() {
+    let parsed = parse_source_program("def helper() = true def main() = 7").expect("parse");
+    let bundle = compile_program_bundle(&parsed.program);
+
+    assert_eq!(bundle.entry, Some("main".to_string()));
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $main__def1 (export \"main\") (result i32)"));
+    assert!(bundle.backend_link.linked_wat.contains("i32.const 1"));
+    assert!(bundle.backend_link.linked_wat.contains("i32.const 7"));
+}
+
+#[test]
+fn frontend_supports_parameters_and_variables() {
+    let parsed = parse_source_program("def id(x) = x").expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { name, params, body } => {
+            assert_eq!(name, "id");
+            assert_eq!(params, &vec!["x".to_string()]);
+            assert_eq!(body, &Expr::var("x"));
+        }
+    }
+}
+
+#[test]
+fn frontend_reports_unexpected_token_without_scanner_fallback() {
+    let err = parse_source_program("def main() = +").unwrap_err();
+
+    assert!(matches!(
+        err,
+        FrontendError::UnexpectedToken {
+            found,
+            expected,
+            ..
+        } if found == "Plus" && expected.contains(&"Number".to_string())
+    ));
+}
+
+#[test]
+fn frontend_reports_lexer_errors_for_unknown_characters() {
+    let err = parse_source_program("def main() = @").unwrap_err();
+
+    assert!(matches!(err, FrontendError::Lex(_)));
+}

@@ -11,6 +11,7 @@ pub mod core;
 pub mod cps;
 pub mod cps_usage;
 pub mod debug;
+pub mod frontend;
 pub mod lambda_lift;
 pub mod monomorphize;
 pub mod nanopass;
@@ -30,6 +31,7 @@ pub use ast::{Expr, Literal, SourceProgram};
 pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use cps::{cps_program, CpsProgram};
 pub use debug::{render_visual_report, VisualReport};
+pub use frontend::{parse_source_program, FrontendError, FrontendOutput};
 pub use pipeline::{
     compile_expr, compile_program, compile_program_bundle, CompileOutput, ProgramCompileOutput,
     ProgramDefOutput, ProgramDiagnostic,

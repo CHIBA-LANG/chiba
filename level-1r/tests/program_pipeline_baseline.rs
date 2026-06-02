@@ -41,7 +41,7 @@ fn program_bundle_selects_main_and_links_def_artifacts() {
     assert!(bundle
         .backend_link
         .linked_wat
-        .contains("(func $main (export \"main\") (result i32)"));
+        .contains("(func $main__def1 (export \"main\") (result i32)"));
     assert!(bundle.backend_link.linked_wat.contains("i32.const 1"));
     assert!(bundle.backend_link.linked_wat.contains("i32.const 7"));
 }
