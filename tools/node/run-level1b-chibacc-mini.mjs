@@ -461,7 +461,7 @@ def main(): i64 = {
   const okBody = caseInfo.check
     ? `match ast {\n${caseInfo.check}    }`
     : "0";
-  return `${tokenBuilderSource(caseInfo.tokens)}def harness_status(result: LabeledAST): i64 = {\n    match result {\n        OK(ast_value, _) => {\n            let ast = ast_value as AST\n            ${okBody}\n        }\n        Err(_, _) => 99\n    }\n}\n\ndef main(): i64 = {\n    let tokens = harness_tokens()\n    let result = parse_tokens(tokens)\n    harness_status(result)\n}\n`;
+  return `${tokenBuilderSource(caseInfo.tokens)}\ndef harness_status(result: LabeledAST): i64 = {\n    match result {\n        OK(ast_value, _) => {\n            let ast = ast_value as AST\n            ${okBody}\n        }\n        Err(_, _) => 99\n    }\n}\n\ndef main(): i64 = {\n    let tokens = harness_tokens()\n    let result = parse_tokens(tokens)\n    harness_status(result)\n}\n`;
 }
 
 function astItemCountForCase(caseInfo) {
@@ -759,7 +759,11 @@ if (fullTokenInsertion < 0) {
 }
 
 function fullGrammarHarnessSource() {
-  return `${tokenBuilderSource(fullExprTokens()).replace("def harness_tokens", "def expr_tokens")}${tokenBuilderSource(fullIfTokens()).replace("def harness_tokens", "def if_tokens")}${tokenBuilderSource(fullNegTokens()).replace("def harness_tokens", "def neg_tokens")}${tokenBuilderSource(fullMatchTokens()).replace("def harness_tokens", "def match_tokens")}def harness_expr_status(result: MatchResult): i64 = {
+  return `${tokenBuilderSource(fullExprTokens()).replace("def harness_tokens", "def expr_tokens")}
+${tokenBuilderSource(fullIfTokens()).replace("def harness_tokens", "def if_tokens")}
+${tokenBuilderSource(fullNegTokens()).replace("def harness_tokens", "def neg_tokens")}
+${tokenBuilderSource(fullMatchTokens()).replace("def harness_tokens", "def match_tokens")}
+def harness_expr_status(result: MatchResult): i64 = {
     match result {
         MatchOK(ast_value, _, _) => {
             let ast = ast_value as AST
@@ -976,7 +980,8 @@ function fullMatchTokens() {
 }
 
 function fullExpressionHarnessSource() {
-  return `${tokenBuilderSource(fullExprTokens()).replace("def harness_tokens", "def expr_tokens")}def harness_expr_status(result: MatchResult): i64 = {
+  return `${tokenBuilderSource(fullExprTokens()).replace("def harness_tokens", "def expr_tokens")}
+def harness_expr_status(result: MatchResult): i64 = {
     match result {
         MatchOK(ast_value, _, _) => {
             let ast = ast_value as AST
