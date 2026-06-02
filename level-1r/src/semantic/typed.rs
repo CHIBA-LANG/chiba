@@ -141,11 +141,84 @@ pub enum SendColor {
 
 pub type TypeEnv = BTreeMap<String, Type>;
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TypeContext {
+    nominal_rows: BTreeMap<String, Vec<RecordTypeField>>,
+    generic_nominal_rows: BTreeMap<String, NominalRowDecl>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NominalRowDecl {
+    pub name: String,
+    pub generics: Vec<String>,
+    pub fields: Vec<RecordTypeField>,
+}
+
+impl TypeContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert_nominal_row(
+        &mut self,
+        nominal: impl Into<String>,
+        fields: Vec<RecordTypeField>,
+    ) {
+        self.nominal_rows.insert(nominal.into(), canonical_fields(fields));
+    }
+
+    pub fn insert_generic_nominal_row(
+        &mut self,
+        name: impl Into<String>,
+        generics: Vec<String>,
+        fields: Vec<RecordTypeField>,
+    ) {
+        let name = name.into();
+        self.generic_nominal_rows.insert(
+            name.clone(),
+            NominalRowDecl {
+                name,
+                generics,
+                fields: canonical_fields(fields),
+            },
+        );
+    }
+
+    pub fn nominal_field_type(&self, receiver: &Type, name: &str) -> Option<Type> {
+        let Type::Nominal(nominal) = receiver else {
+            return None;
+        };
+        self.nominal_rows
+            .get(nominal)
+            .and_then(|fields| field_type(fields, name))
+            .or_else(|| self.generic_nominal_field_type(nominal, name))
+    }
+
+    fn generic_nominal_field_type(&self, nominal: &str, field: &str) -> Option<Type> {
+        let (base, args) = parse_nominal_application(nominal)?;
+        let decl = self.generic_nominal_rows.get(base)?;
+        if decl.generics.len() != args.len() {
+            return None;
+        }
+        let substitutions = decl
+            .generics
+            .iter()
+            .cloned()
+            .zip(args.into_iter().map(type_name_to_type))
+            .collect::<BTreeMap<_, _>>();
+        field_type(&decl.fields, field).map(|ty| substitute_type_params(&ty, &substitutions))
+    }
+}
+
 pub fn type_expr(expr: &Expr) -> TypedExpr {
     type_expr_with_env(expr, &TypeEnv::new())
 }
 
 pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
+    type_expr_with_context(expr, env, &TypeContext::new())
+}
+
+pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext) -> TypedExpr {
     match expr {
         Expr::Var(name) => typed(
             TypedExprKind::Var(name.clone()),
@@ -161,7 +234,7 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             let param_ty = Type::Unknown;
             let mut env = env.clone();
             env.insert(param.clone(), param_ty.clone());
-            let body = type_expr_with_env(body, &env);
+            let body = type_expr_with_context(body, &env, context);
             let ty = Type::Func(Box::new(param_ty.clone()), Box::new(body.ty.clone()));
             typed(
                 TypedExprKind::Lambda {
@@ -173,10 +246,10 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             )
         }
         Expr::Call { callee, args } => {
-            let callee = type_expr_with_env(callee, env);
+            let callee = type_expr_with_context(callee, env, context);
             let args = args
                 .iter()
-                .map(|arg| type_expr_with_env(arg, env))
+                .map(|arg| type_expr_with_context(arg, env, context))
                 .collect();
             typed(
                 TypedExprKind::Call {
@@ -186,11 +259,11 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
                 Type::Unknown,
             )
         }
-        Expr::Instantiate { callee, .. } => type_expr_with_env(callee, env),
+        Expr::Instantiate { callee, .. } => type_expr_with_context(callee, env, context),
         Expr::Tuple(fields) => {
             let fields: Vec<_> = fields
                 .iter()
-                .map(|field| type_expr_with_env(field, env))
+                .map(|field| type_expr_with_context(field, env, context))
                 .collect();
             let field_types = fields
                 .iter()
@@ -209,19 +282,19 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
                 .iter()
                 .map(|field| TypedRecordField {
                     name: field.name.clone(),
-                    value: type_expr_with_env(&field.value, env),
+                    value: type_expr_with_context(&field.value, env, context),
                 })
                 .collect::<Vec<_>>();
             let ty = Type::Record(record_type_fields(&fields));
             typed(TypedExprKind::Record { fields }, ty)
         }
         Expr::RecordUpdate { base, fields } => {
-            let base = type_expr_with_env(base, env);
+            let base = type_expr_with_context(base, env, context);
             let fields = fields
                 .iter()
                 .map(|field| TypedRecordField {
                     name: field.name.clone(),
-                    value: type_expr_with_env(&field.value, env),
+                    value: type_expr_with_context(&field.value, env, context),
                 })
                 .collect::<Vec<_>>();
             let ty = record_update_type(&base.ty, &fields);
@@ -241,7 +314,7 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
         } => {
             let args = args
                 .iter()
-                .map(|arg| type_expr_with_env(arg, env))
+                .map(|arg| type_expr_with_context(arg, env, context))
                 .collect::<Vec<_>>();
             typed(
                 TypedExprKind::AdtCtor {
@@ -257,9 +330,10 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             )
         }
         Expr::Field { receiver, name } => {
-            let receiver = type_expr_with_env(receiver, env);
+            let receiver = type_expr_with_context(receiver, env, context);
             let ty = tuple_field_type(&receiver.ty, name)
                 .or_else(|| record_field_type(&receiver.ty, name))
+                .or_else(|| context.nominal_field_type(&receiver.ty, name))
                 .unwrap_or(Type::Unknown);
             typed(
                 TypedExprKind::Field {
@@ -274,10 +348,10 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             name,
             args,
         } => {
-            let receiver = type_expr_with_env(receiver, env);
+            let receiver = type_expr_with_context(receiver, env, context);
             let args = args
                 .iter()
-                .map(|arg| type_expr_with_env(arg, env))
+                .map(|arg| type_expr_with_context(arg, env, context))
                 .collect();
             typed(
                 TypedExprKind::MethodCall {
@@ -289,8 +363,8 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             )
         }
         Expr::Index { receiver, index } => {
-            let receiver = type_expr_with_env(receiver, env);
-            let index = type_expr_with_env(index, env);
+            let receiver = type_expr_with_context(receiver, env, context);
+            let index = type_expr_with_context(index, env, context);
             typed(
                 TypedExprKind::Index {
                     receiver: Box::new(receiver),
@@ -300,8 +374,8 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             )
         }
         Expr::Range { start, end } => {
-            let start = type_expr_with_env(start, env);
-            let end = type_expr_with_env(end, env);
+            let start = type_expr_with_context(start, env, context);
+            let end = type_expr_with_context(end, env, context);
             typed(
                 TypedExprKind::Range {
                     start: Box::new(start),
@@ -311,8 +385,8 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             )
         }
         Expr::Binary { op, lhs, rhs } => {
-            let lhs = type_expr_with_env(lhs, env);
-            let rhs = type_expr_with_env(rhs, env);
+            let lhs = type_expr_with_context(lhs, env, context);
+            let rhs = type_expr_with_context(rhs, env, context);
             typed(
                 TypedExprKind::Binary {
                     op: op.clone(),
@@ -327,9 +401,9 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             then_branch,
             else_branch,
         } => {
-            let cond = type_expr_with_env(cond, env);
-            let then_branch = type_expr_with_env(then_branch, env);
-            let else_branch = type_expr_with_env(else_branch, env);
+            let cond = type_expr_with_context(cond, env, context);
+            let then_branch = type_expr_with_context(then_branch, env, context);
+            let else_branch = type_expr_with_context(else_branch, env, context);
             let ty = common_type(&then_branch.ty, &else_branch.ty);
             typed(
                 TypedExprKind::If {
@@ -346,9 +420,9 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             then_branch,
             else_branch,
         } => {
-            let scrutinee = type_expr_with_env(scrutinee, env);
-            let then_branch = type_expr_with_env(then_branch, env);
-            let else_branch = type_expr_with_env(else_branch, env);
+            let scrutinee = type_expr_with_context(scrutinee, env, context);
+            let then_branch = type_expr_with_context(then_branch, env, context);
+            let else_branch = type_expr_with_context(else_branch, env, context);
             let ty = common_type(&then_branch.ty, &else_branch.ty);
             typed(
                 TypedExprKind::IfLet {
@@ -361,12 +435,12 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             )
         }
         Expr::Match { scrutinee, arms } => {
-            let scrutinee = type_expr_with_env(scrutinee, env);
+            let scrutinee = type_expr_with_context(scrutinee, env, context);
             let arms: Vec<_> = arms
                 .iter()
                 .map(|arm| TypedMatchArm {
                     pattern: arm.pattern.clone(),
-                    body: type_expr_with_env(&arm.body, env),
+                    body: type_expr_with_context(&arm.body, env, context),
                 })
                 .collect();
             let ty = arms
@@ -383,7 +457,7 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             )
         }
         Expr::Nominal { name, expr } => {
-            let expr = type_expr_with_env(expr, env);
+            let expr = type_expr_with_context(expr, env, context);
             typed(
                 TypedExprKind::Nominal {
                     name: name.clone(),
@@ -393,7 +467,7 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             )
         }
         Expr::Reset { multi, body } => {
-            let body = type_expr_with_env(body, env);
+            let body = type_expr_with_context(body, env, context);
             typed(
                 TypedExprKind::Reset {
                     multi: *multi,
@@ -403,7 +477,7 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
             )
         }
         Expr::Shift { binder, body } => {
-            let body = type_expr_with_env(body, env);
+            let body = type_expr_with_context(body, env, context);
             typed(
                 TypedExprKind::Shift {
                     binder: binder.clone(),
@@ -438,6 +512,10 @@ fn record_field_type(receiver: &Type, name: &str) -> Option<Type> {
     let Type::Record(fields) = receiver else {
         return None;
     };
+    field_type(fields, name)
+}
+
+fn field_type(fields: &[RecordTypeField], name: &str) -> Option<Type> {
     fields
         .iter()
         .find(|field| field.name == name)
@@ -445,20 +523,14 @@ fn record_field_type(receiver: &Type, name: &str) -> Option<Type> {
 }
 
 fn record_type_fields(fields: &[TypedRecordField]) -> Vec<RecordTypeField> {
-    let mut fields = fields
+    let fields = fields
         .iter()
         .map(|field| RecordTypeField {
             name: field.name.clone(),
             ty: field.value.ty.clone(),
         })
         .collect::<Vec<_>>();
-    fields.sort_by(|left, right| {
-        left.name
-            .cmp(&right.name)
-            .then_with(|| type_stable_name(&left.ty).cmp(&type_stable_name(&right.ty)))
-    });
-    fields.dedup_by(|left, right| left.name == right.name);
-    fields
+    canonical_fields(fields)
 }
 
 fn record_update_type(base: &Type, fields: &[TypedRecordField]) -> Type {
@@ -485,6 +557,72 @@ fn record_update_type(base: &Type, fields: &[TypedRecordField]) -> Type {
             .then_with(|| type_stable_name(&left.ty).cmp(&type_stable_name(&right.ty)))
     });
     Type::Record(merged)
+}
+
+fn canonical_fields(mut fields: Vec<RecordTypeField>) -> Vec<RecordTypeField> {
+    fields.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| type_stable_name(&left.ty).cmp(&type_stable_name(&right.ty)))
+    });
+    fields.dedup_by(|left, right| left.name == right.name);
+    fields
+}
+
+fn parse_nominal_application(nominal: &str) -> Option<(&str, Vec<String>)> {
+    let open = nominal.find('[')?;
+    let close = nominal.strip_suffix(']')?;
+    let base = &nominal[..open];
+    let args = &close[open + 1..];
+    let args = if args.trim().is_empty() {
+        Vec::new()
+    } else {
+        args.split(',').map(|arg| arg.trim().to_string()).collect()
+    };
+    Some((base, args))
+}
+
+fn type_name_to_type(name: String) -> Type {
+    match name.as_str() {
+        "I64" | "i64" => Type::I64,
+        "Bool" | "bool" => Type::Bool,
+        _ => Type::Nominal(name),
+    }
+}
+
+fn substitute_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> Type {
+    match ty {
+        Type::Nominal(name) => substitutions
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| Type::Nominal(name.clone())),
+        Type::Tuple(fields) => Type::Tuple(
+            fields
+                .iter()
+                .map(|field| substitute_type_params(field, substitutions))
+                .collect(),
+        ),
+        Type::Record(fields) => Type::Record(
+            fields
+                .iter()
+                .map(|field| RecordTypeField {
+                    name: field.name.clone(),
+                    ty: substitute_type_params(&field.ty, substitutions),
+                })
+                .collect(),
+        ),
+        Type::Func(param, result) => Type::Func(
+            Box::new(substitute_type_params(param, substitutions)),
+            Box::new(substitute_type_params(result, substitutions)),
+        ),
+        Type::Adt { name, variants } => Type::Adt {
+            name: name.clone(),
+            variants: variants.clone(),
+        },
+        Type::Unknown => Type::Unknown,
+        Type::I64 => Type::I64,
+        Type::Bool => Type::Bool,
+    }
 }
 
 fn typed(kind: TypedExprKind, ty: Type) -> TypedExpr {

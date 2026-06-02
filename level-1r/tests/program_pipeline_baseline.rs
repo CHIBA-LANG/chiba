@@ -339,6 +339,65 @@ fn method_self_record_update_preserves_nominal_receiver_type_in_body() {
 }
 
 #[test]
+fn method_self_field_access_uses_row_style_type_shape() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            vec!["T".to_string()],
+            vec![TypeField::new("value", "T")],
+        )],
+        Vec::new(),
+        vec![SourceItem::method_def(
+            MethodReceiver::new("Box", vec!["T".to_string()]),
+            "get",
+            vec![ParamDecl::new("self", Some("Self".to_string()))],
+            Some("T".to_string()),
+            Expr::field(Expr::var("self"), "value"),
+        )],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let typed = &bundle.defs[0].output.typed;
+
+    assert_eq!(typed.ty, Type::Nominal("T".to_string()));
+    match &typed.kind {
+        TypedExprKind::Field { receiver, name } => {
+            assert_eq!(receiver.ty, Type::Nominal("Box[T]".to_string()));
+            assert_eq!(name, "value");
+        }
+        other => panic!("expected typed field access, got {other:?}"),
+    }
+}
+
+#[test]
+fn nominal_row_field_access_substitutes_concrete_type_arguments() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            vec!["T".to_string()],
+            vec![TypeField::new("value", "T")],
+        )],
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "main".to_string(),
+            params: vec![ParamDecl::new("box", Some("Box[i64]".to_string()))],
+            return_type: Some("i64".to_string()),
+            body: Expr::field(Expr::var("box"), "value"),
+        }],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+}
+
+#[test]
 fn auto_generic_is_lowering_fact_not_source_surface_generic() {
     let program = SourceProgram::new(vec![def("id", vec!["x"], Expr::var("x"))]);
 

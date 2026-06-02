@@ -34,7 +34,9 @@ use crate::surface::{
 };
 use crate::template::{analyze_template_with_source, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
-use crate::typed::{type_expr_with_env, Type, TypeEnv, TypedExpr};
+use crate::typed::{
+    type_expr_with_context, RecordTypeField, Type, TypeContext, TypeEnv, TypedExpr,
+};
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
 
@@ -125,6 +127,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &[],
         &None,
         &None,
+        &TypeContext::new(),
     )
 }
 
@@ -137,6 +140,7 @@ fn compile_expr_with_indexes_and_generics(
     params: &[ParamDecl],
     return_type: &Option<String>,
     receiver: &Option<MethodReceiver>,
+    type_context: &TypeContext,
 ) -> CompileOutput {
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || alpha_expr(expr));
@@ -180,7 +184,7 @@ fn compile_expr_with_indexes_and_generics(
     );
     let typed_env = typed_signature.type_env();
     let typed = passes.record("L7Typed", "SourceExpr+TypedSignature", "TypedExpr", || {
-        type_expr_with_env(expr, &typed_env)
+        type_expr_with_context(expr, &typed_env, type_context)
     });
     let pattern = passes.record("L8PatternElab", "TypedExpr", "PatternFacts", || {
         analyze_patterns(&typed)
@@ -418,6 +422,7 @@ fn compile_program_defs(
 ) -> Vec<ProgramDefOutput> {
     let names = NameIndex::from_interface(interface);
     let methods = MethodIndex::from_interface(interface);
+    let type_context = type_context_from_interface(interface);
     program
         .items
         .iter()
@@ -441,6 +446,7 @@ fn compile_program_defs(
                     params,
                     return_type,
                     receiver,
+                    &type_context,
                 ),
             }),
             SourceItem::StaticValue { .. } => None,
@@ -511,6 +517,38 @@ fn header_type_to_type(ty: &str) -> Type {
         "I64" | "i64" => Type::I64,
         "Bool" | "bool" => Type::Bool,
         ty => Type::Nominal(ty.to_string()),
+    }
+}
+
+fn type_context_from_interface(interface: &InterfaceSummary) -> TypeContext {
+    let mut context = TypeContext::new();
+    for ty in &interface.types {
+        let Some(name) = ty.symbol.rsplit("::").next() else {
+            continue;
+        };
+        let fields = ty
+            .fields
+            .iter()
+            .filter(|field| field.name != "_")
+            .map(|field| RecordTypeField {
+                name: field.name.clone(),
+                ty: header_type_to_type(&field.ty),
+            })
+            .collect::<Vec<_>>();
+        let display_name = nominal_display_name(name, &ty.generics);
+        context.insert_nominal_row(display_name, fields.clone());
+        if !ty.generics.is_empty() {
+            context.insert_generic_nominal_row(name, ty.generics.clone(), fields);
+        }
+    }
+    context
+}
+
+fn nominal_display_name(name: &str, generics: &[String]) -> String {
+    if generics.is_empty() {
+        name.to_string()
+    } else {
+        format!("{}[{}]", name, generics.join(","))
     }
 }
 
