@@ -6,7 +6,7 @@ use chiba_level1r::resolve::{
 };
 use chiba_level1r::{
     build_interface_summary, compile_expr, project_surface, DataDecl, DataVariant, Expr,
-    MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
+    MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram, Visibility,
 };
 
 #[test]
@@ -145,6 +145,7 @@ fn interface_summary_resolves_global_function_owner_symbol() {
             receiver: None,
             generics: Vec::new(),
             name: "helper".to_string(),
+            visibility: Visibility::Public,
             params: Vec::new(),
             return_type: None,
             body: Expr::i64(1),
@@ -180,6 +181,7 @@ fn interface_summary_resolves_one_arg_function_call_by_arity() {
             receiver: None,
             generics: Vec::new(),
             name: "helper".to_string(),
+            visibility: Visibility::Public,
             params: vec![ParamDecl::new("x", Some("I64".to_string()))],
             return_type: Some("I64".to_string()),
             body: Expr::var("x"),
@@ -215,6 +217,7 @@ fn interface_summary_reports_function_call_arity_mismatch() {
             receiver: None,
             generics: Vec::new(),
             name: "helper".to_string(),
+            visibility: Visibility::Public,
             params: Vec::new(),
             return_type: Some("I64".to_string()),
             body: Expr::i64(1),
@@ -294,6 +297,7 @@ fn interface_summary_does_not_resolve_local_binder_as_global_function() {
             receiver: None,
             generics: Vec::new(),
             name: "x".to_string(),
+            visibility: Visibility::Public,
             params: Vec::new(),
             return_type: None,
             body: Expr::i64(1),

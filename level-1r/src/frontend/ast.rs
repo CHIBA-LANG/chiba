@@ -22,6 +22,7 @@ pub struct UseDecl {
 pub enum SourceItem {
     Def {
         name: String,
+        visibility: Visibility,
         receiver: Option<MethodReceiver>,
         generics: Vec<String>,
         params: Vec<ParamDecl>,
@@ -30,9 +31,16 @@ pub enum SourceItem {
     },
     StaticValue {
         name: String,
+        visibility: Visibility,
         ty: Option<String>,
         body: Expr,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Visibility {
+    Public,
+    Private,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -239,6 +247,7 @@ impl SourceItem {
     ) -> Self {
         Self::Def {
             name: name.into(),
+            visibility: Visibility::Public,
             receiver: None,
             generics,
             params,
@@ -258,6 +267,7 @@ impl SourceItem {
             generics: receiver.generics.clone(),
             receiver: Some(receiver),
             name: name.into(),
+            visibility: Visibility::Public,
             params,
             return_type,
             body,
@@ -267,8 +277,37 @@ impl SourceItem {
     pub fn static_value(name: impl Into<String>, ty: Option<String>, body: Expr) -> Self {
         Self::StaticValue {
             name: name.into(),
+            visibility: Visibility::Public,
             ty,
             body,
+        }
+    }
+
+    pub fn with_visibility(self, visibility: Visibility) -> Self {
+        match self {
+            Self::Def {
+                name,
+                receiver,
+                generics,
+                params,
+                return_type,
+                body,
+                ..
+            } => Self::Def {
+                name,
+                visibility,
+                receiver,
+                generics,
+                params,
+                return_type,
+                body,
+            },
+            Self::StaticValue { name, ty, body, .. } => Self::StaticValue {
+                name,
+                visibility,
+                ty,
+                body,
+            },
         }
     }
 }

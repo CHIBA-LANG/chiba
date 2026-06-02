@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::ast::{
     BinaryOp, DataDecl, DataVariant, Expr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern,
-    SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl,
+    SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
 };
 use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
 
@@ -28,7 +28,7 @@ pub enum FrontendError {
 pub fn parse_source_program(source: &str) -> Result<FrontendOutput, FrontendError> {
     let lexer = compile_lexer(chiba_lexer_spec()).map_err(FrontendError::Lex)?;
     let tokens = lexer.lex(source).map_err(FrontendError::Lex)?;
-    let mut parser = FrontendParser::new(tokens.clone());
+    let mut parser = FrontendParser::new(tokens.clone(), source);
     let program = parser.parse_program()?;
     Ok(FrontendOutput { tokens, program })
 }
@@ -64,6 +64,11 @@ fn chiba_lexer_spec() -> LexerSpec {
             LexerRule {
                 name: "KwUse".to_string(),
                 pattern: "use".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "KwPrivate".to_string(),
+                pattern: "private".to_string(),
                 skip: false,
             },
             LexerRule {
@@ -160,37 +165,45 @@ fn punct(name: &str, pattern: &str) -> LexerRule {
 
 struct FrontendParser {
     tokens: Vec<Token>,
+    source_chars: Vec<char>,
     pos: usize,
     data_variants: BTreeMap<String, Vec<String>>,
 }
 
 impl FrontendParser {
-    fn new(tokens: Vec<Token>) -> Self {
+    fn new(tokens: Vec<Token>, source: &str) -> Self {
         Self {
             tokens,
+            source_chars: source.chars().collect(),
             pos: 0,
             data_variants: BTreeMap::new(),
         }
     }
 
     fn parse_program(&mut self) -> Result<SourceProgram, FrontendError> {
+        let mut previous_top_level_end = None;
         let namespace = if self.peek_name() == Some("KwNamespace") {
-            Some(self.parse_namespace()?)
+            let namespace = Some(self.parse_namespace()?);
+            previous_top_level_end = self.previous_token_end();
+            namespace
         } else {
             None
         };
         let mut imports = Vec::new();
         while self.peek_name() == Some("KwUse") {
+            self.expect_top_level_separator(previous_top_level_end)?;
             imports.push(self.parse_use()?);
+            previous_top_level_end = self.previous_token_end();
         }
         let mut types = Vec::new();
         let mut data = Vec::new();
         let mut items = Vec::new();
         while !self.is_eof() {
+            self.expect_top_level_separator(previous_top_level_end)?;
             match self.peek_name() {
                 Some("KwType") => types.push(self.parse_type_decl()?),
                 Some("KwData") => data.push(self.parse_data()?),
-                Some("KwDef") => items.push(self.parse_def()?),
+                Some("KwDef") | Some("KwPrivate") => items.push(self.parse_def()?),
                 Some(found) => {
                     let token = self.tokens[self.pos].clone();
                     return Err(FrontendError::UnexpectedToken {
@@ -200,11 +213,13 @@ impl FrontendParser {
                             "KwType".to_string(),
                             "KwData".to_string(),
                             "KwDef".to_string(),
+                            "KwPrivate".to_string(),
                         ],
                     });
                 }
                 None => break,
             }
+            previous_top_level_end = self.previous_token_end();
         }
         let variants = data_variant_map(&data);
         let items = items
@@ -247,6 +262,12 @@ impl FrontendParser {
     }
 
     fn parse_def(&mut self) -> Result<SourceItem, FrontendError> {
+        let visibility = if self.peek_name() == Some("KwPrivate") {
+            self.pos += 1;
+            Visibility::Private
+        } else {
+            Visibility::Public
+        };
         self.expect("KwDef")?;
         let first_name = self.expect_lexeme("Ident")?;
         let generics = if self.peek_name() == Some("LBracket")
@@ -274,7 +295,7 @@ impl FrontendParser {
             let ty = Some(self.expect_type_name()?);
             self.expect("Eq")?;
             let body = self.parse_expr_bp(0)?;
-            return Ok(SourceItem::static_value(name, ty, body));
+            return Ok(SourceItem::static_value(name, ty, body).with_visibility(visibility));
         }
         if self.peek_name() == Some("Eq") {
             if receiver.is_some() {
@@ -282,7 +303,7 @@ impl FrontendParser {
             }
             self.pos += 1;
             let body = self.parse_expr_bp(0)?;
-            return Ok(SourceItem::static_value(name, None, body));
+            return Ok(SourceItem::static_value(name, None, body).with_visibility(visibility));
         }
         self.expect("LParen")?;
         let params = self.parse_params()?;
@@ -297,6 +318,7 @@ impl FrontendParser {
         let body = self.parse_expr_bp(0)?;
         Ok(SourceItem::Def {
             name,
+            visibility,
             generics: receiver
                 .as_ref()
                 .map(|receiver| receiver.generics.clone())
@@ -964,6 +986,37 @@ impl FrontendParser {
         }
     }
 
+    fn expect_top_level_separator(
+        &self,
+        previous_top_level_end: Option<usize>,
+    ) -> Result<(), FrontendError> {
+        let Some(previous_top_level_end) = previous_top_level_end else {
+            return Ok(());
+        };
+        let Some(current) = self.tokens.get(self.pos) else {
+            return Ok(());
+        };
+        if self.source_chars[previous_top_level_end..current.start]
+            .iter()
+            .any(|ch| *ch == '\n')
+        {
+            Ok(())
+        } else {
+            Err(FrontendError::UnexpectedToken {
+                found: current.name.clone(),
+                lexeme: current.lexeme.clone(),
+                expected: vec!["Newline".to_string()],
+            })
+        }
+    }
+
+    fn previous_token_end(&self) -> Option<usize> {
+        self.pos
+            .checked_sub(1)
+            .and_then(|index| self.tokens.get(index))
+            .map(|token| token.end)
+    }
+
     fn expect_lexeme(&mut self, name: &str) -> Result<String, FrontendError> {
         self.expect(name).map(|token| token.lexeme)
     }
@@ -1269,6 +1322,7 @@ fn enrich_item_with_data_variants(
     match item {
         SourceItem::Def {
             name,
+            visibility,
             receiver,
             generics,
             params,
@@ -1276,14 +1330,21 @@ fn enrich_item_with_data_variants(
             body,
         } => SourceItem::Def {
             name,
+            visibility,
             receiver,
             generics,
             params,
             return_type,
             body: enrich_expr_with_data_variants(body, variants),
         },
-        SourceItem::StaticValue { name, ty, body } => SourceItem::StaticValue {
+        SourceItem::StaticValue {
             name,
+            visibility,
+            ty,
+            body,
+        } => SourceItem::StaticValue {
+            name,
+            visibility,
             ty,
             body: enrich_expr_with_data_variants(body, variants),
         },

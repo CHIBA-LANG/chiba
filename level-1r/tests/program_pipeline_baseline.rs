@@ -1,6 +1,6 @@
 use chiba_level1r::ast::{
     DataDecl, DataVariant, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
-    TypeDecl, TypeField, UseDecl,
+    TypeDecl, TypeField, UseDecl, Visibility,
 };
 use chiba_level1r::typed::{Type, TypedExprKind};
 use chiba_level1r::{
@@ -13,6 +13,7 @@ fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
         receiver: None,
         generics: Vec::new(),
         name: name.to_string(),
+        visibility: Visibility::Public,
         params: params.into_iter().map(ParamDecl::untyped).collect(),
         return_type: None,
         body,
@@ -23,6 +24,7 @@ fn static_value(name: &str, ty: Option<&str>, body: Expr) -> SourceItem {
     SourceItem::StaticValue {
         name: name.to_string(),
         ty: ty.map(str::to_string),
+        visibility: Visibility::Public,
         body,
     }
 }
@@ -135,6 +137,40 @@ fn program_surface_and_interface_summary_preserve_owner_namespace() {
 }
 
 #[test]
+fn private_def_and_static_visibility_reach_surface_and_interface() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "namespace demo.math
+private def hidden(): i64 = 0
+private def SECRET: i64 = 1
+def public_value(): i64 = SECRET",
+    )
+    .expect("compile source");
+
+    assert_eq!(output.program.surface.defs[0].name, "hidden");
+    assert_eq!(output.program.surface.defs[0].visibility, Visibility::Private);
+    assert_eq!(output.program.surface.defs[1].name, "public_value");
+    assert_eq!(output.program.surface.defs[1].visibility, Visibility::Public);
+    assert_eq!(output.program.surface.statics[0].name, "SECRET");
+    assert_eq!(
+        output.program.surface.statics[0].visibility,
+        Visibility::Private
+    );
+    assert_eq!(
+        output.program.interface.functions[0].visibility,
+        Visibility::Private
+    );
+    assert_eq!(
+        output.program.interface.functions[1].visibility,
+        Visibility::Public
+    );
+    assert_eq!(
+        output.program.interface.statics[0].visibility,
+        Visibility::Private
+    );
+    assert!(output.program.render_summary().contains("visibility"));
+}
+
+#[test]
 fn project_surface_many_merges_namespaces_deterministically() {
     let lexer_program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["lexer".to_string()])),
@@ -197,6 +233,7 @@ fn interface_summary_preserves_function_signature_types() {
             receiver: None,
             generics: Vec::new(),
             name: "id".to_string(),
+            visibility: Visibility::Public,
             params: vec![ParamDecl::new("x", Some("I64".to_string()))],
             return_type: Some("I64".to_string()),
             body: Expr::var("x"),
@@ -235,6 +272,7 @@ fn interface_summary_preserves_explicit_checked_template_params() {
             receiver: None,
             generics: vec!["T".to_string()],
             name: "id".to_string(),
+            visibility: Visibility::Public,
             params: vec![ParamDecl::new("x", Some("T".to_string()))],
             return_type: Some("T".to_string()),
             body: Expr::var("x"),
@@ -324,6 +362,7 @@ fn typed_signature_resolves_type_alias_headers() {
             receiver: None,
             generics: Vec::new(),
             name: "id".to_string(),
+            visibility: Visibility::Public,
             params: vec![ParamDecl::new("value", Some("UserId".to_string()))],
             return_type: Some("UserId".to_string()),
             body: Expr::var("value"),
@@ -520,6 +559,7 @@ fn nominal_row_field_access_substitutes_concrete_type_arguments() {
             receiver: None,
             generics: Vec::new(),
             name: "main".to_string(),
+            visibility: Visibility::Public,
             params: vec![ParamDecl::new("box", Some("Box[i64]".to_string()))],
             return_type: Some("i64".to_string()),
             body: Expr::field(Expr::var("box"), "value"),
@@ -766,6 +806,7 @@ fn phantom_type_fields_are_not_available_for_field_access() {
             receiver: None,
             generics: Vec::new(),
             name: "probe".to_string(),
+            visibility: Visibility::Public,
             params: vec![ParamDecl::new("box", Some("Box".to_string()))],
             return_type: None,
             body: Expr::field(Expr::var("box"), "_"),

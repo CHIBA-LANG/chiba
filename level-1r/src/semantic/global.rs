@@ -49,7 +49,7 @@ pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
         .items
         .iter()
         .filter_map(|item| match item {
-            SourceItem::StaticValue { name, ty, body } => {
+            SourceItem::StaticValue { name, ty, body, .. } => {
                 let mut refs = BTreeSet::new();
                 collect_expr_vars(body, &mut refs);
                 let dependencies = refs

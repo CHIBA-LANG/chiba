@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ast::{DataDecl, MethodReceiver, SourceItem, SourceProgram, TypeDecl};
+use crate::ast::{DataDecl, MethodReceiver, SourceItem, SourceProgram, TypeDecl, Visibility};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectSurface {
@@ -17,6 +17,7 @@ pub struct ProjectSurface {
 pub struct SurfaceDef {
     pub owner: String,
     pub name: String,
+    pub visibility: Visibility,
     pub receiver: Option<MethodReceiver>,
     pub generics: Vec<String>,
     pub arity: usize,
@@ -28,6 +29,7 @@ pub struct SurfaceDef {
 pub struct SurfaceStatic {
     pub owner: String,
     pub name: String,
+    pub visibility: Visibility,
     pub ty: Option<String>,
 }
 
@@ -79,6 +81,7 @@ pub struct InterfaceSummary {
 pub struct InterfaceFunction {
     pub symbol: String,
     pub source_name: String,
+    pub visibility: Visibility,
     pub receiver: Option<MethodReceiver>,
     pub generics: Vec<String>,
     pub arity: usize,
@@ -89,6 +92,7 @@ pub struct InterfaceFunction {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterfaceStatic {
     pub symbol: String,
+    pub visibility: Visibility,
     pub ty: Option<String>,
 }
 
@@ -134,6 +138,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .filter_map(|item| match item {
             SourceItem::Def {
                 name,
+                visibility,
                 receiver,
                 generics,
                 params,
@@ -142,6 +147,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
             } => Some(SurfaceDef {
                 owner: namespace.clone(),
                 name: name.clone(),
+                visibility: *visibility,
                 receiver: receiver.clone(),
                 generics: generics.clone(),
                 arity: params.len(),
@@ -155,9 +161,15 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .items
         .iter()
         .filter_map(|item| match item {
-            SourceItem::StaticValue { name, ty, .. } => Some(SurfaceStatic {
+            SourceItem::StaticValue {
+                name,
+                visibility,
+                ty,
+                ..
+            } => Some(SurfaceStatic {
                 owner: namespace.clone(),
                 name: name.clone(),
+                visibility: *visibility,
                 ty: ty.clone(),
             }),
             SourceItem::Def { .. } => None,
@@ -230,6 +242,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .map(|def| InterfaceFunction {
             symbol: def_symbol(def),
             source_name: def.name.clone(),
+            visibility: def.visibility,
             receiver: def.receiver.clone(),
             generics: def.generics.clone(),
             arity: def.arity,
@@ -242,6 +255,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .iter()
         .map(|static_value| InterfaceStatic {
             symbol: owned_symbol(&static_value.owner, &static_value.name),
+            visibility: static_value.visibility,
             ty: static_value.ty.clone(),
         })
         .collect();
@@ -300,6 +314,7 @@ fn sort_defs(defs: &mut [SurfaceDef]) {
             left.owner.as_str(),
             left.receiver.as_ref().map(MethodReceiver::display_name),
             left.name.as_str(),
+            left.visibility,
             left.arity,
             &left.param_types,
             &left.return_type,
@@ -308,6 +323,7 @@ fn sort_defs(defs: &mut [SurfaceDef]) {
                 right.owner.as_str(),
                 right.receiver.as_ref().map(MethodReceiver::display_name),
                 right.name.as_str(),
+                right.visibility,
                 right.arity,
                 &right.param_types,
                 &right.return_type,
@@ -317,9 +333,10 @@ fn sort_defs(defs: &mut [SurfaceDef]) {
 
 fn sort_statics(statics: &mut [SurfaceStatic]) {
     statics.sort_by(|left, right| {
-        (left.owner.as_str(), left.name.as_str(), &left.ty).cmp(&(
+        (left.owner.as_str(), left.name.as_str(), left.visibility, &left.ty).cmp(&(
             right.owner.as_str(),
             right.name.as_str(),
+            right.visibility,
             &right.ty,
         ))
     });
@@ -500,6 +517,11 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
             text.push('.');
         }
         text.push_str(&def.name);
+        text.push(':');
+        text.push_str(match def.visibility {
+            Visibility::Public => "public",
+            Visibility::Private => "private",
+        });
         text.push('[');
         text.push_str(&def.generics.join(","));
         text.push(']');
@@ -520,6 +542,11 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
     for static_value in &surface.statics {
         text.push_str("|static:");
         text.push_str(&static_value.name);
+        text.push(':');
+        text.push_str(match static_value.visibility {
+            Visibility::Public => "public",
+            Visibility::Private => "private",
+        });
         text.push(':');
         text.push_str(static_value.ty.as_deref().unwrap_or("_"));
     }

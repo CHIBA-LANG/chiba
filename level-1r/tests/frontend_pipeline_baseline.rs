@@ -42,6 +42,7 @@ fn frontend_lexes_and_parses_def_source_to_program() {
             params,
             return_type,
             body,
+            ..
         } => {
             assert_eq!(name, "main");
             assert_eq!(receiver, &None);
@@ -75,6 +76,7 @@ fn frontend_parses_method_style_def_with_generic_receiver_and_self_type() {
             params,
             return_type,
             body,
+            ..
         } => {
             assert_eq!(name, "update");
             assert_eq!(
@@ -98,7 +100,8 @@ fn frontend_parses_method_style_def_with_generic_receiver_and_self_type() {
 
 #[test]
 fn frontend_parses_row_style_type_decl_with_generics() {
-    let output = parse_source_program("type Box[T] = { value: T } def main() = 0")
+    let output = parse_source_program("type Box[T] = { value: T }
+def main() = 0")
         .expect("frontend parse");
 
     assert_eq!(
@@ -114,7 +117,8 @@ fn frontend_parses_row_style_type_decl_with_generics() {
 
 #[test]
 fn frontend_parses_type_alias_decl() {
-    let output = parse_source_program("type UserId = i64 def main(id: UserId) = id")
+    let output = parse_source_program("type UserId = i64
+def main(id: UserId) = id")
         .expect("frontend parse");
 
     assert_eq!(
@@ -127,7 +131,8 @@ fn frontend_parses_type_alias_decl() {
 #[test]
 fn frontend_parses_utf8_row_style_type_decl_names() {
     let output = parse_source_program(
-        "type 向量🚀[Τ] = { 值中文: Τ, emoji字段🚀: i64 } def main() = 0",
+        "type 向量🚀[Τ] = { 值中文: Τ, emoji字段🚀: i64 }
+def main() = 0",
     )
     .expect("frontend parse");
 
@@ -155,7 +160,8 @@ fn frontend_parses_utf8_row_style_type_decl_names() {
 
 #[test]
 fn frontend_source_program_enters_program_bundle_pipeline() {
-    let parsed = parse_source_program("def helper() = true def main() = 7").expect("parse");
+    let parsed = parse_source_program("def helper() = true
+def main() = 7").expect("parse");
     let bundle = compile_program_bundle(&parsed.program);
 
     assert_eq!(bundle.entry, Some("main".to_string()));
@@ -172,7 +178,10 @@ fn frontend_source_program_enters_program_bundle_pipeline() {
 #[test]
 fn frontend_parses_namespace_and_use_headers_as_project_surface() {
     let output = parse_source_program(
-        "namespace parser.chiba use frontend.ast.* use std.regex def main() = 7",
+        "namespace parser.chiba
+use frontend.ast.*
+use std.regex
+def main() = 7",
     )
     .expect("frontend parse");
 
@@ -214,7 +223,10 @@ fn frontend_parses_namespace_and_use_headers_as_project_surface() {
 #[test]
 fn frontend_project_surface_reaches_program_summary_and_keeps_entry() {
     let output = compile_source_program_bundle(
-        "namespace parser.chiba use frontend.ast.* def helper() = 1 def main() = 7",
+        "namespace parser.chiba
+use frontend.ast.*
+def helper() = 1
+def main() = 7",
     )
     .expect("compile source");
 
@@ -244,7 +256,8 @@ fn frontend_project_surface_reaches_program_summary_and_keeps_entry() {
 
 #[test]
 fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
-    let output = compile_source_program_bundle("def helper(x) = f(1) def main() = helper(2)")
+    let output = compile_source_program_bundle("def helper(x) = f(1)
+def main() = helper(2)")
         .expect("compile source");
 
     assert_eq!(output.frontend.tokens.len(), 19);
@@ -304,7 +317,8 @@ fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
 #[test]
 fn frontend_parses_data_decl_and_uses_variants_for_qualified_ctors() {
     let output = compile_source_program_bundle(
-        "data Option[T] = { Some(T), None } def main() = Option.Some(1)",
+        "data Option[T] = { Some(T), None }
+def main() = Option.Some(1)",
     )
     .expect("compile source");
     let main = &output.program.defs[0].output;
@@ -379,7 +393,8 @@ fn frontend_parses_data_decl_and_uses_variants_for_qualified_ctors() {
 #[test]
 fn frontend_data_decl_allows_zero_arg_qualified_ctor_and_exhaustive_match() {
     let output = compile_source_program_bundle(
-        "data Option[T] = { Some(T), None } def main() = match Option.None { Option.Some(value) => value, Option.None => 0 }",
+        "data Option[T] = { Some(T), None }
+def main() = match Option.None { Option.Some(value) => value, Option.None => 0 }",
     )
     .expect("compile source");
     let main = &output.program.defs[0].output;
@@ -420,7 +435,8 @@ fn frontend_data_decl_allows_zero_arg_qualified_ctor_and_exhaustive_match() {
 #[test]
 fn frontend_data_variant_summary_is_independent_of_decl_order() {
     let output = compile_source_program_bundle(
-        "def main() = Option.Some(1) data Option[T] = { Some(T), None }",
+        "def main() = Option.Some(1)
+data Option[T] = { Some(T), None }",
     )
     .expect("compile source");
 
@@ -472,7 +488,8 @@ fn frontend_supports_parameters_and_variables() {
 
 #[test]
 fn frontend_parses_typed_global_value_def_surface() {
-    let output = compile_source_program_bundle("def ANSWER: I64 = 42 def main() = ANSWER")
+    let output = compile_source_program_bundle("def ANSWER: I64 = 42
+def main() = ANSWER")
         .expect("compile source");
 
     assert_eq!(output.frontend.program.items.len(), 2);
@@ -480,6 +497,7 @@ fn frontend_parses_typed_global_value_def_surface() {
         output.frontend.program.items[0],
         SourceItem::StaticValue {
             name: "ANSWER".to_string(),
+            visibility: chiba_level1r::Visibility::Public,
             ty: Some("I64".to_string()),
             body: Expr::i64(42),
         }
@@ -528,6 +546,7 @@ fn frontend_parses_explicit_checked_template_def_header() {
             params,
             return_type,
             body,
+            ..
         } => {
             assert_eq!(name, "id");
             assert_eq!(receiver, &None);
@@ -543,7 +562,8 @@ fn frontend_parses_explicit_checked_template_def_header() {
 #[test]
 fn frontend_parses_explicit_call_site_instantiation_without_breaking_index() {
     let parsed =
-        parse_source_program("def main() = id[T](value) def at(values, i) = values[i]")
+        parse_source_program("def main() = id[T](value)
+def at(values, i) = values[i]")
             .expect("parse");
 
     match &parsed.program.items[0] {
@@ -568,7 +588,9 @@ fn frontend_parses_explicit_call_site_instantiation_without_breaking_index() {
 
 #[test]
 fn frontend_parses_static_value_defs_separately_from_zero_arg_functions() {
-    let output = parse_source_program("def ONE: i64 = 1 def TWO = ONE def main() = TWO")
+    let output = parse_source_program("def ONE: i64 = 1
+def TWO = ONE
+def main() = TWO")
         .expect("frontend parse");
 
     assert_eq!(output.program.items.len(), 3);
@@ -576,6 +598,7 @@ fn frontend_parses_static_value_defs_separately_from_zero_arg_functions() {
         output.program.items[0],
         SourceItem::StaticValue {
             name: "ONE".to_string(),
+            visibility: chiba_level1r::Visibility::Public,
             ty: Some("i64".to_string()),
             body: Expr::i64(1),
         }
@@ -584,6 +607,7 @@ fn frontend_parses_static_value_defs_separately_from_zero_arg_functions() {
         output.program.items[1],
         SourceItem::StaticValue {
             name: "TWO".to_string(),
+            visibility: chiba_level1r::Visibility::Public,
             ty: None,
             body: Expr::var("ONE"),
         }
@@ -1029,7 +1053,8 @@ fn frontend_parses_nested_tuple_record_and_at_patterns() {
 #[test]
 fn frontend_parses_qualified_adt_constructor_expression() {
     let output = compile_source_program_bundle(
-        "data Option[T] = { Some(T), None } def main() = Option.Some(1)",
+        "data Option[T] = { Some(T), None }
+def main() = Option.Some(1)",
     )
     .expect("compile source");
     let main = &output.program.defs[0].output;
@@ -1095,7 +1120,8 @@ fn frontend_unknown_qualified_call_is_not_guessed_as_adt_ctor() {
 #[test]
 fn frontend_utf8_identifiers_and_ctors_are_not_ascii_case_guessed() {
     let output = compile_source_program_bundle(
-        "data 选项 = { 成功(i64), 失败 } def main() = 选项.成功(1)",
+        "data 选项 = { 成功(i64), 失败 }
+def main() = 选项.成功(1)",
     )
     .expect("compile source");
     let main = &output.program.defs[0].output;
@@ -1140,7 +1166,8 @@ fn frontend_utf8_identifiers_and_ctors_are_not_ascii_case_guessed() {
 #[test]
 fn frontend_accepts_greek_chinese_and_emoji_symbols() {
     let output = compile_source_program_bundle(
-        "data 结果 = { 🚀Ok(i64), 失败 } def 函数α() = 结果.🚀Ok(1)",
+        "data 结果 = { 🚀Ok(i64), 失败 }
+def 函数α() = 结果.🚀Ok(1)",
     )
     .expect("compile source");
     let main = &output.program.defs[0].output;
@@ -1191,7 +1218,8 @@ fn frontend_accepts_greek_chinese_and_emoji_symbols() {
 #[test]
 fn frontend_accepts_utf8_function_scalar_and_adt_constructor_names_together() {
     let output = compile_source_program_bundle(
-        "data 结果α = { 🚀成功(i64), 失败中文 } def 计算🚀(值α: i64) = match 结果α.🚀成功(值α) { 结果α.🚀成功(内值) => 内值, 结果α.失败中文 => 0 }",
+        "data 结果α = { 🚀成功(i64), 失败中文 }
+def 计算🚀(值α: i64) = match 结果α.🚀成功(值α) { 结果α.🚀成功(内值) => 内值, 结果α.失败中文 => 0 }",
     )
     .expect("compile source");
     let main = &output.program.defs[0].output;
@@ -1256,7 +1284,9 @@ fn frontend_accepts_utf8_function_scalar_and_adt_constructor_names_together() {
 #[test]
 fn frontend_accepts_utf8_names_for_function_scalar_adt_and_ctor_in_one_program() {
     let output = compile_source_program_bundle(
-        "data 结果🚀 = { 🚀成功(i64), 失败中文 } def 标量Ω: i64 = 41 def 计算🚀(输入β: i64) = match 结果🚀.🚀成功(标量Ω) { 结果🚀.🚀成功(绑定中文) => 绑定中文, 结果🚀.失败中文 => 输入β }",
+        "data 结果🚀 = { 🚀成功(i64), 失败中文 }
+def 标量Ω: i64 = 41
+def 计算🚀(输入β: i64) = match 结果🚀.🚀成功(标量Ω) { 结果🚀.🚀成功(绑定中文) => 绑定中文, 结果🚀.失败中文 => 输入β }",
     )
     .expect("compile source");
 
@@ -1337,7 +1367,12 @@ fn frontend_accepts_utf8_names_for_function_scalar_adt_and_ctor_in_one_program()
 #[test]
 fn frontend_preserves_utf8_names_across_type_alias_row_adt_and_patterns() {
     let output = compile_source_program_bundle(
-        "type 标识Ω = i64 type 盒子🚀 = { 值中文: 标识Ω } data 结果🚀 = { 🚀成功(标识Ω), 失败中文 } def 标量Ω: 标识Ω = 41 def 读取中文(输入β: 盒子🚀): 标识Ω = 输入β.值中文 def 计算🚀(参数盒: 盒子🚀) = match 结果🚀.🚀成功(读取中文(参数盒)) { 结果🚀.🚀成功(绑定中文) => 绑定中文, 结果🚀.失败中文 => 标量Ω }",
+        "type 标识Ω = i64
+type 盒子🚀 = { 值中文: 标识Ω }
+data 结果🚀 = { 🚀成功(标识Ω), 失败中文 }
+def 标量Ω: 标识Ω = 41
+def 读取中文(输入β: 盒子🚀): 标识Ω = 输入β.值中文
+def 计算🚀(参数盒: 盒子🚀) = match 结果🚀.🚀成功(读取中文(参数盒)) { 结果🚀.🚀成功(绑定中文) => 绑定中文, 结果🚀.失败中文 => 标量Ω }",
     )
     .expect("compile source");
 
@@ -1405,7 +1440,8 @@ fn frontend_preserves_utf8_names_across_type_alias_row_adt_and_patterns() {
 #[test]
 fn frontend_parses_qualified_constructor_patterns() {
     let output = compile_source_program_bundle(
-        "data Option[T] = { Some(T), None } def main() = match Option.Some(1) { Option.Some(value) => value, Option.None => 0 }",
+        "data Option[T] = { Some(T), None }
+def main() = match Option.Some(1) { Option.Some(value) => value, Option.None => 0 }",
     )
     .expect("compile source");
     let main = &output.program.defs[0].output;
@@ -1730,4 +1766,18 @@ fn frontend_reports_lexer_errors_for_unknown_characters() {
     let err = parse_source_program("def main() = $").unwrap_err();
 
     assert!(matches!(err, FrontendError::Lex(_)));
+}
+
+#[test]
+fn frontend_rejects_adjacent_top_level_defs_without_newline() {
+    let err = parse_source_program("def first() = 1 def second() = 2").unwrap_err();
+
+    assert!(matches!(
+        err,
+        FrontendError::UnexpectedToken {
+            found,
+            lexeme,
+            expected,
+        } if found == "KwDef" && lexeme == "def" && expected == vec!["Newline".to_string()]
+    ));
 }

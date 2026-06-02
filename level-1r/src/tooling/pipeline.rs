@@ -441,6 +441,7 @@ fn compile_program_defs(
                 params,
                 return_type,
                 body,
+                ..
             } => Some(ProgramDefOutput {
                 name: name.clone(),
                 params: params.iter().map(|param| param.name.clone()).collect(),
