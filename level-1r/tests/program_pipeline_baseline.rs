@@ -303,6 +303,106 @@ fn program_literal_arg_tailcall_lowers_to_executable_direct_call_wat() {
 }
 
 #[test]
+fn program_param_branch_lowers_to_executable_wat() {
+    let program = SourceProgram::new(vec![
+        def(
+            "helper",
+            vec!["x"],
+            Expr::if_else(Expr::var("x"), Expr::i64(11), Expr::i64(22)),
+        ),
+        def(
+            "main",
+            vec![],
+            Expr::call_args(Expr::var("helper"), vec![Expr::i64(0)]),
+        ),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.backend_link.linked_wat
+    );
+    assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ReturnBranch {
+                cond: chiba_level1r::core::CoreValue::Var(name),
+                then_value: chiba_level1r::core::CoreValue::I64(11),
+                else_value: chiba_level1r::core::CoreValue::I64(22),
+            } if name == "x"
+        )
+    }));
+    assert!(bundle.backend_link.linked_wat.contains("(func $helper (param $x i32) (result i32)"));
+    assert!(bundle.backend_link.linked_wat.contains("local.get $x"));
+
+    let callable_wat = export_func_for_test(
+        &bundle.backend_link.linked_wat,
+        "$chiba_tailcall_0",
+        "tailcall_main",
+    );
+    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "22");
+}
+
+#[test]
+fn program_param_literal_match_lowers_to_executable_wat() {
+    let program = SourceProgram::new(vec![
+        def(
+            "helper",
+            vec!["x"],
+            Expr::match_expr(
+                Expr::var("x"),
+                vec![
+                    (chiba_level1r::ast::Pattern::lit_i64(1), Expr::i64(10)),
+                    (chiba_level1r::ast::Pattern::wildcard(), Expr::i64(30)),
+                ],
+            ),
+        ),
+        def(
+            "main",
+            vec![],
+            Expr::call_args(Expr::var("helper"), vec![Expr::i64(1)]),
+        ),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.backend_link.linked_wat
+    );
+    assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ReturnMatch {
+                scrutinee: chiba_level1r::core::CoreValue::Var(name),
+                arms,
+            } if name == "x"
+                && arms.len() == 2
+                && arms[0].pattern == chiba_level1r::core::CorePattern::I64(1)
+                && arms[0].value == chiba_level1r::core::CoreValue::I64(10)
+                && arms[1].pattern == chiba_level1r::core::CorePattern::Wildcard
+                && arms[1].value == chiba_level1r::core::CoreValue::I64(30)
+        )
+    }));
+    assert!(bundle.backend_link.linked_wat.contains("(func $helper (param $x i32) (result i32)"));
+    assert!(bundle.backend_link.linked_wat.contains("local.get $x"));
+
+    let callable_wat = export_func_for_test(
+        &bundle.backend_link.linked_wat,
+        "$chiba_tailcall_0",
+        "tailcall_main",
+    );
+    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "10");
+}
+
+#[test]
 fn program_adt_constructor_return_lowers_to_executable_tag_wat() {
     let program = SourceProgram::new(vec![def(
         "main",
