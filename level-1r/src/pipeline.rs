@@ -55,7 +55,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         analyze_alpha_closures(&alpha.expr)
     });
     let core = passes.record("L10Core", "CpsProgram", "CoreProgram", || {
-        lower_core_with_facts(&cps, &control.continuations, &specialize, &usage)
+        lower_core_with_facts(&cps, &control.continuations, &closure, &specialize, &usage)
     });
     let core_validation = passes.record("L11CoreValidate", "CoreProgram", "CoreValidation", || {
         validate_core(&core)

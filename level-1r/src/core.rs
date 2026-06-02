@@ -1,5 +1,6 @@
 use crate::control::{ContinuationFact, ContinuationKind};
 use crate::cps::{CpsAtom, CpsProgram, CpsTerm};
+use crate::closure::{ClosureFacts, ClosureStorageKind};
 use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{DynRowContract, RowShape};
 use crate::typed::{SendColor, UsageColor};
@@ -10,6 +11,7 @@ pub struct CoreProgram {
     pub ops: Vec<CoreOp>,
     pub layouts: Vec<LayoutFact>,
     pub ownership: Vec<OwnershipFact>,
+    pub callable_storage: Vec<CallableStorageFact>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -71,6 +73,24 @@ pub enum OwnershipDecision {
     DynPackage,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CallableStorageFact {
+    pub subject: String,
+    pub kind: CallableStorageKind,
+    pub usage: UsageColor,
+    pub send: SendColor,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CallableStorageKind {
+    DirectFn,
+    NoCaptureClosure,
+    EnvClosure,
+    BoxedCont1,
+    ContNPackage,
+    ErasedCallableAdt,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CoreValidation {
     pub diagnostics: Vec<CoreDiagnostic>,
@@ -89,6 +109,7 @@ pub enum CoreDiagnostic {
     Cont1HasPackageLayout { key: String },
     MissingDynRowLayout { layout: String },
     DynRowLayoutKindMismatch { layout: String },
+    SendableCallableContainsContinuation { subject: String },
     SharedSendSubjectUsesRc { subject: String },
     DynPayloadMustUseDynPackage { subject: String },
 }
@@ -97,6 +118,7 @@ pub fn lower_core(cps: &CpsProgram, continuations: &[ContinuationFact]) -> CoreP
     lower_core_with_facts(
         cps,
         continuations,
+        &ClosureFacts::default(),
         &SpecializationFacts::default(),
         &UsageFacts::default(),
     )
@@ -105,6 +127,7 @@ pub fn lower_core(cps: &CpsProgram, continuations: &[ContinuationFact]) -> CoreP
 pub fn lower_core_with_facts(
     cps: &CpsProgram,
     continuations: &[ContinuationFact],
+    closures: &ClosureFacts,
     specialize: &SpecializationFacts,
     usage: &UsageFacts,
 ) -> CoreProgram {
@@ -112,11 +135,13 @@ pub fn lower_core_with_facts(
     lower_term(&cps.term, continuations, &mut ops);
     let layouts = lower_layouts(continuations, specialize);
     let ownership = lower_ownership(continuations, specialize, usage);
+    let callable_storage = lower_callable_storage(continuations, closures);
     lower_specialization_ops(specialize, &layouts, &mut ops);
     CoreProgram {
         ops,
         layouts,
         ownership,
+        callable_storage,
     }
 }
 
@@ -126,6 +151,7 @@ pub fn validate_core(program: &CoreProgram) -> CoreValidation {
     validate_layouts(program, &mut diagnostics);
     validate_continuation_packages(program, &mut diagnostics);
     validate_dyn_adapter_layouts(program, &mut diagnostics);
+    validate_callable_storage(program, &mut diagnostics);
     validate_ownership(program, &mut diagnostics);
     CoreValidation { diagnostics }
 }
@@ -288,6 +314,20 @@ fn validate_dyn_adapter_layouts(program: &CoreProgram, diagnostics: &mut Vec<Cor
     }
 }
 
+fn validate_callable_storage(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    for fact in &program.callable_storage {
+        let continuation_variant = matches!(
+            fact.kind,
+            CallableStorageKind::BoxedCont1 | CallableStorageKind::ContNPackage
+        );
+        if fact.send == SendColor::Send && continuation_variant {
+            diagnostics.push(CoreDiagnostic::SendableCallableContainsContinuation {
+                subject: fact.subject.clone(),
+            });
+        }
+    }
+}
+
 fn validate_ownership(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
     for fact in &program.ownership {
         if fact.subject.contains("send") && fact.decision == OwnershipDecision::Rc {
@@ -385,6 +425,59 @@ fn lower_ownership(
                 ContinuationKind::Cont1 => OwnershipDecision::StackValue,
                 ContinuationKind::ContN => OwnershipDecision::DynPackage,
             },
+        });
+    }
+    facts
+}
+
+fn lower_callable_storage(
+    continuations: &[ContinuationFact],
+    closures: &ClosureFacts,
+) -> Vec<CallableStorageFact> {
+    let mut facts = Vec::new();
+    facts.push(CallableStorageFact {
+        subject: "top-level-def".to_string(),
+        kind: CallableStorageKind::DirectFn,
+        usage: UsageColor::Many,
+        send: SendColor::Send,
+    });
+    for closure in &closures.closures {
+        let has_captures = !closure.captures.is_empty();
+        facts.push(CallableStorageFact {
+            subject: format!("closure::{}", closure.param),
+            kind: match closure.storage {
+                ClosureStorageKind::DirectNoCapture => CallableStorageKind::NoCaptureClosure,
+                ClosureStorageKind::EnvClosure => CallableStorageKind::EnvClosure,
+            },
+            usage: if has_captures {
+                UsageColor::Many
+            } else {
+                UsageColor::One
+            },
+            send: if has_captures {
+                SendColor::Obligation
+            } else {
+                SendColor::Send
+            },
+        });
+    }
+    for fact in continuations {
+        facts.push(CallableStorageFact {
+            subject: format!("continuation::{}", fact.binder),
+            kind: match fact.kind {
+                ContinuationKind::Cont1 => CallableStorageKind::BoxedCont1,
+                ContinuationKind::ContN => CallableStorageKind::ContNPackage,
+            },
+            usage: fact.usage,
+            send: SendColor::NotSend,
+        });
+    }
+    if !continuations.is_empty() || !closures.closures.is_empty() {
+        facts.push(CallableStorageFact {
+            subject: "callable-storage::erased".to_string(),
+            kind: CallableStorageKind::ErasedCallableAdt,
+            usage: UsageColor::Many,
+            send: SendColor::Obligation,
         });
     }
     facts

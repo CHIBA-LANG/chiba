@@ -44,6 +44,7 @@ fn validator_rejects_invalid_layout_hash_and_duplicate_keys() {
         ops: vec![],
         layouts: vec![layout.clone(), layout],
         ownership: vec![],
+        callable_storage: vec![],
     };
 
     let validation = validate_core(&program);
@@ -76,6 +77,7 @@ fn validator_rejects_missing_contn_package_layout() {
         }],
         layouts: vec![],
         ownership: vec![],
+        callable_storage: vec![],
     };
 
     let validation = validate_core(&program);
@@ -107,6 +109,7 @@ fn validator_rejects_cont1_package_and_send_rc_contradiction() {
                 decision: OwnershipDecision::Rc,
             },
         ],
+        callable_storage: vec![],
     };
 
     let validation = validate_core(&program);
@@ -142,6 +145,7 @@ fn validator_rejects_dyn_adapter_missing_or_wrong_layout_ref() {
         }],
         layouts: vec![],
         ownership: vec![],
+        callable_storage: vec![],
     };
 
     assert_eq!(
@@ -165,6 +169,7 @@ fn validator_rejects_dyn_adapter_missing_or_wrong_layout_ref() {
             )])),
         }],
         ownership: vec![],
+        callable_storage: vec![],
     };
 
     assert!(
