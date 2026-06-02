@@ -239,6 +239,35 @@ fn interface_summary_preserves_row_style_type_decl_shape() {
 }
 
 #[test]
+fn interface_summary_splits_type_fields_from_phantom_markers() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "User",
+            Vec::new(),
+            vec![
+                TypeField::new("id", "i64"),
+                TypeField::new("_", "PhantomUser"),
+                TypeField::new("_", "AuditMarker"),
+            ],
+        )],
+        Vec::new(),
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.interface.types[0].fields.len(), 1);
+    assert_eq!(bundle.interface.types[0].fields[0].name, "id");
+    assert_eq!(
+        bundle.interface.types[0].phantom_markers,
+        vec!["PhantomUser".to_string(), "AuditMarker".to_string()]
+    );
+    assert!(bundle.render_summary().contains("phantom_markers"));
+}
+
+#[test]
 fn interface_summary_preserves_method_style_receiver_and_self_surface() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
@@ -747,6 +776,43 @@ fn interface_summary_hash_changes_when_constructor_arity_changes() {
     let two_hash = compile_program_bundle(&two_fields).interface.stable_hash;
 
     assert_ne!(one_hash, two_hash);
+}
+
+#[test]
+fn interface_summary_hash_changes_when_type_phantom_marker_changes() {
+    let user_marker = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "User",
+            Vec::new(),
+            vec![
+                TypeField::new("id", "i64"),
+                TypeField::new("_", "UserMarker"),
+            ],
+        )],
+        Vec::new(),
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+    let admin_marker = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "User",
+            Vec::new(),
+            vec![
+                TypeField::new("id", "i64"),
+                TypeField::new("_", "AdminMarker"),
+            ],
+        )],
+        Vec::new(),
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+
+    let user_hash = compile_program_bundle(&user_marker).interface.stable_hash;
+    let admin_hash = compile_program_bundle(&admin_marker).interface.stable_hash;
+
+    assert_ne!(user_hash, admin_hash);
 }
 
 #[test]

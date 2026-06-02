@@ -533,7 +533,6 @@ fn type_context_from_interface(interface: &InterfaceSummary) -> TypeContext {
         let fields = ty
             .fields
             .iter()
-            .filter(|field| field.name != "_")
             .map(|field| RecordTypeField {
                 name: field.name.clone(),
                 ty: header_type_to_type(&field.ty),

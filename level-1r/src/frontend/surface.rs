@@ -37,6 +37,7 @@ pub struct SurfaceType {
     pub name: String,
     pub generics: Vec<String>,
     pub fields: Vec<SurfaceTypeField>,
+    pub phantom_markers: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -95,6 +96,7 @@ pub struct InterfaceType {
     pub symbol: String,
     pub generics: Vec<String>,
     pub fields: Vec<InterfaceTypeField>,
+    pub phantom_markers: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -222,6 +224,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .map(|ty| InterfaceType {
             symbol: owned_symbol(&ty.owner, &ty.name),
             generics: ty.generics.clone(),
+            phantom_markers: ty.phantom_markers.clone(),
             fields: ty
                 .fields
                 .iter()
@@ -321,10 +324,17 @@ fn surface_type(owner: &str, decl: &TypeDecl) -> SurfaceType {
         fields: decl
             .fields
             .iter()
+            .filter(|field| field.name != "_")
             .map(|field| SurfaceTypeField {
                 name: field.name.clone(),
                 ty: field.ty.clone(),
             })
+            .collect(),
+        phantom_markers: decl
+            .fields
+            .iter()
+            .filter(|field| field.name == "_")
+            .map(|field| field.ty.clone())
             .collect(),
     }
 }
@@ -413,6 +423,8 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
             text.push_str(&field.ty);
             text.push(',');
         }
+        text.push_str("|phantom:");
+        text.push_str(&ty.phantom_markers.join(","));
         text.push('}');
     }
     for data in &surface.data {
