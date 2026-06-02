@@ -174,6 +174,7 @@ fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipD
 
 fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
     let mut wat = String::from("(module\n");
+    let mut return_index = 0usize;
     for entry in &manifest.entries {
         wat.push_str(&format!(
             "  ;; source={} origin={}\n",
@@ -183,12 +184,140 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
         wat.push_str("    i32.const 0)\n");
     }
     for op in &core.ops {
-        if let CoreOp::TailCall { func, .. } = op {
-            wat.push_str(&format!("  ;; tailcall {}\n", final_symbol(func)));
+        match op {
+            CoreOp::ReturnAtom(atom) => {
+                let symbol = if return_index == 0 {
+                    "main".to_string()
+                } else {
+                    format!("chiba_return_{return_index}")
+                };
+                wat.push_str(&format!(
+                    "  ;; core-return atom={}\n",
+                    escape_wat_comment(atom)
+                ));
+                wat.push_str(&format!("  (func ${symbol} (export \"{symbol}\") (result i32)\n"));
+                wat.push_str(&format!("    i32.const {})\n", atom_i32_result(atom)));
+                return_index += 1;
+            }
+            CoreOp::TailCall { func, arg } => {
+                wat.push_str(&format!(
+                    "  ;; tailcall {} arg={}\n",
+                    final_symbol(func),
+                    escape_wat_comment(arg)
+                ));
+            }
+            CoreOp::Branch { cond } => {
+                wat.push_str(&format!("  ;; branch cond={}\n", escape_wat_comment(cond)));
+            }
+            CoreOp::Match { scrutinee, patterns } => {
+                wat.push_str(&format!(
+                    "  ;; match scrutinee={} arms={}\n",
+                    escape_wat_comment(scrutinee),
+                    patterns.len()
+                ));
+            }
+            CoreOp::TupleConstruct { layout, fields } => {
+                wat.push_str(&format!(
+                    "  ;; tuple layout={} fields={}\n",
+                    escape_wat_comment(layout),
+                    fields.len()
+                ));
+            }
+            CoreOp::TupleFieldGet { layout, field } => {
+                wat.push_str(&format!(
+                    "  ;; tuple-field layout={} field={}\n",
+                    escape_wat_comment(layout),
+                    escape_wat_comment(field)
+                ));
+            }
+            CoreOp::RecordConstruct { layout, fields } => {
+                wat.push_str(&format!(
+                    "  ;; record layout={} fields={}\n",
+                    escape_wat_comment(layout),
+                    fields.len()
+                ));
+            }
+            CoreOp::RecordUpdate {
+                base,
+                layout,
+                fields,
+            } => {
+                wat.push_str(&format!(
+                    "  ;; record-update base={} layout={} fields={}\n",
+                    escape_wat_comment(base),
+                    escape_wat_comment(layout),
+                    fields.len()
+                ));
+            }
+            CoreOp::RecordFieldGet { layout, field } => {
+                wat.push_str(&format!(
+                    "  ;; record-field layout={} field={}\n",
+                    escape_wat_comment(layout),
+                    escape_wat_comment(field)
+                ));
+            }
+            CoreOp::AdtConstruct {
+                data, ctor, args, ..
+            } => {
+                wat.push_str(&format!(
+                    "  ;; adt data={} ctor={} args={}\n",
+                    escape_wat_comment(data),
+                    escape_wat_comment(ctor),
+                    args.len()
+                ));
+            }
+            CoreOp::Prompt { kind } => {
+                wat.push_str(&format!("  ;; prompt kind={kind:?}\n"));
+            }
+            CoreOp::CaptureContinuation { binder, kind } => {
+                wat.push_str(&format!(
+                    "  ;; capture-cont binder={} kind={kind:?}\n",
+                    escape_wat_comment(binder)
+                ));
+            }
+            CoreOp::StaticRowAccess { field, layout } => {
+                wat.push_str(&format!(
+                    "  ;; static-row field={} layout={}\n",
+                    escape_wat_comment(field),
+                    escape_wat_comment(layout)
+                ));
+            }
+            CoreOp::DynRowAdapterAccess { subject, layout } => {
+                wat.push_str(&format!(
+                    "  ;; dyn-row subject={} layout={}\n",
+                    escape_wat_comment(subject),
+                    escape_wat_comment(layout)
+                ));
+            }
+            CoreOp::DirectMethodTarget { .. }
+            | CoreOp::OperatorTarget { .. }
+            | CoreOp::LiftedFunction { .. } => {}
         }
     }
     wat.push_str(")\n");
     wat
+}
+
+fn atom_i32_result(atom: &str) -> i32 {
+    if atom == "Unit" || atom == "unit" {
+        0
+    } else if atom == "Bool(true)" || atom == "true" {
+        1
+    } else if atom == "Bool(false)" || atom == "false" {
+        0
+    } else if let Some(value) = atom
+        .strip_prefix("I64(")
+        .and_then(|rest| rest.strip_suffix(')'))
+        .and_then(|digits| digits.parse::<i64>().ok())
+    {
+        value as i32
+    } else {
+        0
+    }
+}
+
+fn escape_wat_comment(text: &str) -> String {
+    text.replace('\n', "\\n").replace('\r', "\\r")
 }
 
 fn final_symbol(symbol: &str) -> String {

@@ -76,8 +76,30 @@ fn backend_records_tailcall_targets_in_serialized_output() {
 
     assert_eq!(artifact.diagnostics, vec![]);
     assert!(artifact.wat.contains("(func $math_Vec2_norm"));
-    assert!(artifact.wat.contains(";; tailcall math_Vec2_norm"));
+    assert!(artifact.wat.contains(";; tailcall math_Vec2_norm arg=v"));
     assert_eq!(artifact.manifest.entries[0].source_debug_name, "norm");
+}
+
+#[test]
+fn backend_emits_exported_main_for_return_atom_core() {
+    let output = compile_expr(&Expr::i64(7));
+
+    assert_eq!(output.backend.diagnostics, vec![]);
+    assert!(output.backend.wat.contains(";; core-return atom=I64(7)"));
+    assert!(output.backend.wat.contains("(func $main (export \"main\") (result i32)"));
+    assert!(output.backend.wat.contains("i32.const 7"));
+}
+
+#[test]
+fn backend_serializes_structural_core_ops_as_debuggable_wat_comments() {
+    let output = compile_expr(&Expr::record(vec![
+        ("x", Expr::i64(1)),
+        ("y", Expr::bool(true)),
+    ]));
+
+    assert_eq!(output.backend.diagnostics, vec![]);
+    assert!(output.backend.wat.contains(";; record layout=record::x+y fields=2"));
+    assert!(output.backend.wat.contains(";; core-return atom=record::x+y{x=1, y=true}"));
 }
 
 #[test]
