@@ -25,6 +25,7 @@ pub enum TemplateObligationSource {
     Field,
     Method,
     Function,
+    Static,
     Constructor,
     Operator,
     DynAdapter,
@@ -108,6 +109,7 @@ fn obligation_source(obligation: &TemplateObligation) -> TemplateObligationSourc
         TemplateObligation::Field { .. } => TemplateObligationSource::Field,
         TemplateObligation::Method { .. } => TemplateObligationSource::Method,
         TemplateObligation::Function { .. } => TemplateObligationSource::Function,
+        TemplateObligation::Static { .. } => TemplateObligationSource::Static,
         TemplateObligation::Constructor { .. } => TemplateObligationSource::Constructor,
         TemplateObligation::Operator { .. } => TemplateObligationSource::Operator,
         TemplateObligation::DynAdapter { .. } => TemplateObligationSource::DynAdapter,
@@ -130,6 +132,7 @@ fn discharged_source(obligation: &DischargedObligation) -> TemplateObligationSou
         DischargedObligation::Field { .. } => TemplateObligationSource::Field,
         DischargedObligation::Method { .. } => TemplateObligationSource::Method,
         DischargedObligation::Function { .. } => TemplateObligationSource::Function,
+        DischargedObligation::Static { .. } => TemplateObligationSource::Static,
         DischargedObligation::Constructor { .. } => TemplateObligationSource::Constructor,
         DischargedObligation::Operator { .. } => TemplateObligationSource::Operator,
         DischargedObligation::DynAdapter { .. } => TemplateObligationSource::DynAdapter,
@@ -158,6 +161,9 @@ fn explanation_for(obligation: &TemplateObligation) -> String {
         },
         TemplateObligation::Function { name, resolved } => {
             format!("function `{name}` is resolved to owner symbol `{resolved}`")
+        }
+        TemplateObligation::Static { name, resolved } => {
+            format!("static value `{name}` is resolved to owner symbol `{resolved}`")
         }
         TemplateObligation::Constructor {
             data,

@@ -26,7 +26,14 @@ pub struct NameCandidate {
     pub symbol: String,
     pub owner: String,
     pub visibility: Visibility,
+    pub kind: NameCandidateKind,
     pub arity: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NameCandidateKind {
+    Function,
+    Static,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -71,6 +78,10 @@ pub enum ResolvedCall {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ResolvedName {
     Function {
+        name: String,
+        symbol: String,
+    },
+    Static {
         name: String,
         symbol: String,
     },
@@ -179,6 +190,18 @@ impl NameIndex {
                 );
             }
         }
+        for static_value in &interface.statics {
+            let owner = owner_from_symbol(&static_value.symbol);
+            if !is_visible_from(static_value.visibility, &owner, current_namespace) {
+                continue;
+            }
+            index.add_static(
+                source_name_from_symbol(&static_value.symbol),
+                &static_value.symbol,
+                &owner,
+                static_value.visibility,
+            );
+        }
         for ctor in &interface.constructors {
             if let Some((data, ctor_name)) = data_ctor_from_symbol(&ctor.symbol) {
                 index.add_constructor(data, ctor_name, &ctor.symbol, ctor.arity);
@@ -191,6 +214,29 @@ impl NameIndex {
         let symbol = symbol.into();
         let owner = owner_from_symbol(&symbol);
         self.add_function_with_arity(name, symbol, owner, Visibility::Public, 0);
+    }
+
+    pub fn add_static(
+        &mut self,
+        name: impl Into<String>,
+        symbol: impl Into<String>,
+        owner: impl Into<String>,
+        visibility: Visibility,
+    ) {
+        let name = name.into();
+        let symbol = symbol.into();
+        let owner = owner.into();
+        self.functions
+            .entry(name.clone())
+            .or_default()
+            .push(NameCandidate {
+                name,
+                symbol,
+                owner,
+                visibility,
+                kind: NameCandidateKind::Static,
+                arity: 0,
+            });
     }
 
     pub fn add_function_with_arity(
@@ -212,6 +258,7 @@ impl NameIndex {
                 symbol,
                 owner,
                 visibility,
+                kind: NameCandidateKind::Function,
                 arity,
             });
     }
@@ -441,10 +488,7 @@ fn resolve_var_name(name: &str, facts: &mut ResolveFacts) {
     let candidates = facts.names.find_function(name).to_vec();
     match candidates.as_slice() {
         [] => {}
-        [candidate] => facts.resolved_names.push(ResolvedName::Function {
-            name: name.to_string(),
-            symbol: candidate.symbol.clone(),
-        }),
+        [candidate] => push_resolved_name(name, candidate, facts),
         many => facts.diagnostics.push(ResolveDiagnostic::AmbiguousName {
             name: name.to_string(),
             candidates: many.iter().map(|candidate| candidate.symbol.clone()).collect(),
@@ -453,7 +497,13 @@ fn resolve_var_name(name: &str, facts: &mut ResolveFacts) {
 }
 
 fn resolve_function_call(name: &str, arity: usize, facts: &mut ResolveFacts) {
-    let candidates = facts.names.find_function(name).to_vec();
+    let candidates = facts
+        .names
+        .find_function(name)
+        .iter()
+        .filter(|candidate| candidate.kind == NameCandidateKind::Function)
+        .cloned()
+        .collect::<Vec<_>>();
     match candidates.as_slice() {
         [] => {}
         [candidate] if candidate.arity == arity => facts.resolved_names.push(
@@ -491,6 +541,19 @@ fn resolve_function_call(name: &str, arity: usize, facts: &mut ResolveFacts) {
                 }),
             }
         }
+    }
+}
+
+fn push_resolved_name(name: &str, candidate: &NameCandidate, facts: &mut ResolveFacts) {
+    match candidate.kind {
+        NameCandidateKind::Function => facts.resolved_names.push(ResolvedName::Function {
+            name: name.to_string(),
+            symbol: candidate.symbol.clone(),
+        }),
+        NameCandidateKind::Static => facts.resolved_names.push(ResolvedName::Static {
+            name: name.to_string(),
+            symbol: candidate.symbol.clone(),
+        }),
     }
 }
 
@@ -613,6 +676,13 @@ fn owner_from_symbol(symbol: &str) -> String {
         .split_once("::")
         .map(|(owner, _)| owner.to_string())
         .unwrap_or_else(|| "root".to_string())
+}
+
+fn source_name_from_symbol(symbol: &str) -> &str {
+    symbol
+        .rsplit_once("::")
+        .map(|(_, name)| name)
+        .unwrap_or(symbol)
 }
 
 fn is_visible_from(visibility: Visibility, owner: &str, current_namespace: &str) -> bool {

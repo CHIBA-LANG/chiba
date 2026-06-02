@@ -511,6 +511,28 @@ def main() = ANSWER")
         vec!["ANSWER".to_string()]
     );
     assert_eq!(output.program.global_init.statics[0].ty, Some("I64".to_string()));
+    let main = &output.program.defs[0].output;
+    assert!(main.resolve.resolved_names.contains(&ResolvedName::Static {
+        name: "ANSWER".to_string(),
+        symbol: "root::ANSWER".to_string(),
+    }));
+    assert!(main
+        .template
+        .obligations
+        .contains(&TemplateObligation::Static {
+            name: "ANSWER".to_string(),
+            resolved: "root::ANSWER".to_string(),
+        }));
+    assert!(main.specialize.work_items[0]
+        .obligations
+        .contains(&DischargedObligation::Static {
+            name: "ANSWER".to_string(),
+            target: "root::ANSWER".to_string(),
+        }));
+    let visual = main.render_visual();
+    assert!(visual.contains("resolve static ANSWER -> root::ANSWER"));
+    assert!(visual.contains("template static ANSWER -> root::ANSWER"));
+    assert!(visual.contains("specialize static ANSWER -> root::ANSWER"));
 }
 
 #[test]

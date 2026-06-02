@@ -51,6 +51,7 @@ pub enum DischargedObligation {
     Field { field: String, shape: RowShape },
     Method { name: String, target: Option<String> },
     Function { name: String, target: String },
+    Static { name: String, target: String },
     Constructor { data: String, ctor: String, target: String, arity: usize },
     Operator { protocol: String, receiver: Option<String> },
     DynAdapter { contract: DynRowContract },
@@ -96,6 +97,10 @@ pub fn specialization_key(generic_symbol: impl Into<String>, template: &Template
                 ..
             }
             | TemplateObligation::Function {
+                resolved: receiver,
+                ..
+            }
+            | TemplateObligation::Static {
                 resolved: receiver,
                 ..
             }
@@ -148,6 +153,10 @@ pub fn discharge_obligations(template: &TemplateFacts) -> Vec<DischargedObligati
                     target: resolved.clone(),
                 }
             }
+            TemplateObligation::Static { name, resolved } => DischargedObligation::Static {
+                name: name.clone(),
+                target: resolved.clone(),
+            },
             TemplateObligation::Constructor {
                 data,
                 ctor,

@@ -225,6 +225,56 @@ fn name_index_filters_private_functions_by_namespace_visibility() {
 }
 
 #[test]
+fn name_index_resolves_static_values_with_namespace_visibility() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["demo".to_string(), "math".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![
+            SourceItem::static_value("PUBLIC_CONST", Some("i64".to_string()), Expr::i64(1)),
+            SourceItem::static_value("SECRET", Some("i64".to_string()), Expr::i64(0))
+                .with_visibility(Visibility::Private),
+        ],
+    );
+    let interface = build_interface_summary(&project_surface(&program));
+    let public_alpha = alpha_expr(&Expr::var("PUBLIC_CONST"));
+    let secret_alpha = alpha_expr(&Expr::var("SECRET"));
+
+    let external_names = NameIndex::from_interface_for_namespace(&interface, "demo.app");
+    let public_external = resolve_expr_with_names(
+        &public_alpha.expr,
+        MethodIndex::default(),
+        external_names.clone(),
+    );
+    let secret_external =
+        resolve_expr_with_names(&secret_alpha.expr, MethodIndex::default(), external_names);
+    let secret_internal = resolve_expr_with_names(
+        &secret_alpha.expr,
+        MethodIndex::default(),
+        NameIndex::from_interface_for_namespace(&interface, "demo.math"),
+    );
+
+    assert_eq!(public_external.diagnostics, vec![]);
+    assert_eq!(
+        public_external.resolved_names,
+        vec![ResolvedName::Static {
+            name: "PUBLIC_CONST".to_string(),
+            symbol: "demo.math::PUBLIC_CONST".to_string(),
+        }]
+    );
+    assert_eq!(secret_external.diagnostics, vec![]);
+    assert_eq!(secret_external.resolved_names, vec![]);
+    assert_eq!(
+        secret_internal.resolved_names,
+        vec![ResolvedName::Static {
+            name: "SECRET".to_string(),
+            symbol: "demo.math::SECRET".to_string(),
+        }]
+    );
+}
+
+#[test]
 fn method_index_filters_private_methods_by_namespace_visibility() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["demo".to_string(), "math".to_string()])),

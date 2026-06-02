@@ -71,6 +71,10 @@ pub enum TemplateObligation {
         name: String,
         resolved: String,
     },
+    Static {
+        name: String,
+        resolved: String,
+    },
     Constructor {
         data: String,
         ctor: String,
@@ -434,6 +438,12 @@ fn collect_resolve_obligations(resolve: &ResolveFacts, facts: &mut TemplateFacts
         match name {
             ResolvedName::Function { name, symbol } => {
                 facts.obligations.push(TemplateObligation::Function {
+                    name: name.clone(),
+                    resolved: symbol.clone(),
+                });
+            }
+            ResolvedName::Static { name, symbol } => {
+                facts.obligations.push(TemplateObligation::Static {
                     name: name.clone(),
                     resolved: symbol.clone(),
                 });

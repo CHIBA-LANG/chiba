@@ -358,6 +358,7 @@ fn lower_specialization_ops(
                     target: target.clone(),
                 }),
                 DischargedObligation::Function { .. }
+                | DischargedObligation::Static { .. }
                 | DischargedObligation::Constructor { .. } => {}
                 DischargedObligation::Operator {
                     protocol,

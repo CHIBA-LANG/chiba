@@ -191,6 +191,9 @@ fn render_symbol_lineage(
             ResolvedName::Function { name, symbol } => {
                 writeln!(out, "resolve function {name} -> {symbol}").unwrap();
             }
+            ResolvedName::Static { name, symbol } => {
+                writeln!(out, "resolve static {name} -> {symbol}").unwrap();
+            }
             ResolvedName::Constructor {
                 data,
                 ctor,
@@ -205,6 +208,9 @@ fn render_symbol_lineage(
         match obligation {
             TemplateObligation::Function { name, resolved } => {
                 writeln!(out, "template function {name} -> {resolved}").unwrap();
+            }
+            TemplateObligation::Static { name, resolved } => {
+                writeln!(out, "template static {name} -> {resolved}").unwrap();
             }
             TemplateObligation::Constructor {
                 data,
@@ -233,6 +239,9 @@ fn render_symbol_lineage(
             match obligation {
                 DischargedObligation::Function { name, target } => {
                     writeln!(out, "specialize function {name} -> {target}").unwrap();
+                }
+                DischargedObligation::Static { name, target } => {
+                    writeln!(out, "specialize static {name} -> {target}").unwrap();
                 }
                 DischargedObligation::Constructor {
                     data,
