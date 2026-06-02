@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::ast::{
     BinaryOp, DataDecl, DataVariant, Expr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern,
-    SourceItem, SourceProgram, UseDecl,
+    SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl,
 };
 use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
 
@@ -49,6 +49,11 @@ fn chiba_lexer_spec() -> LexerSpec {
             LexerRule {
                 name: "KwData".to_string(),
                 pattern: "data".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "KwType".to_string(),
+                pattern: "type".to_string(),
                 skip: false,
             },
             LexerRule {
@@ -178,10 +183,12 @@ impl FrontendParser {
         while self.peek_name() == Some("KwUse") {
             imports.push(self.parse_use()?);
         }
-        let mut items = Vec::new();
+        let mut types = Vec::new();
         let mut data = Vec::new();
+        let mut items = Vec::new();
         while !self.is_eof() {
             match self.peek_name() {
+                Some("KwType") => types.push(self.parse_type_decl()?),
                 Some("KwData") => data.push(self.parse_data()?),
                 Some("KwDef") => items.push(self.parse_def()?),
                 Some(found) => {
@@ -189,7 +196,11 @@ impl FrontendParser {
                     return Err(FrontendError::UnexpectedToken {
                         found: found.to_string(),
                         lexeme: token.lexeme,
-                        expected: vec!["KwData".to_string(), "KwDef".to_string()],
+                        expected: vec![
+                            "KwType".to_string(),
+                            "KwData".to_string(),
+                            "KwDef".to_string(),
+                        ],
                     });
                 }
                 None => break,
@@ -200,7 +211,7 @@ impl FrontendParser {
             .into_iter()
             .map(|item| enrich_item_with_data_variants(item, &variants))
             .collect();
-        Ok(SourceProgram::with_surface(namespace, imports, data, items))
+        Ok(SourceProgram::with_surface(namespace, imports, types, data, items))
     }
 
     fn parse_namespace(&mut self) -> Result<NamespaceDecl, FrontendError> {
@@ -318,6 +329,30 @@ impl FrontendParser {
         let data = DataDecl::new(name, generics, variants);
         self.data_variants.insert(data.name.clone(), data.variant_names());
         Ok(data)
+    }
+
+    fn parse_type_decl(&mut self) -> Result<TypeDecl, FrontendError> {
+        self.expect("KwType")?;
+        let name = self.expect_lexeme("Ident")?;
+        let generics = if self.peek_name() == Some("LBracket") {
+            self.parse_generic_params()?
+        } else {
+            Vec::new()
+        };
+        self.expect("Eq")?;
+        self.expect("LBrace")?;
+        let mut fields = Vec::new();
+        while self.peek_name() != Some("RBrace") {
+            let field_name = self.expect_lexeme("Ident")?;
+            self.expect("Colon")?;
+            let ty = self.expect_type_name()?;
+            fields.push(TypeField::new(field_name, ty));
+            if self.peek_name() == Some("Comma") {
+                self.pos += 1;
+            }
+        }
+        self.expect("RBrace")?;
+        Ok(TypeDecl::new(name, generics, fields))
     }
 
     fn parse_generic_params(&mut self) -> Result<Vec<String>, FrontendError> {

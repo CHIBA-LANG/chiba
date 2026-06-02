@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::ast::{DataDecl, MethodReceiver, SourceItem, SourceProgram};
+use crate::ast::{DataDecl, MethodReceiver, SourceItem, SourceProgram, TypeDecl};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectSurface {
@@ -8,6 +8,7 @@ pub struct ProjectSurface {
     pub imports: Vec<String>,
     pub defs: Vec<SurfaceDef>,
     pub statics: Vec<SurfaceStatic>,
+    pub types: Vec<SurfaceType>,
     pub data: Vec<SurfaceData>,
     pub constructors: Vec<SurfaceConstructor>,
 }
@@ -31,6 +32,20 @@ pub struct SurfaceStatic {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SurfaceType {
+    pub owner: String,
+    pub name: String,
+    pub generics: Vec<String>,
+    pub fields: Vec<SurfaceTypeField>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SurfaceTypeField {
+    pub name: String,
+    pub ty: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SurfaceData {
     pub owner: String,
     pub name: String,
@@ -51,6 +66,7 @@ pub struct InterfaceSummary {
     pub namespace: String,
     pub functions: Vec<InterfaceFunction>,
     pub statics: Vec<InterfaceStatic>,
+    pub types: Vec<InterfaceType>,
     pub data: Vec<InterfaceData>,
     pub constructors: Vec<InterfaceConstructor>,
     pub imports: Vec<String>,
@@ -72,6 +88,19 @@ pub struct InterfaceFunction {
 pub struct InterfaceStatic {
     pub symbol: String,
     pub ty: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterfaceType {
+    pub symbol: String,
+    pub generics: Vec<String>,
+    pub fields: Vec<InterfaceTypeField>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterfaceTypeField {
+    pub name: String,
+    pub ty: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -135,6 +164,11 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .iter()
         .map(|decl| surface_data(&namespace, decl))
         .collect::<Vec<_>>();
+    let types = program
+        .types
+        .iter()
+        .map(|decl| surface_type(&namespace, decl))
+        .collect::<Vec<_>>();
     let constructors = program
         .data
         .iter()
@@ -145,6 +179,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         imports,
         defs,
         statics,
+        types,
         data,
         constructors,
     }
@@ -181,6 +216,22 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
             variants: data.variants.clone(),
         })
         .collect();
+    let types = surface
+        .types
+        .iter()
+        .map(|ty| InterfaceType {
+            symbol: owned_symbol(&ty.owner, &ty.name),
+            generics: ty.generics.clone(),
+            fields: ty
+                .fields
+                .iter()
+                .map(|field| InterfaceTypeField {
+                    name: field.name.clone(),
+                    ty: field.ty.clone(),
+                })
+                .collect(),
+        })
+        .collect();
     let constructors = surface
         .constructors
         .iter()
@@ -195,6 +246,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         namespace: surface.namespace.clone(),
         functions,
         statics,
+        types,
         data,
         constructors,
         imports: surface.imports.clone(),
@@ -226,6 +278,22 @@ fn surface_data(owner: &str, decl: &DataDecl) -> SurfaceData {
         name: decl.name.clone(),
         generics: decl.generics.clone(),
         variants: decl.variant_names(),
+    }
+}
+
+fn surface_type(owner: &str, decl: &TypeDecl) -> SurfaceType {
+    SurfaceType {
+        owner: owner.to_string(),
+        name: decl.name.clone(),
+        generics: decl.generics.clone(),
+        fields: decl
+            .fields
+            .iter()
+            .map(|field| SurfaceTypeField {
+                name: field.name.clone(),
+                ty: field.ty.clone(),
+            })
+            .collect(),
     }
 }
 
@@ -299,6 +367,21 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
         text.push_str(&static_value.name);
         text.push(':');
         text.push_str(static_value.ty.as_deref().unwrap_or("_"));
+    }
+    for ty in &surface.types {
+        text.push_str("|type:");
+        text.push_str(&ty.name);
+        text.push('[');
+        text.push_str(&ty.generics.join(","));
+        text.push(']');
+        text.push('{');
+        for field in &ty.fields {
+            text.push_str(&field.name);
+            text.push(':');
+            text.push_str(&field.ty);
+            text.push(',');
+        }
+        text.push('}');
     }
     for data in &surface.data {
         text.push_str("|data:");

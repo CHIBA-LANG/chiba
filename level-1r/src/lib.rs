@@ -60,7 +60,7 @@ pub mod usage_audit;
 
 pub use ast::{
     DataDecl, DataVariant, Expr, Literal, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem,
-    SourceProgram, UseDecl,
+    SourceProgram, TypeDecl, TypeField, UseDecl,
 };
 pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use cps::{cps_program, CpsProgram};
@@ -74,7 +74,7 @@ pub use resolve::{resolve_expr, resolve_expr_with_names, MethodIndex, NameIndex,
 pub use specialize::{plan_specialization, SpecializationFacts};
 pub use surface::{
     build_interface_summary, project_surface, InterfaceSummary, ProjectSurface, SurfaceConstructor,
-    SurfaceData, SurfaceDef,
+    SurfaceData, SurfaceDef, SurfaceType, SurfaceTypeField,
 };
 pub use template::{
     analyze_template, analyze_template_with_source, TemplateFacts, TemplateInstantiation,

@@ -1,6 +1,6 @@
 use chiba_level1r::ast::{
     DataDecl, DataVariant, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
-    UseDecl,
+    TypeDecl, TypeField, UseDecl,
 };
 use chiba_level1r::typed::{Type, TypedExprKind};
 use chiba_level1r::{compile_program, compile_program_bundle, Expr, ProgramDiagnostic};
@@ -90,6 +90,7 @@ fn program_surface_and_interface_summary_preserve_owner_namespace() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
         vec![UseDecl::new(vec!["std".to_string(), "regex".to_string()], false)],
+        Vec::new(),
         vec![DataDecl::new(
             "Option",
             vec!["T".to_string()],
@@ -136,6 +137,7 @@ fn interface_summary_preserves_function_signature_types() {
         Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
@@ -171,6 +173,7 @@ fn interface_summary_preserves_function_signature_types() {
 fn interface_summary_preserves_explicit_checked_template_params() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
@@ -209,9 +212,37 @@ fn interface_summary_preserves_explicit_checked_template_params() {
 }
 
 #[test]
+fn interface_summary_preserves_row_style_type_decl_shape() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            vec!["T".to_string()],
+            vec![TypeField::new("value", "T")],
+        )],
+        Vec::new(),
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.surface.types[0].owner, "parser.core");
+    assert_eq!(bundle.surface.types[0].name, "Box");
+    assert_eq!(bundle.surface.types[0].generics, vec!["T".to_string()]);
+    assert_eq!(bundle.surface.types[0].fields[0].name, "value");
+    assert_eq!(bundle.surface.types[0].fields[0].ty, "T");
+    assert_eq!(bundle.interface.types[0].symbol, "parser.core::Box");
+    assert_eq!(bundle.interface.types[0].fields[0].name, "value");
+    assert_eq!(bundle.interface.types[0].fields[0].ty, "T");
+    assert!(bundle.render_summary().contains("parser.core::Box"));
+}
+
+#[test]
 fn interface_summary_preserves_method_style_receiver_and_self_surface() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         vec![SourceItem::method_def(
@@ -278,6 +309,7 @@ fn interface_summary_preserves_method_style_receiver_and_self_surface() {
 fn method_self_record_update_preserves_nominal_receiver_type_in_body() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         vec![SourceItem::method_def(
@@ -437,6 +469,7 @@ fn program_surface_reports_duplicate_data_and_constructor_names() {
     let program = SourceProgram::with_surface(
         None,
         Vec::new(),
+        Vec::new(),
         vec![
             DataDecl::new(
                 "A",
@@ -470,6 +503,7 @@ fn program_surface_allows_same_constructor_name_across_different_data() {
     let program = SourceProgram::with_surface(
         None,
         Vec::new(),
+        Vec::new(),
         vec![
             DataDecl::new("Left", Vec::new(), vec![DataVariant::new("Same", Vec::new())]),
             DataDecl::new("Right", Vec::new(), vec![DataVariant::new("Same", Vec::new())]),
@@ -500,6 +534,7 @@ fn interface_summary_hash_changes_when_constructor_arity_changes() {
     let one_field = SourceProgram::with_surface(
         None,
         Vec::new(),
+        Vec::new(),
         vec![DataDecl::new(
             "Box",
             Vec::new(),
@@ -509,6 +544,7 @@ fn interface_summary_hash_changes_when_constructor_arity_changes() {
     );
     let two_fields = SourceProgram::with_surface(
         None,
+        Vec::new(),
         Vec::new(),
         vec![DataDecl::new(
             "Box",

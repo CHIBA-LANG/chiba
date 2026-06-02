@@ -1,4 +1,6 @@
-use chiba_level1r::ast::{BinaryOp, Expr, MethodReceiver, ParamDecl, Pattern, SourceItem};
+use chiba_level1r::ast::{
+    BinaryOp, Expr, MethodReceiver, ParamDecl, Pattern, SourceItem, TypeDecl, TypeField,
+};
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::resolve::ResolvedName;
 use chiba_level1r::specialize::DischargedObligation;
@@ -92,6 +94,51 @@ fn frontend_parses_method_style_def_with_generic_receiver_and_self_type() {
         }
         other => panic!("expected method-style function def, got {other:?}"),
     }
+}
+
+#[test]
+fn frontend_parses_row_style_type_decl_with_generics() {
+    let output = parse_source_program("type Box[T] = { value: T } def main() = 0")
+        .expect("frontend parse");
+
+    assert_eq!(
+        output.program.types,
+        vec![TypeDecl::new(
+            "Box",
+            vec!["T".to_string()],
+            vec![TypeField::new("value", "T")]
+        )]
+    );
+    assert_eq!(output.program.items.len(), 1);
+}
+
+#[test]
+fn frontend_parses_utf8_row_style_type_decl_names() {
+    let output = parse_source_program(
+        "type 向量🚀[Τ] = { 值中文: Τ, emoji字段🚀: i64 } def main() = 0",
+    )
+    .expect("frontend parse");
+
+    for expected in ["向量🚀", "Τ", "值中文", "emoji字段🚀"] {
+        assert!(
+            output
+                .tokens
+                .iter()
+                .any(|token| token.name == "Ident" && token.lexeme == expected),
+            "missing UTF-8 identifier token {expected}"
+        );
+    }
+    assert_eq!(
+        output.program.types,
+        vec![TypeDecl::new(
+            "向量🚀",
+            vec!["Τ".to_string()],
+            vec![
+                TypeField::new("值中文", "Τ"),
+                TypeField::new("emoji字段🚀", "i64"),
+            ],
+        )]
+    );
 }
 
 #[test]

@@ -2,6 +2,7 @@
 pub struct SourceProgram {
     pub namespace: Option<NamespaceDecl>,
     pub imports: Vec<UseDecl>,
+    pub types: Vec<TypeDecl>,
     pub data: Vec<DataDecl>,
     pub items: Vec<SourceItem>,
 }
@@ -47,6 +48,19 @@ pub struct MethodReceiver {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeDecl {
+    pub name: String,
+    pub generics: Vec<String>,
+    pub fields: Vec<TypeField>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeField {
+    pub name: String,
+    pub ty: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DataDecl {
     pub name: String,
     pub generics: Vec<String>,
@@ -64,6 +78,7 @@ impl SourceProgram {
         Self {
             namespace: None,
             imports: Vec::new(),
+            types: Vec::new(),
             data: Vec::new(),
             items,
         }
@@ -72,12 +87,14 @@ impl SourceProgram {
     pub fn with_surface(
         namespace: Option<NamespaceDecl>,
         imports: Vec<UseDecl>,
+        types: Vec<TypeDecl>,
         data: Vec<DataDecl>,
         items: Vec<SourceItem>,
     ) -> Self {
         Self {
             namespace,
             imports,
+            types,
             data,
             items,
         }
@@ -132,6 +149,29 @@ impl DataDecl {
             .iter()
             .map(|variant| variant.name.clone())
             .collect()
+    }
+}
+
+impl TypeDecl {
+    pub fn new(
+        name: impl Into<String>,
+        generics: Vec<String>,
+        fields: Vec<TypeField>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            generics,
+            fields,
+        }
+    }
+}
+
+impl TypeField {
+    pub fn new(name: impl Into<String>, ty: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            ty: ty.into(),
+        }
     }
 }
 

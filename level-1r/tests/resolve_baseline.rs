@@ -53,6 +53,7 @@ fn interface_summary_builds_method_index_for_method_style_defs() {
         Some(NamespaceDecl::new(vec!["parser".to_string()])),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
         vec![SourceItem::method_def(
             MethodReceiver::new("Box", vec!["T".to_string()]),
             "update",
@@ -139,6 +140,7 @@ fn interface_summary_resolves_global_function_owner_symbol() {
         Some(NamespaceDecl::new(vec!["parser".to_string()])),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
@@ -171,6 +173,7 @@ fn interface_summary_resolves_global_function_owner_symbol() {
 fn interface_summary_resolves_one_arg_function_call_by_arity() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
@@ -207,6 +210,7 @@ fn interface_summary_reports_function_call_arity_mismatch() {
         Some(NamespaceDecl::new(vec!["parser".to_string()])),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
@@ -241,6 +245,7 @@ fn interface_summary_reports_function_call_arity_mismatch() {
 fn interface_summary_resolves_qualified_constructor_owner_symbol_and_arity() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
         Vec::new(),
         vec![DataDecl::new(
             "Option",
@@ -284,6 +289,7 @@ fn interface_summary_does_not_resolve_local_binder_as_global_function() {
         Some(NamespaceDecl::new(vec!["parser".to_string()])),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
@@ -310,6 +316,7 @@ fn interface_summary_does_not_resolve_local_binder_as_global_function() {
 fn interface_summary_reports_constructor_arity_mismatch() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
         Vec::new(),
         vec![DataDecl::new(
             "Option",
