@@ -35,11 +35,20 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
 
     assert_eq!(
         output.passes.names(),
-        vec!["L2Typed", "L3AnswerControl", "L4Usage", "L5OnePassCps"]
+        vec![
+            "L2Typed",
+            "L3AnswerControl",
+            "L4Usage",
+            "L5OnePassCps",
+            "L6Closure",
+            "L7Core"
+        ]
     );
 
     let visual = output.render_visual();
     assert!(visual.contains("control:"));
+    assert!(visual.contains("closure:"));
+    assert!(visual.contains("core:"));
     assert!(visual.contains("nanopass:"));
     assert!(visual.contains("L5OnePassCps: TypedExpr -> CpsProgram"));
 }

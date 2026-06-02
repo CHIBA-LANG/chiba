@@ -10,6 +10,9 @@ Current baseline:
 - typed expression skeleton
 - usage facts
 - one-pass CBV CPS with meta-continuations
+- delimiter-driven Cont1/ContN facts
+- closure capture facts
+- target-neutral CoreIR skeleton
 - visual report across source / typed / usage / cps
 
 Run:

@@ -1,7 +1,9 @@
 use std::fmt::Write;
 
 use crate::ast::Expr;
+use crate::closure::ClosureFacts;
 use crate::control::ControlFacts;
+use crate::core::CoreProgram;
 use crate::cps::CpsProgram;
 use crate::nanopass::PassReport;
 use crate::typed::TypedExpr;
@@ -14,6 +16,8 @@ pub struct VisualReport {
     pub control: String,
     pub usage: String,
     pub cps: String,
+    pub closure: String,
+    pub core: String,
     pub nanopass: String,
 }
 
@@ -29,6 +33,10 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.usage).unwrap();
     writeln!(out, "cps:").unwrap();
     writeln!(out, "  {}", report.cps).unwrap();
+    writeln!(out, "closure:").unwrap();
+    writeln!(out, "  {}", report.closure).unwrap();
+    writeln!(out, "core:").unwrap();
+    writeln!(out, "  {}", report.core).unwrap();
     writeln!(out, "nanopass:").unwrap();
     for event in report.nanopass.lines() {
         writeln!(out, "  {event}").unwrap();
@@ -42,6 +50,8 @@ pub fn visual_report(
     control: &ControlFacts,
     usage: &UsageFacts,
     cps: &CpsProgram,
+    closure: &ClosureFacts,
+    core: &CoreProgram,
     passes: &PassReport,
 ) -> VisualReport {
     VisualReport {
@@ -50,6 +60,8 @@ pub fn visual_report(
         control: format!("{control:#?}"),
         usage: format!("{usage:#?}"),
         cps: cps.to_string(),
+        closure: format!("{closure:#?}"),
+        core: format!("{core:#?}"),
         nanopass: render_pass_report(passes),
     }
 }

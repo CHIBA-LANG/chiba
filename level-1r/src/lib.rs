@@ -1,5 +1,7 @@
 pub mod ast;
+pub mod closure;
 pub mod control;
+pub mod core;
 pub mod cps;
 pub mod debug;
 pub mod nanopass;

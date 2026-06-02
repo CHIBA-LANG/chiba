@@ -1,5 +1,7 @@
 use crate::ast::{Expr, SourceItem, SourceProgram};
+use crate::closure::{analyze_closures, ClosureFacts};
 use crate::control::{analyze_control, ControlFacts};
+use crate::core::{lower_core, CoreProgram};
 use crate::cps::{cps_program, CpsProgram};
 use crate::debug::{render_visual_report, visual_report, VisualReport};
 use crate::nanopass::PassReport;
@@ -12,6 +14,8 @@ pub struct CompileOutput {
     pub control: ControlFacts,
     pub usage: UsageFacts,
     pub cps: CpsProgram,
+    pub closure: ClosureFacts,
+    pub core: CoreProgram,
     pub passes: PassReport,
     pub visual: VisualReport,
 }
@@ -28,12 +32,22 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
     let cps = passes.record("L5OnePassCps", "TypedExpr", "CpsProgram", || {
         cps_program(&typed)
     });
-    let visual = visual_report(expr, &typed, &control, &usage, &cps, &passes);
+    let closure = passes.record("L6Closure", "TypedExpr", "ClosureFacts", || {
+        analyze_closures(&typed)
+    });
+    let core = passes.record("L7Core", "CpsProgram", "CoreProgram", || {
+        lower_core(&cps, &control.continuations)
+    });
+    let visual = visual_report(
+        expr, &typed, &control, &usage, &cps, &closure, &core, &passes,
+    );
     CompileOutput {
         typed,
         control,
         usage,
         cps,
+        closure,
+        core,
         passes,
         visual,
     }
