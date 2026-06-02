@@ -42,6 +42,7 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
             "L4Specialize",
             "L5Monomorphize",
             "L6TemplateAudit",
+            "L7TypedSignature",
             "L7Typed",
             "L8PatternElab",
             "L9AnswerControl",
@@ -69,6 +70,8 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("specialize:"));
     assert!(visual.contains("monomorphize:"));
     assert!(visual.contains("template-audit:"));
+    assert!(visual.contains("typed-signature:"));
+    assert!(visual.contains("typed:"));
     assert!(visual.contains("pattern:"));
     assert!(visual.contains("control:"));
     assert!(visual.contains("cps-usage:"));

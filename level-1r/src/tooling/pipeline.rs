@@ -1,7 +1,9 @@
 use crate::alpha::{alpha_expr, AlphaFacts};
 use std::collections::BTreeSet;
 
-use crate::ast::{Expr, NamespaceDecl, ParamDecl, SourceItem, SourceProgram, UseDecl};
+use crate::ast::{
+    Expr, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram, UseDecl,
+};
 use crate::backend::{
     backend_cache_key, emit_wasm_gc, link_backend_artifacts, BackendArtifact, BackendCacheConfig,
     BackendCacheKey, BackendLinkedBundle,
@@ -44,6 +46,7 @@ pub struct CompileOutput {
     pub specialize: SpecializationFacts,
     pub monomorphize: MonomorphizationPlan,
     pub template_audit: TemplateAuditReport,
+    pub typed_signature: TypedSignature,
     pub typed: TypedExpr,
     pub pattern: PatternFacts,
     pub control: ControlFacts,
@@ -64,6 +67,12 @@ pub struct CompileOutput {
     pub backend_cache_key: BackendCacheKey,
     pub passes: PassReport,
     pub visual: VisualReport,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TypedSignature {
+    pub params: Vec<(String, String)>,
+    pub return_type: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -108,22 +117,26 @@ pub enum ProgramDiagnostic {
 
 pub fn compile_expr(expr: &Expr) -> CompileOutput {
     compile_expr_with_indexes_and_generics(
+        "<expr>",
         expr,
         NameIndex::default(),
         MethodIndex::default(),
         &[],
         &[],
         &None,
+        &None,
     )
 }
 
 fn compile_expr_with_indexes_and_generics(
+    def_name: &str,
     expr: &Expr,
     names: NameIndex,
     methods: MethodIndex,
     explicit_generics: &[String],
     params: &[ParamDecl],
     return_type: &Option<String>,
+    receiver: &Option<MethodReceiver>,
 ) -> CompileOutput {
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || alpha_expr(expr));
@@ -158,6 +171,12 @@ fn compile_expr_with_indexes_and_generics(
         "TemplateFacts+SpecializationFacts+MonomorphizationPlan",
         "TemplateAuditReport",
         || audit_checked_templates(&template, &specialize, &monomorphize),
+    );
+    let typed_signature = passes.record(
+        "L7TypedSignature",
+        "DefHeader+MethodReceiver",
+        "TypedSignature",
+        || typed_signature(params, return_type, receiver),
     );
     let typed = passes.record("L7Typed", "SourceExpr", "TypedExpr", || type_expr(expr));
     let pattern = passes.record("L8PatternElab", "TypedExpr", "PatternFacts", || {
@@ -247,6 +266,7 @@ fn compile_expr_with_indexes_and_generics(
         &specialize,
         &monomorphize,
         &template_audit,
+        &typed_signature.render(def_name),
         &typed,
         &pattern,
         &control,
@@ -274,6 +294,7 @@ fn compile_expr_with_indexes_and_generics(
         specialize,
         monomorphize,
         template_audit,
+        typed_signature,
         typed,
         pattern,
         control,
@@ -400,26 +421,75 @@ fn compile_program_defs(
         .filter_map(|item| match item {
             SourceItem::Def {
                 name,
+                receiver,
                 generics,
                 params,
                 return_type,
                 body,
-                ..
             } => Some(ProgramDefOutput {
                 name: name.clone(),
                 params: params.iter().map(|param| param.name.clone()).collect(),
                 output: compile_expr_with_indexes_and_generics(
+                    name,
                     body,
                     names.clone(),
                     methods.clone(),
                     generics,
                     params,
                     return_type,
+                    receiver,
                 ),
             }),
             SourceItem::StaticValue { .. } => None,
         })
         .collect()
+}
+
+impl TypedSignature {
+    pub fn render(&self, name: &str) -> String {
+        let params = self
+            .params
+            .iter()
+            .map(|(name, ty)| format!("{name}: {ty}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        match &self.return_type {
+            Some(return_type) => format!("def {name}({params}): {return_type}"),
+            None => format!("def {name}({params})"),
+        }
+    }
+}
+
+fn typed_signature(
+    params: &[ParamDecl],
+    return_type: &Option<String>,
+    receiver: &Option<MethodReceiver>,
+) -> TypedSignature {
+    TypedSignature {
+        params: params
+            .iter()
+            .map(|param| {
+                (
+                    param.name.clone(),
+                    resolve_header_type(param.ty.as_deref(), receiver),
+                )
+            })
+            .collect(),
+        return_type: return_type
+            .as_deref()
+            .map(|ty| resolve_header_type(Some(ty), receiver)),
+    }
+}
+
+fn resolve_header_type(ty: Option<&str>, receiver: &Option<MethodReceiver>) -> String {
+    match ty {
+        Some("Self") => receiver
+            .as_ref()
+            .map(MethodReceiver::display_name)
+            .unwrap_or_else(|| "Self".to_string()),
+        Some(ty) => ty.to_string(),
+        None => "Unknown".to_string(),
+    }
 }
 
 fn program_surface_diagnostics(surface: &ProjectSurface) -> Vec<ProgramDiagnostic> {

@@ -248,6 +248,21 @@ fn interface_summary_preserves_method_style_receiver_and_self_surface() {
         bundle.interface.functions[0].return_type,
         Some("Self".to_string())
     );
+    assert_eq!(
+        bundle.defs[0].output.typed_signature.params,
+        vec![
+            ("self".to_string(), "Box[T]".to_string()),
+            ("value".to_string(), "T".to_string()),
+        ]
+    );
+    assert_eq!(
+        bundle.defs[0].output.typed_signature.return_type,
+        Some("Box[T]".to_string())
+    );
+    assert!(bundle.defs[0]
+        .output
+        .render_visual()
+        .contains("typed-signature: def update(self: Box[T], value: T): Box[T]"));
 }
 
 #[test]

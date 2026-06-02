@@ -33,6 +33,7 @@ pub struct VisualReport {
     pub symbol_lineage: String,
     pub monomorphize: String,
     pub template_audit: String,
+    pub typed_signature: String,
     pub typed: String,
     pub pattern: String,
     pub control: String,
@@ -74,6 +75,7 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.monomorphize).unwrap();
     writeln!(out, "template-audit:").unwrap();
     writeln!(out, "  {}", report.template_audit).unwrap();
+    writeln!(out, "typed-signature: {}", report.typed_signature).unwrap();
     writeln!(out, "typed:").unwrap();
     writeln!(out, "  {}", report.typed).unwrap();
     writeln!(out, "pattern:").unwrap();
@@ -125,6 +127,7 @@ pub fn visual_report(
     specialize: &SpecializationFacts,
     monomorphize: &MonomorphizationPlan,
     template_audit: &TemplateAuditReport,
+    typed_signature: &str,
     typed: &TypedExpr,
     pattern: &PatternFacts,
     control: &ControlFacts,
@@ -154,6 +157,7 @@ pub fn visual_report(
         symbol_lineage: render_symbol_lineage(resolve, template, specialize),
         monomorphize: format!("{monomorphize:#?}"),
         template_audit: format!("{template_audit:#?}"),
+        typed_signature: typed_signature.to_string(),
         typed: format!("{typed:#?}"),
         pattern: format!("{pattern:#?}"),
         control: format!("{control:#?}"),
