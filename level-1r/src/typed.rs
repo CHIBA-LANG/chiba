@@ -147,12 +147,13 @@ pub fn type_expr(expr: &Expr) -> TypedExpr {
         }
         Expr::Field { receiver, name } => {
             let receiver = type_expr(receiver);
+            let ty = tuple_field_type(&receiver.ty, name).unwrap_or(Type::Unknown);
             typed(
                 TypedExprKind::Field {
                     receiver: Box::new(receiver),
                     name: name.clone(),
                 },
-                Type::Unknown,
+                ty,
             )
         }
         Expr::MethodCall {
@@ -282,6 +283,17 @@ fn common_type(left: &Type, right: &Type) -> Type {
     } else {
         Type::Unknown
     }
+}
+
+fn tuple_field_type(receiver: &Type, name: &str) -> Option<Type> {
+    let Type::Tuple(fields) = receiver else {
+        return None;
+    };
+    let index = name.strip_prefix('_')?.parse::<usize>().ok()?;
+    if index == 0 {
+        return None;
+    }
+    fields.get(index - 1).cloned()
 }
 
 fn typed(kind: TypedExprKind, ty: Type) -> TypedExpr {

@@ -47,3 +47,20 @@ fn tuple_expression_reaches_target_neutral_core_with_tuple_layout() {
     assert_eq!(output.core_validation.diagnostics, vec![]);
     assert!(output.render_visual().contains("Tuple2_I64_I64"));
 }
+
+#[test]
+fn tuple_positional_field_access_has_stable_underscore_names() {
+    let expr = Expr::field(Expr::tuple(vec![Expr::i64(1), Expr::bool(true)]), "_2");
+    let output = compile_expr(&expr);
+
+    assert_eq!(output.typed.ty, Type::Bool);
+    assert_eq!(
+        output.cps.to_string(),
+        "halt Tuple2_I64_Bool(_1=1, _2=true)._2"
+    );
+    assert!(output.core.ops.contains(&CoreOp::TupleFieldGet {
+        layout: "tuple::Tuple2_I64_Bool".to_string(),
+        field: "_2".to_string(),
+    }));
+    assert!(output.core_validation.diagnostics.is_empty());
+}

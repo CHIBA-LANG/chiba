@@ -56,6 +56,10 @@ pub enum CoreOp {
         layout: String,
         fields: Vec<String>,
     },
+    TupleFieldGet {
+        layout: String,
+        field: String,
+    },
     LiftedFunction {
         source: String,
         symbol: String,
@@ -154,6 +158,12 @@ pub enum CoreDiagnostic {
     DynRowLayoutKindMismatch { layout: String },
     MissingStaticRowLayout { layout: String },
     StaticRowLayoutKindMismatch { layout: String },
+    MissingTupleLayout { layout: String },
+    TupleLayoutKindMismatch { layout: String },
+    TupleFieldMissing {
+        layout: String,
+        field: String,
+    },
     DanglingTailCallTarget { target: String },
     EnvClosureMissingLayout { subject: String },
     ClosureEnvLayoutHasNoFields { layout: String },
@@ -208,6 +218,7 @@ pub fn validate_core(program: &CoreProgram) -> CoreValidation {
     validate_continuation_packages(program, &mut diagnostics);
     validate_tail_calls(program, &mut diagnostics);
     validate_static_row_access(program, &mut diagnostics);
+    validate_tuple_field_access(program, &mut diagnostics);
     validate_dyn_adapter_layouts(program, &mut diagnostics);
     validate_lifted_functions(program, &mut diagnostics);
     validate_callable_storage(program, &mut diagnostics);
@@ -431,6 +442,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         CoreOp::LiftedFunction { symbol, .. } => symbol == func,
         CoreOp::ReturnAtom(_)
         | CoreOp::TupleConstruct { .. }
+        | CoreOp::TupleFieldGet { .. }
         | CoreOp::TailCall { .. }
         | CoreOp::Prompt { .. }
         | CoreOp::CaptureContinuation { .. }
@@ -455,6 +467,28 @@ fn validate_static_row_access(program: &CoreProgram, diagnostics: &mut Vec<CoreD
                     layout: layout.clone(),
                 }),
                 None => diagnostics.push(CoreDiagnostic::MissingStaticRowLayout {
+                    layout: layout.clone(),
+                }),
+            }
+        }
+    }
+}
+
+fn validate_tuple_field_access(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    for op in &program.ops {
+        if let CoreOp::TupleFieldGet { layout, field } = op {
+            match program.layouts.iter().find(|fact| fact.key == *layout) {
+                Some(fact) => match &fact.kind {
+                    LayoutKind::TupleStruct(tuple) if tuple.fields.contains(field) => {}
+                    LayoutKind::TupleStruct(_) => diagnostics.push(CoreDiagnostic::TupleFieldMissing {
+                        layout: layout.clone(),
+                        field: field.clone(),
+                    }),
+                    _ => diagnostics.push(CoreDiagnostic::TupleLayoutKindMismatch {
+                        layout: layout.clone(),
+                    }),
+                },
+                None => diagnostics.push(CoreDiagnostic::MissingTupleLayout {
                     layout: layout.clone(),
                 }),
             }
@@ -560,6 +594,7 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::FunLambda { param, .. } => format!("lambda#{param}"),
         CpsAtom::ContLambda { param, .. } => format!("cont#{param}"),
         CpsAtom::Tuple { nominal, .. } => format!("tuple#{nominal}"),
+        CpsAtom::TupleField { tuple, field } => format!("{}.{}", render_atom(tuple), field),
     }
 }
 
@@ -571,6 +606,16 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 layout,
                 fields: fields.iter().map(render_atom).collect(),
             });
+            ops.push(CoreOp::ReturnAtom(render_atom(atom)));
+        }
+        CpsAtom::TupleField { tuple, field } => {
+            if let CpsAtom::Tuple { nominal, .. } = tuple.as_ref() {
+                ops.push(CoreOp::TupleFieldGet {
+                    layout: format!("tuple::{nominal}"),
+                    field: field.clone(),
+                });
+            }
+            lower_atom_value(tuple, ops);
             ops.push(CoreOp::ReturnAtom(render_atom(atom)));
         }
         _ => ops.push(CoreOp::ReturnAtom(render_atom(atom))),
@@ -629,8 +674,10 @@ fn lower_layouts(
 
 fn collect_tuple_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
     for op in ops {
-        let CoreOp::TupleConstruct { layout, fields } = op else {
-            continue;
+        let (layout, fields_len) = match op {
+            CoreOp::TupleConstruct { layout, fields } => (layout, fields.len()),
+            CoreOp::TupleFieldGet { .. } => continue,
+            _ => continue,
         };
         if layouts.iter().any(|fact| fact.key == *layout) {
             continue;
@@ -639,7 +686,7 @@ fn collect_tuple_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
             .strip_prefix("tuple::")
             .unwrap_or(layout)
             .to_string();
-        let field_names = (1..=fields.len())
+        let field_names = (1..=fields_len)
             .map(|index| format!("_{index}"))
             .collect::<Vec<_>>();
         layouts.push(LayoutFact {

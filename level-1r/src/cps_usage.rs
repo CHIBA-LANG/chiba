@@ -122,6 +122,7 @@ fn visit_atom(atom: &CpsAtom, facts: &mut CpsUsageFacts) {
                 visit_atom(field, facts);
             }
         }
+        CpsAtom::TupleField { tuple, .. } => visit_atom(tuple, facts),
     }
 }
 
@@ -182,6 +183,7 @@ fn count_atom_refs(atom: &CpsAtom, binder: &str, count: &mut UseCount) {
                 count_atom_refs(field, binder, count);
             }
         }
+        CpsAtom::TupleField { tuple, .. } => count_atom_refs(tuple, binder, count),
     }
 }
 

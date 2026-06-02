@@ -1,7 +1,7 @@
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
     validate_core, CallableStorageFact, CallableStorageKind, ClosureEnvLayout, CoreDiagnostic,
-    CoreOp, CoreProgram, LayoutFact, LayoutKind, OwnershipDecision, OwnershipFact,
+    CoreOp, CoreProgram, LayoutFact, LayoutKind, OwnershipDecision, OwnershipFact, TupleLayout,
 };
 use chiba_level1r::template::{canonical_open_row, ShapeType};
 use chiba_level1r::typed::{SendColor, UsageColor};
@@ -274,6 +274,52 @@ fn validator_rejects_static_row_access_missing_or_wrong_layout_ref() {
             .diagnostics
             .contains(&CoreDiagnostic::StaticRowLayoutKindMismatch {
                 layout: "dyn-row::user".to_string()
+            })
+    );
+}
+
+#[test]
+fn validator_rejects_tuple_field_access_missing_layout_or_field() {
+    let missing = CoreProgram {
+        ops: vec![CoreOp::TupleFieldGet {
+            layout: "tuple::Tuple2_I64_Bool".to_string(),
+            field: "_2".to_string(),
+        }],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    assert_eq!(
+        validate_core(&missing).diagnostics,
+        vec![CoreDiagnostic::MissingTupleLayout {
+            layout: "tuple::Tuple2_I64_Bool".to_string()
+        }]
+    );
+
+    let missing_field = CoreProgram {
+        ops: vec![CoreOp::TupleFieldGet {
+            layout: "tuple::Tuple1_I64".to_string(),
+            field: "_2".to_string(),
+        }],
+        layouts: vec![LayoutFact {
+            key: "tuple::Tuple1_I64".to_string(),
+            hash: 0,
+            kind: LayoutKind::TupleStruct(TupleLayout {
+                nominal: "Tuple1_I64".to_string(),
+                fields: vec!["_1".to_string()],
+            }),
+        }],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    assert!(
+        validate_core(&missing_field)
+            .diagnostics
+            .contains(&CoreDiagnostic::TupleFieldMissing {
+                layout: "tuple::Tuple1_I64".to_string(),
+                field: "_2".to_string(),
             })
     );
 }

@@ -26,6 +26,10 @@ pub enum CpsAtom {
         nominal: String,
         fields: Vec<CpsAtom>,
     },
+    TupleField {
+        tuple: Box<CpsAtom>,
+        field: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -132,7 +136,16 @@ fn transform(
         }
         TypedExprKind::Field { receiver, name } => transform(
             receiver,
-            Box::new(|value, ctx| k(CpsAtom::Var(format!("{value}.{name}")), ctx)),
+            Box::new(|value, ctx| {
+                let atom = match value {
+                    CpsAtom::Tuple { .. } if name.starts_with('_') => CpsAtom::TupleField {
+                        tuple: Box::new(value),
+                        field: name.clone(),
+                    },
+                    _ => CpsAtom::Var(format!("{value}.{name}")),
+                };
+                k(atom, ctx)
+            }),
             controls,
             ctx,
         ),
@@ -474,6 +487,7 @@ impl fmt::Display for CpsAtom {
                 }
                 write!(f, ")")
             }
+            CpsAtom::TupleField { tuple, field } => write!(f, "{tuple}.{field}"),
         }
     }
 }
