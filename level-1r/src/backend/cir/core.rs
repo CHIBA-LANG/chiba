@@ -125,9 +125,22 @@ pub enum CoreValue {
         tuple: Box<CoreValue>,
         field: String,
     },
+    Record {
+        fields: Vec<CoreRecordValueField>,
+    },
+    RecordField {
+        record: Box<CoreValue>,
+        field: String,
+    },
     Rendered {
         debug: String,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CoreRecordValueField {
+    pub name: String,
+    pub value: CoreValue,
 }
 
 impl CoreValue {
@@ -147,6 +160,17 @@ impl CoreValue {
             }
             CoreValue::TupleField { tuple, field } => {
                 format!("{}.{}", tuple.debug_name(), field)
+            }
+            CoreValue::Record { fields } => {
+                let fields = fields
+                    .iter()
+                    .map(|field| format!("{}={}", field.name, field.value.debug_name()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{{{fields}}}")
+            }
+            CoreValue::RecordField { record, field } => {
+                format!("{}.{}", record.debug_name(), field)
             }
             CoreValue::Rendered { debug } => debug.clone(),
         }
@@ -861,6 +885,19 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
             tuple: Box::new(core_value(tuple)),
             field: field.clone(),
         },
+        CpsAtom::Record { fields, .. } => CoreValue::Record {
+            fields: fields
+                .iter()
+                .map(|field| CoreRecordValueField {
+                    name: field.name.clone(),
+                    value: core_value(&field.value),
+                })
+                .collect(),
+        },
+        CpsAtom::RecordField { record, field } => CoreValue::RecordField {
+            record: Box::new(core_value(record)),
+            field: field.clone(),
+        },
         _ => CoreValue::Rendered {
             debug: render_atom(atom),
         },
@@ -916,13 +953,16 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::RecordField { record, field } => {
-            if let CpsAtom::Record { layout, .. } = record.as_ref() {
+            if let CpsAtom::Record { layout, fields } = record.as_ref() {
+                ops.push(CoreOp::RecordConstruct {
+                    layout: layout.clone(),
+                    fields: fields.iter().map(|field| field.name.clone()).collect(),
+                });
                 ops.push(CoreOp::RecordFieldGet {
                     layout: layout.clone(),
                     field: field.clone(),
                 });
             }
-            lower_atom_value(record, ops);
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::AdtCtor {

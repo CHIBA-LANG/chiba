@@ -99,7 +99,7 @@ fn backend_serializes_structural_core_ops_as_debuggable_wat_comments() {
 
     assert_eq!(output.backend.diagnostics, vec![]);
     assert!(output.backend.wat.contains(";; record layout=record::x+y fields=2"));
-    assert!(output.backend.wat.contains(";; core-return atom=record::x+y{x=1, y=true}"));
+    assert!(output.backend.wat.contains(";; core-return atom={x=1, y=true}"));
 }
 
 #[test]

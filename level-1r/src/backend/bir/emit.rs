@@ -376,7 +376,17 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue) {
                 wat.push_str("    i32.const 0\n");
             }
         }
-        CoreValue::Var(_) | CoreValue::Tuple { .. } | CoreValue::Rendered { .. } => {
+        CoreValue::RecordField { record, field } => {
+            if let Some(value) = record_field_value(record, field) {
+                render_core_value_i32(wat, value);
+            } else {
+                wat.push_str("    i32.const 0\n");
+            }
+        }
+        CoreValue::Var(_)
+        | CoreValue::Tuple { .. }
+        | CoreValue::Record { .. }
+        | CoreValue::Rendered { .. } => {
             wat.push_str("    i32.const 0\n")
         }
     }
@@ -388,6 +398,16 @@ fn tuple_field_value<'a>(tuple: &'a CoreValue, field: &str) -> Option<&'a CoreVa
     };
     let index = field.strip_prefix('_')?.parse::<usize>().ok()?.checked_sub(1)?;
     fields.get(index)
+}
+
+fn record_field_value<'a>(record: &'a CoreValue, field: &str) -> Option<&'a CoreValue> {
+    let CoreValue::Record { fields } = record else {
+        return None;
+    };
+    fields
+        .iter()
+        .find(|candidate| candidate.name == field)
+        .map(|candidate| &candidate.value)
 }
 
 fn render_core_value_i32_indented(wat: &mut String, value: &CoreValue, indent: usize) {
