@@ -618,6 +618,52 @@ fn program_adt_payload_match_lowers_to_executable_payload_wat() {
 }
 
 #[test]
+fn program_adt_payload_literal_pattern_checks_payload_before_arm_body() {
+    let program = SourceProgram::new(vec![def(
+        "main",
+        vec![],
+        Expr::match_expr(
+            Expr::adt_ctor("Option", "Some", vec!["None", "Some"], vec![Expr::i64(8)]),
+            vec![
+                (
+                    chiba_level1r::ast::Pattern::qualified_ctor(
+                        "Option",
+                        "Some",
+                        vec![chiba_level1r::ast::Pattern::lit_i64(9)],
+                    ),
+                    Expr::i64(90),
+                ),
+                (
+                    chiba_level1r::ast::Pattern::qualified_ctor(
+                        "Option",
+                        "Some",
+                        vec![chiba_level1r::ast::Pattern::bind("value")],
+                    ),
+                    Expr::var("value"),
+                ),
+                (
+                    chiba_level1r::ast::Pattern::qualified_ctor("Option", "None", Vec::new()),
+                    Expr::i64(0),
+                ),
+            ],
+        ),
+    )]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.defs[0].output.backend.diagnostics,
+        bundle.defs[0].output.core_validation.diagnostics,
+        bundle.defs[0].output.backend.wat
+    );
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "8");
+}
+
+#[test]
 fn program_bundle_reports_duplicate_defs_and_entry_params() {
     let program = SourceProgram::new(vec![
         def("main", vec!["x"], Expr::var("x")),
