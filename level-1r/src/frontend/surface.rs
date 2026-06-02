@@ -258,6 +258,21 @@ pub fn duplicate_data_names(surface: &ProjectSurface) -> Vec<String> {
     duplicates(surface.data.iter().map(|data| data.name.as_str()))
 }
 
+pub fn duplicate_type_names(surface: &ProjectSurface) -> Vec<String> {
+    duplicates(surface.types.iter().map(|ty| ty.name.as_str()))
+}
+
+pub fn duplicate_top_level_names(surface: &ProjectSurface) -> Vec<String> {
+    let names = surface
+        .types
+        .iter()
+        .map(|ty| ty.name.as_str())
+        .chain(surface.data.iter().map(|data| data.name.as_str()))
+        .chain(surface.defs.iter().map(|def| def.name.as_str()))
+        .chain(surface.statics.iter().map(|static_value| static_value.name.as_str()));
+    duplicates(names)
+}
+
 pub fn duplicate_constructor_names(surface: &ProjectSurface) -> Vec<String> {
     let mut by_data = BTreeMap::<String, Vec<&str>>::new();
     for ctor in &surface.constructors {

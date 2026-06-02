@@ -558,6 +558,68 @@ fn program_surface_reports_duplicate_data_and_constructor_names() {
 }
 
 #[test]
+fn program_surface_reports_duplicate_type_names() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![
+            TypeDecl::new("Box", Vec::new(), vec![TypeField::new("value", "i64")]),
+            TypeDecl::new("Box", Vec::new(), vec![TypeField::new("other", "i64")]),
+        ],
+        Vec::new(),
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateType {
+            name: "Box".to_string(),
+        }));
+}
+
+#[test]
+fn program_surface_reports_type_topdef_name_conflicts() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![
+            TypeDecl::new("Thing", Vec::new(), vec![TypeField::new("value", "i64")]),
+            TypeDecl::new("Config", Vec::new(), vec![TypeField::new("value", "i64")]),
+            TypeDecl::new("Global", Vec::new(), vec![TypeField::new("value", "i64")]),
+        ],
+        vec![DataDecl::new(
+            "Thing",
+            Vec::new(),
+            vec![DataVariant::new("Made", Vec::new())],
+        )],
+        vec![
+            def("Config", vec![], Expr::i64(0)),
+            static_value("Global", Some("i64"), Expr::i64(1)),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateTopLevelName {
+            name: "Thing".to_string(),
+        }));
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateTopLevelName {
+            name: "Config".to_string(),
+        }));
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateTopLevelName {
+            name: "Global".to_string(),
+        }));
+}
+
+#[test]
 fn program_surface_allows_same_constructor_name_across_different_data() {
     let program = SourceProgram::with_surface(
         None,
