@@ -21,7 +21,7 @@ use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
 use crate::monomorphize::{schedule_monomorphization, MonomorphizationPlan};
 use crate::nanopass::PassReport;
 use crate::pattern::{analyze_patterns, PatternFacts};
-use crate::resolve::{resolve_expr, MethodIndex, ResolveFacts};
+use crate::resolve::{resolve_expr, resolve_expr_with_names, MethodIndex, NameIndex, ResolveFacts};
 use crate::specialize::{plan_specialization, SpecializationFacts};
 use crate::std_audit::{audit_std_dependencies, StdAuditReport};
 use crate::surface::{
@@ -101,10 +101,18 @@ pub enum ProgramDiagnostic {
 }
 
 pub fn compile_expr(expr: &Expr) -> CompileOutput {
+    compile_expr_with_name_index(expr, NameIndex::default())
+}
+
+fn compile_expr_with_name_index(expr: &Expr, names: NameIndex) -> CompileOutput {
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || alpha_expr(expr));
     let resolve = passes.record("L2Resolve", "AlphaExpr", "ResolveFacts", || {
-        resolve_expr(&alpha.expr, MethodIndex::default())
+        if names == NameIndex::default() {
+            resolve_expr(&alpha.expr, MethodIndex::default())
+        } else {
+            resolve_expr_with_names(&alpha.expr, MethodIndex::default(), names)
+        }
     });
     let template = passes.record("L3Template", "AlphaExpr+ResolveFacts", "TemplateFacts", || {
         analyze_template(&alpha.expr, &resolve)
@@ -295,9 +303,9 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     );
     let defs = passes.record(
         "P4ProgramDefs",
-        "SourceProgram",
+        "SourceProgram+InterfaceSummary",
         "ProgramDefOutput",
-        || compile_program_defs(program),
+        || compile_program_defs(program, &interface),
     );
     let entry = passes.record(
         "P5ProgramEntry",
@@ -345,7 +353,11 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     }
 }
 
-fn compile_program_defs(program: &SourceProgram) -> Vec<ProgramDefOutput> {
+fn compile_program_defs(
+    program: &SourceProgram,
+    interface: &InterfaceSummary,
+) -> Vec<ProgramDefOutput> {
+    let names = NameIndex::from_interface(interface);
     program
         .items
         .iter()
@@ -353,7 +365,7 @@ fn compile_program_defs(program: &SourceProgram) -> Vec<ProgramDefOutput> {
             SourceItem::Def { name, params, body } => ProgramDefOutput {
                 name: name.clone(),
                 params: params.clone(),
-                output: compile_expr(body),
+                output: compile_expr_with_name_index(body, names.clone()),
             },
         })
         .collect()

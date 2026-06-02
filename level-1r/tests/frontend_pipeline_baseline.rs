@@ -1,5 +1,6 @@
 use chiba_level1r::ast::{BinaryOp, Expr, Pattern, SourceItem};
 use chiba_level1r::control::ContinuationKind;
+use chiba_level1r::resolve::ResolvedName;
 use chiba_level1r::typed::UsageColor;
 use chiba_level1r::{
     compile_program_bundle, compile_source_program_bundle, parse_source_program, FrontendError,
@@ -154,6 +155,14 @@ fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
         .cps
         .to_string()
         .contains("helper(2,"));
+    assert!(output.program.defs[1]
+        .output
+        .resolve
+        .resolved_names
+        .contains(&ResolvedName::Function {
+            name: "helper".to_string(),
+            symbol: "root::helper".to_string(),
+        }));
 
     let summary = output.render_summary();
     assert!(summary.contains("source-program:"));
@@ -206,6 +215,12 @@ fn frontend_parses_data_decl_and_uses_variants_for_qualified_ctors() {
                 && variants == &vec!["None".to_string(), "Some".to_string()]
                 && args == &vec!["I64(1)".to_string()]
         )
+    }));
+    assert!(main.resolve.resolved_names.contains(&ResolvedName::Constructor {
+        data: "Option".to_string(),
+        ctor: "Some".to_string(),
+        symbol: "root::Option.Some".to_string(),
+        arity: 1,
     }));
     assert!(output.render_summary().contains("data=1"));
 }

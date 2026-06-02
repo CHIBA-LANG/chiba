@@ -234,7 +234,9 @@ fn program_summary_contains_program_level_nanopass_events() {
     assert!(summary.contains("P1ProjectSurface: SourceProgram -> ProjectSurface"));
     assert!(summary.contains("P2InterfaceSummary: ProjectSurface -> InterfaceSummary"));
     assert!(summary.contains("P3ProgramDiagnostics: ProjectSurface -> ProgramDiagnostics"));
-    assert!(summary.contains("P4ProgramDefs: SourceProgram -> ProgramDefOutput"));
+    assert!(summary.contains(
+        "P4ProgramDefs: SourceProgram+InterfaceSummary -> ProgramDefOutput"
+    ));
     assert!(summary.contains("P5ProgramEntry: ProgramDefOutput -> EntrySelection"));
     assert!(summary.contains(
         "P6ProgramBackendLink: ProgramDefOutput+EntrySelection -> BackendLinkedBundle"
