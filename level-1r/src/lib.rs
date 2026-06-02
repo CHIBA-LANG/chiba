@@ -30,7 +30,10 @@ pub use ast::{Expr, Literal, SourceProgram};
 pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use cps::{cps_program, CpsProgram};
 pub use debug::{render_visual_report, VisualReport};
-pub use pipeline::{compile_expr, compile_program, CompileOutput};
+pub use pipeline::{
+    compile_expr, compile_program, compile_program_bundle, CompileOutput, ProgramCompileOutput,
+    ProgramDefOutput, ProgramDiagnostic,
+};
 pub use resolve::{resolve_expr, MethodIndex, ResolveFacts};
 pub use specialize::{plan_specialization, SpecializationFacts};
 pub use template::{analyze_template, TemplateFacts};

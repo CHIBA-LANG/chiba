@@ -1,4 +1,6 @@
 use crate::alpha::{alpha_expr, AlphaFacts};
+use std::collections::BTreeSet;
+
 use crate::ast::{Expr, SourceItem, SourceProgram};
 use crate::backend::{
     backend_cache_key, emit_wasm_gc, link_backend_artifacts, BackendArtifact, BackendCacheConfig,
@@ -55,6 +57,30 @@ pub struct CompileOutput {
     pub backend_cache_key: BackendCacheKey,
     pub passes: PassReport,
     pub visual: VisualReport,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProgramCompileOutput {
+    pub defs: Vec<ProgramDefOutput>,
+    pub diagnostics: Vec<ProgramDiagnostic>,
+    pub entry: Option<String>,
+    pub backend_link: BackendLinkedBundle,
+    pub backend_cache_key: BackendCacheKey,
+    pub passes: PassReport,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProgramDefOutput {
+    pub name: String,
+    pub params: Vec<String>,
+    pub output: CompileOutput,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProgramDiagnostic {
+    DuplicateDef { name: String },
+    MissingEntry,
+    EntryHasParams { name: String, params: Vec<String> },
 }
 
 pub fn compile_expr(expr: &Expr) -> CompileOutput {
@@ -220,11 +246,154 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
 }
 
 pub fn compile_program(program: &SourceProgram) -> Vec<CompileOutput> {
+    compile_program_bundle(program)
+        .defs
+        .into_iter()
+        .map(|def| def.output)
+        .collect()
+}
+
+pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
+    let mut passes = PassReport::default();
+    let diagnostics = passes.record(
+        "P1ProgramSurface",
+        "SourceProgram",
+        "ProgramDiagnostics",
+        || program_surface_diagnostics(program),
+    );
+    let defs = passes.record(
+        "P2ProgramDefs",
+        "SourceProgram",
+        "ProgramDefOutput",
+        || compile_program_defs(program),
+    );
+    let entry = passes.record(
+        "P3ProgramEntry",
+        "ProgramDefOutput",
+        "EntrySelection",
+        || select_program_entry(&defs),
+    );
+    let mut all_diagnostics = diagnostics;
+    if entry.is_none() {
+        all_diagnostics.push(ProgramDiagnostic::MissingEntry);
+    }
+    if let Some(entry_name) = &entry {
+        if let Some(def) = defs.iter().find(|def| def.name == *entry_name) {
+            if !def.params.is_empty() {
+                all_diagnostics.push(ProgramDiagnostic::EntryHasParams {
+                    name: def.name.clone(),
+                    params: def.params.clone(),
+                });
+            }
+        }
+    }
+    let backend_link = passes.record(
+        "P4ProgramBackendLink",
+        "ProgramDefOutput+EntrySelection",
+        "BackendLinkedBundle",
+        || link_backend_artifacts(program_backend_artifacts(&defs, entry.as_deref())),
+    );
+    let backend_cache_key = passes.record(
+        "P5ProgramBackendCacheKey",
+        "BackendLinkedBundle",
+        "BackendCacheKey",
+        || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
+    );
+    ProgramCompileOutput {
+        defs,
+        diagnostics: all_diagnostics,
+        entry,
+        backend_link,
+        backend_cache_key,
+        passes,
+    }
+}
+
+fn compile_program_defs(program: &SourceProgram) -> Vec<ProgramDefOutput> {
     program
         .items
         .iter()
         .map(|item| match item {
-            SourceItem::Def { body, .. } => compile_expr(body),
+            SourceItem::Def { name, params, body } => ProgramDefOutput {
+                name: name.clone(),
+                params: params.clone(),
+                output: compile_expr(body),
+            },
+        })
+        .collect()
+}
+
+fn program_surface_diagnostics(program: &SourceProgram) -> Vec<ProgramDiagnostic> {
+    let mut seen = BTreeSet::new();
+    let mut diagnostics = Vec::new();
+    for item in &program.items {
+        match item {
+            SourceItem::Def { name, .. } => {
+                if !seen.insert(name.clone()) {
+                    diagnostics.push(ProgramDiagnostic::DuplicateDef { name: name.clone() });
+                }
+            }
+        }
+    }
+    diagnostics
+}
+
+fn select_program_entry(defs: &[ProgramDefOutput]) -> Option<String> {
+    if defs.iter().any(|def| def.name == "main") {
+        Some("main".to_string())
+    } else {
+        defs.first().map(|def| def.name.clone())
+    }
+}
+
+fn program_backend_artifacts(
+    defs: &[ProgramDefOutput],
+    entry: Option<&str>,
+) -> Vec<BackendArtifact> {
+    let mut entry_exported = false;
+    defs.iter()
+        .enumerate()
+        .map(|(index, def)| {
+            let mut artifact = def.output.backend.clone();
+            let is_entry = entry == Some(def.name.as_str()) && !entry_exported;
+            if is_entry {
+                entry_exported = true;
+            }
+            artifact.wat =
+                relabel_program_wat(&artifact.wat, &def_symbol(&def.name, index), is_entry);
+            artifact
+        })
+        .collect()
+}
+
+fn relabel_program_wat(wat: &str, symbol: &str, is_entry: bool) -> String {
+    if is_entry {
+        wat.replace(
+            "(func $main (export \"main\")",
+            &format!("(func ${symbol} (export \"main\")"),
+        )
+    } else {
+        wat.replace("(func $main (export \"main\")", &format!("(func ${symbol}"))
+    }
+}
+
+fn def_symbol(name: &str, index: usize) -> String {
+    let base = sanitize_program_symbol(name);
+    if index == 0 {
+        base
+    } else {
+        format!("{base}__def{index}")
+    }
+}
+
+fn sanitize_program_symbol(name: &str) -> String {
+    name.chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch
+            } else {
+                '_'
+            }
         })
         .collect()
 }
@@ -232,5 +401,23 @@ pub fn compile_program(program: &SourceProgram) -> Vec<CompileOutput> {
 impl CompileOutput {
     pub fn render_visual(&self) -> String {
         render_visual_report(&self.visual)
+    }
+}
+
+impl ProgramCompileOutput {
+    pub fn render_summary(&self) -> String {
+        let mut out = String::new();
+        out.push_str("program:\n");
+        out.push_str(&format!("  defs={}\n", self.defs.len()));
+        out.push_str(&format!("  entry={:?}\n", self.entry));
+        out.push_str(&format!("  diagnostics={:?}\n", self.diagnostics));
+        out.push_str("  passes:\n");
+        for event in &self.passes.events {
+            out.push_str(&format!(
+                "    {}: {} -> {}\n",
+                event.name, event.input, event.output
+            ));
+        }
+        out
     }
 }
