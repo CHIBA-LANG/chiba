@@ -1853,6 +1853,7 @@ fn frontend_rejects_adjacent_top_level_defs_without_newline() {
             found,
             lexeme,
             expected,
+            ..
         } if found == "KwDef"
             && lexeme == "def"
             && expected == vec!["Newline".to_string(), "Semicolon".to_string()]
@@ -1903,6 +1904,7 @@ fn frontend_rejects_adjacent_match_arms_without_comma() {
             found,
             lexeme,
             expected,
+            ..
         } if found == "Ident" && lexeme == "_" && expected == vec!["Comma".to_string()]
     ));
 }

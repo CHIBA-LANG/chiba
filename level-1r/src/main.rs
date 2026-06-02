@@ -28,7 +28,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
     };
     let source = fs::read_to_string(&input).map_err(|error| format!("{input}: {error}"))?;
     let output = chiba_level1r::compile_source_program_bundle(&source)
-        .map_err(|error| format!("{input}: frontend error: {error:?}"))?;
+        .map_err(|error| {
+            format!(
+                "{input}: {}",
+                chiba_level1r::render_frontend_error(&source, &error)
+            )
+        })?;
 
     if visual {
         for def in &output.program.defs {

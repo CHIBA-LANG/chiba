@@ -65,7 +65,7 @@ pub use ast::{
 pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use cps::{cps_program, CpsProgram};
 pub use debug::{render_visual_report, VisualReport};
-pub use frontend::{parse_source_program, FrontendError, FrontendOutput};
+pub use frontend::{parse_source_program, render_frontend_error, FrontendError, FrontendOutput};
 pub use pipeline::{
     compile_expr, compile_program, compile_program_bundle, compile_source_program_bundle,
     CompileOutput, ProgramCompileOutput, ProgramDefOutput, ProgramDiagnostic, SourceCompileOutput,

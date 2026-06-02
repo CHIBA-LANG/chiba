@@ -20,9 +20,81 @@ pub enum FrontendError {
         found: String,
         lexeme: String,
         expected: Vec<String>,
+        offset: usize,
     },
-    InvalidInteger { lexeme: String },
+    InvalidInteger { lexeme: String, offset: usize },
     TrailingTokens { offset: usize },
+}
+
+pub fn render_frontend_error(source: &str, error: &FrontendError) -> String {
+    match error {
+        FrontendError::Lex(error) => render_lex_error(source, error),
+        FrontendError::UnexpectedEof { expected } => {
+            format!("frontend error at end of file: expected {}", expected.join(", "))
+        }
+        FrontendError::UnexpectedToken {
+            found,
+            lexeme,
+            expected,
+            offset,
+        } => render_source_error(
+            source,
+            *offset,
+            format!(
+                "unexpected token {found} `{lexeme}`, expected {}",
+                expected.join(", ")
+            ),
+        ),
+        FrontendError::InvalidInteger { lexeme, offset } => {
+            render_source_error(source, *offset, format!("invalid integer `{lexeme}`"))
+        }
+        FrontendError::TrailingTokens { offset } => {
+            render_source_error(source, *offset, "trailing tokens".to_string())
+        }
+    }
+}
+
+fn render_lex_error(source: &str, error: &LexError) -> String {
+    match error {
+        LexError::Regex(error) => format!("frontend lexer regex error: {error:?}"),
+        LexError::NoRule { offset, found } => render_source_error(
+            source,
+            *offset,
+            format!(
+                "no lexer rule for {}",
+                found.map_or("end of file".to_string(), |ch| format!("`{ch}`"))
+            ),
+        ),
+        LexError::EmptyMatch { rule, offset } => {
+            render_source_error(source, *offset, format!("lexer rule `{rule}` matched empty text"))
+        }
+    }
+}
+
+fn render_source_error(source: &str, offset: usize, message: String) -> String {
+    let (line, column) = line_column(source, offset);
+    let line_text = source.lines().nth(line.saturating_sub(1)).unwrap_or("");
+    format!(
+        "frontend error at {line}:{column}: {message}\n  {line_text}\n  {}^",
+        " ".repeat(column.saturating_sub(1))
+    )
+}
+
+fn line_column(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut column = 1;
+    for (index, ch) in source.chars().enumerate() {
+        if index == offset {
+            return (line, column);
+        }
+        if ch == '\n' {
+            line += 1;
+            column = 1;
+        } else {
+            column += 1;
+        }
+    }
+    (line, column)
 }
 
 pub fn parse_source_program(source: &str) -> Result<FrontendOutput, FrontendError> {
@@ -223,6 +295,7 @@ impl FrontendParser {
                             "KwDef".to_string(),
                             "KwPrivate".to_string(),
                         ],
+                        offset: token.start,
                     });
                 }
                 None => break,
@@ -618,11 +691,15 @@ impl FrontendParser {
     fn parse_primary(&mut self) -> Result<Expr, FrontendError> {
         match self.peek_name() {
             Some("Number") => {
-                let lexeme = self.expect_lexeme("Number")?;
+                let token = self.expect("Number")?;
+                let lexeme = token.lexeme;
                 lexeme
                     .parse::<i64>()
                     .map(Expr::i64)
-                    .map_err(|_| FrontendError::InvalidInteger { lexeme })
+                    .map_err(|_| FrontendError::InvalidInteger {
+                        lexeme,
+                        offset: token.start,
+                    })
             }
             Some("True") => {
                 self.pos += 1;
@@ -680,6 +757,7 @@ impl FrontendParser {
                         "LBrace".to_string(),
                         "LBracket".to_string(),
                     ],
+                    offset: token.start,
                 })
             }
             None => Err(FrontendError::UnexpectedEof {
@@ -842,6 +920,7 @@ impl FrontendParser {
     fn parse_pattern(&mut self) -> Result<Pattern, FrontendError> {
         let pattern = self.parse_pattern_atom()?;
         if self.peek_name() == Some("At") {
+            let at_offset = self.tokens[self.pos].start;
             self.pos += 1;
             let name = match pattern {
                 Pattern::Bind(name) => name,
@@ -850,6 +929,7 @@ impl FrontendParser {
                         found: format!("{other:?}"),
                         lexeme: "@".to_string(),
                         expected: vec!["binding name before @".to_string()],
+                        offset: at_offset,
                     })
                 }
             };
@@ -861,11 +941,15 @@ impl FrontendParser {
     fn parse_pattern_atom(&mut self) -> Result<Pattern, FrontendError> {
         match self.peek_name() {
             Some("Number") => {
-                let lexeme = self.expect_lexeme("Number")?;
+                let token = self.expect("Number")?;
+                let lexeme = token.lexeme;
                 lexeme
                     .parse::<i64>()
                     .map(Pattern::lit_i64)
-                    .map_err(|_| FrontendError::InvalidInteger { lexeme })
+                    .map_err(|_| FrontendError::InvalidInteger {
+                        lexeme,
+                        offset: token.start,
+                    })
             }
             Some("True") => {
                 self.pos += 1;
@@ -906,6 +990,7 @@ impl FrontendParser {
                         "LParen".to_string(),
                         "LBrace".to_string(),
                     ],
+                    offset: token.start,
                 })
             }
             None => Err(FrontendError::UnexpectedEof {
@@ -992,6 +1077,7 @@ impl FrontendParser {
                 found: token.name.clone(),
                 lexeme: token.lexeme.clone(),
                 expected: vec![name.to_string()],
+                offset: token.start,
             }),
             None => Err(FrontendError::UnexpectedEof {
                 expected: vec![name.to_string()],
@@ -1019,6 +1105,7 @@ impl FrontendParser {
                 found: current.name.clone(),
                 lexeme: current.lexeme.clone(),
                 expected: vec!["Newline".to_string(), "Semicolon".to_string()],
+                offset: current.start,
             })
         }
     }
@@ -1082,6 +1169,7 @@ impl FrontendParser {
                     found: found.to_string(),
                     lexeme: token.lexeme,
                     expected: vec!["type name".to_string()],
+                    offset: token.start,
                 })
             }
             None => Err(FrontendError::UnexpectedEof {
@@ -1096,6 +1184,7 @@ impl FrontendParser {
                 found: token.name.clone(),
                 lexeme: token.lexeme.clone(),
                 expected: expected.into_iter().map(str::to_string).collect(),
+                offset: token.start,
             },
             None => FrontendError::UnexpectedEof {
                 expected: expected.into_iter().map(str::to_string).collect(),

@@ -58,3 +58,23 @@ _ => 2
     assert!(stdout.contains("nanopass:"));
     assert!(stdout.contains("L11OnePassCps: TypedExpr -> CpsProgram"));
 }
+
+#[test]
+fn cli_reports_frontend_errors_with_source_location() {
+    let source = write_fixture(
+        "error",
+        "def main() = match tag { 0 => 1 _ => 2 }",
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_chiba-level1r"))
+        .arg(&source)
+        .output()
+        .expect("run cli");
+
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(stderr.contains("frontend error at 1:33"), "{stderr}");
+    assert!(stderr.contains("unexpected token Ident `_`, expected Comma"), "{stderr}");
+    assert!(stderr.contains("def main() = match tag { 0 => 1 _ => 2 }"), "{stderr}");
+    assert!(stderr.contains("                                ^"), "{stderr}");
+}
