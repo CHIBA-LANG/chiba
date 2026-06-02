@@ -1856,3 +1856,23 @@ fn frontend_rejects_adjacent_top_level_defs_without_newline() {
         } if found == "KwDef" && lexeme == "def" && expected == vec!["Newline".to_string()]
     ));
 }
+
+#[test]
+fn frontend_rejects_adjacent_top_level_items_without_newline() {
+    for source in [
+        "type Id = i64 def main() = 0",
+        "data Option[T] = { Some(T), None } def main() = 0",
+        "namespace demo use std.regex",
+        "use std.regex def main() = 0",
+        "def 中文名🚀() = 1 def second() = 2",
+    ] {
+        let err = parse_source_program(source).unwrap_err();
+        assert!(matches!(
+            err,
+            FrontendError::UnexpectedToken {
+                expected,
+                ..
+            } if expected == vec!["Newline".to_string()]
+        ));
+    }
+}

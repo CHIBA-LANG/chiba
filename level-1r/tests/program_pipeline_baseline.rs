@@ -166,6 +166,54 @@ def unwrap_or_zero(None: Option[i64]): i64 = 0",
 }
 
 #[test]
+fn source_pattern_clause_defs_merge_wildcard_fallback() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "data Option[T] = { Some(T), None }
+def unwrap_or_zero(Some(x): Option[i64]): i64 = x
+def unwrap_or_zero(_: Option[i64]): i64 = 0",
+    )
+    .expect("compile source");
+
+    assert_eq!(output.frontend.program.items.len(), 2);
+    assert!(!output
+        .program
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateDef {
+            name: "unwrap_or_zero".to_string(),
+        }));
+    assert_eq!(output.program.defs.len(), 1);
+    assert_eq!(output.program.defs[0].name, "unwrap_or_zero");
+    assert_eq!(output.program.defs[0].params, vec!["value".to_string()]);
+    assert_eq!(output.program.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(output.program.defs[0].output.pattern.matches.len(), 1);
+    assert!(output.program.defs[0].output.pattern.matches[0].exhaustive);
+}
+
+#[test]
+fn source_pattern_clause_defs_merge_binding_fallback() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "data Option[T] = { Some(T), None }
+def unwrap_or_zero(Some(x): Option[i64]): i64 = x
+def unwrap_or_zero(other: Option[i64]): i64 = 0",
+    )
+    .expect("compile source");
+
+    assert_eq!(output.frontend.program.items.len(), 2);
+    assert!(!output
+        .program
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateDef {
+            name: "unwrap_or_zero".to_string(),
+        }));
+    assert_eq!(output.program.defs.len(), 1);
+    assert_eq!(output.program.defs[0].name, "unwrap_or_zero");
+    assert_eq!(output.program.defs[0].params, vec!["value".to_string()]);
+    assert_eq!(output.program.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(output.program.defs[0].output.pattern.matches.len(), 1);
+    assert!(output.program.defs[0].output.pattern.matches[0].exhaustive);
+}
+
+#[test]
 fn program_surface_and_interface_summary_preserve_owner_namespace() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),

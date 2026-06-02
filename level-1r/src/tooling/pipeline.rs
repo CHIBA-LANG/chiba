@@ -439,22 +439,29 @@ fn normalize_pattern_clause_defs(program: &SourceProgram) -> SourceProgram {
         program.data.clone(),
         Vec::new(),
     );
-    let mut index_by_key = BTreeMap::<ClauseKey, usize>::new();
-    let mut clauses_by_key = BTreeMap::<ClauseKey, Vec<SourceItem>>::new();
+    let mut items_by_key = BTreeMap::<ClauseKey, Vec<SourceItem>>::new();
+    for item in &program.items {
+        if let Some(key) = def_clause_key(item) {
+            items_by_key.entry(key).or_default().push(item.clone());
+        }
+    }
+    let merge_keys = items_by_key
+        .iter()
+        .filter_map(|(key, items)| clause_group_needs_dispatcher(items).then(|| key.clone()))
+        .collect::<BTreeSet<_>>();
+    let mut emitted_keys = BTreeSet::<ClauseKey>::new();
 
     for item in &program.items {
-        let Some(key) = clause_key(item) else {
+        let Some(key) = def_clause_key(item) else {
             normalized.items.push(item.clone());
             continue;
         };
-        if let Some(index) = index_by_key.get(&key).copied() {
-            let clauses = clauses_by_key.entry(key).or_default();
-            clauses.push(item.clone());
-            normalized.items[index] = merge_clause_items(clauses);
-        } else {
-            index_by_key.insert(key.clone(), normalized.items.len());
-            clauses_by_key.insert(key, vec![item.clone()]);
+        if !merge_keys.contains(&key) {
             normalized.items.push(item.clone());
+            continue;
+        }
+        if emitted_keys.insert(key.clone()) {
+            normalized.items.push(merge_clause_items(&items_by_key[&key]));
         }
     }
 
@@ -468,7 +475,7 @@ struct ClauseKey {
     arity: usize,
 }
 
-fn clause_key(item: &SourceItem) -> Option<ClauseKey> {
+fn def_clause_key(item: &SourceItem) -> Option<ClauseKey> {
     let SourceItem::Def {
         name,
         receiver,
@@ -478,14 +485,21 @@ fn clause_key(item: &SourceItem) -> Option<ClauseKey> {
     else {
         return None;
     };
-    if !params.iter().any(|param| is_refutable_clause_pattern(&param.pattern)) {
-        return None;
-    }
     Some(ClauseKey {
         name: name.clone(),
         receiver: receiver.as_ref().map(MethodReceiver::display_name),
         arity: params.len(),
     })
+}
+
+fn clause_group_needs_dispatcher(items: &[SourceItem]) -> bool {
+    items.len() > 1
+        && items.iter().any(|item| match item {
+            SourceItem::Def { params, .. } => params
+                .iter()
+                .any(|param| is_refutable_clause_pattern(&param.pattern)),
+            SourceItem::StaticValue { .. } => false,
+        })
 }
 
 fn is_refutable_clause_pattern(pattern: &Pattern) -> bool {
