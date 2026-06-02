@@ -24,6 +24,7 @@ pub struct NameIndex {
 pub struct NameCandidate {
     pub name: String,
     pub symbol: String,
+    pub arity: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -99,6 +100,12 @@ pub enum ResolveDiagnostic {
         name: String,
         candidates: Vec<String>,
     },
+    FunctionArityMismatch {
+        name: String,
+        symbol: String,
+        expected: usize,
+        actual: usize,
+    },
     AmbiguousConstructor {
         data: String,
         ctor: String,
@@ -144,7 +151,7 @@ impl NameIndex {
         let mut index = Self::default();
         for function in &interface.functions {
             if let Some(name) = function.symbol.rsplit("::").next() {
-                index.add_function(name, &function.symbol);
+                index.add_function_with_arity(name, &function.symbol, function.arity);
             }
         }
         for ctor in &interface.constructors {
@@ -156,12 +163,21 @@ impl NameIndex {
     }
 
     pub fn add_function(&mut self, name: impl Into<String>, symbol: impl Into<String>) {
+        self.add_function_with_arity(name, symbol, 0);
+    }
+
+    pub fn add_function_with_arity(
+        &mut self,
+        name: impl Into<String>,
+        symbol: impl Into<String>,
+        arity: usize,
+    ) {
         let name = name.into();
         let symbol = symbol.into();
         self.functions
             .entry(name.clone())
             .or_default()
-            .push(NameCandidate { name, symbol });
+            .push(NameCandidate { name, symbol, arity });
     }
 
     pub fn add_constructor(
@@ -240,7 +256,12 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
         AlphaExprKind::Lit(_) => {}
         AlphaExprKind::Lambda { body, .. } => visit(body, facts),
         AlphaExprKind::Call { callee, arg } => {
-            visit(callee, facts);
+            match &callee.kind {
+                AlphaExprKind::Var(var) if var.target.is_none() => {
+                    resolve_function_call(&var.name, 1, facts);
+                }
+                _ => visit(callee, facts),
+            }
             visit(arg, facts);
         }
         AlphaExprKind::Tuple(fields) => {
@@ -332,6 +353,48 @@ fn resolve_var_name(name: &str, facts: &mut ResolveFacts) {
             name: name.to_string(),
             candidates: many.iter().map(|candidate| candidate.symbol.clone()).collect(),
         }),
+    }
+}
+
+fn resolve_function_call(name: &str, arity: usize, facts: &mut ResolveFacts) {
+    let candidates = facts.names.find_function(name).to_vec();
+    match candidates.as_slice() {
+        [] => {}
+        [candidate] if candidate.arity == arity => facts.resolved_names.push(
+            ResolvedName::Function {
+                name: name.to_string(),
+                symbol: candidate.symbol.clone(),
+            },
+        ),
+        [candidate] => facts.diagnostics.push(ResolveDiagnostic::FunctionArityMismatch {
+            name: name.to_string(),
+            symbol: candidate.symbol.clone(),
+            expected: candidate.arity,
+            actual: arity,
+        }),
+        many => {
+            let arity_matches = many
+                .iter()
+                .filter(|candidate| candidate.arity == arity)
+                .collect::<Vec<_>>();
+            match arity_matches.as_slice() {
+                [candidate] => facts.resolved_names.push(ResolvedName::Function {
+                    name: name.to_string(),
+                    symbol: candidate.symbol.clone(),
+                }),
+                [] => facts.diagnostics.push(ResolveDiagnostic::AmbiguousName {
+                    name: name.to_string(),
+                    candidates: many.iter().map(|candidate| candidate.symbol.clone()).collect(),
+                }),
+                matches => facts.diagnostics.push(ResolveDiagnostic::AmbiguousName {
+                    name: name.to_string(),
+                    candidates: matches
+                        .iter()
+                        .map(|candidate| candidate.symbol.clone())
+                        .collect(),
+                }),
+            }
+        }
     }
 }
 

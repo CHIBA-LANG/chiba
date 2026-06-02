@@ -6,7 +6,7 @@ use chiba_level1r::resolve::{
 };
 use chiba_level1r::{
     build_interface_summary, compile_expr, project_surface, DataDecl, DataVariant, Expr,
-    NamespaceDecl, SourceItem, SourceProgram,
+    NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
 };
 
 #[test]
@@ -105,6 +105,72 @@ fn interface_summary_resolves_global_function_owner_symbol() {
             symbol: "parser::helper".to_string(),
         }]
     );
+}
+
+#[test]
+fn interface_summary_resolves_one_arg_function_call_by_arity() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            name: "helper".to_string(),
+            params: vec![ParamDecl::new("x", Some("I64".to_string()))],
+            return_type: Some("I64".to_string()),
+            body: Expr::var("x"),
+        }],
+    );
+    let interface = build_interface_summary(&project_surface(&program));
+    let alpha = alpha_expr(&Expr::call(Expr::var("helper"), Expr::i64(1)));
+
+    let facts = resolve_expr_with_names(
+        &alpha.expr,
+        MethodIndex::default(),
+        NameIndex::from_interface(&interface),
+    );
+
+    assert_eq!(facts.diagnostics, vec![]);
+    assert_eq!(
+        facts.resolved_names,
+        vec![ResolvedName::Function {
+            name: "helper".to_string(),
+            symbol: "parser::helper".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn interface_summary_reports_function_call_arity_mismatch() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            name: "helper".to_string(),
+            params: Vec::new(),
+            return_type: Some("I64".to_string()),
+            body: Expr::i64(1),
+        }],
+    );
+    let interface = build_interface_summary(&project_surface(&program));
+    let alpha = alpha_expr(&Expr::call(Expr::var("helper"), Expr::i64(1)));
+
+    let facts = resolve_expr_with_names(
+        &alpha.expr,
+        MethodIndex::default(),
+        NameIndex::from_interface(&interface),
+    );
+
+    assert_eq!(
+        facts.diagnostics,
+        vec![ResolveDiagnostic::FunctionArityMismatch {
+            name: "helper".to_string(),
+            symbol: "parser::helper".to_string(),
+            expected: 0,
+            actual: 1,
+        }]
+    );
+    assert_eq!(facts.resolved_names, vec![]);
 }
 
 #[test]

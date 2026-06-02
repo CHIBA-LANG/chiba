@@ -145,10 +145,10 @@ fn frontend_project_surface_reaches_program_summary_and_keeps_entry() {
 
 #[test]
 fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
-    let output = compile_source_program_bundle("def helper() = f(1) def main() = helper(2)")
+    let output = compile_source_program_bundle("def helper(x) = f(1) def main() = helper(2)")
         .expect("compile source");
 
-    assert_eq!(output.frontend.tokens.len(), 18);
+    assert_eq!(output.frontend.tokens.len(), 20);
     assert_eq!(output.frontend.program.items.len(), 2);
     assert_eq!(output.program.entry, Some("main".to_string()));
     assert!(output.program.backend_link.diagnostics.is_empty());
@@ -196,7 +196,7 @@ fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
 
     let summary = output.render_summary();
     assert!(summary.contains("source-program:"));
-    assert!(summary.contains("tokens=18"));
+    assert!(summary.contains("tokens=20"));
     assert!(summary.contains("items=2"));
     assert!(summary.contains("data=0"));
     assert!(summary.contains("P1ProjectSurface"));
