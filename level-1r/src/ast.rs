@@ -2,6 +2,7 @@
 pub struct SourceProgram {
     pub namespace: Option<NamespaceDecl>,
     pub imports: Vec<UseDecl>,
+    pub data: Vec<DataDecl>,
     pub items: Vec<SourceItem>,
 }
 
@@ -25,11 +26,25 @@ pub enum SourceItem {
     },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DataDecl {
+    pub name: String,
+    pub generics: Vec<String>,
+    pub variants: Vec<DataVariant>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DataVariant {
+    pub name: String,
+    pub fields: Vec<String>,
+}
+
 impl SourceProgram {
     pub fn new(items: Vec<SourceItem>) -> Self {
         Self {
             namespace: None,
             imports: Vec::new(),
+            data: Vec::new(),
             items,
         }
     }
@@ -37,11 +52,13 @@ impl SourceProgram {
     pub fn with_surface(
         namespace: Option<NamespaceDecl>,
         imports: Vec<UseDecl>,
+        data: Vec<DataDecl>,
         items: Vec<SourceItem>,
     ) -> Self {
         Self {
             namespace,
             imports,
+            data,
             items,
         }
     }
@@ -73,6 +90,36 @@ impl UseDecl {
             format!("{}.*", self.path.join("."))
         } else {
             self.path.join(".")
+        }
+    }
+}
+
+impl DataDecl {
+    pub fn new(
+        name: impl Into<String>,
+        generics: Vec<String>,
+        variants: Vec<DataVariant>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            generics,
+            variants,
+        }
+    }
+
+    pub fn variant_names(&self) -> Vec<String> {
+        self.variants
+            .iter()
+            .map(|variant| variant.name.clone())
+            .collect()
+    }
+}
+
+impl DataVariant {
+    pub fn new(name: impl Into<String>, fields: Vec<String>) -> Self {
+        Self {
+            name: name.into(),
+            fields,
         }
     }
 }

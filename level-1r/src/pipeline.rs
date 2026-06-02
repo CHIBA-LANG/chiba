@@ -477,6 +477,10 @@ impl SourceCompileOutput {
                 .collect::<Vec<_>>()
         ));
         out.push_str(&format!("  items={}\n", self.frontend.program.items.len()));
+        out.push_str(&format!(
+            "  data={}\n",
+            self.frontend.program.data.len()
+        ));
         out.push_str(&self.program.render_summary());
         out
     }

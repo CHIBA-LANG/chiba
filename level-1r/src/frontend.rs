@@ -1,4 +1,9 @@
-use crate::ast::{BinaryOp, Expr, NamespaceDecl, Pattern, SourceItem, SourceProgram, UseDecl};
+use std::collections::BTreeMap;
+
+use crate::ast::{
+    BinaryOp, DataDecl, DataVariant, Expr, NamespaceDecl, Pattern, SourceItem, SourceProgram,
+    UseDecl,
+};
 use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,6 +44,11 @@ fn chiba_lexer_spec() -> LexerSpec {
             LexerRule {
                 name: "KwDef".to_string(),
                 pattern: "def".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "KwData".to_string(),
+                pattern: "data".to_string(),
                 skip: false,
             },
             LexerRule {
@@ -115,6 +125,8 @@ fn chiba_lexer_spec() -> LexerSpec {
             punct("RParen", "\\)"),
             punct("LBrace", "\\{"),
             punct("RBrace", "\\}"),
+            punct("LBracket", "\\["),
+            punct("RBracket", "\\]"),
             punct("FatArrow", "=>"),
             punct("Arrow", "->"),
             punct("Dot", "\\."),
@@ -142,11 +154,16 @@ fn punct(name: &str, pattern: &str) -> LexerRule {
 struct FrontendParser {
     tokens: Vec<Token>,
     pos: usize,
+    data_variants: BTreeMap<String, Vec<String>>,
 }
 
 impl FrontendParser {
     fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, pos: 0 }
+        Self {
+            tokens,
+            pos: 0,
+            data_variants: BTreeMap::new(),
+        }
     }
 
     fn parse_program(&mut self) -> Result<SourceProgram, FrontendError> {
@@ -160,10 +177,28 @@ impl FrontendParser {
             imports.push(self.parse_use()?);
         }
         let mut items = Vec::new();
+        let mut data = Vec::new();
         while !self.is_eof() {
-            items.push(self.parse_def()?);
+            match self.peek_name() {
+                Some("KwData") => data.push(self.parse_data()?),
+                Some("KwDef") => items.push(self.parse_def()?),
+                Some(found) => {
+                    let token = self.tokens[self.pos].clone();
+                    return Err(FrontendError::UnexpectedToken {
+                        found: found.to_string(),
+                        lexeme: token.lexeme,
+                        expected: vec!["KwData".to_string(), "KwDef".to_string()],
+                    });
+                }
+                None => break,
+            }
         }
-        Ok(SourceProgram::with_surface(namespace, imports, items))
+        let variants = data_variant_map(&data);
+        let items = items
+            .into_iter()
+            .map(|item| enrich_item_with_data_variants(item, &variants))
+            .collect();
+        Ok(SourceProgram::with_surface(namespace, imports, data, items))
     }
 
     fn parse_namespace(&mut self) -> Result<NamespaceDecl, FrontendError> {
@@ -224,6 +259,69 @@ impl FrontendParser {
         Ok(SourceItem::Def { name, params, body })
     }
 
+    fn parse_data(&mut self) -> Result<DataDecl, FrontendError> {
+        self.expect("KwData")?;
+        let name = self.expect_lexeme("Ident")?;
+        let generics = if self.peek_name() == Some("LBracket") {
+            self.parse_generic_params()?
+        } else {
+            Vec::new()
+        };
+        self.expect("Eq")?;
+        self.expect("LBrace")?;
+        let mut variants = Vec::new();
+        while self.peek_name() != Some("RBrace") {
+            variants.push(self.parse_data_variant()?);
+            if self.peek_name() == Some("Comma") {
+                self.pos += 1;
+            }
+        }
+        self.expect("RBrace")?;
+        let data = DataDecl::new(name, generics, variants);
+        self.data_variants.insert(data.name.clone(), data.variant_names());
+        Ok(data)
+    }
+
+    fn parse_generic_params(&mut self) -> Result<Vec<String>, FrontendError> {
+        self.expect("LBracket")?;
+        let mut params = Vec::new();
+        if self.peek_name() == Some("RBracket") {
+            self.pos += 1;
+            return Ok(params);
+        }
+        loop {
+            params.push(self.expect_lexeme("Ident")?);
+            if self.peek_name() != Some("Comma") {
+                break;
+            }
+            self.pos += 1;
+        }
+        self.expect("RBracket")?;
+        Ok(params)
+    }
+
+    fn parse_data_variant(&mut self) -> Result<DataVariant, FrontendError> {
+        let name = self.expect_lexeme("Ident")?;
+        let fields = if self.peek_name() == Some("LParen") {
+            self.pos += 1;
+            let mut fields = Vec::new();
+            if self.peek_name() != Some("RParen") {
+                loop {
+                    fields.push(self.expect_type_name()?);
+                    if self.peek_name() != Some("Comma") {
+                        break;
+                    }
+                    self.pos += 1;
+                }
+            }
+            self.expect("RParen")?;
+            fields
+        } else {
+            Vec::new()
+        };
+        Ok(DataVariant::new(name, fields))
+    }
+
     fn parse_params(&mut self) -> Result<Vec<String>, FrontendError> {
         let mut params = Vec::new();
         if self.peek_name() == Some("RParen") {
@@ -278,12 +376,19 @@ impl FrontendParser {
                         self.expect("RParen")?;
                         expr = match expr {
                             Expr::Var(data) if is_big_camel(&name) => {
-                                Expr::adt_ctor(data, name.clone(), vec![name], vec![arg])
+                                let variants = self.known_variants(&data, &name);
+                                Expr::adt_ctor(data, name.clone(), variants, vec![arg])
                             }
                             receiver => Expr::method_call(receiver, name, arg),
                         };
                     } else {
-                        expr = Expr::field(expr, name);
+                        expr = match expr {
+                            Expr::Var(data) if is_big_camel(&name) => {
+                                let variants = self.known_variants(&data, &name);
+                                Expr::adt_ctor(data, name.clone(), variants, Vec::new())
+                            }
+                            receiver => Expr::field(receiver, name),
+                        };
                     }
                 }
                 _ => break,
@@ -694,6 +799,13 @@ impl FrontendParser {
     fn is_eof(&self) -> bool {
         self.pos == self.tokens.len()
     }
+
+    fn known_variants(&self, data: &str, fallback_ctor: &str) -> Vec<String> {
+        self.data_variants
+            .get(data)
+            .cloned()
+            .unwrap_or_else(|| vec![fallback_ctor.to_string()])
+    }
 }
 
 fn is_big_camel(name: &str) -> bool {
@@ -701,4 +813,137 @@ fn is_big_camel(name: &str) -> bool {
         .next()
         .map(|ch| ch.is_ascii_uppercase())
         .unwrap_or(false)
+}
+
+fn data_variant_map(data: &[DataDecl]) -> BTreeMap<String, Vec<String>> {
+    data.iter()
+        .map(|decl| (decl.name.clone(), decl.variant_names()))
+        .collect()
+}
+
+fn enrich_item_with_data_variants(
+    item: SourceItem,
+    variants: &BTreeMap<String, Vec<String>>,
+) -> SourceItem {
+    match item {
+        SourceItem::Def { name, params, body } => SourceItem::Def {
+            name,
+            params,
+            body: enrich_expr_with_data_variants(body, variants),
+        },
+    }
+}
+
+fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<String>>) -> Expr {
+    match expr {
+        Expr::AdtCtor {
+            data,
+            ctor,
+            variants: old_variants,
+            args,
+        } => {
+            let args = args
+                .into_iter()
+                .map(|arg| enrich_expr_with_data_variants(arg, variants))
+                .collect();
+            let variants = variants.get(&data).cloned().unwrap_or(old_variants);
+            Expr::adt_ctor(data, ctor, variants, args)
+        }
+        Expr::Lambda { param, body } => {
+            Expr::lambda(param, enrich_expr_with_data_variants(*body, variants))
+        }
+        Expr::Call { callee, arg } => Expr::call(
+            enrich_expr_with_data_variants(*callee, variants),
+            enrich_expr_with_data_variants(*arg, variants),
+        ),
+        Expr::Tuple(fields) => Expr::tuple(
+            fields
+                .into_iter()
+                .map(|field| enrich_expr_with_data_variants(field, variants))
+                .collect(),
+        ),
+        Expr::Record(fields) => Expr::Record(
+            fields
+                .into_iter()
+                .map(|field| crate::ast::RecordField {
+                    name: field.name,
+                    value: enrich_expr_with_data_variants(field.value, variants),
+                })
+                .collect(),
+        ),
+        Expr::RecordUpdate { base, fields } => Expr::RecordUpdate {
+            base: Box::new(enrich_expr_with_data_variants(*base, variants)),
+            fields: fields
+                .into_iter()
+                .map(|field| crate::ast::RecordField {
+                    name: field.name,
+                    value: enrich_expr_with_data_variants(field.value, variants),
+                })
+                .collect(),
+        },
+        Expr::Field { receiver, name } => Expr::field(
+            enrich_expr_with_data_variants(*receiver, variants),
+            name,
+        ),
+        Expr::MethodCall {
+            receiver,
+            name,
+            arg,
+        } => Expr::method_call(
+            enrich_expr_with_data_variants(*receiver, variants),
+            name,
+            enrich_expr_with_data_variants(*arg, variants),
+        ),
+        Expr::Binary { op, lhs, rhs } => Expr::binary(
+            op,
+            enrich_expr_with_data_variants(*lhs, variants),
+            enrich_expr_with_data_variants(*rhs, variants),
+        ),
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => Expr::if_else(
+            enrich_expr_with_data_variants(*cond, variants),
+            enrich_expr_with_data_variants(*then_branch, variants),
+            enrich_expr_with_data_variants(*else_branch, variants),
+        ),
+        Expr::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => Expr::if_let(
+            pattern,
+            enrich_expr_with_data_variants(*scrutinee, variants),
+            enrich_expr_with_data_variants(*then_branch, variants),
+            enrich_expr_with_data_variants(*else_branch, variants),
+        ),
+        Expr::Match { scrutinee, arms } => Expr::match_expr(
+            enrich_expr_with_data_variants(*scrutinee, variants),
+            arms.into_iter()
+                .map(|arm| {
+                    (
+                        arm.pattern,
+                        enrich_expr_with_data_variants(arm.body, variants),
+                    )
+                })
+                .collect(),
+        ),
+        Expr::Nominal { name, expr } => {
+            Expr::nominal(name, enrich_expr_with_data_variants(*expr, variants))
+        }
+        Expr::Reset { multi, body } => {
+            let body = enrich_expr_with_data_variants(*body, variants);
+            if multi {
+                Expr::resetn(body)
+            } else {
+                Expr::reset(body)
+            }
+        }
+        Expr::Shift { binder, body } => {
+            Expr::shift(binder, enrich_expr_with_data_variants(*body, variants))
+        }
+        Expr::Var(_) | Expr::Lit(_) => expr,
+    }
 }

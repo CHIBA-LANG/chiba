@@ -159,7 +159,125 @@ fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
     assert!(summary.contains("source-program:"));
     assert!(summary.contains("tokens=18"));
     assert!(summary.contains("items=2"));
+    assert!(summary.contains("data=0"));
     assert!(summary.contains("P1ProgramSurface"));
+}
+
+#[test]
+fn frontend_parses_data_decl_and_uses_variants_for_qualified_ctors() {
+    let output = compile_source_program_bundle(
+        "data Option[T] = { Some(T), None } def main() = Option.Some(1)",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert_eq!(output.frontend.program.data.len(), 1);
+    let data = &output.frontend.program.data[0];
+    assert_eq!(data.name, "Option");
+    assert_eq!(data.generics, vec!["T".to_string()]);
+    assert_eq!(data.variant_names(), vec!["Some".to_string(), "None".to_string()]);
+    assert_eq!(data.variants[0].fields, vec!["T".to_string()]);
+    assert_eq!(data.variants[1].fields, Vec::<String>::new());
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::adt_ctor(
+                    "Option",
+                    "Some",
+                    vec!["Some", "None"],
+                    vec![Expr::i64(1)]
+                )
+            );
+        }
+    }
+
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::AdtConstruct {
+                data,
+                ctor,
+                variants,
+                args
+            } if data == "Option"
+                && ctor == "Some"
+                && variants == &vec!["None".to_string(), "Some".to_string()]
+                && args == &vec!["I64(1)".to_string()]
+        )
+    }));
+    assert!(output.render_summary().contains("data=1"));
+}
+
+#[test]
+fn frontend_data_decl_allows_zero_arg_qualified_ctor_and_exhaustive_match() {
+    let output = compile_source_program_bundle(
+        "data Option[T] = { Some(T), None } def main() = match Option.None { Option.Some(value) => value, Option.None => 0 }",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::match_expr(
+                    Expr::adt_ctor("Option", "None", vec!["Some", "None"], Vec::<Expr>::new()),
+                    vec![
+                        (
+                            Pattern::qualified_ctor(
+                                "Option",
+                                "Some",
+                                vec![Pattern::bind("value")]
+                            ),
+                            Expr::var("value"),
+                        ),
+                        (
+                            Pattern::qualified_ctor("Option", "None", Vec::<Pattern>::new()),
+                            Expr::i64(0),
+                        ),
+                    ],
+                )
+            );
+        }
+    }
+
+    assert_eq!(main.pattern.diagnostics, vec![]);
+    assert!(main.cps.to_string().contains("halt match Option.None"));
+    assert!(main.cps.to_string().contains("Option.Some(value) =>"));
+    assert!(main.cps.to_string().contains("Option.None =>"));
+}
+
+#[test]
+fn frontend_data_variant_summary_is_independent_of_decl_order() {
+    let output = compile_source_program_bundle(
+        "def main() = Option.Some(1) data Option[T] = { Some(T), None }",
+    )
+    .expect("compile source");
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::adt_ctor(
+                    "Option",
+                    "Some",
+                    vec!["Some", "None"],
+                    vec![Expr::i64(1)]
+                )
+            );
+        }
+    }
+    assert_eq!(output.frontend.program.data.len(), 1);
+    assert_eq!(output.program.defs.len(), 1);
+    assert!(output.program.defs[0].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::AdtConstruct { variants, .. }
+                if variants == &vec!["None".to_string(), "Some".to_string()]
+        )
+    }));
 }
 
 #[test]
