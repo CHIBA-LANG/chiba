@@ -3,7 +3,6 @@ use crate::cps::{CpsAtom, CpsProgram, CpsTerm};
 use crate::closure::{CaptureFact, ClosureFacts, ClosureStorageKind};
 use crate::lambda_lift::LambdaLiftFacts;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
-use crate::symbol::is_chiba_identifier;
 use crate::template::{DynRowContract, RowShape};
 use crate::typed::{SendColor, UsageColor};
 use crate::usage::UsageFacts;
@@ -22,6 +21,9 @@ pub enum CoreOp {
     TailCall {
         func: String,
         args: Vec<String>,
+    },
+    DynamicCallableTarget {
+        target: String,
     },
     Prompt {
         kind: ContinuationKind,
@@ -288,8 +290,12 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
         CpsTerm::Halt(atom) => lower_atom_value(atom, ops),
         CpsTerm::AppCont { value, .. } => lower_atom_value(value, ops),
         CpsTerm::AppFun { func, args, kont } => {
+            let func = render_atom(func);
+            ops.push(CoreOp::DynamicCallableTarget {
+                target: func.clone(),
+            });
             ops.push(CoreOp::TailCall {
-                func: render_atom(func),
+                func,
                 args: args.iter().map(render_atom).collect(),
             });
             lower_continuation_atom(kont, continuations, ops);
@@ -502,10 +508,8 @@ fn validate_tail_calls(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnost
 }
 
 fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
-    if func.starts_with("lambda#") || func.starts_with("cont#") || is_dynamic_callable_value(func) {
-        return true;
-    }
     program.ops.iter().any(|op| match op {
+        CoreOp::DynamicCallableTarget { target } => target == func,
         CoreOp::DirectMethodTarget { target, .. } => target == func,
         CoreOp::OperatorTarget { target, .. } => target == func,
         CoreOp::LiftedFunction { symbol, .. } => symbol == func,
@@ -546,42 +550,6 @@ fn validate_record_field_access(program: &CoreProgram, diagnostics: &mut Vec<Cor
             }
         }
     }
-}
-
-fn is_dynamic_callable_value(func: &str) -> bool {
-    is_simple_callable_ident(func)
-        || is_field_callable_value(func)
-        || is_operator_callable_value(func)
-}
-
-fn is_simple_callable_ident(value: &str) -> bool {
-    is_chiba_identifier(value)
-}
-
-fn is_field_callable_value(value: &str) -> bool {
-    let Some((receiver, method)) = value.rsplit_once('.') else {
-        return false;
-    };
-    !receiver.contains("::")
-        && is_receiver_path(receiver)
-        && is_simple_callable_ident(method)
-}
-
-fn is_receiver_path(value: &str) -> bool {
-    !value.is_empty() && value.split('.').all(is_simple_callable_ident)
-}
-
-fn is_operator_callable_value(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("operator::") else {
-        return false;
-    };
-    let Some((protocol, receiver)) = rest.split_once('(') else {
-        return false;
-    };
-    let Some(receiver) = receiver.strip_suffix(')') else {
-        return false;
-    };
-    is_simple_callable_ident(protocol) && is_simple_callable_ident(receiver)
 }
 
 fn validate_static_row_access(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {

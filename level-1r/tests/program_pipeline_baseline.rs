@@ -7,6 +7,7 @@ use chiba_level1r::{
     build_interface_summary, compile_program, compile_program_bundle, project_surface_many, Expr,
     ProgramDiagnostic,
 };
+use std::process::Command;
 
 fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
     SourceItem::Def {
@@ -791,6 +792,56 @@ fn global_init_allows_ordered_and_forward_static_dependencies() {
         bundle.global_init.init_order,
         vec!["ONE".to_string(), "TWO".to_string(), "THREE".to_string()]
     );
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__ONE (mut i32) (i32.const 0)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__TWO (mut i32) (i32.const 0)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__THREE (mut i32) (i32.const 0)"));
+    assert!(bundle.backend_link.linked_wat.contains("(func $__chiba_init"));
+    assert!(bundle.backend_link.linked_wat.contains("(start $__chiba_init)"));
+    assert!(bundle.backend_link.linked_wat.contains("global.set $global__ONE"));
+    assert!(bundle.backend_link.linked_wat.contains("global.get $global__ONE"));
+    assert!(bundle.backend_link.linked_wat.contains("i32.add"));
+    assert!(bundle.backend_link.linked_wat.contains("global.set $global__TWO"));
+    assert!(bundle.backend_link.linked_wat.contains("global.set $global__THREE"));
+    assert!(bundle.backend_link.linked_wat.contains("global.get $global__THREE"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+fn run_wat_text(wat: &str) -> String {
+    let path = std::env::temp_dir().join(format!(
+        "level1r-global-init-{}-{}.wat",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("test")
+    ));
+    std::fs::write(&path, wat).expect("write generated wat fixture");
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("level-1r parent repo root");
+    let output = Command::new("node")
+        .arg("tools/node/run-wat.mjs")
+        .arg(&path)
+        .current_dir(repo_root)
+        .output()
+        .expect("run generated wat");
+    assert!(
+        output.status.success(),
+        "generated WAT failed\nstdout:\n{}\nstderr:\n{}\nwat:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+        wat
+    );
+    String::from_utf8(output.stdout)
+        .expect("wat stdout utf8")
+        .trim()
+        .to_string()
 }
 
 #[test]
@@ -1128,7 +1179,7 @@ fn program_summary_contains_program_level_nanopass_events() {
     ));
     assert!(summary.contains("P6ProgramEntry: ProgramDefOutput -> EntrySelection"));
     assert!(summary.contains(
-        "P7ProgramBackendLink: ProgramDefOutput+EntrySelection -> BackendLinkedBundle"
+        "P7ProgramBackendLink: ProgramDefOutput+EntrySelection+GlobalInitPlan -> BackendLinkedBundle"
     ));
     assert!(summary.contains("P8ProgramBackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
     assert!(summary.contains("global-init=GlobalInitPlan"));

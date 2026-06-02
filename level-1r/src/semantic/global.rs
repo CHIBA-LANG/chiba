@@ -13,6 +13,7 @@ pub struct GlobalInitPlan {
 pub struct GlobalStatic {
     pub name: String,
     pub ty: Option<String>,
+    pub body: Expr,
     pub dependencies: Vec<String>,
 }
 
@@ -59,6 +60,7 @@ pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
                 Some(GlobalStatic {
                     name: name.clone(),
                     ty: ty.clone(),
+                    body: body.clone(),
                     dependencies,
                 })
             }

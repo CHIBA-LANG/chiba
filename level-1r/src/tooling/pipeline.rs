@@ -440,9 +440,16 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     }
     let backend_link = passes.record(
         "P7ProgramBackendLink",
-        "ProgramDefOutput+EntrySelection",
+        "ProgramDefOutput+EntrySelection+GlobalInitPlan",
         "BackendLinkedBundle",
-        || link_backend_artifacts(program_backend_artifacts(&defs, entry.as_deref())),
+        || {
+            let linked = link_backend_artifacts(program_backend_artifacts(
+                &defs,
+                entry.as_deref(),
+                &global_init,
+            ));
+            lower_global_init_into_linked_wat(linked, &global_init)
+        },
     );
     let backend_cache_key = passes.record(
         "P8ProgramBackendCacheKey",
@@ -866,8 +873,14 @@ fn select_program_entry(defs: &[ProgramDefOutput]) -> Option<String> {
 fn program_backend_artifacts(
     defs: &[ProgramDefOutput],
     entry: Option<&str>,
+    global_init: &GlobalInitPlan,
 ) -> Vec<BackendArtifact> {
     let mut entry_exported = false;
+    let static_names = global_init
+        .statics
+        .iter()
+        .map(|static_value| static_value.name.as_str())
+        .collect::<BTreeSet<_>>();
     defs.iter()
         .enumerate()
         .map(|(index, def)| {
@@ -876,21 +889,36 @@ fn program_backend_artifacts(
             if is_entry {
                 entry_exported = true;
             }
-            artifact.wat =
-                relabel_program_wat(&artifact.wat, &def_symbol(&def.name, index), is_entry);
+            artifact.wat = relabel_program_wat(
+                &artifact.wat,
+                &def_symbol(&def.name, index),
+                is_entry,
+                &static_names,
+            );
             artifact
         })
         .collect()
 }
 
-fn relabel_program_wat(wat: &str, symbol: &str, is_entry: bool) -> String {
+fn relabel_program_wat(
+    wat: &str,
+    symbol: &str,
+    is_entry: bool,
+    static_names: &BTreeSet<&str>,
+) -> String {
     if is_entry {
-        wat.replace(
-            "(func $main (export \"main\")",
-            &format!("(func ${symbol} (export \"main\")"),
+        replace_static_return(
+            &wat.replace(
+                "(func $main (export \"main\")",
+                &format!("(func ${symbol} (export \"main\")"),
+            ),
+            static_names,
         )
     } else {
-        wat.replace("(func $main (export \"main\")", &format!("(func ${symbol}"))
+        replace_static_return(&wat.replace(
+            "(func $main (export \"main\")",
+            &format!("(func ${symbol}"),
+        ), static_names)
     }
 }
 
@@ -905,6 +933,127 @@ fn def_symbol(name: &str, index: usize) -> String {
 
 fn sanitize_program_symbol(name: &str) -> String {
     encode_debug_symbol(name)
+}
+
+fn lower_global_init_into_linked_wat(
+    mut bundle: BackendLinkedBundle,
+    global_init: &GlobalInitPlan,
+) -> BackendLinkedBundle {
+    if !bundle.diagnostics.is_empty() || global_init.statics.is_empty() {
+        return bundle;
+    }
+    let Some(body) = bundle.linked_wat.strip_prefix("(module\n") else {
+        return bundle;
+    };
+    let Some(body) = body.strip_suffix(")\n") else {
+        return bundle;
+    };
+
+    let mut wat = String::from("(module\n");
+    for static_value in &global_init.statics {
+        wat.push_str(&format!(
+            "  (global ${} (mut i32) (i32.const 0))\n",
+            global_symbol(&static_value.name)
+        ));
+    }
+    wat.push_str("  (func $__chiba_init\n");
+    for name in &global_init.init_order {
+        let Some(static_value) = global_init.statics.iter().find(|item| item.name == *name) else {
+            continue;
+        };
+        wat.push_str(&format!("    ;; init static {}\n", static_value.name));
+        render_global_init_expr(&mut wat, &static_value.body, global_init);
+        wat.push_str(&format!("    global.set ${}\n", global_symbol(&static_value.name)));
+    }
+    wat.push_str("  )\n");
+    wat.push_str("  (start $__chiba_init)\n");
+    wat.push_str(body);
+    wat.push_str(")\n");
+    bundle.linked_wat = wat;
+    bundle
+}
+
+fn replace_static_return(wat: &str, static_names: &BTreeSet<&str>) -> String {
+    let Some(start) = wat.find(";; core-return atom=") else {
+        return wat.to_string();
+    };
+    let atom_start = start + ";; core-return atom=".len();
+    let Some(atom_end) = wat[atom_start..].find('\n').map(|offset| atom_start + offset) else {
+        return wat.to_string();
+    };
+    let atom = &wat[atom_start..atom_end];
+    if !static_names.contains(atom) {
+        return wat.to_string();
+    }
+    let Some(const_start) = wat[atom_end..].find("    i32.const 0").map(|offset| atom_end + offset) else {
+        return wat.to_string();
+    };
+    let const_end = const_start + "    i32.const 0".len();
+    let replacement = format!("    global.get ${}", global_symbol(atom));
+    let mut out = String::new();
+    out.push_str(&wat[..const_start]);
+    out.push_str(&replacement);
+    out.push_str(&wat[const_end..]);
+    out
+}
+
+fn render_global_init_expr(wat: &mut String, expr: &Expr, global_init: &GlobalInitPlan) {
+    match expr {
+        Expr::Lit(crate::ast::Literal::I64(value)) => {
+            wat.push_str(&format!("    i32.const {}\n", *value as i32));
+        }
+        Expr::Lit(crate::ast::Literal::Bool(value)) => {
+            wat.push_str(&format!("    i32.const {}\n", i32::from(*value)));
+        }
+        Expr::Var(name) if global_init.statics.iter().any(|item| item.name == *name) => {
+            wat.push_str(&format!("    global.get ${}\n", global_symbol(name)));
+        }
+        Expr::Binary { op, lhs, rhs } => {
+            render_global_init_expr(wat, lhs, global_init);
+            render_global_init_expr(wat, rhs, global_init);
+            wat.push_str(match op {
+                crate::ast::BinaryOp::Add => "    i32.add\n",
+                crate::ast::BinaryOp::Sub => "    i32.sub\n",
+                crate::ast::BinaryOp::Mul => "    i32.mul\n",
+                crate::ast::BinaryOp::Div => "    i32.div_s\n",
+            });
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            render_global_init_expr(wat, cond, global_init);
+            wat.push_str("    if (result i32)\n");
+            render_global_init_expr_nested(wat, then_branch, global_init, 6);
+            wat.push_str("    else\n");
+            render_global_init_expr_nested(wat, else_branch, global_init, 6);
+            wat.push_str("    end\n");
+        }
+        other => {
+            wat.push_str(&format!("    ;; unsupported static init {:?}\n", other));
+            wat.push_str("    i32.const 0\n");
+        }
+    }
+}
+
+fn render_global_init_expr_nested(
+    wat: &mut String,
+    expr: &Expr,
+    global_init: &GlobalInitPlan,
+    indent: usize,
+) {
+    let mut nested = String::new();
+    render_global_init_expr(&mut nested, expr, global_init);
+    for line in nested.lines() {
+        wat.push_str(&" ".repeat(indent));
+        wat.push_str(line.trim_start());
+        wat.push('\n');
+    }
+}
+
+fn global_symbol(name: &str) -> String {
+    format!("global__{}", encode_debug_symbol(name))
 }
 
 impl CompileOutput {

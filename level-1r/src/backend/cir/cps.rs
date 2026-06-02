@@ -848,7 +848,7 @@ impl fmt::Display for CpsTerm {
                 else_term,
                 join,
             } => {
-                write!(f, "if {cond} then {then_term} else {else_term} join {join}")
+                write!(f, "if {cond} {{ {then_term} }} else {{ {else_term} }} join {join}")
             }
             CpsTerm::Match {
                 scrutinee,

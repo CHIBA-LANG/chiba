@@ -52,13 +52,13 @@ fn lambda_adds_object_level_continuation_parameter() {
 fn if_cps_materializes_real_branch_join_without_administrative_chain() {
     let output = compile_expr(&Expr::if_else(
         Expr::var("cond"),
-        Expr::call(Expr::var("then_fn"), Expr::var("x")),
+        Expr::call(Expr::var("ok_fn"), Expr::var("x")),
         Expr::var("fallback"),
     ));
     let rendered = output.cps.to_string();
 
     assert!(rendered.contains("if cond"));
-    assert!(rendered.contains("then then_fn(x,"));
+    assert!(rendered.contains("{ ok_fn(x,"));
     assert!(rendered.contains("else"));
     assert!(rendered.contains("join"));
     assert!(!rendered.contains("LetCont"));
@@ -116,13 +116,13 @@ fn if_let_cps_has_success_and_failure_paths() {
 fn branch_usage_traverses_condition_and_all_arms() {
     let output = compile_expr(&Expr::if_else(
         Expr::var("shared"),
-        Expr::var("then_only"),
+        Expr::var("success_only"),
         Expr::call(Expr::var("shared"), Expr::var("else_arg")),
     ));
 
     assert_eq!(output.usage.vars.get("shared").copied(), Some(UseCount::Many));
     assert_eq!(
-        output.usage.vars.get("then_only").copied(),
+        output.usage.vars.get("success_only").copied(),
         Some(UseCount::One)
     );
     assert_eq!(

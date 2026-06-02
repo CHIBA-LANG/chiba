@@ -188,10 +188,15 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
     assert_eq!(validate_core(&known).diagnostics, vec![]);
 
     let dynamic = CoreProgram {
-        ops: vec![CoreOp::TailCall {
-            func: "f".to_string(),
-            args: vec!["x".to_string()],
-        }],
+        ops: vec![
+            CoreOp::DynamicCallableTarget {
+                target: "f".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "f".to_string(),
+                args: vec!["x".to_string()],
+            },
+        ],
         layouts: vec![],
         ownership: vec![],
         callable_storage: vec![],
@@ -199,10 +204,15 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
     assert_eq!(validate_core(&dynamic).diagnostics, vec![]);
 
     let dynamic_method = CoreProgram {
-        ops: vec![CoreOp::TailCall {
-            func: "receiver.put".to_string(),
-            args: vec!["1".to_string(), "2".to_string()],
-        }],
+        ops: vec![
+            CoreOp::DynamicCallableTarget {
+                target: "receiver.put".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "receiver.put".to_string(),
+                args: vec!["1".to_string(), "2".to_string()],
+            },
+        ],
         layouts: vec![],
         ownership: vec![],
         callable_storage: vec![],
@@ -210,10 +220,15 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
     assert_eq!(validate_core(&dynamic_method).diagnostics, vec![]);
 
     let dynamic_operator = CoreProgram {
-        ops: vec![CoreOp::TailCall {
-            func: "operator::Add(w0)".to_string(),
-            args: vec!["1".to_string()],
-        }],
+        ops: vec![
+            CoreOp::DynamicCallableTarget {
+                target: "operator::Add(w0)".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "operator::Add(w0)".to_string(),
+                args: vec!["1".to_string()],
+            },
+        ],
         layouts: vec![],
         ownership: vec![],
         callable_storage: vec![],
@@ -221,10 +236,15 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
     assert_eq!(validate_core(&dynamic_operator).diagnostics, vec![]);
 
     let utf8_dynamic = CoreProgram {
-        ops: vec![CoreOp::TailCall {
-            func: "模块.函数α".to_string(),
-            args: vec!["标量名".to_string()],
-        }],
+        ops: vec![
+            CoreOp::DynamicCallableTarget {
+                target: "模块.函数α".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "模块.函数α".to_string(),
+                args: vec!["标量名".to_string()],
+            },
+        ],
         layouts: vec![],
         ownership: vec![],
         callable_storage: vec![],
@@ -232,10 +252,15 @@ fn validator_accepts_known_direct_and_dynamic_callable_tailcalls() {
     assert_eq!(validate_core(&utf8_dynamic).diagnostics, vec![]);
 
     let emoji_dynamic = CoreProgram {
-        ops: vec![CoreOp::TailCall {
-            func: "结果.🚀Ok".to_string(),
-            args: vec!["1".to_string()],
-        }],
+        ops: vec![
+            CoreOp::DynamicCallableTarget {
+                target: "结果.🚀Ok".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "结果.🚀Ok".to_string(),
+                args: vec!["1".to_string()],
+            },
+        ],
         layouts: vec![],
         ownership: vec![],
         callable_storage: vec![],

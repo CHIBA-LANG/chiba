@@ -186,11 +186,6 @@ fn chiba_lexer_spec() -> LexerSpec {
                 skip: false,
             },
             LexerRule {
-                name: "KwThen".to_string(),
-                pattern: "then".to_string(),
-                skip: false,
-            },
-            LexerRule {
                 name: "KwElse".to_string(),
                 pattern: "else".to_string(),
                 skip: false,
@@ -550,7 +545,6 @@ impl FrontendParser {
                         | "KwMatch"
                         | "KwIf"
                         | "KwLet"
-                        | "KwThen"
                         | "KwElse"
                         | "True"
                         | "False"
@@ -874,10 +868,13 @@ impl FrontendParser {
             return self.parse_if_let_after_if();
         }
         let cond = self.parse_expr_bp(0)?;
-        self.expect("KwThen")?;
-        let then_branch = self.parse_expr_bp(0)?;
+        let then_branch = self.parse_block_expr()?;
         self.expect("KwElse")?;
-        let else_branch = self.parse_expr_bp(0)?;
+        let else_branch = if self.peek_name() == Some("KwIf") {
+            self.parse_if()?
+        } else {
+            self.parse_block_expr()?
+        };
         Ok(Expr::if_else(cond, then_branch, else_branch))
     }
 
@@ -1222,7 +1219,6 @@ impl FrontendParser {
             Some("KwMatch") => self.expect_lexeme("KwMatch"),
             Some("KwIf") => self.expect_lexeme("KwIf"),
             Some("KwLet") => self.expect_lexeme("KwLet"),
-            Some("KwThen") => self.expect_lexeme("KwThen"),
             Some("KwElse") => self.expect_lexeme("KwElse"),
             Some("True") => self.expect_lexeme("True"),
             Some("False") => self.expect_lexeme("False"),

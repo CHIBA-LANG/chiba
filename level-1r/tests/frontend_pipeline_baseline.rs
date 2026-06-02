@@ -1011,8 +1011,8 @@ fn frontend_slice_indexing_uses_index_slice_operator_path() {
 }
 
 #[test]
-fn frontend_parses_if_then_else_through_branch_cps_and_wat() {
-    let output = compile_source_program_bundle("def main() = if flag then f(1) else 2")
+fn frontend_parses_if_block_else_block_through_branch_cps_and_wat() {
+    let output = compile_source_program_bundle("def main() = if flag { f(1) } else { 2 }")
         .expect("compile source");
 
     match &output.frontend.program.items[0] {
@@ -1031,7 +1031,7 @@ fn frontend_parses_if_then_else_through_branch_cps_and_wat() {
 
     let main = &output.program.defs[0].output;
     assert!(main.cps.to_string().contains("if flag"));
-    assert!(main.cps.to_string().contains("then f(1,"));
+    assert!(main.cps.to_string().contains("{ f(1,"));
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1039,6 +1039,28 @@ fn frontend_parses_if_then_else_through_branch_cps_and_wat() {
         )
     }));
     assert!(output.program.backend_link.linked_wat.contains(";; branch cond=flag"));
+}
+
+#[test]
+fn frontend_parses_else_if_as_nested_if_expr() {
+    let output = compile_source_program_bundle(
+        "def main() = if a { 1 } else if b { 2 } else { 3 }",
+    )
+    .expect("compile source");
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::if_else(
+                    Expr::var("a"),
+                    Expr::i64(1),
+                    Expr::if_else(Expr::var("b"), Expr::i64(2), Expr::i64(3)),
+                )
+            );
+        }
+        other => panic!("expected function def, got {other:?}"),
+    }
 }
 
 #[test]

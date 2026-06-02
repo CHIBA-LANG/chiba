@@ -148,6 +148,7 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
                 ownership: ownership_for_subject(core, target),
             }),
             CoreOp::ReturnAtom(_)
+            | CoreOp::DynamicCallableTarget { .. }
             | CoreOp::TupleConstruct { .. }
             | CoreOp::TupleFieldGet { .. }
             | CoreOp::RecordConstruct { .. }
@@ -294,6 +295,7 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest) -> String {
                 ));
             }
             CoreOp::DirectMethodTarget { .. }
+            | CoreOp::DynamicCallableTarget { .. }
             | CoreOp::OperatorTarget { .. }
             | CoreOp::LiftedFunction { .. } => {}
         }
