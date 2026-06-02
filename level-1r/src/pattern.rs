@@ -32,6 +32,9 @@ pub enum PatternDiagnostic {
     DuplicateBinding {
         name: String,
     },
+    ChainedAtPattern {
+        name: String,
+    },
 }
 
 pub fn analyze_patterns(expr: &TypedExpr) -> PatternFacts {
@@ -92,6 +95,7 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             visit(then_branch, facts);
             visit(else_branch, facts);
             diagnose_duplicate_bindings(pattern, facts);
+            diagnose_chained_at_patterns(pattern, facts);
             facts.envs.push(PatternEnvFact {
                 bindings: pattern_bindings(pattern),
                 success_branch_binds: true,
@@ -103,6 +107,7 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts) {
             for arm in arms {
                 visit(&arm.body, facts);
                 diagnose_duplicate_bindings(&arm.pattern, facts);
+                diagnose_chained_at_patterns(&arm.pattern, facts);
             }
             let fact = exhaustiveness(scrutinee, arms);
             if !fact.exhaustive {
@@ -130,6 +135,14 @@ fn exhaustiveness(
             Pattern::Wildcard => has_wildcard = true,
             Pattern::Bind(_) => has_wildcard = true,
             Pattern::Tuple(_) => {}
+            Pattern::Record(_) => {}
+            Pattern::At { pattern, .. } => match pattern.as_ref() {
+                Pattern::Wildcard | Pattern::Bind(_) => has_wildcard = true,
+                Pattern::Lit(lit) if !covered_literals.contains(lit) => {
+                    covered_literals.push(lit.clone());
+                }
+                Pattern::Lit(_) | Pattern::Tuple(_) | Pattern::Record(_) | Pattern::At { .. } => {}
+            },
             Pattern::Lit(lit) if !covered_literals.contains(lit) => {
                 covered_literals.push(lit.clone());
             }
@@ -178,6 +191,15 @@ fn pattern_bindings(pattern: &Pattern) -> Vec<String> {
             .iter()
             .flat_map(pattern_bindings)
             .collect::<Vec<_>>(),
+        Pattern::Record(fields) => fields
+            .iter()
+            .flat_map(|field| pattern_bindings(&field.pattern))
+            .collect::<Vec<_>>(),
+        Pattern::At { name, pattern } => {
+            let mut bindings = pattern_bindings(pattern);
+            bindings.push(name.clone());
+            bindings
+        }
         Pattern::Wildcard | Pattern::Lit(_) => vec![],
     }
 }
@@ -211,6 +233,43 @@ fn collect_duplicate_bindings(
                 collect_duplicate_bindings(field, seen, duplicates);
             }
         }
+        Pattern::Record(fields) => {
+            for field in fields {
+                collect_duplicate_bindings(&field.pattern, seen, duplicates);
+            }
+        }
+        Pattern::At { name, pattern } => {
+            collect_duplicate_bindings(pattern, seen, duplicates);
+            if seen.contains(name) && !duplicates.contains(name) {
+                duplicates.push(name.clone());
+            } else {
+                seen.push(name.clone());
+            }
+        }
         Pattern::Wildcard | Pattern::Lit(_) => {}
+    }
+}
+
+fn diagnose_chained_at_patterns(pattern: &Pattern, facts: &mut PatternFacts) {
+    match pattern {
+        Pattern::At { pattern, .. } => {
+            if let Pattern::At { name, .. } = pattern.as_ref() {
+                facts.diagnostics.push(PatternDiagnostic::ChainedAtPattern {
+                    name: name.clone(),
+                });
+            }
+            diagnose_chained_at_patterns(pattern, facts);
+        }
+        Pattern::Tuple(fields) => {
+            for field in fields {
+                diagnose_chained_at_patterns(field, facts);
+            }
+        }
+        Pattern::Record(fields) => {
+            for field in fields {
+                diagnose_chained_at_patterns(&field.pattern, facts);
+            }
+        }
+        Pattern::Wildcard | Pattern::Bind(_) | Pattern::Lit(_) => {}
     }
 }

@@ -95,7 +95,18 @@ pub enum AlphaPattern {
     Wildcard,
     Bind(AlphaBinder),
     Tuple(Vec<AlphaPattern>),
+    Record(Vec<AlphaRecordPatternField>),
+    At {
+        binder: AlphaBinder,
+        pattern: Box<AlphaPattern>,
+    },
     Lit(Literal),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AlphaRecordPatternField {
+    pub name: String,
+    pub pattern: AlphaPattern,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -343,6 +354,20 @@ impl AlphaCtx {
                     .map(|field| self.alpha_pattern(field))
                     .collect(),
             ),
+            Pattern::Record(fields) => AlphaPattern::Record(
+                fields
+                    .iter()
+                    .map(|field| AlphaRecordPatternField {
+                        name: field.name.clone(),
+                        pattern: self.alpha_pattern(&field.pattern),
+                    })
+                    .collect(),
+            ),
+            Pattern::At { name, pattern } => {
+                let pattern = Box::new(self.alpha_pattern(pattern));
+                let binder = self.bind(name);
+                AlphaPattern::At { binder, pattern }
+            }
             Pattern::Lit(lit) => AlphaPattern::Lit(lit.clone()),
         }
     }

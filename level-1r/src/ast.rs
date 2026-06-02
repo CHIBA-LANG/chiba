@@ -90,7 +90,18 @@ pub enum Pattern {
     Wildcard,
     Bind(String),
     Tuple(Vec<Pattern>),
+    Record(Vec<RecordPatternField>),
+    At {
+        name: String,
+        pattern: Box<Pattern>,
+    },
     Lit(Literal),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordPatternField {
+    pub name: String,
+    pub pattern: Pattern,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -253,6 +264,25 @@ impl Pattern {
 
     pub fn tuple(fields: Vec<Pattern>) -> Self {
         Self::Tuple(fields)
+    }
+
+    pub fn record(fields: Vec<(impl Into<String>, Pattern)>) -> Self {
+        Self::Record(
+            fields
+                .into_iter()
+                .map(|(name, pattern)| RecordPatternField {
+                    name: name.into(),
+                    pattern,
+                })
+                .collect(),
+        )
+    }
+
+    pub fn at(name: impl Into<String>, pattern: Pattern) -> Self {
+        Self::At {
+            name: name.into(),
+            pattern: Box::new(pattern),
+        }
     }
 
     pub fn lit_i64(value: i64) -> Self {

@@ -133,3 +133,95 @@ fn tuple_pattern_reports_duplicate_binding_once() {
         vec!["x".to_string(), "x".to_string(), "y".to_string(), "x".to_string()]
     );
 }
+
+#[test]
+fn record_pattern_collects_bindings_by_field_pattern_order() {
+    let output = compile_expr(&Expr::if_let(
+        Pattern::record(vec![
+            ("y", Pattern::bind("py")),
+            ("x", Pattern::tuple(vec![Pattern::bind("px"), Pattern::wildcard()])),
+        ]),
+        Expr::var("point"),
+        Expr::var("px"),
+        Expr::i64(0),
+    ));
+
+    assert_eq!(
+        output.pattern.envs[0].bindings,
+        vec!["py".to_string(), "px".to_string()]
+    );
+    assert!(output.cps.to_string().contains("{y: py, x: (px, _)} => join"));
+}
+
+#[test]
+fn at_pattern_binds_inner_pattern_then_whole_value_alias() {
+    let output = compile_expr(&Expr::if_let(
+        Pattern::at("whole", Pattern::record(vec![("x", Pattern::bind("inner"))])),
+        Expr::var("point"),
+        Expr::var("whole"),
+        Expr::i64(0),
+    ));
+
+    assert_eq!(
+        output.pattern.envs[0].bindings,
+        vec!["inner".to_string(), "whole".to_string()]
+    );
+    assert!(output
+        .cps
+        .to_string()
+        .contains("whole @ {x: inner} => join"));
+}
+
+#[test]
+fn at_pattern_reports_duplicate_binding_against_inner_pattern() {
+    let output = compile_expr(&Expr::if_let(
+        Pattern::at("x", Pattern::record(vec![("x", Pattern::bind("x"))])),
+        Expr::var("point"),
+        Expr::var("x"),
+        Expr::i64(0),
+    ));
+
+    assert_eq!(
+        output.pattern.diagnostics,
+        vec![PatternDiagnostic::DuplicateBinding {
+            name: "x".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn chained_at_pattern_is_rejected_but_nested_at_pattern_is_allowed() {
+    let chained = compile_expr(&Expr::if_let(
+        Pattern::at("a", Pattern::at("b", Pattern::bind("x"))),
+        Expr::var("value"),
+        Expr::var("a"),
+        Expr::i64(0),
+    ));
+
+    assert!(chained
+        .pattern
+        .diagnostics
+        .contains(&PatternDiagnostic::ChainedAtPattern {
+            name: "b".to_string(),
+        }));
+
+    let nested = compile_expr(&Expr::if_let(
+        Pattern::record(vec![(
+            "node",
+            Pattern::at("inner", Pattern::record(vec![("leaf", Pattern::bind("v"))])),
+        )]),
+        Expr::var("tree"),
+        Expr::var("inner"),
+        Expr::i64(0),
+    ));
+
+    assert!(!nested
+        .pattern
+        .diagnostics
+        .iter()
+        .any(|diag| matches!(diag, PatternDiagnostic::ChainedAtPattern { .. })));
+    assert_eq!(
+        nested.pattern.envs[0].bindings,
+        vec!["v".to_string(), "inner".to_string()]
+    );
+}

@@ -724,6 +724,17 @@ fn display_pattern(pattern: &Pattern) -> String {
                 .join(", ");
             format!("({fields})")
         }
+        Pattern::Record(fields) => {
+            let fields = fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, display_pattern(&field.pattern)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{{fields}}}")
+        }
+        Pattern::At { name, pattern } => {
+            format!("{name} @ {}", display_pattern(pattern))
+        }
         Pattern::Lit(Literal::I64(value)) => value.to_string(),
         Pattern::Lit(Literal::Bool(value)) => value.to_string(),
     }
