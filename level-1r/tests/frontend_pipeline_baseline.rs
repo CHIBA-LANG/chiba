@@ -1853,7 +1853,9 @@ fn frontend_rejects_adjacent_top_level_defs_without_newline() {
             found,
             lexeme,
             expected,
-        } if found == "KwDef" && lexeme == "def" && expected == vec!["Newline".to_string()]
+        } if found == "KwDef"
+            && lexeme == "def"
+            && expected == vec!["Newline".to_string(), "Semicolon".to_string()]
     ));
 }
 
@@ -1872,9 +1874,23 @@ fn frontend_rejects_adjacent_top_level_items_without_newline() {
             FrontendError::UnexpectedToken {
                 expected,
                 ..
-            } if expected == vec!["Newline".to_string()]
+            } if expected == vec!["Newline".to_string(), "Semicolon".to_string()]
         ));
     }
+}
+
+#[test]
+fn frontend_accepts_semicolon_separated_top_level_items() {
+    let output =
+        parse_source_program("namespace demo; use std.regex; def first() = 1; def second() = 2")
+            .expect("semicolon-separated top-level items");
+
+    assert_eq!(
+        output.program.namespace.as_ref().map(|namespace| namespace.dotted()),
+        Some("demo".to_string())
+    );
+    assert_eq!(output.program.imports.len(), 1);
+    assert_eq!(output.program.items.len(), 2);
 }
 
 #[test]

@@ -146,6 +146,7 @@ fn chiba_lexer_spec() -> LexerSpec {
             punct("Pipe", "\\|"),
             punct("At", "@"),
             punct("Comma", ","),
+            punct("Semicolon", ";"),
             punct("Eq", "="),
             punct("Plus", "\\+"),
             punct("Minus", "\\-"),
@@ -189,27 +190,34 @@ impl FrontendParser {
         } else {
             None
         };
-        let mut imports = Vec::new();
-        while self.peek_name() == Some("KwUse") {
-            self.expect_top_level_separator(previous_top_level_end)?;
-            imports.push(self.parse_use()?);
-            previous_top_level_end = self.previous_token_end();
-        }
         let mut types = Vec::new();
         let mut data = Vec::new();
         let mut items = Vec::new();
+        let mut imports = Vec::new();
+        let mut imports_closed = false;
         while !self.is_eof() {
             self.expect_top_level_separator(previous_top_level_end)?;
             match self.peek_name() {
-                Some("KwType") => types.push(self.parse_type_decl()?),
-                Some("KwData") => data.push(self.parse_data()?),
-                Some("KwDef") | Some("KwPrivate") => items.push(self.parse_def()?),
+                Some("KwUse") if !imports_closed => imports.push(self.parse_use()?),
+                Some("KwType") => {
+                    imports_closed = true;
+                    types.push(self.parse_type_decl()?);
+                }
+                Some("KwData") => {
+                    imports_closed = true;
+                    data.push(self.parse_data()?);
+                }
+                Some("KwDef") | Some("KwPrivate") => {
+                    imports_closed = true;
+                    items.push(self.parse_def()?);
+                }
                 Some(found) => {
                     let token = self.tokens[self.pos].clone();
                     return Err(FrontendError::UnexpectedToken {
                         found: found.to_string(),
                         lexeme: token.lexeme,
                         expected: vec![
+                            "KwUse".to_string(),
                             "KwType".to_string(),
                             "KwData".to_string(),
                             "KwDef".to_string(),
@@ -992,7 +1000,7 @@ impl FrontendParser {
     }
 
     fn expect_top_level_separator(
-        &self,
+        &mut self,
         previous_top_level_end: Option<usize>,
     ) -> Result<(), FrontendError> {
         let Some(previous_top_level_end) = previous_top_level_end else {
@@ -1001,13 +1009,16 @@ impl FrontendParser {
         let Some(current) = self.tokens.get(self.pos) else {
             return Ok(());
         };
-        if self.has_newline_between(previous_top_level_end, current.start) {
+        if current.name == "Semicolon" {
+            self.pos += 1;
+            Ok(())
+        } else if self.has_newline_between(previous_top_level_end, current.start) {
             Ok(())
         } else {
             Err(FrontendError::UnexpectedToken {
                 found: current.name.clone(),
                 lexeme: current.lexeme.clone(),
-                expected: vec!["Newline".to_string()],
+                expected: vec!["Newline".to_string(), "Semicolon".to_string()],
             })
         }
     }
