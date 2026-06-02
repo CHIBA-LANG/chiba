@@ -1,5 +1,6 @@
 use std::fmt::Write;
 
+use crate::alpha::AlphaFacts;
 use crate::ast::Expr;
 use crate::closure::ClosureFacts;
 use crate::control::ControlFacts;
@@ -12,6 +13,7 @@ use crate::usage::UsageFacts;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VisualReport {
     pub source: String,
+    pub alpha: String,
     pub typed: String,
     pub control: String,
     pub usage: String,
@@ -25,6 +27,8 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     let mut out = String::new();
     writeln!(out, "source:").unwrap();
     writeln!(out, "  {}", report.source).unwrap();
+    writeln!(out, "alpha:").unwrap();
+    writeln!(out, "  {}", report.alpha).unwrap();
     writeln!(out, "typed:").unwrap();
     writeln!(out, "  {}", report.typed).unwrap();
     writeln!(out, "control:").unwrap();
@@ -46,6 +50,7 @@ pub fn render_visual_report(report: &VisualReport) -> String {
 
 pub fn visual_report(
     source: &Expr,
+    alpha: &AlphaFacts,
     typed: &TypedExpr,
     control: &ControlFacts,
     usage: &UsageFacts,
@@ -56,6 +61,7 @@ pub fn visual_report(
 ) -> VisualReport {
     VisualReport {
         source: format!("{source:?}"),
+        alpha: format!("{alpha:#?}"),
         typed: format!("{typed:#?}"),
         control: format!("{control:#?}"),
         usage: format!("{usage:#?}"),

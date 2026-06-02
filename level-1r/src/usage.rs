@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
 
+use crate::alpha::{AlphaExpr, AlphaExprKind, BinderId};
 use crate::typed::{TypedExpr, TypedExprKind, UsageColor};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct UsageFacts {
     pub vars: BTreeMap<String, UseCount>,
+    pub binders: BTreeMap<BinderId, UseCount>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -36,6 +38,12 @@ pub fn analyze_usage(expr: &TypedExpr) -> UsageFacts {
     facts
 }
 
+pub fn analyze_alpha_usage(expr: &AlphaExpr) -> UsageFacts {
+    let mut facts = UsageFacts::default();
+    visit_alpha(expr, &mut facts);
+    facts
+}
+
 fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
     match &expr.kind {
         TypedExprKind::Var(name) => {
@@ -50,5 +58,35 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
         }
         TypedExprKind::Reset { body, .. } => visit(body, facts),
         TypedExprKind::Shift { body, .. } => visit(body, facts),
+    }
+}
+
+fn bump_binder(facts: &mut UsageFacts, binder: BinderId) {
+    let current = facts
+        .binders
+        .get(&binder)
+        .copied()
+        .unwrap_or(UseCount::Zero);
+    facts.binders.insert(binder, current.bump());
+}
+
+fn visit_alpha(expr: &AlphaExpr, facts: &mut UsageFacts) {
+    match &expr.kind {
+        AlphaExprKind::Var(var) => {
+            if let Some(target) = var.target {
+                bump_binder(facts, target);
+            } else {
+                let current = facts.vars.get(&var.name).copied().unwrap_or(UseCount::Zero);
+                facts.vars.insert(var.name.clone(), current.bump());
+            }
+        }
+        AlphaExprKind::Lit(_) => {}
+        AlphaExprKind::Lambda { body, .. } => visit_alpha(body, facts),
+        AlphaExprKind::Call { callee, arg } => {
+            visit_alpha(callee, facts);
+            visit_alpha(arg, facts);
+        }
+        AlphaExprKind::Reset { body, .. } => visit_alpha(body, facts),
+        AlphaExprKind::Shift { body, .. } => visit_alpha(body, facts),
     }
 }
