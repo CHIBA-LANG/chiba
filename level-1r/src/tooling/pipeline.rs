@@ -18,7 +18,7 @@ use crate::cps_usage::{
     analyze_cps_usage, simplify_continuations, ContinuationSimplificationFacts, CpsUsageFacts,
 };
 use crate::debug::{render_visual_report, visual_report, VisualReport};
-use crate::frontend::{parse_source_program, FrontendError, FrontendOutput};
+use crate::frontend::{parse_source_program, FrontendError, FrontendOutput, SourceItemSpan};
 use crate::global::{analyze_global_init, GlobalInitDiagnostic, GlobalInitPlan};
 use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
 use crate::monomorphize::{schedule_monomorphization, MonomorphizationPlan};
@@ -349,8 +349,42 @@ pub fn compile_program(program: &SourceProgram) -> Vec<CompileOutput> {
 
 pub fn compile_source_program_bundle(source: &str) -> Result<SourceCompileOutput, FrontendError> {
     let frontend = parse_source_program(source)?;
-    let program = compile_program_bundle(&frontend.program);
+    let mut program = compile_program_bundle(&frontend.program);
+    attach_source_item_spans_to_visuals(&mut program, &frontend.item_spans);
     Ok(SourceCompileOutput { frontend, program })
+}
+
+fn attach_source_item_spans_to_visuals(
+    program: &mut ProgramCompileOutput,
+    spans: &[SourceItemSpan],
+) {
+    for def in &mut program.defs {
+        let source_lines = spans
+            .iter()
+            .filter(|span| span.kind == "def" && span.name == def.name)
+            .map(render_source_item_span)
+            .collect::<Vec<_>>();
+        if source_lines.is_empty() {
+            continue;
+        }
+        def.output.visual.symbol_lineage = format!(
+            "{}{}",
+            source_lines.join(""),
+            def.output.visual.symbol_lineage
+        );
+    }
+}
+
+fn render_source_item_span(span: &SourceItemSpan) -> String {
+    format!(
+        "source {} {} @ {}:{}..{}:{}\n",
+        span.kind,
+        span.name,
+        span.span.line,
+        span.span.column,
+        span.span.end_line,
+        span.span.end_column
+    )
 }
 
 pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {

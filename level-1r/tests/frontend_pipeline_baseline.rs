@@ -309,6 +309,7 @@ def main() = helper(2)")
         }));
     let main_visual = output.program.defs[1].output.render_visual();
     assert!(main_visual.contains("symbol-lineage:"));
+    assert!(main_visual.contains("source def main @ 2:1..2:23"));
     assert!(main_visual.contains("resolve function helper -> root::helper"));
     assert!(main_visual.contains("template function helper -> root::helper"));
     assert!(main_visual.contains("specialize function helper -> root::helper"));
