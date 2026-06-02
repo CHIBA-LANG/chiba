@@ -27,12 +27,12 @@ use crate::pattern::PatternFacts;
 use crate::resolve::{resolve_expr, resolve_expr_with_names, MethodIndex, NameIndex, ResolveFacts};
 use crate::specialize::{plan_specialization, SpecializationFacts};
 use crate::std_audit::{audit_std_dependencies, StdAuditReport};
-use crate::symbol::encode_debug_symbol;
 use crate::surface::{
     build_interface_summary, duplicate_constructor_names, duplicate_data_names,
     duplicate_top_level_names, duplicate_type_fields, duplicate_type_names, project_surface,
     InterfaceSummary, ProjectSurface,
 };
+use crate::symbol::encode_debug_symbol;
 use crate::template::{analyze_template_with_source, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
@@ -165,19 +165,27 @@ fn compile_expr_with_indexes_and_generics(
             resolve_expr_with_names(&alpha.expr, methods.clone(), names.clone())
         }
     });
-    let template = passes.record("L3Template", "AlphaExpr+ResolveFacts", "TemplateFacts", || {
-        analyze_template_with_source(
-            expr,
-            explicit_generics,
-            params,
-            return_type,
-            &alpha.expr,
-            &resolve,
-        )
-    });
-    let specialize = passes.record("L4Specialize", "TemplateFacts", "SpecializationFacts", || {
-        plan_specialization("<expr>", &template)
-    });
+    let template = passes.record(
+        "L3Template",
+        "AlphaExpr+ResolveFacts",
+        "TemplateFacts",
+        || {
+            analyze_template_with_source(
+                expr,
+                explicit_generics,
+                params,
+                return_type,
+                &alpha.expr,
+                &resolve,
+            )
+        },
+    );
+    let specialize = passes.record(
+        "L4Specialize",
+        "TemplateFacts",
+        "SpecializationFacts",
+        || plan_specialization("<expr>", &template),
+    );
     let monomorphize = passes.record(
         "L5Monomorphize",
         "SpecializationFacts",
@@ -200,9 +208,12 @@ fn compile_expr_with_indexes_and_generics(
     let typed = passes.record("L7Typed", "SourceExpr+TypedSignature", "TypedExpr", || {
         type_expr_with_context(expr, &typed_env, type_context)
     });
-    let pattern = passes.record("L8PatternElab", "TypedExpr+ParamPatterns", "PatternFacts", || {
-        crate::pattern::analyze_patterns_with_params_and_context(&typed, params, type_context)
-    });
+    let pattern = passes.record(
+        "L8PatternElab",
+        "TypedExpr+ParamPatterns",
+        "PatternFacts",
+        || crate::pattern::analyze_patterns_with_params_and_context(&typed, params, type_context),
+    );
     let control = passes.record("L9AnswerControl", "TypedExpr", "ControlFacts", || {
         analyze_control(&typed)
     });
@@ -266,7 +277,10 @@ fn compile_expr_with_indexes_and_generics(
         "CoreProgram+CoreValidation",
         "BackendArtifact",
         || {
-            let param_names = params.iter().map(|param| param.name.clone()).collect::<Vec<_>>();
+            let param_names = params
+                .iter()
+                .map(|param| param.name.clone())
+                .collect::<Vec<_>>();
             emit_wasm_gc_with_params(&core, &core_validation, &param_names)
         },
     );
@@ -393,9 +407,12 @@ fn render_source_item_span(span: &SourceItemSpan) -> String {
 pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     let normalized_program = normalize_pattern_clause_defs(program);
     let mut passes = PassReport::default();
-    let surface = passes.record("P1ProjectSurface", "SourceProgram", "ProjectSurface", || {
-        project_surface(&normalized_program)
-    });
+    let surface = passes.record(
+        "P1ProjectSurface",
+        "SourceProgram",
+        "ProjectSurface",
+        || project_surface(&normalized_program),
+    );
     let interface = passes.record(
         "P2InterfaceSummary",
         "ProjectSurface",
@@ -505,7 +522,9 @@ fn normalize_pattern_clause_defs(program: &SourceProgram) -> SourceProgram {
             continue;
         }
         if emitted_keys.insert(key.clone()) {
-            normalized.items.push(merge_clause_items(&items_by_key[&key]));
+            normalized
+                .items
+                .push(merge_clause_items(&items_by_key[&key]));
         }
     }
 
@@ -574,7 +593,9 @@ fn merge_clause_items(clauses: &[SourceItem]) -> SourceItem {
     let dispatcher_params = (0..params.len())
         .map(|index| {
             let ty = clauses.iter().find_map(|clause| match clause {
-                SourceItem::Def { params, .. } => params.get(index).and_then(|param| param.ty.clone()),
+                SourceItem::Def { params, .. } => {
+                    params.get(index).and_then(|param| param.ty.clone())
+                }
                 SourceItem::StaticValue { .. } => None,
             });
             ParamDecl::new(dispatcher_param_name(index), ty)
@@ -826,10 +847,7 @@ fn program_surface_diagnostics(surface: &ProjectSurface) -> Vec<ProgramDiagnosti
     diagnostics.extend(
         duplicate_type_fields(surface)
             .into_iter()
-            .map(|(type_name, field)| ProgramDiagnostic::DuplicateTypeField {
-                type_name,
-                field,
-            }),
+            .map(|(type_name, field)| ProgramDiagnostic::DuplicateTypeField { type_name, field }),
     );
     diagnostics.extend(
         duplicate_data_names(surface)
@@ -918,7 +936,12 @@ fn relabel_program_wat(
     } else {
         wat.replace("(func $main (export \"main\")", &format!("(func ${symbol}"))
     };
-    replace_static_return_from_fact(&relabeled, artifact.return_value.as_ref(), static_names, is_entry)
+    replace_static_return_from_fact(
+        &relabeled,
+        artifact.return_value.as_ref(),
+        static_names,
+        is_entry,
+    )
 }
 
 fn def_symbol(name: &str, index: usize) -> String {
@@ -967,7 +990,10 @@ fn lower_global_init_into_linked_wat(
         }
         wat.push_str(&format!("    ;; init static {}\n", static_value.name));
         render_global_init_expr(&mut wat, &static_value.body, global_init);
-        wat.push_str(&format!("    global.set ${}\n", global_symbol(&static_value.name)));
+        wat.push_str(&format!(
+            "    global.set ${}\n",
+            global_symbol(&static_value.name)
+        ));
     }
     wat.push_str("  )\n");
     wat.push_str("  (start $__chiba_init)\n");
@@ -1035,6 +1061,15 @@ fn replace_static_return_from_fact(
 }
 
 fn render_global_init_expr(wat: &mut String, expr: &Expr, global_init: &GlobalInitPlan) {
+    render_global_init_expr_with_bindings(wat, expr, global_init, &BTreeMap::new());
+}
+
+fn render_global_init_expr_with_bindings(
+    wat: &mut String,
+    expr: &Expr,
+    global_init: &GlobalInitPlan,
+    bindings: &BTreeMap<String, Expr>,
+) {
     match expr {
         Expr::Lit(crate::ast::Literal::I64(value)) => {
             wat.push_str(&format!("    i32.const {}\n", *value as i32));
@@ -1042,12 +1077,20 @@ fn render_global_init_expr(wat: &mut String, expr: &Expr, global_init: &GlobalIn
         Expr::Lit(crate::ast::Literal::Bool(value)) => {
             wat.push_str(&format!("    i32.const {}\n", i32::from(*value)));
         }
+        Expr::Var(name) if bindings.contains_key(name) => {
+            render_global_init_expr_with_bindings(
+                wat,
+                bindings.get(name).expect("checked binding"),
+                global_init,
+                bindings,
+            );
+        }
         Expr::Var(name) if global_init.statics.iter().any(|item| item.name == *name) => {
             wat.push_str(&format!("    global.get ${}\n", global_symbol(name)));
         }
         Expr::Binary { op, lhs, rhs } => {
-            render_global_init_expr(wat, lhs, global_init);
-            render_global_init_expr(wat, rhs, global_init);
+            render_global_init_expr_with_bindings(wat, lhs, global_init, bindings);
+            render_global_init_expr_with_bindings(wat, rhs, global_init, bindings);
             wat.push_str(match op {
                 crate::ast::BinaryOp::Add => "    i32.add\n",
                 crate::ast::BinaryOp::Sub => "    i32.sub\n",
@@ -1060,12 +1103,27 @@ fn render_global_init_expr(wat: &mut String, expr: &Expr, global_init: &GlobalIn
             then_branch,
             else_branch,
         } => {
-            render_global_init_expr(wat, cond, global_init);
+            render_global_init_expr_with_bindings(wat, cond, global_init, bindings);
             wat.push_str("    if (result i32)\n");
-            render_global_init_expr_nested(wat, then_branch, global_init, 6);
+            render_global_init_expr_nested_with_bindings(
+                wat,
+                then_branch,
+                global_init,
+                bindings,
+                6,
+            );
             wat.push_str("    else\n");
-            render_global_init_expr_nested(wat, else_branch, global_init, 6);
+            render_global_init_expr_nested_with_bindings(
+                wat,
+                else_branch,
+                global_init,
+                bindings,
+                6,
+            );
             wat.push_str("    end\n");
+        }
+        Expr::Match { scrutinee, arms } => {
+            render_global_match_expr(wat, scrutinee, arms, global_init, bindings, 4);
         }
         Expr::AdtCtor { ctor, variants, .. } => {
             let tag = variants
@@ -1081,19 +1139,176 @@ fn render_global_init_expr(wat: &mut String, expr: &Expr, global_init: &GlobalIn
     }
 }
 
-fn render_global_init_expr_nested(
+fn render_global_init_expr_nested_with_bindings(
     wat: &mut String,
     expr: &Expr,
     global_init: &GlobalInitPlan,
+    bindings: &BTreeMap<String, Expr>,
     indent: usize,
 ) {
     let mut nested = String::new();
-    render_global_init_expr(&mut nested, expr, global_init);
+    render_global_init_expr_with_bindings(&mut nested, expr, global_init, bindings);
     for line in nested.lines() {
         wat.push_str(&" ".repeat(indent));
         wat.push_str(line.trim_start());
         wat.push('\n');
     }
+}
+
+fn render_global_match_expr(
+    wat: &mut String,
+    scrutinee: &Expr,
+    arms: &[crate::ast::MatchArm],
+    global_init: &GlobalInitPlan,
+    bindings: &BTreeMap<String, Expr>,
+    indent: usize,
+) {
+    let Some((first, rest)) = arms.split_first() else {
+        push_global_indent(wat, indent);
+        wat.push_str("unreachable\n");
+        return;
+    };
+    render_global_match_arm(wat, scrutinee, first, rest, global_init, bindings, indent);
+}
+
+fn render_global_match_arm(
+    wat: &mut String,
+    scrutinee: &Expr,
+    arm: &crate::ast::MatchArm,
+    rest: &[crate::ast::MatchArm],
+    global_init: &GlobalInitPlan,
+    bindings: &BTreeMap<String, Expr>,
+    indent: usize,
+) {
+    match global_pattern_bindings(&arm.pattern, scrutinee, bindings) {
+        Some(GlobalPatternMatch::Always(next_bindings)) => {
+            render_global_init_expr_nested_with_bindings(
+                wat,
+                &arm.body,
+                global_init,
+                &next_bindings,
+                indent,
+            );
+        }
+        Some(GlobalPatternMatch::Conditional {
+            expected,
+            bindings: next_bindings,
+        }) => {
+            render_global_init_expr_nested_with_bindings(
+                wat,
+                scrutinee,
+                global_init,
+                bindings,
+                indent,
+            );
+            push_global_indent(wat, indent);
+            wat.push_str(&format!("i32.const {expected}\n"));
+            push_global_indent(wat, indent);
+            wat.push_str("i32.eq\n");
+            push_global_indent(wat, indent);
+            wat.push_str("if (result i32)\n");
+            render_global_init_expr_nested_with_bindings(
+                wat,
+                &arm.body,
+                global_init,
+                &next_bindings,
+                indent + 2,
+            );
+            push_global_indent(wat, indent);
+            wat.push_str("else\n");
+            render_global_match_expr(wat, scrutinee, rest, global_init, bindings, indent + 2);
+            push_global_indent(wat, indent);
+            wat.push_str("end\n");
+        }
+        None => render_global_match_expr(wat, scrutinee, rest, global_init, bindings, indent),
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum GlobalPatternMatch {
+    Always(BTreeMap<String, Expr>),
+    Conditional {
+        expected: i32,
+        bindings: BTreeMap<String, Expr>,
+    },
+}
+
+fn global_pattern_bindings(
+    pattern: &Pattern,
+    value: &Expr,
+    bindings: &BTreeMap<String, Expr>,
+) -> Option<GlobalPatternMatch> {
+    match pattern {
+        Pattern::Wildcard => Some(GlobalPatternMatch::Always(bindings.clone())),
+        Pattern::Bind(name) => {
+            let mut next = bindings.clone();
+            next.insert(name.clone(), value.clone());
+            Some(GlobalPatternMatch::Always(next))
+        }
+        Pattern::Lit(crate::ast::Literal::I64(expected)) => Some(GlobalPatternMatch::Conditional {
+            expected: *expected as i32,
+            bindings: bindings.clone(),
+        }),
+        Pattern::Lit(crate::ast::Literal::Bool(expected)) => {
+            Some(GlobalPatternMatch::Conditional {
+                expected: i32::from(*expected),
+                bindings: bindings.clone(),
+            })
+        }
+        Pattern::Constructor { data, ctor, args } => {
+            let Expr::AdtCtor {
+                data: value_data,
+                variants,
+                args: payloads,
+                ..
+            } = value
+            else {
+                return None;
+            };
+            if data
+                .as_ref()
+                .is_some_and(|pattern_data| pattern_data != value_data)
+            {
+                return None;
+            }
+            if args.len() != payloads.len() {
+                return None;
+            }
+            let expected = variants.iter().position(|variant| variant == ctor)? as i32;
+            let mut next = bindings.clone();
+            for (pattern, payload) in args.iter().zip(payloads) {
+                match global_pattern_bindings(pattern, payload, &next)? {
+                    GlobalPatternMatch::Always(updated) => next = updated,
+                    GlobalPatternMatch::Conditional { .. } => return None,
+                }
+            }
+            Some(GlobalPatternMatch::Conditional {
+                expected,
+                bindings: next,
+            })
+        }
+        Pattern::At { name, pattern } => match global_pattern_bindings(pattern, value, bindings)? {
+            GlobalPatternMatch::Always(mut next) => {
+                next.insert(name.clone(), value.clone());
+                Some(GlobalPatternMatch::Always(next))
+            }
+            GlobalPatternMatch::Conditional {
+                expected,
+                bindings: mut next,
+            } => {
+                next.insert(name.clone(), value.clone());
+                Some(GlobalPatternMatch::Conditional {
+                    expected,
+                    bindings: next,
+                })
+            }
+        },
+        Pattern::Tuple(_) | Pattern::Record(_) => None,
+    }
+}
+
+fn push_global_indent(wat: &mut String, indent: usize) {
+    wat.push_str(&" ".repeat(indent));
 }
 
 fn global_symbol(name: &str) -> String {
@@ -1119,10 +1334,7 @@ impl ProgramCompileOutput {
         ));
         out.push_str(&format!(
             "  imports={:?}\n",
-            self.imports
-                .iter()
-                .map(UseDecl::dotted)
-                .collect::<Vec<_>>()
+            self.imports.iter().map(UseDecl::dotted).collect::<Vec<_>>()
         ));
         out.push_str(&format!("  defs={}\n", self.defs.len()));
         out.push_str(&format!("  global-init={:#?}\n", self.global_init));
@@ -1177,10 +1389,7 @@ impl SourceCompileOutput {
                 item.span.end_column
             ));
         }
-        out.push_str(&format!(
-            "  data={}\n",
-            self.frontend.program.data.len()
-        ));
+        out.push_str(&format!("  data={}\n", self.frontend.program.data.len()));
         out.push_str(&self.program.render_summary());
         out
     }

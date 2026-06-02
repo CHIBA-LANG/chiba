@@ -57,7 +57,10 @@ fn program_bundle_selects_main_and_links_def_artifacts() {
     assert_eq!(bundle.diagnostics, vec![]);
     assert_eq!(bundle.defs.len(), 2);
     assert!(bundle.backend_link.diagnostics.is_empty());
-    assert!(bundle.backend_link.linked_wat.contains("(func $helper (result i32)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $helper (result i32)"));
     assert!(bundle
         .backend_link
         .linked_wat
@@ -232,7 +235,11 @@ fn program_record_field_return_lowers_to_executable_wat_value() {
 fn program_zero_arg_tailcall_lowers_to_executable_direct_call_wat() {
     let program = SourceProgram::new(vec![
         def("helper", vec![], Expr::i64(7)),
-        def("main", vec![], Expr::call_args(Expr::var("helper"), Vec::new())),
+        def(
+            "main",
+            vec![],
+            Expr::call_args(Expr::var("helper"), Vec::new()),
+        ),
     ]);
 
     let bundle = compile_program_bundle(&program);
@@ -251,7 +258,10 @@ fn program_zero_arg_tailcall_lowers_to_executable_direct_call_wat() {
                 if func == "helper" && args.is_empty()
         )
     }));
-    assert!(bundle.backend_link.linked_wat.contains(";; tailcall helper args=[]"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains(";; tailcall helper args=[]"));
     assert!(bundle.backend_link.linked_wat.contains("call $helper"));
 
     let callable_wat = export_func_for_test(
@@ -290,7 +300,10 @@ fn program_literal_arg_tailcall_lowers_to_executable_direct_call_wat() {
                     && args == &vec![chiba_level1r::core::CoreValue::I64(9)]
         )
     }));
-    assert!(bundle.backend_link.linked_wat.contains("(func $helper (param $x i32) (result i32)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $helper (param $x i32) (result i32)"));
     assert!(bundle.backend_link.linked_wat.contains("i32.const 9"));
     assert!(bundle.backend_link.linked_wat.contains("call $helper"));
 
@@ -336,7 +349,10 @@ fn program_param_branch_lowers_to_executable_wat() {
             } if name == "x"
         )
     }));
-    assert!(bundle.backend_link.linked_wat.contains("(func $helper (param $x i32) (result i32)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $helper (param $x i32) (result i32)"));
     assert!(bundle.backend_link.linked_wat.contains("local.get $x"));
 
     let callable_wat = export_func_for_test(
@@ -391,7 +407,10 @@ fn program_param_literal_match_lowers_to_executable_wat() {
                 && arms[1].value == chiba_level1r::core::CoreValue::I64(30)
         )
     }));
-    assert!(bundle.backend_link.linked_wat.contains("(func $helper (param $x i32) (result i32)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $helper (param $x i32) (result i32)"));
     assert!(bundle.backend_link.linked_wat.contains("local.get $x"));
 
     let callable_wat = export_func_for_test(
@@ -684,8 +703,18 @@ fn program_bundle_reports_duplicate_defs_and_entry_params() {
             name: "main".to_string(),
             params: vec!["x".to_string()],
         }));
-    assert_eq!(bundle.backend_link.linked_wat.matches("(export \"main\")").count(), 1);
-    assert!(bundle.backend_link.linked_wat.contains("(func $main__def1 (result i32)"));
+    assert_eq!(
+        bundle
+            .backend_link
+            .linked_wat
+            .matches("(export \"main\")")
+            .count(),
+        1
+    );
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $main__def1 (result i32)"));
 }
 
 #[test]
@@ -709,7 +738,10 @@ fn pattern_clause_defs_lower_to_single_dispatcher_without_duplicate_def() {
                 name: "unwrap_or_zero".to_string(),
                 visibility: Visibility::Public,
                 params: vec![ParamDecl::pattern(
-                    chiba_level1r::ast::Pattern::ctor("Some", vec![chiba_level1r::ast::Pattern::bind("x")]),
+                    chiba_level1r::ast::Pattern::ctor(
+                        "Some",
+                        vec![chiba_level1r::ast::Pattern::bind("x")],
+                    ),
                     Some("Option[i64]".to_string()),
                 )],
                 return_type: Some("i64".to_string()),
@@ -814,8 +846,14 @@ def unwrap_or_zero(other: Option[i64]): i64 = 0",
 #[test]
 fn program_surface_and_interface_summary_preserve_owner_namespace() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
-        vec![UseDecl::new(vec!["std".to_string(), "regex".to_string()], false)],
+        Some(NamespaceDecl::new(vec![
+            "parser".to_string(),
+            "core".to_string(),
+        ])),
+        vec![UseDecl::new(
+            vec!["std".to_string(), "regex".to_string()],
+            false,
+        )],
         Vec::new(),
         vec![DataDecl::new(
             "Option",
@@ -833,13 +871,19 @@ fn program_surface_and_interface_summary_preserve_owner_namespace() {
     assert_eq!(bundle.surface.namespace, "parser.core");
     assert_eq!(bundle.surface.imports, vec!["std.regex".to_string()]);
     assert_eq!(bundle.surface.defs[0].owner, "parser.core");
-    assert_eq!(bundle.surface.defs[0].param_types, Vec::<Option<String>>::new());
+    assert_eq!(
+        bundle.surface.defs[0].param_types,
+        Vec::<Option<String>>::new()
+    );
     assert_eq!(bundle.surface.defs[0].return_type, None);
     assert_eq!(bundle.surface.data[0].owner, "parser.core");
     assert_eq!(bundle.surface.constructors.len(), 2);
     assert_eq!(bundle.interface.namespace, "parser.core");
     assert_eq!(bundle.interface.functions[0].symbol, "parser.core::main");
-    assert_eq!(bundle.interface.functions[0].param_types, Vec::<Option<String>>::new());
+    assert_eq!(
+        bundle.interface.functions[0].param_types,
+        Vec::<Option<String>>::new()
+    );
     assert_eq!(bundle.interface.functions[0].return_type, None);
     assert_eq!(bundle.interface.data[0].symbol, "parser.core::Option");
     assert_eq!(
@@ -868,9 +912,15 @@ def public_value(): i64 = SECRET",
     .expect("compile source");
 
     assert_eq!(output.program.surface.defs[0].name, "hidden");
-    assert_eq!(output.program.surface.defs[0].visibility, Visibility::Private);
+    assert_eq!(
+        output.program.surface.defs[0].visibility,
+        Visibility::Private
+    );
     assert_eq!(output.program.surface.defs[1].name, "public_value");
-    assert_eq!(output.program.surface.defs[1].visibility, Visibility::Public);
+    assert_eq!(
+        output.program.surface.defs[1].visibility,
+        Visibility::Public
+    );
     assert_eq!(output.program.surface.statics[0].name, "SECRET");
     assert_eq!(
         output.program.surface.statics[0].visibility,
@@ -895,7 +945,10 @@ def public_value(): i64 = SECRET",
 fn project_surface_many_merges_namespaces_deterministically() {
     let lexer_program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["lexer".to_string()])),
-        vec![UseDecl::new(vec!["std".to_string(), "text".to_string()], false)],
+        vec![UseDecl::new(
+            vec!["std".to_string(), "text".to_string()],
+            false,
+        )],
         vec![TypeDecl::alias("TokenId", Vec::new(), "i64")],
         Vec::new(),
         vec![def("scan", vec![], Expr::i64(1))],
@@ -946,7 +999,10 @@ fn project_surface_many_merges_namespaces_deterministically() {
 #[test]
 fn interface_summary_preserves_function_signature_types() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Some(NamespaceDecl::new(vec![
+            "parser".to_string(),
+            "core".to_string(),
+        ])),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -985,7 +1041,10 @@ fn interface_summary_preserves_function_signature_types() {
 #[test]
 fn interface_summary_preserves_explicit_checked_template_params() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Some(NamespaceDecl::new(vec![
+            "parser".to_string(),
+            "core".to_string(),
+        ])),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -1015,10 +1074,7 @@ fn interface_summary_preserves_explicit_checked_template_params() {
         }]
     );
     assert_eq!(
-        bundle.defs[0]
-            .output
-            .specialize
-            .work_items[0]
+        bundle.defs[0].output.specialize.work_items[0]
             .key
             .template_params,
         bundle.defs[0].output.template.explicit_params
@@ -1028,7 +1084,10 @@ fn interface_summary_preserves_explicit_checked_template_params() {
 #[test]
 fn interface_summary_preserves_row_style_type_decl_shape() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Some(NamespaceDecl::new(vec![
+            "parser".to_string(),
+            "core".to_string(),
+        ])),
         Vec::new(),
         vec![TypeDecl::new(
             "Box",
@@ -1055,7 +1114,10 @@ fn interface_summary_preserves_row_style_type_decl_shape() {
 #[test]
 fn interface_summary_preserves_type_alias_target() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Some(NamespaceDecl::new(vec![
+            "parser".to_string(),
+            "core".to_string(),
+        ])),
         Vec::new(),
         vec![TypeDecl::alias("UserId", Vec::new(), "i64")],
         Vec::new(),
@@ -1141,7 +1203,10 @@ fn interface_summary_splits_type_fields_from_phantom_markers() {
 #[test]
 fn interface_summary_preserves_method_style_receiver_and_self_surface() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Some(NamespaceDecl::new(vec![
+            "parser".to_string(),
+            "core".to_string(),
+        ])),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -1214,7 +1279,10 @@ fn interface_summary_preserves_method_style_receiver_and_self_surface() {
 #[test]
 fn method_self_record_update_preserves_nominal_receiver_type_in_body() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Some(NamespaceDecl::new(vec![
+            "parser".to_string(),
+            "core".to_string(),
+        ])),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -1247,7 +1315,10 @@ fn method_self_record_update_preserves_nominal_receiver_type_in_body() {
 #[test]
 fn method_self_field_access_uses_row_style_type_shape() {
     let program = SourceProgram::with_surface(
-        Some(NamespaceDecl::new(vec!["parser".to_string(), "core".to_string()])),
+        Some(NamespaceDecl::new(vec![
+            "parser".to_string(),
+            "core".to_string(),
+        ])),
         Vec::new(),
         vec![TypeDecl::new(
             "Box",
@@ -1320,10 +1391,7 @@ fn auto_generic_is_lowering_fact_not_source_surface_generic() {
         }]
     );
     assert_eq!(
-        bundle.defs[0]
-            .output
-            .specialize
-            .work_items[0]
+        bundle.defs[0].output.specialize.work_items[0]
             .key
             .template_params,
         bundle.defs[0].output.template.explicit_params
@@ -1359,7 +1427,11 @@ fn global_init_allows_ordered_and_forward_static_dependencies() {
         static_value(
             "TWO",
             Some("i64"),
-            Expr::binary(chiba_level1r::ast::BinaryOp::Add, Expr::var("ONE"), Expr::i64(1)),
+            Expr::binary(
+                chiba_level1r::ast::BinaryOp::Add,
+                Expr::var("ONE"),
+                Expr::i64(1),
+            ),
         ),
         def("main", vec![], Expr::var("THREE")),
     ]);
@@ -1405,14 +1477,35 @@ fn global_init_allows_ordered_and_forward_static_dependencies() {
         .backend_link
         .linked_wat
         .contains("(global $global__THREE (mut i32) (i32.const 0)"));
-    assert!(bundle.backend_link.linked_wat.contains("(func $__chiba_init"));
-    assert!(bundle.backend_link.linked_wat.contains("(start $__chiba_init)"));
-    assert!(!bundle.backend_link.linked_wat.contains("global.set $global__ONE"));
-    assert!(bundle.backend_link.linked_wat.contains("global.get $global__ONE"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $__chiba_init"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(start $__chiba_init)"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__ONE"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.get $global__ONE"));
     assert!(bundle.backend_link.linked_wat.contains("i32.add"));
-    assert!(bundle.backend_link.linked_wat.contains("global.set $global__TWO"));
-    assert!(bundle.backend_link.linked_wat.contains("global.set $global__THREE"));
-    assert!(bundle.backend_link.linked_wat.contains("global.get $global__THREE"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__TWO"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__THREE"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.get $global__THREE"));
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
 }
 
@@ -1422,7 +1515,11 @@ fn global_init_lowers_pure_const_expressions_into_global_initializers() {
         static_value(
             "FORTY_TWO",
             Some("i64"),
-            Expr::binary(chiba_level1r::ast::BinaryOp::Add, Expr::i64(40), Expr::i64(2)),
+            Expr::binary(
+                chiba_level1r::ast::BinaryOp::Add,
+                Expr::i64(40),
+                Expr::i64(2),
+            ),
         ),
         static_value(
             "CHOSEN",
@@ -1479,6 +1576,47 @@ fn global_init_lowers_adt_constructor_tag_into_global_initializer() {
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
 }
 
+#[test]
+fn global_init_lowers_adt_match_into_executable_initializer() {
+    let program = SourceProgram::new(vec![
+        static_value(
+            "MATCHED",
+            Some("i64"),
+            Expr::match_expr(
+                Expr::adt_ctor("Option", "Some", vec!["None", "Some"], vec![Expr::i64(5)]),
+                vec![
+                    (
+                        chiba_level1r::ast::Pattern::qualified_ctor(
+                            "Option",
+                            "Some",
+                            vec![chiba_level1r::ast::Pattern::bind("value")],
+                        ),
+                        Expr::var("value"),
+                    ),
+                    (
+                        chiba_level1r::ast::Pattern::qualified_ctor("Option", "None", Vec::new()),
+                        Expr::i64(0),
+                    ),
+                ],
+            ),
+        ),
+        def("main", vec![], Expr::var("MATCHED")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $__chiba_init"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__MATCHED"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "5");
+}
+
 fn run_wat_text(wat: &str) -> String {
     run_wat_export(wat, "main")
 }
@@ -1532,9 +1670,11 @@ fn global_init_reports_cycles_and_duplicate_static_names() {
 
     let bundle = compile_program_bundle(&program);
 
-    assert!(bundle.diagnostics.contains(&ProgramDiagnostic::DuplicateStatic {
-        name: "A".to_string(),
-    }));
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateStatic {
+            name: "A".to_string(),
+        }));
     assert!(bundle.diagnostics.iter().any(|diagnostic| {
         matches!(
             diagnostic,
@@ -1553,11 +1693,11 @@ fn global_init_reports_static_function_name_conflict() {
 
     let bundle = compile_program_bundle(&program);
 
-    assert!(bundle.diagnostics.contains(
-        &ProgramDiagnostic::StaticFunctionNameConflict {
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::StaticFunctionNameConflict {
             name: "main".to_string(),
-        }
-    ));
+        }));
 }
 
 #[test]
@@ -1643,12 +1783,12 @@ fn program_surface_reports_duplicate_ordinary_type_fields() {
             type_name: "Box".to_string(),
             field: "value".to_string(),
         }));
-    assert!(!bundle.diagnostics.contains(
-        &ProgramDiagnostic::DuplicateTypeField {
+    assert!(!bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateTypeField {
             type_name: "Box".to_string(),
             field: "_".to_string(),
-        }
-    ));
+        }));
 }
 
 #[test]
@@ -1665,15 +1805,18 @@ fn phantom_type_fields_are_not_available_for_field_access() {
             ],
         )],
         Vec::new(),
-        vec![SourceItem::Def {
-            receiver: None,
-            generics: Vec::new(),
-            name: "probe".to_string(),
-            visibility: Visibility::Public,
-            params: vec![ParamDecl::new("box", Some("Box".to_string()))],
-            return_type: None,
-            body: Expr::field(Expr::var("box"), "_"),
-        }, def("main", vec![], Expr::i64(0))],
+        vec![
+            SourceItem::Def {
+                receiver: None,
+                generics: Vec::new(),
+                name: "probe".to_string(),
+                visibility: Visibility::Public,
+                params: vec![ParamDecl::new("box", Some("Box".to_string()))],
+                return_type: None,
+                body: Expr::field(Expr::var("box"), "_"),
+            },
+            def("main", vec![], Expr::i64(0)),
+        ],
     );
 
     let bundle = compile_program_bundle(&program);
@@ -1729,19 +1872,27 @@ fn program_surface_allows_same_constructor_name_across_different_data() {
         Vec::new(),
         Vec::new(),
         vec![
-            DataDecl::new("Left", Vec::new(), vec![DataVariant::new("Same", Vec::new())]),
-            DataDecl::new("Right", Vec::new(), vec![DataVariant::new("Same", Vec::new())]),
+            DataDecl::new(
+                "Left",
+                Vec::new(),
+                vec![DataVariant::new("Same", Vec::new())],
+            ),
+            DataDecl::new(
+                "Right",
+                Vec::new(),
+                vec![DataVariant::new("Same", Vec::new())],
+            ),
         ],
         vec![def("main", vec![], Expr::i64(0))],
     );
 
     let bundle = compile_program_bundle(&program);
 
-    assert!(!bundle.diagnostics.contains(
-        &ProgramDiagnostic::DuplicateConstructor {
+    assert!(!bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateConstructor {
             name: "Same".to_string(),
-        }
-    ));
+        }));
     assert_eq!(
         bundle
             .interface
@@ -1851,9 +2002,7 @@ fn program_summary_contains_program_level_nanopass_events() {
     assert!(summary.contains("P2InterfaceSummary: ProjectSurface -> InterfaceSummary"));
     assert!(summary.contains("P3ProgramDiagnostics: ProjectSurface -> ProgramDiagnostics"));
     assert!(summary.contains("P4GlobalInit: SourceProgram+ProjectSurface -> GlobalInitPlan"));
-    assert!(summary.contains(
-        "P5ProgramDefs: SourceProgram+InterfaceSummary -> ProgramDefOutput"
-    ));
+    assert!(summary.contains("P5ProgramDefs: SourceProgram+InterfaceSummary -> ProgramDefOutput"));
     assert!(summary.contains("P6ProgramEntry: ProgramDefOutput -> EntrySelection"));
     assert!(summary.contains(
         "P7ProgramBackendLink: ProgramDefOutput+EntrySelection+GlobalInitPlan -> BackendLinkedBundle"
