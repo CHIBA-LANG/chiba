@@ -467,6 +467,62 @@ fn frontend_parses_dot_method_call_as_method_call_ast() {
 }
 
 #[test]
+fn frontend_parses_lambda_closure_surface_to_lifted_function() {
+    let output = compile_source_program_bundle("def main() = (x: I64): I64 => x")
+        .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(body, &Expr::lambda("x", Expr::var("x")));
+        }
+    }
+
+    assert_eq!(main.closure.closures.len(), 1);
+    assert_eq!(main.closure.closures[0].captures, vec![]);
+    assert_eq!(main.lambda_lift.functions.len(), 1);
+    assert_eq!(main.lambda_lift.functions[0].source, "closure::x");
+    assert!(main.lambda_lift.functions[0].direct);
+    assert!(main
+        .backend
+        .wat
+        .contains("(func $lift__0000__closure__x"));
+}
+
+#[test]
+fn frontend_parses_nested_lambda_and_preserves_capture_env() {
+    let output = compile_source_program_bundle(
+        "def main() = (x: Unknown): Unknown => (y: Unknown): Unknown => x(y)",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::lambda(
+                    "x",
+                    Expr::lambda("y", Expr::call(Expr::var("x"), Expr::var("y"))),
+                )
+            );
+        }
+    }
+
+    assert_eq!(main.closure.closures.len(), 2);
+    let inner = main
+        .closure
+        .closures
+        .iter()
+        .find(|closure| closure.param == "y")
+        .unwrap();
+    assert_eq!(inner.captures.len(), 1);
+    assert_eq!(inner.captures[0].name, "x");
+    assert_eq!(main.lambda_lift.functions[1].env_params, vec!["x".to_string()]);
+    assert!(main.render_visual().contains("lift::0001::closure__y"));
+}
+
+#[test]
 fn frontend_rejects_empty_call_argument() {
     let err = parse_source_program("def main() = f()").unwrap_err();
 

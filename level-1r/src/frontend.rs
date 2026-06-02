@@ -106,6 +106,7 @@ fn chiba_lexer_spec() -> LexerSpec {
             punct("LBrace", "\\{"),
             punct("RBrace", "\\}"),
             punct("FatArrow", "=>"),
+            punct("Arrow", "->"),
             punct("Dot", "\\."),
             punct("Colon", ":"),
             punct("Pipe", "\\|"),
@@ -245,6 +246,9 @@ impl FrontendParser {
             Some("KwShift") => self.parse_shift(),
             Some("Ident") => self.expect_lexeme("Ident").map(Expr::var),
             Some("LParen") => {
+                if self.is_lambda_start() {
+                    return self.parse_lambda();
+                }
                 self.pos += 1;
                 let first = self.parse_expr_bp(0)?;
                 if self.peek_name() == Some("Comma") {
@@ -287,6 +291,25 @@ impl FrontendParser {
                 expected: vec!["expr".to_string()],
             }),
         }
+    }
+
+    fn is_lambda_start(&self) -> bool {
+        self.peek_name() == Some("LParen")
+            && self.peek_next_name() == Some("Ident")
+            && self.peek_n_name(2) == Some("Colon")
+    }
+
+    fn parse_lambda(&mut self) -> Result<Expr, FrontendError> {
+        self.expect("LParen")?;
+        let param = self.expect_lexeme("Ident")?;
+        self.expect("Colon")?;
+        self.expect_type_name()?;
+        self.expect("RParen")?;
+        self.expect("Colon")?;
+        self.expect_type_name()?;
+        self.expect("FatArrow")?;
+        let body = self.parse_expr_bp(0)?;
+        Ok(Expr::lambda(param, body))
     }
 
     fn parse_record_or_update(&mut self) -> Result<Expr, FrontendError> {
@@ -559,12 +582,43 @@ impl FrontendParser {
         self.expect(name).map(|token| token.lexeme)
     }
 
+    fn expect_type_name(&mut self) -> Result<String, FrontendError> {
+        match self.peek_name() {
+            Some("Ident") => self.expect_lexeme("Ident"),
+            Some("KwReset") => self.expect_lexeme("KwReset"),
+            Some("KwResetn") => self.expect_lexeme("KwResetn"),
+            Some("KwShift") => self.expect_lexeme("KwShift"),
+            Some("KwMatch") => self.expect_lexeme("KwMatch"),
+            Some("KwIf") => self.expect_lexeme("KwIf"),
+            Some("KwLet") => self.expect_lexeme("KwLet"),
+            Some("KwThen") => self.expect_lexeme("KwThen"),
+            Some("KwElse") => self.expect_lexeme("KwElse"),
+            Some("True") => self.expect_lexeme("True"),
+            Some("False") => self.expect_lexeme("False"),
+            Some(found) => {
+                let token = self.tokens[self.pos].clone();
+                Err(FrontendError::UnexpectedToken {
+                    found: found.to_string(),
+                    lexeme: token.lexeme,
+                    expected: vec!["type name".to_string()],
+                })
+            }
+            None => Err(FrontendError::UnexpectedEof {
+                expected: vec!["type name".to_string()],
+            }),
+        }
+    }
+
     fn peek_name(&self) -> Option<&str> {
         self.tokens.get(self.pos).map(|token| token.name.as_str())
     }
 
     fn peek_next_name(&self) -> Option<&str> {
         self.tokens.get(self.pos + 1).map(|token| token.name.as_str())
+    }
+
+    fn peek_n_name(&self, offset: usize) -> Option<&str> {
+        self.tokens.get(self.pos + offset).map(|token| token.name.as_str())
     }
 
     fn is_eof(&self) -> bool {
