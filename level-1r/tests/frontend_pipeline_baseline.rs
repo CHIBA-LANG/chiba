@@ -1890,3 +1890,24 @@ fn frontend_rejects_adjacent_match_arms_without_comma() {
         } if found == "Ident" && lexeme == "_" && expected == vec!["Comma".to_string()]
     ));
 }
+
+#[test]
+fn frontend_accepts_newline_separated_match_arms() {
+    let output = parse_source_program(
+        "def main() = match tag {
+0 => 1
+_ => 2
+}",
+    )
+    .expect("frontend parse");
+
+    let SourceItem::Def { body, .. } = &output.program.items[0] else {
+        panic!("expected function def");
+    };
+    match body {
+        Expr::Match { arms, .. } => {
+            assert_eq!(arms.len(), 2);
+        }
+        other => panic!("expected match expression, got {other:?}"),
+    }
+}

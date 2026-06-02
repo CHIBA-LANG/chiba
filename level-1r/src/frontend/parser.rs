@@ -795,10 +795,13 @@ impl FrontendParser {
             self.expect("FatArrow")?;
             let body = self.parse_expr_bp(0)?;
             arms.push((pattern, body));
+            let arm_end = self.previous_token_end();
             if self.peek_name() == Some("Comma") {
                 self.pos += 1;
             } else if self.peek_name() == Some("RBrace") {
                 break;
+            } else if self.has_newline_before_current(arm_end) {
+                continue;
             } else {
                 self.expect("Comma")?;
             }
@@ -998,10 +1001,7 @@ impl FrontendParser {
         let Some(current) = self.tokens.get(self.pos) else {
             return Ok(());
         };
-        if self.source_chars[previous_top_level_end..current.start]
-            .iter()
-            .any(|ch| *ch == '\n')
-        {
+        if self.has_newline_between(previous_top_level_end, current.start) {
             Ok(())
         } else {
             Err(FrontendError::UnexpectedToken {
@@ -1010,6 +1010,20 @@ impl FrontendParser {
                 expected: vec!["Newline".to_string()],
             })
         }
+    }
+
+    fn has_newline_before_current(&self, previous_end: Option<usize>) -> bool {
+        let Some(previous_end) = previous_end else {
+            return false;
+        };
+        self.tokens
+            .get(self.pos)
+            .map(|current| self.has_newline_between(previous_end, current.start))
+            .unwrap_or(false)
+    }
+
+    fn has_newline_between(&self, start: usize, end: usize) -> bool {
+        self.source_chars[start..end].iter().any(|ch| *ch == '\n')
     }
 
     fn previous_token_end(&self) -> Option<usize> {
