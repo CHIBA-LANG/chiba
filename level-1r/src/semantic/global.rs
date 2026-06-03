@@ -84,7 +84,7 @@ pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
         .collect::<Vec<_>>();
 
     for static_value in &statics {
-        validate_static_initializer(static_value, &static_names, &mut diagnostics);
+        validate_static_initializer(static_value, &statics, &static_names, &mut diagnostics);
     }
 
     let mut graph = BTreeMap::<String, Vec<String>>::new();
@@ -112,12 +112,14 @@ pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
 
 fn validate_static_initializer(
     static_value: &GlobalStatic,
+    statics: &[GlobalStatic],
     static_names: &BTreeSet<String>,
     diagnostics: &mut Vec<GlobalInitDiagnostic>,
 ) {
     validate_static_initializer_expr(
         &static_value.body,
         &static_value.name,
+        statics,
         static_names,
         diagnostics,
     );
@@ -126,11 +128,12 @@ fn validate_static_initializer(
 fn validate_static_initializer_expr(
     expr: &Expr,
     static_name: &str,
+    statics: &[GlobalStatic],
     static_names: &BTreeSet<String>,
     diagnostics: &mut Vec<GlobalInitDiagnostic>,
 ) -> bool {
     match expr {
-        Expr::Var(name) => static_names.contains(name),
+        Expr::Var(_) => true,
         Expr::Lit(_) => true,
         Expr::AdtCtor {
             data,
@@ -148,55 +151,60 @@ fn validate_static_initializer_expr(
                 supported = false;
             }
             for arg in args {
-                supported &=
-                    validate_static_initializer_expr(arg, static_name, static_names, diagnostics);
+                supported &= validate_static_initializer_expr(
+                    arg,
+                    static_name,
+                    statics,
+                    static_names,
+                    diagnostics,
+                );
             }
             supported
         }
-        Expr::Tuple(fields) => {
-            validate_static_initializer_exprs(fields, static_name, static_names, diagnostics)
-        }
-        Expr::Record(fields) => validate_static_initializer_record_fields(
-            fields,
-            static_name,
-            static_names,
-            diagnostics,
-        ),
-        Expr::RecordUpdate { base, fields } => {
-            validate_static_initializer_expr(base, static_name, static_names, diagnostics)
-                & validate_static_initializer_record_fields(
-                    fields,
+        Expr::Field { receiver, name } => {
+            if let Some(value) = static_record_field_expr(receiver, name, statics) {
+                validate_static_initializer_expr(
+                    value,
                     static_name,
+                    statics,
                     static_names,
                     diagnostics,
                 )
-        }
-        Expr::Field { receiver, .. } => {
-            validate_static_initializer_expr(receiver, static_name, static_names, diagnostics)
-        }
-        Expr::Range { start, end } => {
-            validate_static_initializer_expr(start, static_name, static_names, diagnostics)
-                & validate_static_initializer_expr(end, static_name, static_names, diagnostics)
+            } else {
+                diagnostics.push(GlobalInitDiagnostic::UnsupportedStaticInitializer {
+                    static_name: static_name.to_string(),
+                    expr: format!("{expr:?}"),
+                });
+                false
+            }
         }
         Expr::Binary { lhs, rhs, .. } => {
-            validate_static_initializer_expr(lhs, static_name, static_names, diagnostics)
-                & validate_static_initializer_expr(rhs, static_name, static_names, diagnostics)
+            validate_static_initializer_expr(lhs, static_name, statics, static_names, diagnostics)
+                & validate_static_initializer_expr(
+                    rhs,
+                    static_name,
+                    statics,
+                    static_names,
+                    diagnostics,
+                )
         }
         Expr::If {
             cond,
             then_branch,
             else_branch,
         } => {
-            validate_static_initializer_expr(cond, static_name, static_names, diagnostics)
+            validate_static_initializer_expr(cond, static_name, statics, static_names, diagnostics)
                 & validate_static_initializer_expr(
                     then_branch,
                     static_name,
+                    statics,
                     static_names,
                     diagnostics,
                 )
                 & validate_static_initializer_expr(
                     else_branch,
                     static_name,
+                    statics,
                     static_names,
                     diagnostics,
                 )
@@ -207,33 +215,53 @@ fn validate_static_initializer_expr(
             then_branch,
             else_branch,
         } => {
-            validate_static_initializer_expr(scrutinee, static_name, static_names, diagnostics)
-                & validate_static_initializer_expr(
-                    then_branch,
-                    static_name,
-                    static_names,
-                    diagnostics,
-                )
-                & validate_static_initializer_expr(
-                    else_branch,
-                    static_name,
-                    static_names,
-                    diagnostics,
-                )
+            validate_static_initializer_expr(
+                scrutinee,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+            ) & validate_static_initializer_expr(
+                then_branch,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+            ) & validate_static_initializer_expr(
+                else_branch,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+            )
         }
         Expr::Match { scrutinee, arms } => {
-            let mut supported =
-                validate_static_initializer_expr(scrutinee, static_name, static_names, diagnostics);
+            let mut supported = validate_static_initializer_expr(
+                scrutinee,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+            );
             for MatchArm { body, .. } in arms {
-                supported &=
-                    validate_static_initializer_expr(body, static_name, static_names, diagnostics);
+                supported &= validate_static_initializer_expr(
+                    body,
+                    static_name,
+                    statics,
+                    static_names,
+                    diagnostics,
+                );
             }
             supported
         }
         Expr::Nominal { expr, .. } => {
-            validate_static_initializer_expr(expr, static_name, static_names, diagnostics)
+            validate_static_initializer_expr(expr, static_name, statics, static_names, diagnostics)
         }
-        Expr::Lambda { .. }
+        Expr::Tuple { .. }
+        | Expr::Record { .. }
+        | Expr::RecordUpdate { .. }
+        | Expr::Range { .. }
+        | Expr::Lambda { .. }
         | Expr::Call { .. }
         | Expr::Instantiate { .. }
         | Expr::MethodCall { .. }
@@ -249,27 +277,37 @@ fn validate_static_initializer_expr(
     }
 }
 
-fn validate_static_initializer_exprs(
-    exprs: &[Expr],
-    static_name: &str,
-    static_names: &BTreeSet<String>,
-    diagnostics: &mut Vec<GlobalInitDiagnostic>,
-) -> bool {
-    exprs.iter().fold(true, |supported, expr| {
-        validate_static_initializer_expr(expr, static_name, static_names, diagnostics) & supported
-    })
+fn static_record_field_expr<'a>(
+    receiver: &'a Expr,
+    name: &str,
+    statics: &'a [GlobalStatic],
+) -> Option<&'a Expr> {
+    static_record_field_expr_seen(receiver, name, statics, &mut BTreeSet::new())
 }
 
-fn validate_static_initializer_record_fields(
-    fields: &[RecordField],
-    static_name: &str,
-    static_names: &BTreeSet<String>,
-    diagnostics: &mut Vec<GlobalInitDiagnostic>,
-) -> bool {
-    fields.iter().fold(true, |supported, field| {
-        validate_static_initializer_expr(&field.value, static_name, static_names, diagnostics)
-            & supported
-    })
+fn static_record_field_expr_seen<'a>(
+    receiver: &'a Expr,
+    name: &str,
+    statics: &'a [GlobalStatic],
+    seen: &mut BTreeSet<String>,
+) -> Option<&'a Expr> {
+    match receiver {
+        Expr::Var(binding) if seen.insert(binding.clone()) => {
+            let value = statics.iter().find(|item| item.name == *binding)?;
+            static_record_field_expr_seen(&value.body, name, statics, seen)
+        }
+        Expr::Record(fields) => fields
+            .iter()
+            .find(|field| field.name == name)
+            .map(|field| &field.value),
+        Expr::RecordUpdate { base, fields } => fields
+            .iter()
+            .rev()
+            .find(|field| field.name == name)
+            .map(|field| &field.value)
+            .or_else(|| static_record_field_expr_seen(base, name, statics, seen)),
+        _ => None,
+    }
 }
 
 fn topo_sort(graph: &BTreeMap<String, Vec<String>>) -> (Vec<String>, Vec<Vec<String>>) {

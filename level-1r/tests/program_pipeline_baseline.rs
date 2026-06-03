@@ -1758,6 +1758,37 @@ fn global_init_lowers_record_field_access_into_executable_initializer() {
 }
 
 #[test]
+fn global_init_rejects_aggregate_static_initializer_instead_of_faking_i32_zero() {
+    let program = SourceProgram::new(vec![
+        static_value(
+            "BOX",
+            None,
+            Expr::record(vec![("value", Expr::i64(13)), ("ignored", Expr::i64(1))]),
+        ),
+        def("main", vec![], Expr::var("BOX")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::UnsupportedStaticInitializer {
+            static_name: "BOX".to_string(),
+            expr: "Record([RecordField { name: \"value\", value: Lit(I64(13)) }, RecordField { name: \"ignored\", value: Lit(I64(1)) }])".to_string(),
+        }]
+    );
+    assert!(!bundle.backend_link.linked_wat.contains("global__BOX"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("unsupported static init"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__BOX (mut i32) (i32.const 0)"));
+}
+
+#[test]
 fn global_init_lowers_record_update_field_access_into_executable_initializer() {
     let program = SourceProgram::new(vec![
         static_value(
