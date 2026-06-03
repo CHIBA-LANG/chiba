@@ -1546,6 +1546,7 @@ def 计算🚀(参数盒: 盒子🚀) = match 结果🚀.🚀成功(读取中文
         Some("i64".to_string())
     );
     assert_eq!(output.program.interface.types[1].symbol, "root::盒子🚀");
+    assert_eq!(output.program.interface.types[1].name, "盒子🚀");
     assert_eq!(output.program.interface.types[1].fields[0].name, "值中文");
     assert_eq!(
         output.program.defs[0]

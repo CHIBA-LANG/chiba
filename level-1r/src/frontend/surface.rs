@@ -99,6 +99,7 @@ pub struct InterfaceStatic {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterfaceType {
     pub symbol: String,
+    pub name: String,
     pub generics: Vec<String>,
     pub alias_target: Option<String>,
     pub fields: Vec<InterfaceTypeField>,
@@ -277,6 +278,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .iter()
         .map(|ty| InterfaceType {
             symbol: owned_symbol(&ty.owner, &ty.name),
+            name: ty.name.clone(),
             generics: ty.generics.clone(),
             alias_target: ty.alias_target.clone(),
             phantom_markers: ty.phantom_markers.clone(),

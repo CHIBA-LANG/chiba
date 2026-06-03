@@ -1040,6 +1040,7 @@ fn project_surface_many_merges_namespaces_deterministically() {
     assert_eq!(forward_summary.functions[0].symbol, "lexer::scan");
     assert_eq!(forward_summary.functions[1].symbol, "parser::parse");
     assert_eq!(forward_summary.types[0].symbol, "lexer::TokenId");
+    assert_eq!(forward_summary.types[0].name, "TokenId");
     assert_eq!(forward_summary.data[0].symbol, "parser::Ast");
     assert_eq!(forward_summary.constructors[0].symbol, "parser::Ast.Node");
 }
@@ -1154,6 +1155,7 @@ fn interface_summary_preserves_row_style_type_decl_shape() {
     assert_eq!(bundle.surface.types[0].fields[0].name, "value");
     assert_eq!(bundle.surface.types[0].fields[0].ty, "T");
     assert_eq!(bundle.interface.types[0].symbol, "parser.core::Box");
+    assert_eq!(bundle.interface.types[0].name, "Box");
     assert_eq!(bundle.interface.types[0].fields[0].name, "value");
     assert_eq!(bundle.interface.types[0].fields[0].ty, "T");
     assert!(bundle.render_summary().contains("parser.core::Box"));
@@ -1175,6 +1177,7 @@ fn interface_summary_preserves_type_alias_target() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.interface.types[0].symbol, "parser.core::UserId");
+    assert_eq!(bundle.interface.types[0].name, "UserId");
     assert_eq!(
         bundle.interface.types[0].alias_target,
         Some("i64".to_string())

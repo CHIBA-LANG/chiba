@@ -802,9 +802,6 @@ fn type_context_from_interface(
         if ty.alias_target.is_some() {
             continue;
         }
-        let Some(name) = ty.symbol.rsplit("::").next() else {
-            continue;
-        };
         let fields = ty
             .fields
             .iter()
@@ -813,10 +810,10 @@ fn type_context_from_interface(
                 ty: header_type_to_type(&field.ty),
             })
             .collect::<Vec<_>>();
-        let display_name = nominal_display_name(name, &ty.generics);
+        let display_name = nominal_display_name(&ty.name, &ty.generics);
         context.insert_nominal_row(display_name, fields.clone());
         if !ty.generics.is_empty() {
-            context.insert_generic_nominal_row(name, ty.generics.clone(), fields);
+            context.insert_generic_nominal_row(&ty.name, ty.generics.clone(), fields);
         }
     }
     for data in data_decls {
@@ -845,9 +842,8 @@ fn type_aliases_from_interface(interface: &InterfaceSummary) -> BTreeMap<String,
         .types
         .iter()
         .filter_map(|ty| {
-            let name = ty.symbol.rsplit("::").next()?;
             let target = ty.alias_target.clone()?;
-            Some((name.to_string(), target))
+            Some((ty.name.clone(), target))
         })
         .collect()
 }
