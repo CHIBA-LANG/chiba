@@ -172,6 +172,29 @@ fn typed_continuation_boxed_storage_param_enters_callable_storage() {
 }
 
 #[test]
+fn interface_type_continuation_field_enters_callable_storage() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "RetryBox",
+            Vec::new(),
+            vec![TypeField::new("retry", "ContN[i64,bool]")],
+        )],
+        Vec::new(),
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(bundle.defs[0].output.core.callable_storage.iter().any(|fact| {
+        fact.subject == "type::RetryBox::retry"
+            && fact.kind == chiba_level1r::core::CallableStorageKind::ContNPackage
+            && fact.send == chiba_level1r::typed::SendColor::NotSend
+    }));
+}
+
+#[test]
 fn program_bundle_selects_main_and_links_def_artifacts() {
     let program = SourceProgram::new(vec![
         def("helper", vec![], Expr::i64(1)),

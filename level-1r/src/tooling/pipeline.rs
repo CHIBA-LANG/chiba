@@ -704,18 +704,25 @@ fn compile_program_defs(
             } => Some(ProgramDefOutput {
                 name: name.clone(),
                 params: params.iter().map(|param| param.name.clone()).collect(),
-                output: compile_expr_with_indexes_and_generics(
-                    name,
-                    body,
-                    names.clone(),
-                    methods.clone(),
-                    generics,
+                output: {
+                    let mut output = compile_expr_with_indexes_and_generics(
+                        name,
+                        body,
+                        names.clone(),
+                        methods.clone(),
+                        generics,
                     params,
                     return_type,
                     receiver,
-                    &type_context,
-                    &type_aliases,
-                ),
+                        &type_context,
+                        &type_aliases,
+                    );
+                    output
+                        .core
+                        .callable_storage
+                        .extend(interface_callable_storage_facts(interface));
+                    output
+                },
             }),
             SourceItem::StaticValue { .. } => None,
         })
@@ -788,6 +795,34 @@ fn explicit_callable_storage_facts(
         }
     }
     facts
+}
+
+fn interface_callable_storage_facts(interface: &InterfaceSummary) -> Vec<CallableStorageFact> {
+    interface
+        .types
+        .iter()
+        .flat_map(|ty| {
+            ty.fields
+                .iter()
+                .filter_map(|field| match source_type_name_to_type(&field.ty) {
+                    Type::Continuation { multi, .. } => Some(CallableStorageFact {
+                        subject: format!("type::{}::{}", ty.name, field.name),
+                        kind: if multi {
+                            CallableStorageKind::ContNPackage
+                        } else {
+                            CallableStorageKind::BoxedCont1
+                        },
+                        usage: if multi {
+                            crate::typed::UsageColor::Many
+                        } else {
+                            crate::typed::UsageColor::One
+                        },
+                        send: crate::typed::SendColor::NotSend,
+                    }),
+                    _ => None,
+                })
+        })
+        .collect()
 }
 
 fn typed_signature(
