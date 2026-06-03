@@ -155,6 +155,11 @@ pub fn emit_wasm_gc_with_params(
 
 fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic> {
     core.ops.iter().find_map(|op| match op {
+        CoreOp::ReturnValue(value) if has_invalid_adt_ctor(value) => {
+            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: value.debug_name(),
+            })
+        }
         CoreOp::ReturnValue(value) if has_missing_projection(value) => {
             Some(BackendDiagnostic::UnsupportedI32ReturnValue {
                 value: value.debug_name(),
@@ -172,12 +177,18 @@ fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic>
         } => [cond, then_value, else_value]
             .into_iter()
             .find_map(|value| {
-                (has_missing_projection(value) || contains_range_value(value)).then(|| {
-                    BackendDiagnostic::UnsupportedI32ReturnValue {
-                        value: value.debug_name(),
-                    }
+                (has_invalid_adt_ctor(value)
+                    || has_missing_projection(value)
+                    || contains_range_value(value))
+                .then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
+                    value: value.debug_name(),
                 })
             }),
+        CoreOp::ReturnMatch { scrutinee, .. } if has_invalid_adt_ctor(scrutinee) => {
+            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: scrutinee.debug_name(),
+            })
+        }
         CoreOp::ReturnMatch { scrutinee, .. } if contains_range_value(scrutinee) => {
             Some(BackendDiagnostic::UnsupportedI32ReturnValue {
                 value: scrutinee.debug_name(),
@@ -185,6 +196,31 @@ fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic>
         }
         _ => None,
     })
+}
+
+fn has_invalid_adt_ctor(value: &CoreValue) -> bool {
+    match value {
+        CoreValue::Adt {
+            ctor,
+            variants,
+            args,
+            ..
+        } => {
+            !variants.iter().any(|variant| variant == ctor) || args.iter().any(has_invalid_adt_ctor)
+        }
+        CoreValue::Tuple { fields } => fields.iter().any(has_invalid_adt_ctor),
+        CoreValue::TupleField { tuple, .. } => has_invalid_adt_ctor(tuple),
+        CoreValue::Record { fields } => fields
+            .iter()
+            .any(|field| has_invalid_adt_ctor(&field.value)),
+        CoreValue::RecordField { record, .. } => has_invalid_adt_ctor(record),
+        CoreValue::Range { start, end } => has_invalid_adt_ctor(start) || has_invalid_adt_ctor(end),
+        CoreValue::Unit
+        | CoreValue::I64(_)
+        | CoreValue::Bool(_)
+        | CoreValue::Var(_)
+        | CoreValue::Rendered { .. } => false,
+    }
 }
 
 fn has_missing_projection(value: &CoreValue) -> bool {
