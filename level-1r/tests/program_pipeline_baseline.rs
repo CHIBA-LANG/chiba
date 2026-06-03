@@ -599,6 +599,45 @@ def main(): i64 = 2 |> add(_, _)",
 }
 
 #[test]
+fn source_arithmetic_operators_lower_to_executable_intrinsic_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def sub(x: i64, y: i64): i64 = x - y
+def mul(x: i64, y: i64): i64 = x * y
+def div(x: i64, y: i64): i64 = x / y
+def main(): i64 = div(mul(sub(10, 4), 3), 2)",
+    )
+    .expect("compile source");
+    let bundle = &output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\ndef diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle
+            .defs
+            .iter()
+            .map(|def| (
+                def.name.as_str(),
+                &def.output.backend.diagnostics,
+                &def.output.core_validation.diagnostics
+            ))
+            .collect::<Vec<_>>(),
+        bundle.backend_link.linked_wat
+    );
+    assert!(bundle.backend_link.linked_wat.contains("i32.sub"));
+    assert!(bundle.backend_link.linked_wat.contains("i32.mul"));
+    assert!(bundle.backend_link.linked_wat.contains("i32.div_s"));
+
+    let callable_wat = export_func_for_test(
+        &bundle.backend_link.linked_wat,
+        "$chiba_tailcall_0",
+        "tailcall_main",
+    );
+    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "9");
+}
+
+#[test]
 fn program_param_branch_lowers_to_executable_wat() {
     let program = SourceProgram::new(vec![
         def(

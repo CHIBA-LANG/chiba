@@ -31,6 +31,9 @@ pub enum CoreOp {
         func: String,
         args: Vec<CoreValue>,
     },
+    TailCallResult {
+        binder: String,
+    },
     DynamicCallableTarget {
         target: String,
     },
@@ -473,6 +476,7 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             lower_callable_target(&target, func, ops);
             let args = lower_call_args(func, args);
             ops.push(CoreOp::TailCall { func: target, args });
+            lower_tailcall_result(kont, ops);
             lower_continuation_atom(kont, continuations, ops);
         }
         CpsTerm::Prompt { multi, body } => {
@@ -541,6 +545,14 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                 lower_term(&arm.body, continuations, ops);
             }
         }
+    }
+}
+
+fn lower_tailcall_result(kont: &CpsAtom, ops: &mut Vec<CoreOp>) {
+    if let CpsAtom::ContLambda { param, .. } = kont {
+        ops.push(CoreOp::TailCallResult {
+            binder: param.clone(),
+        });
     }
 }
 
@@ -790,6 +802,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         | CoreOp::RecordUpdate { .. }
         | CoreOp::RecordFieldGet { .. }
         | CoreOp::AdtConstruct { .. }
+        | CoreOp::TailCallResult { .. }
         | CoreOp::TailCall { .. }
         | CoreOp::Prompt { .. }
         | CoreOp::CaptureContinuation { .. }

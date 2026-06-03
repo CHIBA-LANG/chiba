@@ -175,11 +175,9 @@ fn unsupported_i32_return_value(
     core: &CoreProgram,
     params: &[String],
 ) -> Option<BackendDiagnostic> {
-    let env = RenderEnv::new(params);
-    core.ops
-        .iter()
-        .enumerate()
-        .find_map(|(index, op)| match op {
+    let mut env = RenderEnv::new(params);
+    for (index, op) in core.ops.iter().enumerate() {
+        if let Some(diagnostic) = match op {
             CoreOp::ReturnValue(value)
                 if return_value_is_tailcall_result(core, index, value, &env) =>
             {
@@ -197,8 +195,16 @@ fn unsupported_i32_return_value(
             CoreOp::TailCall { args, .. } => {
                 args.iter().find_map(|arg| unsupported_i32_value(arg, &env))
             }
+            CoreOp::TailCallResult { binder } => {
+                env = env.with_locals(vec![binder.clone()]);
+                None
+            }
             _ => None,
-        })
+        } {
+            return Some(diagnostic);
+        }
+    }
+    None
 }
 
 fn return_value_is_tailcall_result(
@@ -207,14 +213,25 @@ fn return_value_is_tailcall_result(
     value: &CoreValue,
     env: &RenderEnv,
 ) -> bool {
-    let CoreValue::Var(_) = value else {
+    let CoreValue::Var(name) = value else {
         return false;
     };
-    matches!(
+    if matches!(
         index.checked_sub(1).and_then(|previous| core.ops.get(previous)),
         Some(CoreOp::TailCall { args, .. })
             if args.iter().all(|arg| core_value_is_renderable_i32(arg, env))
-    )
+    ) {
+        return true;
+    }
+    core.ops.windows(2).any(|window| {
+        matches!(
+            window,
+            [
+                CoreOp::TailCall { args, .. },
+                CoreOp::TailCallResult { binder },
+            ] if binder == name && args.iter().all(|arg| core_value_is_renderable_i32(arg, env))
+        )
+    })
 }
 
 fn unsupported_i32_value(value: &CoreValue, env: &RenderEnv) -> Option<BackendDiagnostic> {
@@ -306,6 +323,7 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
             | CoreOp::RecordUpdate { .. }
             | CoreOp::RecordFieldGet { .. }
             | CoreOp::AdtConstruct { .. }
+            | CoreOp::TailCallResult { .. }
             | CoreOp::TailCall { .. }
             | CoreOp::Prompt { .. }
             | CoreOp::CaptureContinuation { .. }
@@ -339,6 +357,20 @@ fn render_wat(
             "  ;; symbol {} source={} origin={}\n",
             entry.final_symbol, entry.source_debug_name, entry.pass_origin
         ));
+    }
+    if render_tailcall_result_chain(&mut wat, core, &env)? {
+        for op in &core.ops {
+            if let CoreOp::OperatorTarget {
+                protocol,
+                target,
+                intrinsic,
+            } = op
+            {
+                render_operator_intrinsic_wat(&mut wat, protocol, target, *intrinsic);
+            }
+        }
+        wat.push_str(")\n");
+        return Ok(wat);
     }
     for (index, op) in core.ops.iter().enumerate() {
         match op {
@@ -514,6 +546,7 @@ fn render_wat(
             }
             CoreOp::DirectMethodTarget { .. }
             | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::TailCallResult { .. }
             | CoreOp::LiftedFunction { .. } => {}
             CoreOp::OperatorTarget {
                 protocol,
@@ -552,6 +585,66 @@ fn render_operator_intrinsic_wat(
     wat.push_str("  )\n");
 }
 
+fn render_tailcall_result_chain(
+    wat: &mut String,
+    core: &CoreProgram,
+    env: &RenderEnv,
+) -> Result<bool, BackendDiagnostic> {
+    let mut result_binders = Vec::new();
+    for op in &core.ops {
+        if let CoreOp::TailCallResult { binder } = op {
+            result_binders.push(binder.clone());
+        }
+    }
+    if result_binders.len() <= 1 {
+        return Ok(false);
+    }
+    let chain_env = env.with_locals(result_binders.clone());
+    wat.push_str("  ;; tailcall-result-chain\n");
+    render_func_header(wat, "chiba_tailcall_0", None, &chain_env);
+    for binder in &result_binders {
+        wat.push_str(&format!(
+            "    (local ${} i32)\n",
+            encode_debug_symbol(binder)
+        ));
+    }
+
+    for (index, op) in core.ops.iter().enumerate() {
+        if let CoreOp::TailCall { func, args } = op {
+            let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
+                continue;
+            };
+            wat.push_str(&format!(
+                "    ;; tailcall {} args=[{}]\n",
+                final_symbol(func),
+                args.iter()
+                    .map(CoreValue::debug_name)
+                    .map(|arg| escape_wat_comment(&arg))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+            for arg in args {
+                render_core_value_i32(wat, arg, &chain_env)?;
+            }
+            wat.push_str(&format!("    call ${}\n", final_symbol(func)));
+            wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
+        }
+    }
+
+    match core.ops.iter().find_map(|op| {
+        if let CoreOp::ReturnValue(value) = op {
+            Some(value)
+        } else {
+            None
+        }
+    }) {
+        Some(value) => render_core_value_i32(wat, value, &chain_env)?,
+        None => wat.push_str("    i32.const 0\n"),
+    }
+    wat.push_str("  )\n");
+    Ok(true)
+}
+
 fn operator_intrinsic_opcode(intrinsic: Option<OperatorIntrinsic>) -> Option<&'static str> {
     match intrinsic {
         Some(OperatorIntrinsic::I64Add) => Some("i32.add"),
@@ -565,6 +658,7 @@ fn operator_intrinsic_opcode(intrinsic: Option<OperatorIntrinsic>) -> Option<&'s
 #[derive(Clone)]
 struct RenderEnv {
     params: BTreeSet<String>,
+    locals: BTreeSet<String>,
     bindings: BTreeMap<String, CoreValue>,
 }
 
@@ -572,12 +666,13 @@ impl RenderEnv {
     fn new(params: &[String]) -> Self {
         Self {
             params: params.iter().cloned().collect(),
+            locals: BTreeSet::new(),
             bindings: BTreeMap::new(),
         }
     }
 
     fn is_param(&self, name: &str) -> bool {
-        self.params.contains(name)
+        self.params.contains(name) || self.locals.contains(name)
     }
 
     fn binding(&self, name: &str) -> Option<&CoreValue> {
@@ -587,6 +682,12 @@ impl RenderEnv {
     fn with_binding(&self, name: &str, value: CoreValue) -> Self {
         let mut next = self.clone();
         next.bindings.insert(name.to_string(), value);
+        next
+    }
+
+    fn with_locals(&self, names: Vec<String>) -> Self {
+        let mut next = self.clone();
+        next.locals.extend(names);
         next
     }
 

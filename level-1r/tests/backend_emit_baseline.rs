@@ -118,6 +118,52 @@ fn backend_skips_tailcall_result_temp_instead_of_faking_return_zero() {
 }
 
 #[test]
+fn backend_skips_nested_tailcall_result_temp_instead_of_rejecting_w0() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::DirectMethodTarget {
+                name: "inner".to_string(),
+                target: "inner".to_string(),
+            },
+            CoreOp::DirectMethodTarget {
+                name: "outer".to_string(),
+                target: "outer".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "inner".to_string(),
+                args: vec![CoreValue::I64(6)],
+            },
+            CoreOp::TailCallResult {
+                binder: "inner_result".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "outer".to_string(),
+                args: vec![CoreValue::Var("inner_result".to_string())],
+            },
+            CoreOp::TailCallResult {
+                binder: "outer_result".to_string(),
+            },
+            CoreOp::ReturnValue(CoreValue::Var("outer_result".to_string())),
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact.wat.contains(";; tailcall-result-chain"));
+    assert!(artifact.wat.contains(";; tailcall inner args=[6]"));
+    assert!(artifact.wat.contains("call $inner"));
+    assert!(artifact.wat.contains("local.set $inner_result"));
+    assert!(artifact.wat.contains("local.get $inner_result"));
+    assert!(artifact.wat.contains("call $outer"));
+    assert!(artifact.wat.contains("local.set $outer_result"));
+    assert!(!artifact.wat.contains("core-return atom=outer_result"));
+}
+
+#[test]
 fn backend_rejects_tailcall_unbound_arg_instead_of_comment_only_success() {
     let core = CoreProgram {
         ops: vec![
