@@ -681,7 +681,29 @@ def store(k: cont1 (i64) -> bool): cont1 (i64) -> bool = k",
     let compiled = compile_program_bundle(&parsed.program);
     assert_eq!(
         compiled.defs[0].output.typed.ty,
-        Type::Nominal("Cont1[i64,bool]".to_string())
+        Type::Continuation {
+            multi: false,
+            input: Box::new(Type::I64),
+            answer: Box::new(Type::Bool),
+        }
+    );
+}
+
+#[test]
+fn frontend_continuation_storage_type_survives_nominal_field_access() {
+    let output = compile_source_program_bundle(
+        "type ParserState = { retry: contN (i64) -> bool }
+def main(state: ParserState) = state.retry",
+    )
+    .expect("compile source");
+
+    assert_eq!(
+        output.program.defs[0].output.typed.ty,
+        Type::Continuation {
+            multi: true,
+            input: Box::new(Type::I64),
+            answer: Box::new(Type::Bool),
+        }
     );
 }
 

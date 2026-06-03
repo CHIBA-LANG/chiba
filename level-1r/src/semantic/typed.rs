@@ -111,9 +111,17 @@ pub enum Type {
     Bool,
     Tuple(Vec<Type>),
     Record(Vec<RecordTypeField>),
-    Adt { name: String, variants: Vec<String> },
+    Adt {
+        name: String,
+        variants: Vec<String>,
+    },
     Nominal(String),
     Func(Box<Type>, Box<Type>),
+    Continuation {
+        multi: bool,
+        input: Box<Type>,
+        answer: Box<Type>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -806,6 +814,7 @@ pub(crate) fn source_type_name_to_type(name: &str) -> Type {
         "I64" | "i64" => Type::I64,
         "Bool" | "bool" => Type::Bool,
         _ => callable_type(name)
+            .or_else(|| continuation_storage_type(name))
             .or_else(|| tuple_intrinsic_type(name))
             .unwrap_or_else(|| Type::Nominal(name.to_string())),
     }
@@ -823,6 +832,23 @@ fn callable_type(name: &str) -> Option<Type> {
         Box::new(source_type_name_to_type(param)),
         Box::new(source_type_name_to_type(result)),
     ))
+}
+
+fn continuation_storage_type(name: &str) -> Option<Type> {
+    let (base, args) = parse_nominal_application(name)?;
+    let multi = match base {
+        "Cont1" => false,
+        "ContN" => true,
+        _ => return None,
+    };
+    if args.len() != 2 {
+        return None;
+    }
+    Some(Type::Continuation {
+        multi,
+        input: Box::new(source_type_name_to_type(&args[0])),
+        answer: Box::new(source_type_name_to_type(&args[1])),
+    })
 }
 
 fn top_level_arrow(name: &str) -> Option<usize> {
@@ -893,6 +919,15 @@ fn substitute_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> 
             Box::new(substitute_type_params(param, substitutions)),
             Box::new(substitute_type_params(result, substitutions)),
         ),
+        Type::Continuation {
+            multi,
+            input,
+            answer,
+        } => Type::Continuation {
+            multi: *multi,
+            input: Box::new(substitute_type_params(input, substitutions)),
+            answer: Box::new(substitute_type_params(answer, substitutions)),
+        },
         Type::Adt { name, variants } => Type::Adt {
             name: name.clone(),
             variants: variants.clone(),
@@ -947,6 +982,18 @@ fn type_stable_name(ty: &Type) -> String {
         }
         Type::Nominal(name) => format!("Nominal{}", sanitize_type_name(name)),
         Type::Func(arg, ret) => format!("Fn_{}_{}", type_stable_name(arg), type_stable_name(ret)),
+        Type::Continuation {
+            multi,
+            input,
+            answer,
+        } => {
+            let kind = if *multi { "ContN" } else { "Cont1" };
+            format!(
+                "{kind}_{}_{}",
+                type_stable_name(input),
+                type_stable_name(answer)
+            )
+        }
     }
 }
 

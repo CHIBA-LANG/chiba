@@ -203,6 +203,14 @@ fn render_type(ty: &Type) -> String {
         }
         Type::Adt { name, .. } | Type::Nominal(name) => name.clone(),
         Type::Func(arg, ret) => format!("({}) -> {}", render_type(arg), render_type(ret)),
+        Type::Continuation {
+            multi,
+            input,
+            answer,
+        } => {
+            let kind = if *multi { "contN" } else { "cont1" };
+            format!("{kind} ({}) -> {}", render_type(input), render_type(answer))
+        }
     }
 }
 
