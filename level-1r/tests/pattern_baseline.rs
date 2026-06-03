@@ -2,7 +2,8 @@ use chiba_level1r::ast::Pattern;
 use chiba_level1r::pattern::PatternDiagnostic;
 use chiba_level1r::typed::Type;
 use chiba_level1r::{
-    compile_expr, compile_source_program_bundle, Expr, Literal, TemplateParamSource,
+    compile_expr, compile_program_bundle, compile_source_program_bundle, Expr, Literal, ParamDecl,
+    SourceItem, SourceProgram, TemplateParamSource, TypeDecl, TypeField, Visibility,
 };
 
 #[test]
@@ -254,6 +255,39 @@ def get(Some(x): Option[i64]): i64 = x",
     assert_eq!(get.pattern.envs.len(), 1);
     assert_eq!(get.pattern.envs[0].bindings, vec!["x".to_string()]);
     assert_eq!(get.typed.ty, chiba_level1r::typed::Type::I64);
+    assert_eq!(get.pattern.diagnostics, vec![]);
+}
+
+#[test]
+fn function_parameter_record_pattern_uses_nominal_row_field_types() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            Vec::new(),
+            vec![TypeField::new("value", "i64")],
+        )],
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "get".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::pattern(
+                Pattern::record(vec![("value", Pattern::bind("x"))]),
+                Some("Box".to_string()),
+            )],
+            return_type: Some("i64".to_string()),
+            body: Expr::var("x"),
+        }],
+    );
+
+    let output = compile_program_bundle(&program);
+    let get = &output.defs[0].output;
+
+    assert_eq!(get.pattern.envs[0].bindings, vec!["x".to_string()]);
+    assert_eq!(get.typed.ty, Type::I64);
     assert_eq!(get.pattern.diagnostics, vec![]);
 }
 

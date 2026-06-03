@@ -277,14 +277,7 @@ impl TypeContext {
             Pattern::Record(fields) => fields
                 .iter()
                 .flat_map(|field| {
-                    let field_ty = match &ty {
-                        Type::Record(types) => types
-                            .iter()
-                            .find(|typed| typed.name == field.name)
-                            .map(|typed| typed.ty.clone())
-                            .unwrap_or(Type::Unknown),
-                        _ => Type::Unknown,
-                    };
+                    let field_ty = self.pattern_record_field_type(&ty, &field.name);
                     self.pattern_bindings(&field.pattern, field_ty, subject_data, substitutions)
                 })
                 .collect(),
@@ -312,6 +305,13 @@ impl TypeContext {
                 bindings
             }
             Pattern::Wildcard | Pattern::Lit(_) => Vec::new(),
+        }
+    }
+
+    fn pattern_record_field_type(&self, ty: &Type, field: &str) -> Type {
+        match ty {
+            Type::Record(fields) => field_type(fields, field).unwrap_or(Type::Unknown),
+            _ => self.nominal_field_type(ty, field).unwrap_or(Type::Unknown),
         }
     }
 
