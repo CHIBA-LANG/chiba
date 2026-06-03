@@ -267,7 +267,18 @@ pub struct ClosureEnvField {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OwnershipFact {
     pub subject: String,
+    pub kind: OwnershipSubjectKind,
     pub decision: OwnershipDecision,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum OwnershipSubjectKind {
+    Value,
+    Binder,
+    DynRowPackage,
+    DynRowPayload { send: SendColor },
+    Continuation,
+    SharedSendValue,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -891,12 +902,16 @@ fn validate_callable_storage(program: &CoreProgram, diagnostics: &mut Vec<CoreDi
 
 fn validate_ownership(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
     for fact in &program.ownership {
-        if fact.subject.contains("send") && fact.decision == OwnershipDecision::Rc {
+        if fact.kind == OwnershipSubjectKind::SharedSendValue
+            && fact.decision == OwnershipDecision::Rc
+        {
             diagnostics.push(CoreDiagnostic::SharedSendSubjectUsesRc {
                 subject: fact.subject.clone(),
             });
         }
-        if fact.subject.starts_with("dyn::") && fact.decision != OwnershipDecision::DynPackage {
+        if fact.kind == OwnershipSubjectKind::DynRowPackage
+            && fact.decision != OwnershipDecision::DynPackage
+        {
             diagnostics.push(CoreDiagnostic::DynPayloadMustUseDynPackage {
                 subject: fact.subject.clone(),
             });
@@ -1205,12 +1220,14 @@ fn lower_ownership(
     for (name, count) in &usage.vars {
         facts.push(OwnershipFact {
             subject: format!("var::{name}"),
+            kind: OwnershipSubjectKind::Value,
             decision: ownership_from_usage(count.color(), SendColor::Obligation),
         });
     }
     for (binder, count) in &usage.binders {
         facts.push(OwnershipFact {
             subject: format!("binder::{binder}"),
+            kind: OwnershipSubjectKind::Binder,
             decision: ownership_from_usage(count.color(), SendColor::Obligation),
         });
     }
@@ -1218,10 +1235,14 @@ fn lower_ownership(
         for contract in &item.key.dyn_contracts {
             facts.push(OwnershipFact {
                 subject: format!("dyn::{:?}", contract.shape),
+                kind: OwnershipSubjectKind::DynRowPackage,
                 decision: OwnershipDecision::DynPackage,
             });
             facts.push(OwnershipFact {
                 subject: format!("dyn-payload::{:?}", contract.shape),
+                kind: OwnershipSubjectKind::DynRowPayload {
+                    send: contract.send,
+                },
                 decision: ownership_from_usage(contract.payload_usage, contract.send),
             });
         }
@@ -1229,6 +1250,7 @@ fn lower_ownership(
     for fact in continuations {
         facts.push(OwnershipFact {
             subject: format!("continuation::{}", fact.binder),
+            kind: OwnershipSubjectKind::Continuation,
             decision: match fact.kind {
                 ContinuationKind::Cont1 => OwnershipDecision::StackValue,
                 ContinuationKind::ContN => OwnershipDecision::DynPackage,

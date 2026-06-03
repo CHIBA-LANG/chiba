@@ -2,7 +2,7 @@ use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
     validate_core, CallableStorageFact, CallableStorageKind, ClosureEnvField, ClosureEnvLayout,
     ContinuationEnvLayout, CoreDiagnostic, CoreOp, CoreProgram, CoreValue, LayoutFact, LayoutKind,
-    OwnershipDecision, OwnershipFact, TupleLayout,
+    OwnershipDecision, OwnershipFact, OwnershipSubjectKind, TupleLayout,
 };
 use chiba_level1r::template::{canonical_open_row, ShapeType};
 use chiba_level1r::typed::{SendColor, UsageColor};
@@ -104,10 +104,12 @@ fn validator_rejects_cont1_package_and_send_rc_contradiction() {
         ownership: vec![
             OwnershipFact {
                 subject: "send::shared-value".to_string(),
+                kind: OwnershipSubjectKind::SharedSendValue,
                 decision: OwnershipDecision::Rc,
             },
             OwnershipFact {
                 subject: "dyn::user".to_string(),
+                kind: OwnershipSubjectKind::DynRowPackage,
                 decision: OwnershipDecision::Rc,
             },
         ],

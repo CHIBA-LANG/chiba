@@ -1,7 +1,9 @@
 use chiba_level1r::ast::BinaryOp;
 use chiba_level1r::closure::ClosureFacts;
 use chiba_level1r::control::ContinuationKind;
-use chiba_level1r::core::{lower_core_with_facts, LayoutKind, OwnershipDecision, OwnershipFact};
+use chiba_level1r::core::{
+    lower_core_with_facts, LayoutKind, OwnershipDecision, OwnershipFact, OwnershipSubjectKind,
+};
 use chiba_level1r::lambda_lift::LambdaLiftFacts;
 use chiba_level1r::template::{canonical_open_row, dyn_row_contract, ShapeType, TemplateFacts};
 use chiba_level1r::usage::UsageFacts;
@@ -29,6 +31,7 @@ fn repeated_value_lowers_to_rc_when_not_send() {
 
     assert!(output.core.ownership.contains(&OwnershipFact {
         subject: "var::x".to_string(),
+        kind: OwnershipSubjectKind::Value,
         decision: OwnershipDecision::Rc,
     }));
 }
@@ -57,9 +60,14 @@ fn dyn_row_contract_lowers_to_dyn_package_and_payload_decision() {
     assert!(core
         .ownership
         .iter()
-        .any(|fact| fact.decision == OwnershipDecision::DynPackage));
+        .any(|fact| fact.kind == OwnershipSubjectKind::DynRowPackage
+            && fact.decision == OwnershipDecision::DynPackage));
     assert!(core.ownership.iter().any(|fact| {
-        fact.subject.starts_with("dyn-payload::") && fact.decision == OwnershipDecision::Rc
+        fact.kind
+            == OwnershipSubjectKind::DynRowPayload {
+                send: chiba_level1r::typed::SendColor::Obligation,
+            }
+            && fact.decision == OwnershipDecision::Rc
     }));
 }
 
