@@ -805,7 +805,54 @@ pub(crate) fn source_type_name_to_type(name: &str) -> Type {
     match name {
         "I64" | "i64" => Type::I64,
         "Bool" | "bool" => Type::Bool,
-        _ => tuple_intrinsic_type(name).unwrap_or_else(|| Type::Nominal(name.to_string())),
+        _ => callable_type(name)
+            .or_else(|| tuple_intrinsic_type(name))
+            .unwrap_or_else(|| Type::Nominal(name.to_string())),
+    }
+}
+
+fn callable_type(name: &str) -> Option<Type> {
+    let arrow = top_level_arrow(name)?;
+    let param = name[..arrow].trim();
+    let result = name[arrow + 2..].trim();
+    let param = parenthesized_type(param)?;
+    if result.is_empty() {
+        return None;
+    }
+    Some(Type::Func(
+        Box::new(source_type_name_to_type(param)),
+        Box::new(source_type_name_to_type(result)),
+    ))
+}
+
+fn top_level_arrow(name: &str) -> Option<usize> {
+    let mut square_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut chars = name.char_indices().peekable();
+    while let Some((index, ch)) = chars.next() {
+        match ch {
+            '[' => square_depth = square_depth.checked_add(1)?,
+            ']' => square_depth = square_depth.checked_sub(1)?,
+            '(' => paren_depth = paren_depth.checked_add(1)?,
+            ')' => paren_depth = paren_depth.checked_sub(1)?,
+            '-' if square_depth == 0
+                && paren_depth == 0
+                && chars.peek().is_some_and(|(_, next)| *next == '>') =>
+            {
+                return Some(index)
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn parenthesized_type(name: &str) -> Option<&str> {
+    let inner = name.strip_prefix('(')?.strip_suffix(')')?.trim();
+    if inner.is_empty() {
+        None
+    } else {
+        Some(inner)
     }
 }
 

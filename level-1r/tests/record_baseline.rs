@@ -3,7 +3,10 @@ use chiba_level1r::template::{canonical_closed_row, ShapeType};
 use chiba_level1r::typed::{
     type_expr, type_expr_with_context, RecordTypeField, Type, TypeContext, TypeEnv, TypedExprKind,
 };
-use chiba_level1r::{compile_expr, Expr};
+use chiba_level1r::{
+    compile_expr, compile_program_bundle, Expr, ParamDecl, SourceItem, SourceProgram, TypeDecl,
+    TypeField, Visibility,
+};
 
 #[test]
 fn record_literal_type_canonicalizes_field_order() {
@@ -169,6 +172,33 @@ fn nominal_field_callable_method_call_uses_field_return_type() {
     );
 
     assert_eq!(typed.ty, Type::Bool);
+}
+
+#[test]
+fn nominal_field_callable_method_call_uses_function_header_type() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "CallableBox",
+            Vec::new(),
+            vec![TypeField::new("apply", "(i64) -> bool")],
+        )],
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "main".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::new("box", Some("CallableBox".to_string()))],
+            return_type: Some("bool".to_string()),
+            body: Expr::method_call(Expr::var("box"), "apply", Expr::i64(1)),
+        }],
+    );
+
+    let output = compile_program_bundle(&program);
+
+    assert_eq!(output.defs[0].output.typed.ty, Type::Bool);
 }
 
 #[test]
