@@ -184,6 +184,28 @@ fn backend_rejects_missing_tuple_field_return_instead_of_faking_i32_zero() {
 }
 
 #[test]
+fn backend_rejects_tuple_return_instead_of_faking_i32_zero() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::Tuple {
+            fields: vec![CoreValue::I64(1), CoreValue::Bool(true)],
+        })],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(
+        artifact.diagnostics,
+        vec![BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: "(1, true)".to_string(),
+        }]
+    );
+    assert_eq!(artifact.wat, "");
+}
+
+#[test]
 fn backend_rejects_unknown_adt_constructor_return_instead_of_faking_tag_zero() {
     let core = CoreProgram {
         ops: vec![CoreOp::ReturnValue(CoreValue::Adt {

@@ -170,6 +170,11 @@ fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic>
                 value: value.debug_name(),
             })
         }
+        CoreOp::ReturnValue(value) if returns_tuple_value(value) => {
+            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: value.debug_name(),
+            })
+        }
         CoreOp::ReturnBranch {
             cond,
             then_value,
@@ -179,7 +184,8 @@ fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic>
             .find_map(|value| {
                 (has_invalid_adt_ctor(value)
                     || has_missing_projection(value)
-                    || contains_range_value(value))
+                    || contains_range_value(value)
+                    || returns_tuple_value(value))
                 .then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
                     value: value.debug_name(),
                 })
@@ -261,6 +267,28 @@ fn contains_range_value(value: &CoreValue) -> bool {
             .any(|field| contains_range_value(&field.value)),
         CoreValue::RecordField { record, .. } => contains_range_value(record),
         CoreValue::Adt { args, .. } => args.iter().any(contains_range_value),
+        CoreValue::Unit
+        | CoreValue::I64(_)
+        | CoreValue::Bool(_)
+        | CoreValue::Var(_)
+        | CoreValue::Rendered { .. } => false,
+    }
+}
+
+fn returns_tuple_value(value: &CoreValue) -> bool {
+    match value {
+        CoreValue::Tuple { .. } => true,
+        CoreValue::TupleField { tuple, field } => tuple_field_value(tuple, field)
+            .map(returns_tuple_value)
+            .unwrap_or(false),
+        CoreValue::RecordField { record, field } => record_field_value(record, field)
+            .map(returns_tuple_value)
+            .unwrap_or(false),
+        CoreValue::Record { fields } => {
+            fields.iter().any(|field| returns_tuple_value(&field.value))
+        }
+        CoreValue::Adt { args, .. } => args.iter().any(returns_tuple_value),
+        CoreValue::Range { start, end } => returns_tuple_value(start) || returns_tuple_value(end),
         CoreValue::Unit
         | CoreValue::I64(_)
         | CoreValue::Bool(_)
