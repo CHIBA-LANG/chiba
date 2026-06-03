@@ -55,6 +55,10 @@ pub enum BackendLinkDiagnostic {
     DuplicateFinalSymbol {
         symbol: String,
     },
+    UnsupportedStaticInitializerLowering {
+        static_name: String,
+        expr: String,
+    },
     TargetMismatch {
         artifact_index: usize,
         expected: BackendTarget,

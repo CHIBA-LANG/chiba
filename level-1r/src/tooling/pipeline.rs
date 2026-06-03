@@ -6,7 +6,7 @@ use crate::ast::{
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_params, link_backend_artifacts, BackendArtifact,
-    BackendCacheConfig, BackendCacheKey, BackendLinkedBundle,
+    BackendCacheConfig, BackendCacheKey, BackendLinkDiagnostic, BackendLinkedBundle,
 };
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -1039,7 +1039,15 @@ fn lower_global_init_into_linked_wat(
             continue;
         }
         wat.push_str(&format!("    ;; init static {}\n", static_value.name));
-        render_global_init_expr(&mut wat, &static_value.body, global_init);
+        if let Err(diagnostic) = render_global_init_expr(
+            &mut wat,
+            &static_value.name,
+            &static_value.body,
+            global_init,
+        ) {
+            bundle.diagnostics.push(diagnostic);
+            return bundle;
+        }
         wat.push_str(&format!(
             "    global.set ${}\n",
             global_symbol(&static_value.name)
@@ -1110,16 +1118,22 @@ fn replace_static_return_from_fact(
     out
 }
 
-fn render_global_init_expr(wat: &mut String, expr: &Expr, global_init: &GlobalInitPlan) {
-    render_global_init_expr_with_bindings(wat, expr, global_init, &BTreeMap::new());
+fn render_global_init_expr(
+    wat: &mut String,
+    static_name: &str,
+    expr: &Expr,
+    global_init: &GlobalInitPlan,
+) -> Result<(), BackendLinkDiagnostic> {
+    render_global_init_expr_with_bindings(wat, static_name, expr, global_init, &BTreeMap::new())
 }
 
 fn render_global_init_expr_with_bindings(
     wat: &mut String,
+    static_name: &str,
     expr: &Expr,
     global_init: &GlobalInitPlan,
     bindings: &BTreeMap<String, Expr>,
-) {
+) -> Result<(), BackendLinkDiagnostic> {
     match expr {
         Expr::Lit(crate::ast::Literal::I64(value)) => {
             wat.push_str(&format!("    i32.const {}\n", *value as i32));
@@ -1130,17 +1144,18 @@ fn render_global_init_expr_with_bindings(
         Expr::Var(name) if bindings.contains_key(name) => {
             render_global_init_expr_with_bindings(
                 wat,
+                static_name,
                 bindings.get(name).expect("checked binding"),
                 global_init,
                 bindings,
-            );
+            )?;
         }
         Expr::Var(name) if global_init.statics.iter().any(|item| item.name == *name) => {
             wat.push_str(&format!("    global.get ${}\n", global_symbol(name)));
         }
         Expr::Binary { op, lhs, rhs } => {
-            render_global_init_expr_with_bindings(wat, lhs, global_init, bindings);
-            render_global_init_expr_with_bindings(wat, rhs, global_init, bindings);
+            render_global_init_expr_with_bindings(wat, static_name, lhs, global_init, bindings)?;
+            render_global_init_expr_with_bindings(wat, static_name, rhs, global_init, bindings)?;
             wat.push_str(match op {
                 crate::ast::BinaryOp::Add => "    i32.add\n",
                 crate::ast::BinaryOp::Sub => "    i32.sub\n",
@@ -1153,23 +1168,25 @@ fn render_global_init_expr_with_bindings(
             then_branch,
             else_branch,
         } => {
-            render_global_init_expr_with_bindings(wat, cond, global_init, bindings);
+            render_global_init_expr_with_bindings(wat, static_name, cond, global_init, bindings)?;
             wat.push_str("    if (result i32)\n");
             render_global_init_expr_nested_with_bindings(
                 wat,
+                static_name,
                 then_branch,
                 global_init,
                 bindings,
                 6,
-            );
+            )?;
             wat.push_str("    else\n");
             render_global_init_expr_nested_with_bindings(
                 wat,
+                static_name,
                 else_branch,
                 global_init,
                 bindings,
                 6,
-            );
+            )?;
             wat.push_str("    end\n");
         }
         Expr::IfLet {
@@ -1180,6 +1197,7 @@ fn render_global_init_expr_with_bindings(
         } => {
             render_global_if_let_expr(
                 wat,
+                static_name,
                 pattern,
                 scrutinee,
                 then_branch,
@@ -1187,17 +1205,27 @@ fn render_global_init_expr_with_bindings(
                 global_init,
                 bindings,
                 4,
-            );
+            )?;
         }
         Expr::Match { scrutinee, arms } => {
-            render_global_match_expr(wat, scrutinee, arms, global_init, bindings, 4);
+            render_global_match_expr(wat, static_name, scrutinee, arms, global_init, bindings, 4)?;
         }
         Expr::Field { receiver, name } => {
             if let Some(value) = global_record_field_expr(receiver, name, bindings) {
-                render_global_init_expr_with_bindings(wat, value, global_init, bindings);
+                render_global_init_expr_with_bindings(
+                    wat,
+                    static_name,
+                    value,
+                    global_init,
+                    bindings,
+                )?;
             } else {
-                wat.push_str(&format!("    ;; unsupported static init {:?}\n", expr));
-                wat.push_str("    i32.const 0\n");
+                return Err(
+                    BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
+                        static_name: static_name.to_string(),
+                        expr: format!("{expr:?}"),
+                    },
+                );
             }
         }
         Expr::AdtCtor { ctor, variants, .. } => {
@@ -1208,26 +1236,33 @@ fn render_global_init_expr_with_bindings(
             wat.push_str(&format!("    i32.const {tag}\n"));
         }
         other => {
-            wat.push_str(&format!("    ;; unsupported static init {:?}\n", other));
-            wat.push_str("    i32.const 0\n");
+            return Err(
+                BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
+                    static_name: static_name.to_string(),
+                    expr: format!("{other:?}"),
+                },
+            );
         }
     }
+    Ok(())
 }
 
 fn render_global_init_expr_nested_with_bindings(
     wat: &mut String,
+    static_name: &str,
     expr: &Expr,
     global_init: &GlobalInitPlan,
     bindings: &BTreeMap<String, Expr>,
     indent: usize,
-) {
+) -> Result<(), BackendLinkDiagnostic> {
     let mut nested = String::new();
-    render_global_init_expr_with_bindings(&mut nested, expr, global_init, bindings);
+    render_global_init_expr_with_bindings(&mut nested, static_name, expr, global_init, bindings)?;
     for line in nested.lines() {
         wat.push_str(&" ".repeat(indent));
         wat.push_str(line.trim_start());
         wat.push('\n');
     }
+    Ok(())
 }
 
 fn global_record_field_expr<'a>(
@@ -1256,22 +1291,33 @@ fn global_record_field_expr<'a>(
 
 fn render_global_match_expr(
     wat: &mut String,
+    static_name: &str,
     scrutinee: &Expr,
     arms: &[crate::ast::MatchArm],
     global_init: &GlobalInitPlan,
     bindings: &BTreeMap<String, Expr>,
     indent: usize,
-) {
+) -> Result<(), BackendLinkDiagnostic> {
     let Some((first, rest)) = arms.split_first() else {
         push_global_indent(wat, indent);
         wat.push_str("unreachable\n");
-        return;
+        return Ok(());
     };
-    render_global_match_arm(wat, scrutinee, first, rest, global_init, bindings, indent);
+    render_global_match_arm(
+        wat,
+        static_name,
+        scrutinee,
+        first,
+        rest,
+        global_init,
+        bindings,
+        indent,
+    )
 }
 
 fn render_global_if_let_expr(
     wat: &mut String,
+    static_name: &str,
     pattern: &Pattern,
     scrutinee: &Expr,
     then_branch: &Expr,
@@ -1279,16 +1325,17 @@ fn render_global_if_let_expr(
     global_init: &GlobalInitPlan,
     bindings: &BTreeMap<String, Expr>,
     indent: usize,
-) {
+) -> Result<(), BackendLinkDiagnostic> {
     match global_pattern_bindings(pattern, scrutinee, bindings) {
         Some(GlobalPatternMatch::Always(next_bindings)) => {
             render_global_init_expr_nested_with_bindings(
                 wat,
+                static_name,
                 then_branch,
                 global_init,
                 &next_bindings,
                 indent,
-            );
+            )?;
         }
         Some(GlobalPatternMatch::Conditional {
             expected,
@@ -1296,11 +1343,12 @@ fn render_global_if_let_expr(
         }) => {
             render_global_init_expr_nested_with_bindings(
                 wat,
+                static_name,
                 scrutinee,
                 global_init,
                 bindings,
                 indent,
-            );
+            )?;
             push_global_indent(wat, indent);
             wat.push_str(&format!("i32.const {expected}\n"));
             push_global_indent(wat, indent);
@@ -1309,53 +1357,59 @@ fn render_global_if_let_expr(
             wat.push_str("if (result i32)\n");
             render_global_init_expr_nested_with_bindings(
                 wat,
+                static_name,
                 then_branch,
                 global_init,
                 &next_bindings,
                 indent + 2,
-            );
+            )?;
             push_global_indent(wat, indent);
             wat.push_str("else\n");
             render_global_init_expr_nested_with_bindings(
                 wat,
+                static_name,
                 else_branch,
                 global_init,
                 bindings,
                 indent + 2,
-            );
+            )?;
             push_global_indent(wat, indent);
             wat.push_str("end\n");
         }
         None => {
             render_global_init_expr_nested_with_bindings(
                 wat,
+                static_name,
                 else_branch,
                 global_init,
                 bindings,
                 indent,
-            );
+            )?;
         }
     }
+    Ok(())
 }
 
 fn render_global_match_arm(
     wat: &mut String,
+    static_name: &str,
     scrutinee: &Expr,
     arm: &crate::ast::MatchArm,
     rest: &[crate::ast::MatchArm],
     global_init: &GlobalInitPlan,
     bindings: &BTreeMap<String, Expr>,
     indent: usize,
-) {
+) -> Result<(), BackendLinkDiagnostic> {
     match global_pattern_bindings(&arm.pattern, scrutinee, bindings) {
         Some(GlobalPatternMatch::Always(next_bindings)) => {
             render_global_init_expr_nested_with_bindings(
                 wat,
+                static_name,
                 &arm.body,
                 global_init,
                 &next_bindings,
                 indent,
-            );
+            )?;
         }
         Some(GlobalPatternMatch::Conditional {
             expected,
@@ -1363,11 +1417,12 @@ fn render_global_match_arm(
         }) => {
             render_global_init_expr_nested_with_bindings(
                 wat,
+                static_name,
                 scrutinee,
                 global_init,
                 bindings,
                 indent,
-            );
+            )?;
             push_global_indent(wat, indent);
             wat.push_str(&format!("i32.const {expected}\n"));
             push_global_indent(wat, indent);
@@ -1376,19 +1431,39 @@ fn render_global_match_arm(
             wat.push_str("if (result i32)\n");
             render_global_init_expr_nested_with_bindings(
                 wat,
+                static_name,
                 &arm.body,
                 global_init,
                 &next_bindings,
                 indent + 2,
-            );
+            )?;
             push_global_indent(wat, indent);
             wat.push_str("else\n");
-            render_global_match_expr(wat, scrutinee, rest, global_init, bindings, indent + 2);
+            render_global_match_expr(
+                wat,
+                static_name,
+                scrutinee,
+                rest,
+                global_init,
+                bindings,
+                indent + 2,
+            )?;
             push_global_indent(wat, indent);
             wat.push_str("end\n");
         }
-        None => render_global_match_expr(wat, scrutinee, rest, global_init, bindings, indent),
+        None => {
+            render_global_match_expr(
+                wat,
+                static_name,
+                scrutinee,
+                rest,
+                global_init,
+                bindings,
+                indent,
+            )?;
+        }
     }
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1559,5 +1634,49 @@ impl SourceCompileOutput {
         out.push_str(&format!("  data={}\n", self.frontend.program.data.len()));
         out.push_str(&self.program.render_summary());
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::{BackendManifest, BackendTarget};
+    use crate::global::GlobalStatic;
+
+    #[test]
+    fn global_init_lowering_rejects_internal_unsupported_expr_without_fake_zero() {
+        let bundle = BackendLinkedBundle {
+            target: BackendTarget::WasmGc,
+            linked_wat:
+                "(module\n  (func $main (export \"main\") (result i32)\n    i32.const 1)\n)\n"
+                    .to_string(),
+            manifest: BackendManifest::default(),
+            diagnostics: vec![],
+        };
+        let global_init = GlobalInitPlan {
+            statics: vec![GlobalStatic {
+                name: "VALUE".to_string(),
+                ty: Some("i64".to_string()),
+                body: Expr::call_args(Expr::var("helper"), Vec::new()),
+                dependencies: vec![],
+            }],
+            init_order: vec!["VALUE".to_string()],
+            diagnostics: vec![],
+        };
+
+        let lowered = lower_global_init_into_linked_wat(bundle, &global_init);
+
+        assert_eq!(
+            lowered.diagnostics,
+            vec![
+                BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
+                    static_name: "VALUE".to_string(),
+                    expr: "Call { callee: Var(\"helper\"), args: [] }".to_string(),
+                }
+            ]
+        );
+        assert!(!lowered.linked_wat.contains("global__VALUE"));
+        assert!(!lowered.linked_wat.contains("unsupported static init"));
+        assert!(!lowered.linked_wat.contains("(i32.const 0)"));
     }
 }
