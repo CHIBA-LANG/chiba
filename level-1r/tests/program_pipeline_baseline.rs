@@ -1427,6 +1427,46 @@ fn nominal_row_field_access_substitutes_concrete_type_arguments() {
 }
 
 #[test]
+fn nominal_row_field_access_preserves_nested_type_arguments() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![
+            TypeDecl::new(
+                "Pair",
+                vec!["A".to_string(), "B".to_string()],
+                vec![TypeField::new("left", "A"), TypeField::new("right", "B")],
+            ),
+            TypeDecl::new(
+                "Box",
+                vec!["T".to_string()],
+                vec![TypeField::new("value", "T")],
+            ),
+        ],
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "main".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::new(
+                "box",
+                Some("Box[Pair[i64,bool]]".to_string()),
+            )],
+            return_type: Some("Pair[i64,bool]".to_string()),
+            body: Expr::field(Expr::var("box"), "value"),
+        }],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(
+        bundle.defs[0].output.typed.ty,
+        Type::Nominal("Pair[i64,bool]".to_string())
+    );
+}
+
+#[test]
 fn auto_generic_is_lowering_fact_not_source_surface_generic() {
     let program = SourceProgram::new(vec![def("id", vec!["x"], Expr::var("x"))]);
 

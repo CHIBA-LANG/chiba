@@ -707,9 +707,39 @@ fn parse_nominal_application(nominal: &str) -> Option<(&str, Vec<String>)> {
     let args = if args.trim().is_empty() {
         Vec::new()
     } else {
-        args.split(',').map(|arg| arg.trim().to_string()).collect()
+        split_nominal_type_args(args)?
     };
     Some((base, args))
+}
+
+fn split_nominal_type_args(args: &str) -> Option<Vec<String>> {
+    let mut out = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    for (index, ch) in args.char_indices() {
+        match ch {
+            '[' => depth = depth.checked_add(1)?,
+            ']' => depth = depth.checked_sub(1)?,
+            ',' if depth == 0 => {
+                let arg = args[start..index].trim();
+                if arg.is_empty() {
+                    return None;
+                }
+                out.push(arg.to_string());
+                start = index + ch.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return None;
+    }
+    let arg = args[start..].trim();
+    if arg.is_empty() {
+        return None;
+    }
+    out.push(arg.to_string());
+    Some(out)
 }
 
 fn nominal_type_name(ty: &Type) -> Option<&str> {
