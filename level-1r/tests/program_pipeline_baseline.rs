@@ -144,6 +144,20 @@ fn typed_continuation_storage_call_returns_answer_type() {
 }
 
 #[test]
+fn typed_continuation_storage_return_enters_callable_storage() {
+    let output =
+        chiba_level1r::compile_source_program_bundle("def main(): contN (i64) -> bool = 0")
+            .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert!(main.core.callable_storage.iter().any(|fact| {
+        fact.subject == "return::main"
+            && fact.kind == chiba_level1r::core::CallableStorageKind::ContNPackage
+            && fact.send == chiba_level1r::typed::SendColor::NotSend
+    }));
+}
+
+#[test]
 fn program_bundle_selects_main_and_links_def_artifacts() {
     let program = SourceProgram::new(vec![
         def("helper", vec![], Expr::i64(1)),

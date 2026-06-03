@@ -273,7 +273,7 @@ fn compile_expr_with_indexes_and_generics(
     let lambda_lift = passes.record("L15LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
         lift_lambdas(&closure)
     });
-    let explicit_callable_storage = explicit_callable_storage_facts(&typed_signature);
+    let explicit_callable_storage = explicit_callable_storage_facts(def_name, &typed_signature);
     let core = passes.record("L16Core", "CpsProgram", "CoreProgram", || {
         lower_core_with_facts(
             &cps,
@@ -744,8 +744,11 @@ impl TypedSignature {
     }
 }
 
-fn explicit_callable_storage_facts(signature: &TypedSignature) -> Vec<CallableStorageFact> {
-    signature
+fn explicit_callable_storage_facts(
+    def_name: &str,
+    signature: &TypedSignature,
+) -> Vec<CallableStorageFact> {
+    let mut facts = signature
         .params
         .iter()
         .filter_map(|param| match source_type_name_to_type(&param.ty) {
@@ -765,7 +768,26 @@ fn explicit_callable_storage_facts(signature: &TypedSignature) -> Vec<CallableSt
             }),
             _ => None,
         })
-        .collect()
+        .collect::<Vec<_>>();
+    if let Some(return_type) = &signature.return_type {
+        if let Type::Continuation { multi, .. } = source_type_name_to_type(return_type) {
+            facts.push(CallableStorageFact {
+                subject: format!("return::{def_name}"),
+                kind: if multi {
+                    CallableStorageKind::ContNPackage
+                } else {
+                    CallableStorageKind::BoxedCont1
+                },
+                usage: if multi {
+                    crate::typed::UsageColor::Many
+                } else {
+                    crate::typed::UsageColor::One
+                },
+                send: crate::typed::SendColor::NotSend,
+            });
+        }
+    }
+    facts
 }
 
 fn typed_signature(
