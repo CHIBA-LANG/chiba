@@ -1214,6 +1214,25 @@ impl FrontendParser {
     }
 
     fn parse_type_name(&mut self) -> Result<String, FrontendError> {
+        if self.peek_name() == Some("Ident")
+            && self
+                .tokens
+                .get(self.pos)
+                .is_some_and(|token| token.lexeme == "cont1" || token.lexeme == "contN")
+        {
+            let kind = self.expect_lexeme("Ident")?;
+            let storage = match kind.as_str() {
+                "cont1" => "Cont1",
+                "contN" => "ContN",
+                _ => unreachable!("continuation type sugar is guarded above"),
+            };
+            self.expect("LParen")?;
+            let param = self.parse_type_name()?;
+            self.expect("RParen")?;
+            self.expect("Arrow")?;
+            let result = self.parse_type_name()?;
+            return Ok(format!("{storage}[{param},{result}]"));
+        }
         if self.peek_name() == Some("LParen") {
             self.pos += 1;
             let param = self.parse_type_name()?;

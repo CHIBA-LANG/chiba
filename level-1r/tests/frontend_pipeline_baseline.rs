@@ -6,6 +6,7 @@ use chiba_level1r::core::CoreValue;
 use chiba_level1r::resolve::ResolvedName;
 use chiba_level1r::specialize::DischargedObligation;
 use chiba_level1r::template::TemplateObligation;
+use chiba_level1r::typed::Type;
 use chiba_level1r::typed::UsageColor;
 use chiba_level1r::{
     compile_program_bundle, compile_source_program_bundle, parse_source_program, FrontendError,
@@ -648,6 +649,40 @@ fn frontend_parses_callable_type_annotations() {
         }
         other => panic!("expected function def, got {other:?}"),
     }
+}
+
+#[test]
+fn frontend_parses_continuation_callable_type_sugar() {
+    let parsed = parse_source_program(
+        "type ParserState = { retry: contN (i64) -> bool }
+def store(k: cont1 (i64) -> bool): cont1 (i64) -> bool = k",
+    )
+    .expect("parse");
+
+    assert_eq!(
+        parsed.program.types[0].fields,
+        vec![TypeField::new("retry", "ContN[i64,bool]")]
+    );
+    match &parsed.program.items[0] {
+        SourceItem::Def {
+            params,
+            return_type,
+            ..
+        } => {
+            assert_eq!(
+                params,
+                &vec![ParamDecl::new("k", Some("Cont1[i64,bool]".to_string()))]
+            );
+            assert_eq!(return_type, &Some("Cont1[i64,bool]".to_string()));
+        }
+        other => panic!("expected function def, got {other:?}"),
+    }
+
+    let compiled = compile_program_bundle(&parsed.program);
+    assert_eq!(
+        compiled.defs[0].output.typed.ty,
+        Type::Nominal("Cont1[i64,bool]".to_string())
+    );
 }
 
 #[test]
