@@ -173,25 +173,30 @@ fn transform(
             variants,
             args,
         } => transform_adt_ctor(data, ctor, variants, args, k, controls, ctx),
-        TypedExprKind::Field { receiver, name } => transform(
-            receiver,
-            Box::new(|value, ctx| {
-                let atom = match value {
-                    CpsAtom::Tuple { .. } if name.starts_with('_') => CpsAtom::TupleField {
-                        tuple: Box::new(value),
-                        field: name.clone(),
-                    },
-                    CpsAtom::Record { .. } => CpsAtom::RecordField {
-                        record: Box::new(value),
-                        field: name.clone(),
-                    },
-                    _ => CpsAtom::Var(format!("{value}.{name}")),
-                };
-                k(atom, ctx)
-            }),
-            controls,
-            ctx,
-        ),
+        TypedExprKind::Field { receiver, name } => {
+            let is_tuple_field = matches!(receiver.ty, Type::Tuple(_));
+            transform(
+                receiver,
+                Box::new(|value, ctx| {
+                    let atom = if is_tuple_field {
+                        CpsAtom::TupleField {
+                            tuple: Box::new(value),
+                            field: name.clone(),
+                        }
+                    } else if matches!(value, CpsAtom::Record { .. }) {
+                        CpsAtom::RecordField {
+                            record: Box::new(value),
+                            field: name.clone(),
+                        }
+                    } else {
+                        CpsAtom::Var(format!("{value}.{name}"))
+                    };
+                    k(atom, ctx)
+                }),
+                controls,
+                ctx,
+            )
+        }
         TypedExprKind::MethodCall {
             receiver,
             name,
