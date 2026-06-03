@@ -212,7 +212,7 @@ impl TypeContext {
             .generics
             .iter()
             .cloned()
-            .zip(args.into_iter().map(type_name_to_type))
+            .zip(args.iter().map(|arg| source_type_name_to_type(arg)))
             .collect::<BTreeMap<_, _>>();
         field_type(&decl.fields, field).map(|ty| substitute_type_params(&ty, &substitutions))
     }
@@ -330,7 +330,7 @@ impl TypeContext {
             generics
                 .iter()
                 .cloned()
-                .zip(args.into_iter().map(type_name_to_type))
+                .zip(args.iter().map(|arg| source_type_name_to_type(arg)))
                 .collect(),
         )
     }
@@ -680,7 +680,7 @@ fn tuple_intrinsic_field_type(nominal: &str, index: usize) -> Option<Type> {
     if base != "Tuple" {
         return None;
     }
-    args.into_iter().map(type_name_to_type).nth(index)
+    args.get(index).map(|arg| source_type_name_to_type(arg))
 }
 
 fn record_field_type(receiver: &Type, name: &str) -> Option<Type> {
@@ -801,12 +801,24 @@ fn nominal_base_name(name: &str) -> &str {
     name.find('[').map(|open| &name[..open]).unwrap_or(name)
 }
 
-fn type_name_to_type(name: String) -> Type {
-    match name.as_str() {
+pub(crate) fn source_type_name_to_type(name: &str) -> Type {
+    match name {
         "I64" | "i64" => Type::I64,
         "Bool" | "bool" => Type::Bool,
-        _ => Type::Nominal(name),
+        _ => tuple_intrinsic_type(name).unwrap_or_else(|| Type::Nominal(name.to_string())),
     }
+}
+
+fn tuple_intrinsic_type(name: &str) -> Option<Type> {
+    let (base, args) = parse_nominal_application(name)?;
+    if base != "Tuple" {
+        return None;
+    }
+    Some(Type::Tuple(
+        args.iter()
+            .map(|arg| source_type_name_to_type(arg))
+            .collect(),
+    ))
 }
 
 fn substitute_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> Type {

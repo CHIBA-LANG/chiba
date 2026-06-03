@@ -1,6 +1,8 @@
 use chiba_level1r::core::{CoreOp, LayoutKind};
 use chiba_level1r::typed::{type_expr, Type, TypedExprKind};
-use chiba_level1r::{compile_expr, Expr};
+use chiba_level1r::{
+    compile_expr, compile_program_bundle, Expr, ParamDecl, SourceItem, SourceProgram, Visibility,
+};
 
 #[test]
 fn tuple_expression_has_stable_nominal_type_from_ordered_field_types() {
@@ -63,4 +65,21 @@ fn tuple_positional_field_access_has_stable_underscore_names() {
         field: "_2".to_string(),
     }));
     assert!(output.core_validation.diagnostics.is_empty());
+}
+
+#[test]
+fn tuple_header_type_field_access_uses_tuple_type_arguments() {
+    let program = SourceProgram::new(vec![SourceItem::Def {
+        receiver: None,
+        generics: Vec::new(),
+        name: "second".to_string(),
+        visibility: Visibility::Public,
+        params: vec![ParamDecl::new("pair", Some("Tuple[i64,bool]".to_string()))],
+        return_type: Some("bool".to_string()),
+        body: Expr::field(Expr::var("pair"), "_2"),
+    }]);
+
+    let output = compile_program_bundle(&program);
+
+    assert_eq!(output.defs[0].output.typed.ty, Type::Bool);
 }

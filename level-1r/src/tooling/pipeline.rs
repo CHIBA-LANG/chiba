@@ -36,7 +36,8 @@ use crate::symbol::encode_debug_symbol;
 use crate::template::{analyze_template_with_source, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
-    type_expr_with_context, RecordTypeField, Type, TypeContext, TypeEnv, TypedExpr,
+    source_type_name_to_type, type_expr_with_context, RecordTypeField, Type, TypeContext, TypeEnv,
+    TypedExpr,
 };
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -784,11 +785,10 @@ fn resolve_header_type(
 }
 
 fn header_type_to_type(ty: &str) -> Type {
-    match ty {
-        "Unknown" => Type::Unknown,
-        "I64" | "i64" => Type::I64,
-        "Bool" | "bool" => Type::Bool,
-        ty => Type::Nominal(ty.to_string()),
+    if ty == "Unknown" {
+        Type::Unknown
+    } else {
+        source_type_name_to_type(ty)
     }
 }
 
