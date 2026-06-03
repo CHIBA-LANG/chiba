@@ -622,6 +622,35 @@ fn frontend_consumes_parameter_and_return_type_annotations() {
 }
 
 #[test]
+fn frontend_parses_callable_type_annotations() {
+    let parsed = parse_source_program(
+        "type Handler = { run: (i64) -> bool }\ndef use_it(f: (i64) -> bool): (i64) -> bool = f",
+    )
+    .expect("parse");
+
+    match &parsed.program.types[0] {
+        TypeDecl { name, fields, .. } => {
+            assert_eq!(name, "Handler");
+            assert_eq!(fields, &vec![TypeField::new("run", "(i64) -> bool")]);
+        }
+    }
+    match &parsed.program.items[0] {
+        SourceItem::Def {
+            params,
+            return_type,
+            ..
+        } => {
+            assert_eq!(
+                params,
+                &vec![ParamDecl::new("f", Some("(i64) -> bool".to_string()))]
+            );
+            assert_eq!(return_type, &Some("(i64) -> bool".to_string()));
+        }
+        other => panic!("expected function def, got {other:?}"),
+    }
+}
+
+#[test]
 fn frontend_parses_explicit_checked_template_def_header() {
     let parsed = parse_source_program("def id[T](x: T): T = x").expect("parse");
 

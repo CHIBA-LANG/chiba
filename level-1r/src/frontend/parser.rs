@@ -1214,6 +1214,14 @@ impl FrontendParser {
     }
 
     fn parse_type_name(&mut self) -> Result<String, FrontendError> {
+        if self.peek_name() == Some("LParen") {
+            self.pos += 1;
+            let param = self.parse_type_name()?;
+            self.expect("RParen")?;
+            self.expect("Arrow")?;
+            let result = self.parse_type_name()?;
+            return Ok(format!("({param}) -> {result}"));
+        }
         let mut name = self.expect_type_atom()?;
         if self.peek_name() == Some("LBracket") {
             let args = self.parse_type_args()?;
