@@ -62,6 +62,19 @@ fn program_typed_binary_i64_result_is_not_unknown() {
 }
 
 #[test]
+fn program_typed_lambda_call_uses_function_return_type() {
+    let program = SourceProgram::new(vec![def(
+        "main",
+        vec![],
+        Expr::call(Expr::lambda("x", Expr::i64(7)), Expr::i64(1)),
+    )]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+}
+
+#[test]
 fn program_bundle_selects_main_and_links_def_artifacts() {
     let program = SourceProgram::new(vec![
         def("helper", vec![], Expr::i64(1)),

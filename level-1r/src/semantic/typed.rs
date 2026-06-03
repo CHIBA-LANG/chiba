@@ -368,6 +368,7 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
         }
         Expr::Call { callee, args } => {
             let callee = type_expr_with_context(callee, env, context);
+            let ty = call_result_type(&callee.ty);
             let args = args
                 .iter()
                 .map(|arg| type_expr_with_context(arg, env, context))
@@ -377,7 +378,7 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
                     callee: Box::new(callee),
                     args,
                 },
-                Type::Unknown,
+                ty,
             )
         }
         Expr::Instantiate { callee, .. } => type_expr_with_context(callee, env, context),
@@ -628,6 +629,13 @@ fn common_type(left: &Type, right: &Type) -> Type {
 fn binary_result_type(lhs: &Type, rhs: &Type) -> Type {
     match (lhs, rhs) {
         (Type::I64, Type::I64) => Type::I64,
+        _ => Type::Unknown,
+    }
+}
+
+fn call_result_type(callee: &Type) -> Type {
+    match callee {
+        Type::Func(_, result) => result.as_ref().clone(),
         _ => Type::Unknown,
     }
 }
