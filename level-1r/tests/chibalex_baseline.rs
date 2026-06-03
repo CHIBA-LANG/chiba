@@ -105,6 +105,39 @@ fn lexer_supports_xid_property_classes_for_utf8_identifiers() {
 }
 
 #[test]
+fn lexer_uses_shared_xid_logic_for_symbolic_utf8_identifiers() {
+    let lexer = compile_lexer(LexerSpec {
+        rules: vec![
+            LexerRule {
+                name: "Whitespace".to_string(),
+                pattern: "[ ]+".to_string(),
+                skip: true,
+            },
+            LexerRule {
+                name: "Ident".to_string(),
+                pattern: "\\p{XID_START}\\p{XID_CONTINUE}*".to_string(),
+                skip: false,
+            },
+        ],
+    })
+    .unwrap();
+
+    let tokens = lexer.lex("函数α 🚀Ctor λx 中_2").unwrap();
+    assert_eq!(
+        tokens
+            .iter()
+            .map(|token| (token.name.as_str(), token.lexeme.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("Ident", "函数α"),
+            ("Ident", "🚀Ctor"),
+            ("Ident", "λx"),
+            ("Ident", "中_2"),
+        ]
+    );
+}
+
+#[test]
 fn lexer_accepts_chiba_symbol_identifiers_beyond_strict_xid() {
     let lexer = compile_lexer(LexerSpec {
         rules: vec![
