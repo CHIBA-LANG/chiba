@@ -508,13 +508,14 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
         Expr::Binary { op, lhs, rhs } => {
             let lhs = type_expr_with_context(lhs, env, context);
             let rhs = type_expr_with_context(rhs, env, context);
+            let ty = binary_result_type(&lhs.ty, &rhs.ty);
             typed(
                 TypedExprKind::Binary {
                     op: op.clone(),
                     lhs: Box::new(lhs),
                     rhs: Box::new(rhs),
                 },
-                Type::Unknown,
+                ty,
             )
         }
         Expr::If {
@@ -621,6 +622,13 @@ fn common_type(left: &Type, right: &Type) -> Type {
         left.clone()
     } else {
         Type::Unknown
+    }
+}
+
+fn binary_result_type(lhs: &Type, rhs: &Type) -> Type {
+    match (lhs, rhs) {
+        (Type::I64, Type::I64) => Type::I64,
+        _ => Type::Unknown,
     }
 }
 
