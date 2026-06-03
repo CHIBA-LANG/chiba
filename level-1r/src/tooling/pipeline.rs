@@ -966,12 +966,7 @@ fn program_backend_artifacts(
                 artifact.wat = static_wat;
                 artifact.diagnostics.clear();
             }
-            artifact.wat = relabel_program_wat(
-                &artifact,
-                &def_symbol(&def.name, index),
-                is_entry,
-                &static_names,
-            );
+            artifact.wat = relabel_program_wat(&artifact, &def_symbol(&def.name, index), is_entry);
             artifact
         })
         .collect()
@@ -995,27 +990,16 @@ fn static_return_wat_from_fact(
     ))
 }
 
-fn relabel_program_wat(
-    artifact: &BackendArtifact,
-    symbol: &str,
-    is_entry: bool,
-    static_names: &BTreeSet<&str>,
-) -> String {
+fn relabel_program_wat(artifact: &BackendArtifact, symbol: &str, is_entry: bool) -> String {
     let wat = &artifact.wat;
-    let relabeled = if is_entry {
+    if is_entry {
         wat.replace(
             "(func $main (export \"main\")",
             &format!("(func ${symbol} (export \"main\")"),
         )
     } else {
         wat.replace("(func $main (export \"main\")", &format!("(func ${symbol}"))
-    };
-    replace_static_return_from_fact(
-        &relabeled,
-        artifact.return_value.as_ref(),
-        static_names,
-        is_entry,
-    )
+    }
 }
 
 fn def_symbol(name: &str, index: usize) -> String {
@@ -1119,30 +1103,6 @@ fn const_global_initializer(expr: &Expr) -> Option<i32> {
             .map(|tag| tag as i32),
         _ => None,
     }
-}
-
-fn replace_static_return_from_fact(
-    wat: &str,
-    return_value: Option<&CoreValue>,
-    static_names: &BTreeSet<&str>,
-    is_entry: bool,
-) -> String {
-    let Some(CoreValue::Var(name)) = return_value else {
-        return wat.to_string();
-    };
-    if !is_entry || !static_names.contains(name.as_str()) {
-        return wat.to_string();
-    }
-    let Some(const_start) = wat.find("    i32.const 0") else {
-        return wat.to_string();
-    };
-    let const_end = const_start + "    i32.const 0".len();
-    let replacement = format!("    global.get ${}", global_symbol(name));
-    let mut out = String::new();
-    out.push_str(&wat[..const_start]);
-    out.push_str(&replacement);
-    out.push_str(&wat[const_end..]);
-    out
 }
 
 fn render_global_init_expr(
