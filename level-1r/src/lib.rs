@@ -59,6 +59,7 @@ pub mod usage;
 pub mod usage_audit;
 #[path = "frontend/xid.rs"]
 pub mod xid;
+pub mod xiddata;
 
 pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use ast::{

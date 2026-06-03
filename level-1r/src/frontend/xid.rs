@@ -1,3 +1,5 @@
+use crate::xiddata::{is_xid_continue, is_xid_start};
+
 pub fn is_chiba_identifier(value: &str) -> bool {
     let mut chars = value.chars();
     let Some(first) = chars.next() else {
@@ -12,25 +14,6 @@ pub fn is_chiba_identifier_start(ch: char) -> bool {
 
 pub fn is_chiba_identifier_continue(ch: char) -> bool {
     is_chiba_identifier_start(ch) || is_xid_continue(ch)
-}
-
-pub fn is_xid_start(ch: char) -> bool {
-    unicode_ident::is_xid_start(ch)
-}
-
-pub fn is_xid_continue(ch: char) -> bool {
-    unicode_ident::is_xid_continue(ch)
-}
-
-fn is_unicode_mark(ch: char) -> bool {
-    matches!(
-        ch as u32,
-        0x0300..=0x036F
-            | 0x1AB0..=0x1AFF
-            | 0x1DC0..=0x1DFF
-            | 0x20D0..=0x20FF
-            | 0xFE20..=0xFE2F
-    )
 }
 
 fn is_chiba_symbol_identifier_start(ch: char) -> bool {
@@ -89,6 +72,17 @@ fn is_chiba_delimiter_or_operator(ch: char) -> bool {
     )
 }
 
+fn is_unicode_mark(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x0300..=0x036F
+            | 0x1AB0..=0x1AFF
+            | 0x1DC0..=0x1DFF
+            | 0x20D0..=0x20FF
+            | 0xFE20..=0xFE2F
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{is_chiba_identifier, is_chiba_identifier_continue, is_chiba_identifier_start};
@@ -122,7 +116,7 @@ mod tests {
     }
 
     #[test]
-    fn xid_policy_uses_unicode_ident_and_not_ascii_surrogates() {
+    fn xid_policy_uses_shared_tables_for_identifier_logic() {
         assert!(is_chiba_identifier_start('λ'));
         assert!(is_chiba_identifier_start('中'));
         assert!(is_chiba_identifier_continue('\u{301}'));

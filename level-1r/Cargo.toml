@@ -14,4 +14,3 @@ name = "chiba-level1r"
 path = "src/main.rs"
 
 [dependencies]
-unicode-ident = "1"
