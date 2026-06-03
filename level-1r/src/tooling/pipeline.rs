@@ -352,6 +352,7 @@ fn compile_expr_with_indexes_and_generics(
         &closure,
         &lambda_lift,
         &core,
+        &format!("{core_callable_storage:#?}", core_callable_storage = core.callable_storage),
         &closure_core_usage,
         &closure_simplification,
         &usage_audit,
@@ -721,6 +722,7 @@ fn compile_program_defs(
                         .core
                         .callable_storage
                         .extend(interface_callable_storage_facts(interface));
+                    output.visual.callable_storage = format!("{:#?}", output.core.callable_storage);
                     output
                 },
             }),

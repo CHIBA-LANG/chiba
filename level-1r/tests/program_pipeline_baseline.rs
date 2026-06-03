@@ -192,6 +192,14 @@ fn interface_type_continuation_field_enters_callable_storage() {
             && fact.kind == chiba_level1r::core::CallableStorageKind::ContNPackage
             && fact.send == chiba_level1r::typed::SendColor::NotSend
     }));
+    assert!(bundle.defs[0].output.render_visual().contains("callable-storage:"));
+    assert!(
+        bundle
+            .defs[0]
+            .output
+            .render_visual()
+            .contains("type::RetryBox::retry")
+    );
 }
 
 #[test]

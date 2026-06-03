@@ -44,6 +44,7 @@ pub struct VisualReport {
     pub closure: String,
     pub lambda_lift: String,
     pub core: String,
+    pub callable_storage: String,
     pub closure_core_usage: String,
     pub closure_simplification: String,
     pub usage_audit: String,
@@ -96,6 +97,10 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.lambda_lift).unwrap();
     writeln!(out, "core:").unwrap();
     writeln!(out, "  {}", report.core).unwrap();
+    writeln!(out, "callable-storage:").unwrap();
+    for line in report.callable_storage.lines() {
+        writeln!(out, "  {line}").unwrap();
+    }
     writeln!(out, "closure-core-usage:").unwrap();
     writeln!(out, "  {}", report.closure_core_usage).unwrap();
     writeln!(out, "closure-simplification:").unwrap();
@@ -138,6 +143,7 @@ pub fn visual_report(
     closure: &ClosureFacts,
     lambda_lift: &LambdaLiftFacts,
     core: &CoreProgram,
+    callable_storage: &str,
     closure_core_usage: &ClosureCoreUsageFacts,
     closure_simplification: &ClosureSimplificationFacts,
     usage_audit: &UsageAuditReport,
@@ -168,6 +174,7 @@ pub fn visual_report(
         closure: format!("{closure:#?}"),
         lambda_lift: format!("{lambda_lift:#?}"),
         core: format!("{core:#?}"),
+        callable_storage: callable_storage.to_string(),
         closure_core_usage: format!("{closure_core_usage:#?}"),
         closure_simplification: format!("{closure_simplification:#?}"),
         usage_audit: format!("{usage_audit:#?}"),
