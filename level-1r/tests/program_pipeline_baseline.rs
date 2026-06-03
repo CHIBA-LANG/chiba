@@ -158,6 +158,20 @@ fn typed_continuation_storage_return_enters_callable_storage() {
 }
 
 #[test]
+fn typed_continuation_boxed_storage_param_enters_callable_storage() {
+    let output =
+        chiba_level1r::compile_source_program_bundle("def main(k: cont1 (i64) -> bool) = 0")
+            .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert!(main.core.callable_storage.iter().any(|fact| {
+        fact.subject == "param::k"
+            && fact.kind == chiba_level1r::core::CallableStorageKind::BoxedCont1
+            && fact.send == chiba_level1r::typed::SendColor::NotSend
+    }));
+}
+
+#[test]
 fn program_bundle_selects_main_and_links_def_artifacts() {
     let program = SourceProgram::new(vec![
         def("helper", vec![], Expr::i64(1)),
