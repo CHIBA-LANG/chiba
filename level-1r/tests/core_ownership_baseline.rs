@@ -49,6 +49,7 @@ fn dyn_row_contract_lowers_to_dyn_package_and_payload_decision() {
         &output.cps,
         &output.control.continuations,
         &ClosureFacts::default(),
+        &[],
         &LambdaLiftFacts::default(),
         &facts,
         &UsageFacts::default(),

@@ -401,6 +401,7 @@ pub fn lower_core(cps: &CpsProgram, continuations: &[ContinuationFact]) -> CoreP
         cps,
         continuations,
         &ClosureFacts::default(),
+        &[],
         &LambdaLiftFacts::default(),
         &SpecializationFacts::default(),
         &UsageFacts::default(),
@@ -411,6 +412,7 @@ pub fn lower_core_with_facts(
     cps: &CpsProgram,
     continuations: &[ContinuationFact],
     closures: &ClosureFacts,
+    explicit_callable_storage: &[CallableStorageFact],
     lambda_lift: &LambdaLiftFacts,
     specialize: &SpecializationFacts,
     usage: &UsageFacts,
@@ -419,7 +421,8 @@ pub fn lower_core_with_facts(
     lower_term(&cps.term, continuations, &mut ops);
     let layouts = lower_layouts(&ops, continuations, closures, specialize);
     let ownership = lower_ownership(continuations, specialize, usage);
-    let callable_storage = lower_callable_storage(continuations, closures);
+    let callable_storage =
+        lower_callable_storage(continuations, closures, explicit_callable_storage);
     lower_specialization_ops(specialize, &layouts, &mut ops);
     lower_lifted_functions(lambda_lift, &mut ops);
     CoreProgram {
@@ -1263,6 +1266,7 @@ fn lower_ownership(
 fn lower_callable_storage(
     continuations: &[ContinuationFact],
     closures: &ClosureFacts,
+    explicit: &[CallableStorageFact],
 ) -> Vec<CallableStorageFact> {
     let mut facts = Vec::new();
     facts.push(CallableStorageFact {
@@ -1302,6 +1306,7 @@ fn lower_callable_storage(
             send: SendColor::NotSend,
         });
     }
+    facts.extend(explicit.iter().cloned());
     if !continuations.is_empty() || !closures.closures.is_empty() {
         facts.push(CallableStorageFact {
             subject: "callable-storage::erased".to_string(),

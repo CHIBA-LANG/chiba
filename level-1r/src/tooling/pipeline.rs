@@ -12,7 +12,10 @@ use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
 use crate::closure_simplify::{simplify_closure_core, ClosureSimplificationFacts};
 use crate::control::{analyze_control, ControlFacts};
-use crate::core::{lower_core_with_facts, validate_core, CoreProgram, CoreValidation, CoreValue};
+use crate::core::{
+    lower_core_with_facts, validate_core, CallableStorageFact, CallableStorageKind, CoreProgram,
+    CoreValidation, CoreValue,
+};
 use crate::cps::{cps_program, CpsProgram};
 use crate::cps_usage::{
     analyze_cps_usage, simplify_continuations, ContinuationSimplificationFacts, CpsUsageFacts,
@@ -270,11 +273,13 @@ fn compile_expr_with_indexes_and_generics(
     let lambda_lift = passes.record("L15LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
         lift_lambdas(&closure)
     });
+    let explicit_callable_storage = explicit_callable_storage_facts(&typed_signature);
     let core = passes.record("L16Core", "CpsProgram", "CoreProgram", || {
         lower_core_with_facts(
             &cps,
             &control.continuations,
             &closure,
+            &explicit_callable_storage,
             &lambda_lift,
             &specialize,
             &usage,
@@ -737,6 +742,30 @@ impl TypedSignature {
             .flat_map(|param| param.binding_types.clone())
             .collect()
     }
+}
+
+fn explicit_callable_storage_facts(signature: &TypedSignature) -> Vec<CallableStorageFact> {
+    signature
+        .params
+        .iter()
+        .filter_map(|param| match source_type_name_to_type(&param.ty) {
+            Type::Continuation { multi, .. } => Some(CallableStorageFact {
+                subject: format!("param::{}", param.name),
+                kind: if multi {
+                    CallableStorageKind::ContNPackage
+                } else {
+                    CallableStorageKind::BoxedCont1
+                },
+                usage: if multi {
+                    crate::typed::UsageColor::Many
+                } else {
+                    crate::typed::UsageColor::One
+                },
+                send: crate::typed::SendColor::NotSend,
+            }),
+            _ => None,
+        })
+        .collect()
 }
 
 fn typed_signature(

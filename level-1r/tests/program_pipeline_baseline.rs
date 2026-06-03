@@ -135,6 +135,11 @@ fn typed_continuation_storage_call_returns_answer_type() {
                 if func == "k" && args == &vec![chiba_level1r::core::CoreValue::I64(1)]
         )
     }));
+    assert!(main.core.callable_storage.iter().any(|fact| {
+        fact.subject == "param::k"
+            && fact.kind == chiba_level1r::core::CallableStorageKind::ContNPackage
+            && fact.send == chiba_level1r::typed::SendColor::NotSend
+    }));
     assert!(main.core_validation.diagnostics.is_empty());
 }
 
