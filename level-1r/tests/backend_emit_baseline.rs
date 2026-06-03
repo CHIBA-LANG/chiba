@@ -206,6 +206,31 @@ fn backend_rejects_tuple_return_instead_of_faking_i32_zero() {
 }
 
 #[test]
+fn backend_rejects_record_return_instead_of_faking_i32_zero() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::Record {
+            fields: vec![chiba_level1r::core::CoreRecordValueField {
+                name: "x".to_string(),
+                value: CoreValue::I64(1),
+            }],
+        })],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(
+        artifact.diagnostics,
+        vec![BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: "{x=1}".to_string(),
+        }]
+    );
+    assert_eq!(artifact.wat, "");
+}
+
+#[test]
 fn backend_rejects_unknown_adt_constructor_return_instead_of_faking_tag_zero() {
     let core = CoreProgram {
         ops: vec![CoreOp::ReturnValue(CoreValue::Adt {
@@ -231,21 +256,26 @@ fn backend_rejects_unknown_adt_constructor_return_instead_of_faking_tag_zero() {
 }
 
 #[test]
-fn backend_serializes_structural_core_ops_as_debuggable_wat_comments() {
+fn backend_rejects_structural_core_return_instead_of_debug_comment_fake_wat() {
     let output = compile_expr(&Expr::record(vec![
         ("x", Expr::i64(1)),
         ("y", Expr::bool(true)),
     ]));
 
-    assert_eq!(output.backend.diagnostics, vec![]);
+    assert_eq!(
+        output.backend.diagnostics,
+        vec![BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: "{x=1, y=true}".to_string(),
+        }]
+    );
+    assert_eq!(output.backend.wat, "");
     assert!(output
-        .backend
-        .wat
-        .contains(";; record layout=record::x+y fields=2"));
-    assert!(output
-        .backend
-        .wat
-        .contains(";; core-return atom={x=1, y=true}"));
+        .core
+        .ops
+        .contains(&CoreOp::RecordConstruct {
+            layout: "record::x+y".to_string(),
+            fields: vec!["x".to_string(), "y".to_string()],
+        }));
 }
 
 #[test]
