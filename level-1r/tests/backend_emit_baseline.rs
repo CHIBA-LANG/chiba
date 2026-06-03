@@ -78,8 +78,12 @@ fn backend_records_tailcall_targets_in_serialized_output() {
     let artifact = emit_wasm_gc_with_params(&core, &validation, &["v".to_string()]);
 
     assert_eq!(artifact.diagnostics, vec![]);
-    assert!(artifact.wat.contains("(func $math_Vec2_norm"));
+    assert!(artifact
+        .wat
+        .contains(";; symbol math_Vec2_norm source=norm origin=L16Core"));
     assert!(artifact.wat.contains(";; tailcall math_Vec2_norm args=[v]"));
+    assert!(artifact.wat.contains("call $math_Vec2_norm"));
+    assert!(!artifact.wat.contains("(func $math_Vec2_norm"));
     assert_eq!(artifact.manifest.entries[0].source_debug_name, "norm");
 }
 
@@ -438,8 +442,14 @@ fn backend_link_merges_artifacts_manifest_and_wat_deterministically() {
         .collect();
     assert_eq!(symbols, vec!["intrinsic__i64__add", "math__add"]);
     assert!(bundle.linked_wat.contains(";; linked artifact 0"));
-    assert!(bundle.linked_wat.contains("(func $intrinsic__i64__add"));
-    assert!(bundle.linked_wat.contains("(func $math__add"));
+    assert!(bundle
+        .linked_wat
+        .contains(";; symbol intrinsic__i64__add source=operator.add origin=L16Core"));
+    assert!(bundle
+        .linked_wat
+        .contains(";; symbol math__add source=math.add origin=L16Core"));
+    assert!(!bundle.linked_wat.contains("(func $intrinsic__i64__add"));
+    assert!(!bundle.linked_wat.contains("(func $math__add"));
 }
 
 #[test]

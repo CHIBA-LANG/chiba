@@ -316,11 +316,9 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest, params: &[String])
     let mut tailcall_index = 0usize;
     for entry in &manifest.entries {
         wat.push_str(&format!(
-            "  ;; source={} origin={}\n",
-            entry.source_debug_name, entry.pass_origin
+            "  ;; symbol {} source={} origin={}\n",
+            entry.final_symbol, entry.source_debug_name, entry.pass_origin
         ));
-        wat.push_str(&format!("  (func ${} (result i32)\n", entry.final_symbol));
-        wat.push_str("    i32.const 0)\n");
     }
     for (index, op) in core.ops.iter().enumerate() {
         match op {
