@@ -1212,10 +1212,14 @@ fn render_global_init_expr_with_bindings(
             }
         }
         Expr::AdtCtor { ctor, variants, .. } => {
-            let tag = variants
-                .iter()
-                .position(|variant| variant == ctor)
-                .unwrap_or(0);
+            let Some(tag) = variants.iter().position(|variant| variant == ctor) else {
+                return Err(
+                    BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
+                        static_name: static_name.to_string(),
+                        expr: format!("{expr:?}"),
+                    },
+                );
+            };
             wat.push_str(&format!("    i32.const {tag}\n"));
         }
         other => {
@@ -1660,6 +1664,43 @@ mod tests {
         );
         assert!(!lowered.linked_wat.contains("global__VALUE"));
         assert!(!lowered.linked_wat.contains("unsupported static init"));
+        assert!(!lowered.linked_wat.contains("(i32.const 0)"));
+    }
+
+    #[test]
+    fn global_init_lowering_rejects_internal_unknown_adt_ctor_without_fake_tag_zero() {
+        let bundle = BackendLinkedBundle {
+            target: BackendTarget::WasmGc,
+            linked_wat:
+                "(module\n  (func $main (export \"main\") (result i32)\n    i32.const 1)\n)\n"
+                    .to_string(),
+            manifest: BackendManifest::default(),
+            diagnostics: vec![],
+        };
+        let body = Expr::adt_ctor("Option", "Ghost", vec!["None", "Some"], Vec::new());
+        let global_init = GlobalInitPlan {
+            statics: vec![GlobalStatic {
+                name: "VALUE".to_string(),
+                ty: Some("Option".to_string()),
+                body: body.clone(),
+                dependencies: vec![],
+            }],
+            init_order: vec!["VALUE".to_string()],
+            diagnostics: vec![],
+        };
+
+        let lowered = lower_global_init_into_linked_wat(bundle, &global_init);
+
+        assert_eq!(
+            lowered.diagnostics,
+            vec![
+                BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
+                    static_name: "VALUE".to_string(),
+                    expr: format!("{body:?}"),
+                }
+            ]
+        );
+        assert!(!lowered.linked_wat.contains("global__VALUE"));
         assert!(!lowered.linked_wat.contains("(i32.const 0)"));
     }
 }
