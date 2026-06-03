@@ -33,6 +33,10 @@ pub enum GlobalInitDiagnostic {
         data: String,
         ctor: String,
     },
+    UnsupportedStaticInitializer {
+        static_name: String,
+        expr: String,
+    },
 }
 
 pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
@@ -80,7 +84,7 @@ pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
         .collect::<Vec<_>>();
 
     for static_value in &statics {
-        collect_invalid_static_adt_ctors(static_value, &mut diagnostics);
+        validate_static_initializer(static_value, &static_names, &mut diagnostics);
     }
 
     let mut graph = BTreeMap::<String, Vec<String>>::new();
@@ -106,128 +110,166 @@ pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
     }
 }
 
-fn collect_invalid_static_adt_ctors(
+fn validate_static_initializer(
     static_value: &GlobalStatic,
+    static_names: &BTreeSet<String>,
     diagnostics: &mut Vec<GlobalInitDiagnostic>,
 ) {
-    collect_invalid_static_adt_ctors_in_expr(&static_value.body, &static_value.name, diagnostics);
+    validate_static_initializer_expr(
+        &static_value.body,
+        &static_value.name,
+        static_names,
+        diagnostics,
+    );
 }
 
-fn collect_invalid_static_adt_ctors_in_expr(
+fn validate_static_initializer_expr(
     expr: &Expr,
     static_name: &str,
+    static_names: &BTreeSet<String>,
     diagnostics: &mut Vec<GlobalInitDiagnostic>,
-) {
+) -> bool {
     match expr {
+        Expr::Var(name) => static_names.contains(name),
+        Expr::Lit(_) => true,
         Expr::AdtCtor {
             data,
             ctor,
             variants,
             args,
         } => {
+            let mut supported = true;
             if !variants.iter().any(|variant| variant == ctor) {
                 diagnostics.push(GlobalInitDiagnostic::InvalidStaticAdtConstructor {
                     static_name: static_name.to_string(),
                     data: data.clone(),
                     ctor: ctor.clone(),
                 });
+                supported = false;
             }
             for arg in args {
-                collect_invalid_static_adt_ctors_in_expr(arg, static_name, diagnostics);
+                supported &=
+                    validate_static_initializer_expr(arg, static_name, static_names, diagnostics);
             }
-        }
-        Expr::Lambda { body, .. } => {
-            collect_invalid_static_adt_ctors_in_expr(body, static_name, diagnostics)
-        }
-        Expr::Call { callee, args } => {
-            collect_invalid_static_adt_ctors_in_expr(callee, static_name, diagnostics);
-            collect_invalid_static_adt_ctors_in_exprs(args, static_name, diagnostics);
-        }
-        Expr::Instantiate { callee, .. } => {
-            collect_invalid_static_adt_ctors_in_expr(callee, static_name, diagnostics)
+            supported
         }
         Expr::Tuple(fields) => {
-            collect_invalid_static_adt_ctors_in_exprs(fields, static_name, diagnostics)
+            validate_static_initializer_exprs(fields, static_name, static_names, diagnostics)
         }
-        Expr::Record(fields) => {
-            collect_invalid_static_adt_ctors_in_record_fields(fields, static_name, diagnostics)
-        }
+        Expr::Record(fields) => validate_static_initializer_record_fields(
+            fields,
+            static_name,
+            static_names,
+            diagnostics,
+        ),
         Expr::RecordUpdate { base, fields } => {
-            collect_invalid_static_adt_ctors_in_expr(base, static_name, diagnostics);
-            collect_invalid_static_adt_ctors_in_record_fields(fields, static_name, diagnostics);
+            validate_static_initializer_expr(base, static_name, static_names, diagnostics)
+                & validate_static_initializer_record_fields(
+                    fields,
+                    static_name,
+                    static_names,
+                    diagnostics,
+                )
         }
         Expr::Field { receiver, .. } => {
-            collect_invalid_static_adt_ctors_in_expr(receiver, static_name, diagnostics)
-        }
-        Expr::MethodCall { receiver, args, .. } => {
-            collect_invalid_static_adt_ctors_in_expr(receiver, static_name, diagnostics);
-            collect_invalid_static_adt_ctors_in_exprs(args, static_name, diagnostics);
-        }
-        Expr::Index { receiver, index } => {
-            collect_invalid_static_adt_ctors_in_expr(receiver, static_name, diagnostics);
-            collect_invalid_static_adt_ctors_in_expr(index, static_name, diagnostics);
+            validate_static_initializer_expr(receiver, static_name, static_names, diagnostics)
         }
         Expr::Range { start, end } => {
-            collect_invalid_static_adt_ctors_in_expr(start, static_name, diagnostics);
-            collect_invalid_static_adt_ctors_in_expr(end, static_name, diagnostics);
+            validate_static_initializer_expr(start, static_name, static_names, diagnostics)
+                & validate_static_initializer_expr(end, static_name, static_names, diagnostics)
         }
         Expr::Binary { lhs, rhs, .. } => {
-            collect_invalid_static_adt_ctors_in_expr(lhs, static_name, diagnostics);
-            collect_invalid_static_adt_ctors_in_expr(rhs, static_name, diagnostics);
+            validate_static_initializer_expr(lhs, static_name, static_names, diagnostics)
+                & validate_static_initializer_expr(rhs, static_name, static_names, diagnostics)
         }
         Expr::If {
             cond,
             then_branch,
             else_branch,
         } => {
-            collect_invalid_static_adt_ctors_in_expr(cond, static_name, diagnostics);
-            collect_invalid_static_adt_ctors_in_expr(then_branch, static_name, diagnostics);
-            collect_invalid_static_adt_ctors_in_expr(else_branch, static_name, diagnostics);
+            validate_static_initializer_expr(cond, static_name, static_names, diagnostics)
+                & validate_static_initializer_expr(
+                    then_branch,
+                    static_name,
+                    static_names,
+                    diagnostics,
+                )
+                & validate_static_initializer_expr(
+                    else_branch,
+                    static_name,
+                    static_names,
+                    diagnostics,
+                )
         }
         Expr::IfLet {
+            pattern: _,
             scrutinee,
             then_branch,
             else_branch,
-            ..
         } => {
-            collect_invalid_static_adt_ctors_in_expr(scrutinee, static_name, diagnostics);
-            collect_invalid_static_adt_ctors_in_expr(then_branch, static_name, diagnostics);
-            collect_invalid_static_adt_ctors_in_expr(else_branch, static_name, diagnostics);
+            validate_static_initializer_expr(scrutinee, static_name, static_names, diagnostics)
+                & validate_static_initializer_expr(
+                    then_branch,
+                    static_name,
+                    static_names,
+                    diagnostics,
+                )
+                & validate_static_initializer_expr(
+                    else_branch,
+                    static_name,
+                    static_names,
+                    diagnostics,
+                )
         }
         Expr::Match { scrutinee, arms } => {
-            collect_invalid_static_adt_ctors_in_expr(scrutinee, static_name, diagnostics);
+            let mut supported =
+                validate_static_initializer_expr(scrutinee, static_name, static_names, diagnostics);
             for MatchArm { body, .. } in arms {
-                collect_invalid_static_adt_ctors_in_expr(body, static_name, diagnostics);
+                supported &=
+                    validate_static_initializer_expr(body, static_name, static_names, diagnostics);
             }
+            supported
         }
         Expr::Nominal { expr, .. } => {
-            collect_invalid_static_adt_ctors_in_expr(expr, static_name, diagnostics)
+            validate_static_initializer_expr(expr, static_name, static_names, diagnostics)
         }
-        Expr::Reset { body, .. } | Expr::Shift { body, .. } => {
-            collect_invalid_static_adt_ctors_in_expr(body, static_name, diagnostics)
+        Expr::Lambda { .. }
+        | Expr::Call { .. }
+        | Expr::Instantiate { .. }
+        | Expr::MethodCall { .. }
+        | Expr::Index { .. }
+        | Expr::Reset { .. }
+        | Expr::Shift { .. } => {
+            diagnostics.push(GlobalInitDiagnostic::UnsupportedStaticInitializer {
+                static_name: static_name.to_string(),
+                expr: format!("{expr:?}"),
+            });
+            false
         }
-        Expr::Var(_) | Expr::Lit(_) => {}
     }
 }
 
-fn collect_invalid_static_adt_ctors_in_exprs(
+fn validate_static_initializer_exprs(
     exprs: &[Expr],
     static_name: &str,
+    static_names: &BTreeSet<String>,
     diagnostics: &mut Vec<GlobalInitDiagnostic>,
-) {
-    for expr in exprs {
-        collect_invalid_static_adt_ctors_in_expr(expr, static_name, diagnostics);
-    }
+) -> bool {
+    exprs.iter().fold(true, |supported, expr| {
+        validate_static_initializer_expr(expr, static_name, static_names, diagnostics) & supported
+    })
 }
 
-fn collect_invalid_static_adt_ctors_in_record_fields(
+fn validate_static_initializer_record_fields(
     fields: &[RecordField],
     static_name: &str,
+    static_names: &BTreeSet<String>,
     diagnostics: &mut Vec<GlobalInitDiagnostic>,
-) {
-    for field in fields {
-        collect_invalid_static_adt_ctors_in_expr(&field.value, static_name, diagnostics);
-    }
+) -> bool {
+    fields.iter().fold(true, |supported, field| {
+        validate_static_initializer_expr(&field.value, static_name, static_names, diagnostics)
+            & supported
+    })
 }
 
 fn topo_sort(graph: &BTreeMap<String, Vec<String>>) -> (Vec<String>, Vec<Vec<String>>) {

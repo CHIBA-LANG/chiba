@@ -149,6 +149,10 @@ pub enum ProgramDiagnostic {
         data: String,
         ctor: String,
     },
+    UnsupportedStaticInitializer {
+        static_name: String,
+        expr: String,
+    },
     MissingEntry,
     EntryHasParams {
         name: String,
@@ -915,6 +919,9 @@ impl From<GlobalInitDiagnostic> for ProgramDiagnostic {
                 data,
                 ctor,
             },
+            GlobalInitDiagnostic::UnsupportedStaticInitializer { static_name, expr } => {
+                ProgramDiagnostic::UnsupportedStaticInitializer { static_name, expr }
+            }
         }
     }
 }

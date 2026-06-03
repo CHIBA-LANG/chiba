@@ -1653,6 +1653,38 @@ fn global_init_rejects_unknown_adt_constructor_instead_of_faking_tag_zero() {
 }
 
 #[test]
+fn global_init_rejects_unsupported_initializer_instead_of_faking_i32_zero() {
+    let program = SourceProgram::new(vec![
+        def("helper", vec![], Expr::i64(9)),
+        static_value(
+            "VALUE",
+            Some("i64"),
+            Expr::call_args(Expr::var("helper"), Vec::new()),
+        ),
+        def("main", vec![], Expr::var("VALUE")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::UnsupportedStaticInitializer {
+            static_name: "VALUE".to_string(),
+            expr: "Call { callee: Var(\"helper\"), args: [] }".to_string(),
+        }]
+    );
+    assert!(!bundle.backend_link.linked_wat.contains("global__VALUE"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("unsupported static init"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__VALUE (mut i32) (i32.const 0)"));
+}
+
+#[test]
 fn global_init_lowers_adt_match_into_executable_initializer() {
     let program = SourceProgram::new(vec![
         static_value(
