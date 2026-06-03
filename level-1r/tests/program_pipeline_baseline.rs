@@ -117,8 +117,25 @@ fn typed_continuation_storage_call_returns_answer_type() {
     let output =
         chiba_level1r::compile_source_program_bundle("def main(k: contN (i64) -> bool) = k(1)")
             .expect("compile source");
+    let main = &output.program.defs[0].output;
 
-    assert_eq!(output.program.defs[0].output.typed.ty, Type::Bool);
+    assert_eq!(main.typed.ty, Type::Bool);
+    assert!(main.cps.to_string().contains("k(1,"));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::DynamicCallableTarget { target }
+                if target == "k"
+        )
+    }));
+    assert!(main.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "k" && args == &vec![chiba_level1r::core::CoreValue::I64(1)]
+        )
+    }));
+    assert!(main.core_validation.diagnostics.is_empty());
 }
 
 #[test]
