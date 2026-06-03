@@ -195,7 +195,10 @@ fn has_missing_projection(value: &CoreValue) -> bool {
                 CoreValue::Record { fields } if !fields.iter().any(|candidate| candidate.name == *field)
             ) || has_missing_projection(record)
         }
-        CoreValue::TupleField { tuple, .. } => has_missing_projection(tuple),
+        CoreValue::TupleField { tuple, field } => {
+            matches!(tuple.as_ref(), CoreValue::Tuple { .. } if tuple_field_value(tuple, field).is_none())
+                || has_missing_projection(tuple)
+        }
         CoreValue::Tuple { fields } => fields.iter().any(has_missing_projection),
         CoreValue::Record { fields } => fields
             .iter()
