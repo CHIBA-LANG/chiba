@@ -1,6 +1,8 @@
 use chiba_level1r::core::{CoreOp, LayoutKind};
 use chiba_level1r::template::{canonical_closed_row, ShapeType};
-use chiba_level1r::typed::{type_expr, RecordTypeField, Type, TypedExprKind};
+use chiba_level1r::typed::{
+    type_expr, type_expr_with_context, RecordTypeField, Type, TypeContext, TypeEnv, TypedExprKind,
+};
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -85,6 +87,40 @@ fn record_field_access_infers_type_and_validates_layout() {
         field: "y".to_string(),
     }));
     assert!(output.core_validation.diagnostics.is_empty());
+}
+
+#[test]
+fn record_field_callable_method_call_uses_field_return_type() {
+    let expr = Expr::method_call(
+        Expr::record(vec![("apply", Expr::lambda("x", Expr::i64(7)))]),
+        "apply",
+        Expr::i64(1),
+    );
+    let typed = type_expr(&expr);
+
+    assert_eq!(typed.ty, Type::I64);
+}
+
+#[test]
+fn nominal_field_callable_method_call_uses_field_return_type() {
+    let mut context = TypeContext::new();
+    context.insert_nominal_row(
+        "CallableBox",
+        vec![RecordTypeField {
+            name: "apply".to_string(),
+            ty: Type::Func(Box::new(Type::I64), Box::new(Type::Bool)),
+        }],
+    );
+    let mut env = TypeEnv::new();
+    env.insert("box".to_string(), Type::Nominal("CallableBox".to_string()));
+
+    let typed = type_expr_with_context(
+        &Expr::method_call(Expr::var("box"), "apply", Expr::i64(1)),
+        &env,
+        &context,
+    );
+
+    assert_eq!(typed.ty, Type::Bool);
 }
 
 #[test]
