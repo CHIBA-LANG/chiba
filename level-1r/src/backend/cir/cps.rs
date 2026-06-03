@@ -13,6 +13,10 @@ pub struct CpsProgram {
 pub enum CpsAtom {
     Var(String),
     Lit(Literal),
+    OperatorCallee {
+        protocol: String,
+        receiver: Box<CpsAtom>,
+    },
     FunLambda {
         param: String,
         k_param: String,
@@ -230,7 +234,10 @@ fn transform(
                             let w = ctx.fresh("w");
                             let kont_body = k(CpsAtom::Var(w.clone()), ctx);
                             CpsTerm::AppFun {
-                                func: CpsAtom::Var(format!("operator::{protocol}({receiver})")),
+                                func: CpsAtom::OperatorCallee {
+                                    protocol: protocol.to_string(),
+                                    receiver: Box::new(receiver),
+                                },
                                 args: vec![index],
                                 kont: CpsAtom::ContLambda {
                                     param: w,
@@ -285,7 +292,10 @@ fn transform(
                             let w = ctx.fresh("w");
                             let kont_body = k(CpsAtom::Var(w.clone()), ctx);
                             CpsTerm::AppFun {
-                                func: CpsAtom::Var(format!("{op_name}({lhs})")),
+                                func: CpsAtom::OperatorCallee {
+                                    protocol: op_name.clone(),
+                                    receiver: Box::new(lhs),
+                                },
                                 args: vec![rhs],
                                 kont: CpsAtom::ContLambda {
                                     param: w,
@@ -745,6 +755,9 @@ impl fmt::Display for CpsAtom {
             CpsAtom::Var(name) => write!(f, "{name}"),
             CpsAtom::Lit(Literal::I64(value)) => write!(f, "{value}"),
             CpsAtom::Lit(Literal::Bool(value)) => write!(f, "{value}"),
+            CpsAtom::OperatorCallee { protocol, receiver } => {
+                write!(f, "{protocol}({receiver})")
+            }
             CpsAtom::FunLambda {
                 param,
                 k_param,

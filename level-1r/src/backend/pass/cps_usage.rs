@@ -125,6 +125,7 @@ fn visit_term(term: &CpsTerm, facts: &mut CpsUsageFacts) {
 fn visit_atom(atom: &CpsAtom, facts: &mut CpsUsageFacts) {
     match atom {
         CpsAtom::Var(_) | CpsAtom::Lit(_) => {}
+        CpsAtom::OperatorCallee { receiver, .. } => visit_atom(receiver, facts),
         CpsAtom::FunLambda { param, body, .. } => {
             bump(&mut facts.function_lambdas, param);
             visit_term(body, facts);
@@ -214,6 +215,7 @@ fn count_atom_refs(atom: &CpsAtom, binder: &str, count: &mut UseCount) {
     match atom {
         CpsAtom::Var(name) if name == binder => *count = count.bump(),
         CpsAtom::Var(_) | CpsAtom::Lit(_) => {}
+        CpsAtom::OperatorCallee { receiver, .. } => count_atom_refs(receiver, binder, count),
         CpsAtom::FunLambda { body, .. } | CpsAtom::ContLambda { body, .. } => {
             count_term_refs(body, binder, count);
         }

@@ -3,7 +3,9 @@ use chiba_level1r::backend::{
     BackendCacheConfig, BackendDiagnostic, BackendExternImport, BackendLinkDiagnostic,
     BackendTarget,
 };
-use chiba_level1r::core::{CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue};
+use chiba_level1r::core::{
+    CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue, OperatorIntrinsic,
+};
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -419,10 +421,17 @@ fn backend_link_merges_artifacts_manifest_and_wat_deterministically() {
     );
     let second = emit_wasm_gc(
         &CoreProgram {
-            ops: vec![CoreOp::OperatorTarget {
-                protocol: "operator.add".to_string(),
-                target: "intrinsic::i64::add".to_string(),
-            }],
+            ops: vec![
+                CoreOp::OperatorTarget {
+                    protocol: "Add".to_string(),
+                    target: "operator::Add(x)".to_string(),
+                    intrinsic: Some(OperatorIntrinsic::I64Add),
+                },
+                CoreOp::TailCall {
+                    func: "operator::Add(x)".to_string(),
+                    args: vec![CoreValue::I64(1), CoreValue::I64(2)],
+                },
+            ],
             layouts: vec![],
             ownership: vec![],
             callable_storage: vec![],
@@ -440,15 +449,18 @@ fn backend_link_merges_artifacts_manifest_and_wat_deterministically() {
         .iter()
         .map(|entry| entry.final_symbol.as_str())
         .collect();
-    assert_eq!(symbols, vec!["intrinsic__i64__add", "math__add"]);
+    assert_eq!(symbols, vec!["math__add", "operator__Add_u28_x_u29_"]);
     assert!(bundle.linked_wat.contains(";; linked artifact 0"));
     assert!(bundle
         .linked_wat
-        .contains(";; symbol intrinsic__i64__add source=operator.add origin=L16Core"));
+        .contains(";; symbol operator__Add_u28_x_u29_ source=Add origin=L16Core"));
     assert!(bundle
         .linked_wat
         .contains(";; symbol math__add source=math.add origin=L16Core"));
-    assert!(!bundle.linked_wat.contains("(func $intrinsic__i64__add"));
+    assert!(bundle
+        .linked_wat
+        .contains("(func $operator__Add_u28_x_u29_"));
+    assert!(bundle.linked_wat.contains("i32.add"));
     assert!(!bundle.linked_wat.contains("(func $math__add"));
 }
 
@@ -570,6 +582,7 @@ fn backend_cache_key_is_stable_across_manifest_order() {
             ops: vec![CoreOp::OperatorTarget {
                 protocol: "operator.add".to_string(),
                 target: "a::target".to_string(),
+                intrinsic: None,
             }],
             layouts: vec![],
             ownership: vec![],

@@ -48,6 +48,7 @@ pub enum CoreOp {
     OperatorTarget {
         protocol: String,
         target: String,
+        intrinsic: Option<OperatorIntrinsic>,
     },
     StaticRowAccess {
         field: String,
@@ -97,6 +98,14 @@ pub enum CoreOp {
         env_params: Vec<String>,
         direct: bool,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OperatorIntrinsic {
+    I64Add,
+    I64Sub,
+    I64Mul,
+    I64Div,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -460,14 +469,10 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
         CpsTerm::Halt(atom) => lower_atom_value(atom, ops),
         CpsTerm::AppCont { value, .. } => lower_atom_value(value, ops),
         CpsTerm::AppFun { func, args, kont } => {
-            let func = render_atom(func);
-            ops.push(CoreOp::DynamicCallableTarget {
-                target: func.clone(),
-            });
-            ops.push(CoreOp::TailCall {
-                func,
-                args: args.iter().map(core_value).collect(),
-            });
+            let target = render_atom(func);
+            lower_callable_target(&target, func, ops);
+            let args = lower_call_args(func, args);
+            ops.push(CoreOp::TailCall { func: target, args });
             lower_continuation_atom(kont, continuations, ops);
         }
         CpsTerm::Prompt { multi, body } => {
@@ -536,6 +541,28 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                 lower_term(&arm.body, continuations, ops);
             }
         }
+    }
+}
+
+fn lower_call_args(func: &CpsAtom, args: &[CpsAtom]) -> Vec<CoreValue> {
+    match func {
+        CpsAtom::OperatorCallee { receiver, .. } => std::iter::once(core_value(receiver))
+            .chain(args.iter().map(core_value))
+            .collect(),
+        _ => args.iter().map(core_value).collect(),
+    }
+}
+
+fn lower_callable_target(target: &str, atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
+    match atom {
+        CpsAtom::OperatorCallee { protocol, .. } => ops.push(CoreOp::OperatorTarget {
+            protocol: protocol.clone(),
+            target: target.to_string(),
+            intrinsic: operator_intrinsic(protocol),
+        }),
+        _ => ops.push(CoreOp::DynamicCallableTarget {
+            target: target.to_string(),
+        }),
     }
 }
 
@@ -608,6 +635,7 @@ fn lower_specialization_ops(
                 } => ops.push(CoreOp::OperatorTarget {
                     protocol: protocol.clone(),
                     target: format!("{receiver}.{protocol}"),
+                    intrinsic: None,
                 }),
                 DischargedObligation::DynAdapter { contract } => {
                     let layout = layouts
@@ -639,6 +667,20 @@ fn lower_specialization_ops(
                 | DischargedObligation::Operator { receiver: None, .. } => {}
             }
         }
+    }
+}
+
+fn operator_intrinsic(protocol: &str) -> Option<OperatorIntrinsic> {
+    match protocol {
+        "operator::Add" => Some(OperatorIntrinsic::I64Add),
+        "operator::Sub" => Some(OperatorIntrinsic::I64Sub),
+        "operator::Mul" => Some(OperatorIntrinsic::I64Mul),
+        "operator::Div" => Some(OperatorIntrinsic::I64Div),
+        "op_add" => Some(OperatorIntrinsic::I64Add),
+        "op_sub" => Some(OperatorIntrinsic::I64Sub),
+        "op_mul" => Some(OperatorIntrinsic::I64Mul),
+        "op_div" => Some(OperatorIntrinsic::I64Div),
+        _ => None,
     }
 }
 
@@ -927,6 +969,9 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::Var(name) => name.clone(),
         CpsAtom::Lit(crate::ast::Literal::I64(value)) => value.to_string(),
         CpsAtom::Lit(crate::ast::Literal::Bool(value)) => value.to_string(),
+        CpsAtom::OperatorCallee { protocol, receiver } => {
+            format!("{protocol}({receiver})")
+        }
         CpsAtom::FunLambda { param, .. } => format!("lambda#{param}"),
         CpsAtom::ContLambda { param, .. } => format!("cont#{param}"),
         CpsAtom::Tuple { nominal, fields } => format!(
@@ -976,6 +1021,9 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
         CpsAtom::Lit(crate::ast::Literal::Bool(value)) => CoreValue::Bool(*value),
         CpsAtom::Var(name) if name == "Unit" || name == "unit" => CoreValue::Unit,
         CpsAtom::Var(name) => CoreValue::Var(name.clone()),
+        CpsAtom::OperatorCallee { .. } => CoreValue::Rendered {
+            debug: render_atom(atom),
+        },
         CpsAtom::Tuple { fields, .. } => CoreValue::Tuple {
             fields: fields.iter().map(core_value).collect(),
         },

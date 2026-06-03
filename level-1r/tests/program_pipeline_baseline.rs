@@ -188,19 +188,24 @@ fn interface_type_continuation_field_enters_callable_storage() {
 
     let bundle = compile_program_bundle(&program);
 
-    assert!(bundle.defs[0].output.core.callable_storage.iter().any(|fact| {
-        fact.subject == "type::RetryBox::retry"
-            && fact.kind == chiba_level1r::core::CallableStorageKind::ContNPackage
-            && fact.send == chiba_level1r::typed::SendColor::NotSend
-    }));
-    assert!(bundle.defs[0].output.render_visual().contains("callable-storage:"));
-    assert!(
-        bundle
-            .defs[0]
-            .output
-            .render_visual()
-            .contains("type::RetryBox::retry")
-    );
+    assert!(bundle.defs[0]
+        .output
+        .core
+        .callable_storage
+        .iter()
+        .any(|fact| {
+            fact.subject == "type::RetryBox::retry"
+                && fact.kind == chiba_level1r::core::CallableStorageKind::ContNPackage
+                && fact.send == chiba_level1r::typed::SendColor::NotSend
+        }));
+    assert!(bundle.defs[0]
+        .output
+        .render_visual()
+        .contains("callable-storage:"));
+    assert!(bundle.defs[0]
+        .output
+        .render_visual()
+        .contains("type::RetryBox::retry"));
 }
 
 #[test]
@@ -223,7 +228,7 @@ fn program_bundle_selects_main_and_links_def_artifacts() {
     assert!(bundle
         .backend_link
         .linked_wat
-        .contains("(func $main__def1 (export \"main\") (result i32)"));
+        .contains("(func $main (export \"main\") (result i32)"));
     assert!(bundle.backend_link.linked_wat.contains("i32.const 1"));
     assert!(bundle.backend_link.linked_wat.contains("i32.const 7"));
 }
@@ -554,6 +559,43 @@ def main(): i64 = 1 |> id",
         "tailcall_main",
     );
     assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "1");
+}
+
+#[test]
+fn source_pipe_placeholder_reuses_input_in_executable_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def add(x: i64, y: i64): i64 = x + y
+def main(): i64 = 2 |> add(_, _)",
+    )
+    .expect("compile source");
+    let bundle = &output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.backend_link.linked_wat
+    );
+    assert!(bundle.defs[1].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "add"
+                    && args == &vec![
+                        chiba_level1r::core::CoreValue::I64(2),
+                        chiba_level1r::core::CoreValue::I64(2)
+                    ]
+        )
+    }));
+    assert!(bundle.backend_link.linked_wat.contains("call $add"));
+
+    let callable_wat = export_func_for_test(
+        &bundle.backend_link.linked_wat,
+        "$chiba_tailcall_0",
+        "tailcall_main",
+    );
+    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "4");
 }
 
 #[test]

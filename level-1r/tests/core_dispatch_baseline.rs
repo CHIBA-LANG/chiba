@@ -60,6 +60,7 @@ fn operator_obligation_enters_core_as_method_protocol_target() {
     assert!(core.ops.contains(&CoreOp::OperatorTarget {
         protocol: "op_add".to_string(),
         target: "Vec2.op_add".to_string(),
+        intrinsic: None,
     }));
 }
 

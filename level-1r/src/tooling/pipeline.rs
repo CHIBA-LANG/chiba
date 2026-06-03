@@ -352,7 +352,10 @@ fn compile_expr_with_indexes_and_generics(
         &closure,
         &lambda_lift,
         &core,
-        &format!("{core_callable_storage:#?}", core_callable_storage = core.callable_storage),
+        &format!(
+            "{core_callable_storage:#?}",
+            core_callable_storage = core.callable_storage
+        ),
         &closure_core_usage,
         &closure_simplification,
         &usage_audit,
@@ -712,9 +715,9 @@ fn compile_program_defs(
                         names.clone(),
                         methods.clone(),
                         generics,
-                    params,
-                    return_type,
-                    receiver,
+                        params,
+                        return_type,
+                        receiver,
                         &type_context,
                         &type_aliases,
                     );
@@ -1033,6 +1036,10 @@ fn program_backend_artifacts(
     } else {
         BTreeSet::new()
     };
+    let mut def_name_counts = BTreeMap::new();
+    for def in defs {
+        *def_name_counts.entry(def.name.as_str()).or_insert(0usize) += 1;
+    }
     defs.iter()
         .enumerate()
         .map(|(index, def)| {
@@ -1041,16 +1048,21 @@ fn program_backend_artifacts(
             if is_entry {
                 entry_exported = true;
             }
-            if let Some(static_wat) = static_return_wat_from_fact(
-                &artifact,
-                &def_symbol(&def.name, index),
-                &static_names,
-                is_entry,
-            ) {
+            let symbol = def_symbol(
+                &def.name,
+                index,
+                def_name_counts
+                    .get(def.name.as_str())
+                    .copied()
+                    .unwrap_or_default(),
+            );
+            if let Some(static_wat) =
+                static_return_wat_from_fact(&artifact, &symbol, &static_names, is_entry)
+            {
                 artifact.wat = static_wat;
                 artifact.diagnostics.clear();
             }
-            artifact.wat = relabel_program_wat(&artifact, &def_symbol(&def.name, index), is_entry);
+            artifact.wat = relabel_program_wat(&artifact, &symbol, is_entry);
             artifact
         })
         .collect()
@@ -1075,20 +1087,34 @@ fn static_return_wat_from_fact(
 }
 
 fn relabel_program_wat(artifact: &BackendArtifact, symbol: &str, is_entry: bool) -> String {
-    let wat = &artifact.wat;
-    if is_entry {
-        wat.replace(
+    let mut wat = if is_entry {
+        artifact.wat.replace(
             "(func $main (export \"main\")",
             &format!("(func ${symbol} (export \"main\")"),
         )
     } else {
-        wat.replace("(func $main (export \"main\")", &format!("(func ${symbol}"))
+        artifact
+            .wat
+            .replace("(func $main (export \"main\")", &format!("(func ${symbol}"))
+    };
+    if !is_entry {
+        wat = wat.replace("(func $chiba_tailcall_0", &format!("(func ${symbol}"));
+        wat = wat.replace("(func $chiba_return_0", &format!("(func ${symbol}"));
+        wat = wat.replace(
+            "(func $chiba_tailcall_",
+            &format!("(func ${symbol}__chiba_tailcall_"),
+        );
+        wat = wat.replace(
+            "(func $chiba_return_",
+            &format!("(func ${symbol}__chiba_return_"),
+        );
     }
+    wat
 }
 
-fn def_symbol(name: &str, index: usize) -> String {
+fn def_symbol(name: &str, index: usize, name_count: usize) -> String {
     let base = sanitize_program_symbol(name);
-    if index == 0 {
+    if name_count <= 1 || index == 0 {
         base
     } else {
         format!("{base}__def{index}")

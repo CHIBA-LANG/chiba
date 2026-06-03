@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::core::{
-    CoreMatchArm, CoreOp, CorePattern, CoreProgram, CoreValidation, CoreValue, OwnershipDecision,
+    CoreMatchArm, CoreOp, CorePattern, CoreProgram, CoreValidation, CoreValue, OperatorIntrinsic,
+    OwnershipDecision,
 };
 use crate::symbol::encode_debug_symbol;
 
@@ -287,7 +288,9 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
                 pass_origin: "L16Core".to_string(),
                 ownership: ownership_for_subject(core, target),
             }),
-            CoreOp::OperatorTarget { protocol, target } => entries.push(BackendManifestEntry {
+            CoreOp::OperatorTarget {
+                protocol, target, ..
+            } => entries.push(BackendManifestEntry {
                 final_symbol: final_symbol(target),
                 source_debug_name: protocol.clone(),
                 pass_origin: "L16Core".to_string(),
@@ -511,12 +514,52 @@ fn render_wat(
             }
             CoreOp::DirectMethodTarget { .. }
             | CoreOp::DynamicCallableTarget { .. }
-            | CoreOp::OperatorTarget { .. }
             | CoreOp::LiftedFunction { .. } => {}
+            CoreOp::OperatorTarget {
+                protocol,
+                target,
+                intrinsic,
+            } => {
+                render_operator_intrinsic_wat(&mut wat, protocol, target, *intrinsic);
+            }
         }
     }
     wat.push_str(")\n");
     Ok(wat)
+}
+
+fn render_operator_intrinsic_wat(
+    wat: &mut String,
+    protocol: &str,
+    target: &str,
+    intrinsic: Option<OperatorIntrinsic>,
+) {
+    let Some(opcode) = operator_intrinsic_opcode(intrinsic) else {
+        return;
+    };
+    wat.push_str(&format!(
+        "  ;; operator-intrinsic protocol={} target={}\n",
+        escape_wat_comment(protocol),
+        escape_wat_comment(target)
+    ));
+    wat.push_str(&format!(
+        "  (func ${} (param $lhs i32) (param $rhs i32) (result i32)\n",
+        final_symbol(target)
+    ));
+    wat.push_str("    local.get $lhs\n");
+    wat.push_str("    local.get $rhs\n");
+    wat.push_str(&format!("    {opcode}\n"));
+    wat.push_str("  )\n");
+}
+
+fn operator_intrinsic_opcode(intrinsic: Option<OperatorIntrinsic>) -> Option<&'static str> {
+    match intrinsic {
+        Some(OperatorIntrinsic::I64Add) => Some("i32.add"),
+        Some(OperatorIntrinsic::I64Sub) => Some("i32.sub"),
+        Some(OperatorIntrinsic::I64Mul) => Some("i32.mul"),
+        Some(OperatorIntrinsic::I64Div) => Some("i32.div_s"),
+        None => None,
+    }
 }
 
 #[derive(Clone)]
