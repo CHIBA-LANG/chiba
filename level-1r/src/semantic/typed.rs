@@ -267,10 +267,7 @@ impl TypeContext {
                 .iter()
                 .enumerate()
                 .flat_map(|(index, field)| {
-                    let field_ty = match &ty {
-                        Type::Tuple(types) => types.get(index).cloned().unwrap_or(Type::Unknown),
-                        _ => Type::Unknown,
-                    };
+                    let field_ty = self.pattern_tuple_field_type(&ty, index);
                     self.pattern_bindings(field, field_ty, subject_data, substitutions)
                 })
                 .collect(),
@@ -312,6 +309,14 @@ impl TypeContext {
         match ty {
             Type::Record(fields) => field_type(fields, field).unwrap_or(Type::Unknown),
             _ => self.nominal_field_type(ty, field).unwrap_or(Type::Unknown),
+        }
+    }
+
+    fn pattern_tuple_field_type(&self, ty: &Type, index: usize) -> Type {
+        match ty {
+            Type::Tuple(fields) => fields.get(index).cloned().unwrap_or(Type::Unknown),
+            Type::Nominal(name) => tuple_intrinsic_field_type(name, index).unwrap_or(Type::Unknown),
+            _ => Type::Unknown,
         }
     }
 
@@ -668,6 +673,14 @@ fn tuple_field_type(receiver: &Type, name: &str) -> Option<Type> {
         return None;
     }
     fields.get(index - 1).cloned()
+}
+
+fn tuple_intrinsic_field_type(nominal: &str, index: usize) -> Option<Type> {
+    let (base, args) = parse_nominal_application(nominal)?;
+    if base != "Tuple" {
+        return None;
+    }
+    args.into_iter().map(type_name_to_type).nth(index)
 }
 
 fn record_field_type(receiver: &Type, name: &str) -> Option<Type> {

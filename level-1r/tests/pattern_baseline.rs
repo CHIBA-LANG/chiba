@@ -113,6 +113,32 @@ fn tuple_pattern_collects_nested_bindings_in_source_order() {
 }
 
 #[test]
+fn function_parameter_tuple_pattern_uses_tuple_type_arguments() {
+    let program = SourceProgram::new(vec![SourceItem::Def {
+        receiver: None,
+        generics: Vec::new(),
+        name: "first".to_string(),
+        visibility: Visibility::Public,
+        params: vec![ParamDecl::pattern(
+            Pattern::tuple(vec![Pattern::bind("head"), Pattern::bind("tail")]),
+            Some("Tuple[i64,bool]".to_string()),
+        )],
+        return_type: Some("i64".to_string()),
+        body: Expr::var("head"),
+    }]);
+
+    let output = compile_program_bundle(&program);
+    let first = &output.defs[0].output;
+
+    assert_eq!(
+        first.pattern.envs[0].bindings,
+        vec!["head".to_string(), "tail".to_string()]
+    );
+    assert_eq!(first.typed.ty, Type::I64);
+    assert_eq!(first.pattern.diagnostics, vec![]);
+}
+
+#[test]
 fn tuple_pattern_reports_duplicate_binding_once() {
     let output = compile_expr(&Expr::if_let(
         Pattern::tuple(vec![
