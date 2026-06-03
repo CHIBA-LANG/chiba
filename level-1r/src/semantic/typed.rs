@@ -368,11 +368,11 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
         }
         Expr::Call { callee, args } => {
             let callee = type_expr_with_context(callee, env, context);
-            let ty = call_result_type(&callee.ty);
             let args = args
                 .iter()
                 .map(|arg| type_expr_with_context(arg, env, context))
-                .collect();
+                .collect::<Vec<_>>();
+            let ty = call_result_type(&callee.ty, args.len());
             typed(
                 TypedExprKind::Call {
                     callee: Box::new(callee),
@@ -634,11 +634,15 @@ fn binary_result_type(lhs: &Type, rhs: &Type) -> Type {
     }
 }
 
-fn call_result_type(callee: &Type) -> Type {
-    match callee {
-        Type::Func(_, result) => result.as_ref().clone(),
-        _ => Type::Unknown,
+fn call_result_type(callee: &Type, arity: usize) -> Type {
+    let mut current = callee;
+    for _ in 0..arity {
+        match current {
+            Type::Func(_, result) => current = result,
+            _ => return Type::Unknown,
+        }
     }
+    current.clone()
 }
 
 fn field_callable_result_type(receiver: &Type, name: &str, context: &TypeContext) -> Type {
@@ -647,7 +651,7 @@ fn field_callable_result_type(receiver: &Type, name: &str, context: &TypeContext
     else {
         return Type::Unknown;
     };
-    call_result_type(&field_ty)
+    call_result_type(&field_ty, 1)
 }
 
 fn tuple_field_type(receiver: &Type, name: &str) -> Option<Type> {

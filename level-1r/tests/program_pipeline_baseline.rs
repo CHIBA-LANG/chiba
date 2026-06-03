@@ -75,6 +75,44 @@ fn program_typed_lambda_call_uses_function_return_type() {
 }
 
 #[test]
+fn typed_multi_arg_call_steps_through_curried_function_type() {
+    let mut env = chiba_level1r::typed::TypeEnv::new();
+    env.insert(
+        "f".to_string(),
+        Type::Func(
+            Box::new(Type::I64),
+            Box::new(Type::Func(Box::new(Type::Bool), Box::new(Type::I64))),
+        ),
+    );
+
+    let typed = chiba_level1r::typed::type_expr_with_context(
+        &Expr::call_args(Expr::var("f"), vec![Expr::i64(1), Expr::bool(true)]),
+        &env,
+        &chiba_level1r::typed::TypeContext::new(),
+    );
+
+    assert_eq!(typed.ty, Type::I64);
+}
+
+#[test]
+fn typed_partial_call_preserves_remaining_function_type() {
+    let remaining = Type::Func(Box::new(Type::Bool), Box::new(Type::I64));
+    let mut env = chiba_level1r::typed::TypeEnv::new();
+    env.insert(
+        "f".to_string(),
+        Type::Func(Box::new(Type::I64), Box::new(remaining.clone())),
+    );
+
+    let typed = chiba_level1r::typed::type_expr_with_context(
+        &Expr::call(Expr::var("f"), Expr::i64(1)),
+        &env,
+        &chiba_level1r::typed::TypeContext::new(),
+    );
+
+    assert_eq!(typed.ty, remaining);
+}
+
+#[test]
 fn program_bundle_selects_main_and_links_def_artifacts() {
     let program = SourceProgram::new(vec![
         def("helper", vec![], Expr::i64(1)),
