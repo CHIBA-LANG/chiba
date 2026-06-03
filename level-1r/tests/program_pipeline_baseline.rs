@@ -1625,6 +1625,34 @@ fn global_init_lowers_adt_constructor_tag_into_global_initializer() {
 }
 
 #[test]
+fn global_init_rejects_unknown_adt_constructor_instead_of_faking_tag_zero() {
+    let program = SourceProgram::new(vec![
+        static_value(
+            "CHOICE",
+            Some("Option"),
+            Expr::adt_ctor("Option", "Ghost", vec!["None", "Some"], vec![]),
+        ),
+        def("main", vec![], Expr::var("CHOICE")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::InvalidStaticAdtConstructor {
+            static_name: "CHOICE".to_string(),
+            data: "Option".to_string(),
+            ctor: "Ghost".to_string(),
+        }]
+    );
+    assert!(!bundle.backend_link.linked_wat.contains("global__CHOICE"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__CHOICE (mut i32) (i32.const 0)"));
+}
+
+#[test]
 fn global_init_lowers_adt_match_into_executable_initializer() {
     let program = SourceProgram::new(vec![
         static_value(

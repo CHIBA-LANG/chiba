@@ -116,17 +116,44 @@ pub struct ProgramDefOutput {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProgramDiagnostic {
-    DuplicateDef { name: String },
-    DuplicateType { name: String },
-    DuplicateTypeField { type_name: String, field: String },
-    DuplicateData { name: String },
-    DuplicateConstructor { name: String },
-    DuplicateTopLevelName { name: String },
-    DuplicateStatic { name: String },
-    StaticFunctionNameConflict { name: String },
-    StaticInitCycle { cycle: Vec<String> },
+    DuplicateDef {
+        name: String,
+    },
+    DuplicateType {
+        name: String,
+    },
+    DuplicateTypeField {
+        type_name: String,
+        field: String,
+    },
+    DuplicateData {
+        name: String,
+    },
+    DuplicateConstructor {
+        name: String,
+    },
+    DuplicateTopLevelName {
+        name: String,
+    },
+    DuplicateStatic {
+        name: String,
+    },
+    StaticFunctionNameConflict {
+        name: String,
+    },
+    StaticInitCycle {
+        cycle: Vec<String>,
+    },
+    InvalidStaticAdtConstructor {
+        static_name: String,
+        data: String,
+        ctor: String,
+    },
     MissingEntry,
-    EntryHasParams { name: String, params: Vec<String> },
+    EntryHasParams {
+        name: String,
+        params: Vec<String>,
+    },
 }
 
 pub fn compile_expr(expr: &Expr) -> CompileOutput {
@@ -879,6 +906,15 @@ impl From<GlobalInitDiagnostic> for ProgramDiagnostic {
             GlobalInitDiagnostic::StaticInitCycle { cycle } => {
                 ProgramDiagnostic::StaticInitCycle { cycle }
             }
+            GlobalInitDiagnostic::InvalidStaticAdtConstructor {
+                static_name,
+                data,
+                ctor,
+            } => ProgramDiagnostic::InvalidStaticAdtConstructor {
+                static_name,
+                data,
+                ctor,
+            },
         }
     }
 }
@@ -897,11 +933,15 @@ fn program_backend_artifacts(
     global_init: &GlobalInitPlan,
 ) -> Vec<BackendArtifact> {
     let mut entry_exported = false;
-    let static_names = global_init
-        .statics
-        .iter()
-        .map(|static_value| static_value.name.as_str())
-        .collect::<BTreeSet<_>>();
+    let static_names = if global_init.diagnostics.is_empty() {
+        global_init
+            .statics
+            .iter()
+            .map(|static_value| static_value.name.as_str())
+            .collect::<BTreeSet<_>>()
+    } else {
+        BTreeSet::new()
+    };
     defs.iter()
         .enumerate()
         .map(|(index, def)| {
@@ -961,7 +1001,10 @@ fn lower_global_init_into_linked_wat(
     mut bundle: BackendLinkedBundle,
     global_init: &GlobalInitPlan,
 ) -> BackendLinkedBundle {
-    if !bundle.diagnostics.is_empty() || global_init.statics.is_empty() {
+    if !bundle.diagnostics.is_empty()
+        || !global_init.diagnostics.is_empty()
+        || global_init.statics.is_empty()
+    {
         return bundle;
     }
     let Some(body) = bundle.linked_wat.strip_prefix("(module\n") else {

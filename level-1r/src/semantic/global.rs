@@ -19,9 +19,20 @@ pub struct GlobalStatic {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GlobalInitDiagnostic {
-    DuplicateStatic { name: String },
-    StaticFunctionNameConflict { name: String },
-    StaticInitCycle { cycle: Vec<String> },
+    DuplicateStatic {
+        name: String,
+    },
+    StaticFunctionNameConflict {
+        name: String,
+    },
+    StaticInitCycle {
+        cycle: Vec<String>,
+    },
+    InvalidStaticAdtConstructor {
+        static_name: String,
+        data: String,
+        ctor: String,
+    },
 }
 
 pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
@@ -68,6 +79,10 @@ pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
         })
         .collect::<Vec<_>>();
 
+    for static_value in &statics {
+        collect_invalid_static_adt_ctors(static_value, &mut diagnostics);
+    }
+
     let mut graph = BTreeMap::<String, Vec<String>>::new();
     for static_value in &statics {
         let deps = graph.entry(static_value.name.clone()).or_default();
@@ -88,6 +103,130 @@ pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
         statics,
         init_order,
         diagnostics,
+    }
+}
+
+fn collect_invalid_static_adt_ctors(
+    static_value: &GlobalStatic,
+    diagnostics: &mut Vec<GlobalInitDiagnostic>,
+) {
+    collect_invalid_static_adt_ctors_in_expr(&static_value.body, &static_value.name, diagnostics);
+}
+
+fn collect_invalid_static_adt_ctors_in_expr(
+    expr: &Expr,
+    static_name: &str,
+    diagnostics: &mut Vec<GlobalInitDiagnostic>,
+) {
+    match expr {
+        Expr::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => {
+            if !variants.iter().any(|variant| variant == ctor) {
+                diagnostics.push(GlobalInitDiagnostic::InvalidStaticAdtConstructor {
+                    static_name: static_name.to_string(),
+                    data: data.clone(),
+                    ctor: ctor.clone(),
+                });
+            }
+            for arg in args {
+                collect_invalid_static_adt_ctors_in_expr(arg, static_name, diagnostics);
+            }
+        }
+        Expr::Lambda { body, .. } => {
+            collect_invalid_static_adt_ctors_in_expr(body, static_name, diagnostics)
+        }
+        Expr::Call { callee, args } => {
+            collect_invalid_static_adt_ctors_in_expr(callee, static_name, diagnostics);
+            collect_invalid_static_adt_ctors_in_exprs(args, static_name, diagnostics);
+        }
+        Expr::Instantiate { callee, .. } => {
+            collect_invalid_static_adt_ctors_in_expr(callee, static_name, diagnostics)
+        }
+        Expr::Tuple(fields) => {
+            collect_invalid_static_adt_ctors_in_exprs(fields, static_name, diagnostics)
+        }
+        Expr::Record(fields) => {
+            collect_invalid_static_adt_ctors_in_record_fields(fields, static_name, diagnostics)
+        }
+        Expr::RecordUpdate { base, fields } => {
+            collect_invalid_static_adt_ctors_in_expr(base, static_name, diagnostics);
+            collect_invalid_static_adt_ctors_in_record_fields(fields, static_name, diagnostics);
+        }
+        Expr::Field { receiver, .. } => {
+            collect_invalid_static_adt_ctors_in_expr(receiver, static_name, diagnostics)
+        }
+        Expr::MethodCall { receiver, args, .. } => {
+            collect_invalid_static_adt_ctors_in_expr(receiver, static_name, diagnostics);
+            collect_invalid_static_adt_ctors_in_exprs(args, static_name, diagnostics);
+        }
+        Expr::Index { receiver, index } => {
+            collect_invalid_static_adt_ctors_in_expr(receiver, static_name, diagnostics);
+            collect_invalid_static_adt_ctors_in_expr(index, static_name, diagnostics);
+        }
+        Expr::Range { start, end } => {
+            collect_invalid_static_adt_ctors_in_expr(start, static_name, diagnostics);
+            collect_invalid_static_adt_ctors_in_expr(end, static_name, diagnostics);
+        }
+        Expr::Binary { lhs, rhs, .. } => {
+            collect_invalid_static_adt_ctors_in_expr(lhs, static_name, diagnostics);
+            collect_invalid_static_adt_ctors_in_expr(rhs, static_name, diagnostics);
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_invalid_static_adt_ctors_in_expr(cond, static_name, diagnostics);
+            collect_invalid_static_adt_ctors_in_expr(then_branch, static_name, diagnostics);
+            collect_invalid_static_adt_ctors_in_expr(else_branch, static_name, diagnostics);
+        }
+        Expr::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_invalid_static_adt_ctors_in_expr(scrutinee, static_name, diagnostics);
+            collect_invalid_static_adt_ctors_in_expr(then_branch, static_name, diagnostics);
+            collect_invalid_static_adt_ctors_in_expr(else_branch, static_name, diagnostics);
+        }
+        Expr::Match { scrutinee, arms } => {
+            collect_invalid_static_adt_ctors_in_expr(scrutinee, static_name, diagnostics);
+            for MatchArm { body, .. } in arms {
+                collect_invalid_static_adt_ctors_in_expr(body, static_name, diagnostics);
+            }
+        }
+        Expr::Nominal { expr, .. } => {
+            collect_invalid_static_adt_ctors_in_expr(expr, static_name, diagnostics)
+        }
+        Expr::Reset { body, .. } | Expr::Shift { body, .. } => {
+            collect_invalid_static_adt_ctors_in_expr(body, static_name, diagnostics)
+        }
+        Expr::Var(_) | Expr::Lit(_) => {}
+    }
+}
+
+fn collect_invalid_static_adt_ctors_in_exprs(
+    exprs: &[Expr],
+    static_name: &str,
+    diagnostics: &mut Vec<GlobalInitDiagnostic>,
+) {
+    for expr in exprs {
+        collect_invalid_static_adt_ctors_in_expr(expr, static_name, diagnostics);
+    }
+}
+
+fn collect_invalid_static_adt_ctors_in_record_fields(
+    fields: &[RecordField],
+    static_name: &str,
+    diagnostics: &mut Vec<GlobalInitDiagnostic>,
+) {
+    for field in fields {
+        collect_invalid_static_adt_ctors_in_expr(&field.value, static_name, diagnostics);
     }
 }
 
