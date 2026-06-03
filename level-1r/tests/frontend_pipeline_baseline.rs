@@ -1860,7 +1860,15 @@ fn frontend_parses_lambda_closure_surface_to_lifted_function() {
     assert_eq!(main.lambda_lift.functions.len(), 1);
     assert_eq!(main.lambda_lift.functions[0].source, "closure::x");
     assert!(main.lambda_lift.functions[0].direct);
-    assert!(main.backend.wat.contains("(func $lift__0000__closure__x"));
+    assert_eq!(
+        main.backend.diagnostics,
+        vec![
+            chiba_level1r::backend::BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: "lambda#x".to_string(),
+            }
+        ]
+    );
+    assert_eq!(main.backend.wat, "");
 }
 
 #[test]

@@ -180,6 +180,11 @@ fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic>
                 value: value.debug_name(),
             })
         }
+        CoreOp::ReturnValue(value) if contains_rendered_value(value) => {
+            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: value.debug_name(),
+            })
+        }
         CoreOp::ReturnBranch {
             cond,
             then_value,
@@ -191,7 +196,8 @@ fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic>
                     || has_missing_projection(value)
                     || contains_range_value(value)
                     || returns_tuple_value(value)
-                    || returns_record_value(value))
+                    || returns_record_value(value)
+                    || contains_rendered_value(value))
                 .then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
                     value: value.debug_name(),
                 })
@@ -320,6 +326,23 @@ fn returns_record_value(value: &CoreValue) -> bool {
         | CoreValue::Bool(_)
         | CoreValue::Var(_)
         | CoreValue::Rendered { .. } => false,
+    }
+}
+
+fn contains_rendered_value(value: &CoreValue) -> bool {
+    match value {
+        CoreValue::Rendered { .. } => true,
+        CoreValue::Tuple { fields } => fields.iter().any(contains_rendered_value),
+        CoreValue::TupleField { tuple, .. } => contains_rendered_value(tuple),
+        CoreValue::Record { fields } => fields
+            .iter()
+            .any(|field| contains_rendered_value(&field.value)),
+        CoreValue::RecordField { record, .. } => contains_rendered_value(record),
+        CoreValue::Adt { args, .. } => args.iter().any(contains_rendered_value),
+        CoreValue::Range { start, end } => {
+            contains_rendered_value(start) || contains_rendered_value(end)
+        }
+        CoreValue::Unit | CoreValue::I64(_) | CoreValue::Bool(_) | CoreValue::Var(_) => false,
     }
 }
 

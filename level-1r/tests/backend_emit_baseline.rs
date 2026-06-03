@@ -34,14 +34,16 @@ fn backend_refuses_to_emit_when_core_validation_failed() {
 }
 
 #[test]
-fn backend_emits_wasm_gc_wat_and_manifest_for_lifted_symbols() {
+fn backend_emits_lifted_symbol_manifest_for_lambda_surface() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
 
-    assert_eq!(output.backend.diagnostics, vec![]);
-    assert!(output.backend.wat.starts_with("(module\n"));
-    assert!(output.backend.wat.contains("(func $lift__0000__closure__x"));
-    assert!(output.backend.wat.contains("source=closure::x"));
-    assert!(output.backend.wat.contains("origin=L15LambdaLift"));
+    assert_eq!(
+        output.backend.diagnostics,
+        vec![BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: "lambda#x".to_string(),
+        }]
+    );
+    assert_eq!(output.backend.wat, "");
 
     let entry = output
         .backend
@@ -231,6 +233,28 @@ fn backend_rejects_record_return_instead_of_faking_i32_zero() {
 }
 
 #[test]
+fn backend_rejects_rendered_return_instead_of_faking_i32_zero() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::Rendered {
+            debug: "opaque-debug-value".to_string(),
+        })],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(
+        artifact.diagnostics,
+        vec![BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: "opaque-debug-value".to_string(),
+        }]
+    );
+    assert_eq!(artifact.wat, "");
+}
+
+#[test]
 fn backend_rejects_unknown_adt_constructor_return_instead_of_faking_tag_zero() {
     let core = CoreProgram {
         ops: vec![CoreOp::ReturnValue(CoreValue::Adt {
@@ -269,13 +293,10 @@ fn backend_rejects_structural_core_return_instead_of_debug_comment_fake_wat() {
         }]
     );
     assert_eq!(output.backend.wat, "");
-    assert!(output
-        .core
-        .ops
-        .contains(&CoreOp::RecordConstruct {
-            layout: "record::x+y".to_string(),
-            fields: vec!["x".to_string(), "y".to_string()],
-        }));
+    assert!(output.core.ops.contains(&CoreOp::RecordConstruct {
+        layout: "record::x+y".to_string(),
+        fields: vec!["x".to_string(), "y".to_string()],
+    }));
 }
 
 #[test]
@@ -404,8 +425,11 @@ fn backend_utf8_final_symbols_are_encoded_without_collision() {
 fn pipeline_records_backend_link_artifact() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
 
-    assert_eq!(output.backend_link.diagnostics, vec![]);
-    assert!(output.backend_link.linked_wat.starts_with("(module\n"));
+    assert_eq!(
+        output.backend_link.diagnostics,
+        vec![BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index: 0 }]
+    );
+    assert_eq!(output.backend_link.linked_wat, "");
     assert_eq!(
         output
             .backend_link
