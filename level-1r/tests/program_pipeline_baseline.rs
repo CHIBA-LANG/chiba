@@ -523,6 +523,40 @@ fn program_literal_arg_tailcall_lowers_to_executable_direct_call_wat() {
 }
 
 #[test]
+fn source_pipe_default_call_lowers_to_executable_direct_call_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def id(x: i64): i64 = x
+def main(): i64 = 1 |> id",
+    )
+    .expect("compile source");
+    let bundle = &output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "backend link diagnostics: {:?}\nwat:\n{}",
+        bundle.backend_link.diagnostics,
+        bundle.backend_link.linked_wat
+    );
+    assert!(bundle.defs[1].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::TailCall { func, args }
+                if func == "id"
+                    && args == &vec![chiba_level1r::core::CoreValue::I64(1)]
+        )
+    }));
+    assert!(bundle.backend_link.linked_wat.contains("call $id"));
+
+    let callable_wat = export_func_for_test(
+        &bundle.backend_link.linked_wat,
+        "$chiba_tailcall_0",
+        "tailcall_main",
+    );
+    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "1");
+}
+
+#[test]
 fn program_param_branch_lowers_to_executable_wat() {
     let program = SourceProgram::new(vec![
         def(
