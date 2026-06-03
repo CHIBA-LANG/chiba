@@ -474,8 +474,8 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             let args = args
                 .iter()
                 .map(|arg| type_expr_with_context(arg, env, context))
-                .collect();
-            let ty = field_callable_result_type(&receiver.ty, name, context);
+                .collect::<Vec<_>>();
+            let ty = field_callable_result_type(&receiver.ty, name, args.len(), context);
             typed(
                 TypedExprKind::MethodCall {
                     receiver: Box::new(receiver),
@@ -645,13 +645,18 @@ fn call_result_type(callee: &Type, arity: usize) -> Type {
     current.clone()
 }
 
-fn field_callable_result_type(receiver: &Type, name: &str, context: &TypeContext) -> Type {
+fn field_callable_result_type(
+    receiver: &Type,
+    name: &str,
+    arity: usize,
+    context: &TypeContext,
+) -> Type {
     let Some(field_ty) =
         record_field_type(receiver, name).or_else(|| context.nominal_field_type(receiver, name))
     else {
         return Type::Unknown;
     };
-    call_result_type(&field_ty, 1)
+    call_result_type(&field_ty, arity)
 }
 
 fn tuple_field_type(receiver: &Type, name: &str) -> Option<Type> {

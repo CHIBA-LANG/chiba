@@ -102,6 +102,54 @@ fn record_field_callable_method_call_uses_field_return_type() {
 }
 
 #[test]
+fn record_field_callable_method_call_steps_through_curried_function_type() {
+    let mut env = TypeEnv::new();
+    env.insert(
+        "record".to_string(),
+        Type::Record(vec![RecordTypeField {
+            name: "apply".to_string(),
+            ty: Type::Func(
+                Box::new(Type::I64),
+                Box::new(Type::Func(Box::new(Type::Bool), Box::new(Type::I64))),
+            ),
+        }]),
+    );
+
+    let typed = type_expr_with_context(
+        &Expr::method_call_args(
+            Expr::var("record"),
+            "apply",
+            vec![Expr::i64(1), Expr::bool(true)],
+        ),
+        &env,
+        &TypeContext::new(),
+    );
+
+    assert_eq!(typed.ty, Type::I64);
+}
+
+#[test]
+fn record_field_callable_method_call_partial_application_keeps_remaining_function_type() {
+    let remaining = Type::Func(Box::new(Type::Bool), Box::new(Type::I64));
+    let mut env = TypeEnv::new();
+    env.insert(
+        "record".to_string(),
+        Type::Record(vec![RecordTypeField {
+            name: "apply".to_string(),
+            ty: Type::Func(Box::new(Type::I64), Box::new(remaining.clone())),
+        }]),
+    );
+
+    let typed = type_expr_with_context(
+        &Expr::method_call(Expr::var("record"), "apply", Expr::i64(1)),
+        &env,
+        &TypeContext::new(),
+    );
+
+    assert_eq!(typed.ty, remaining);
+}
+
+#[test]
 fn nominal_field_callable_method_call_uses_field_return_type() {
     let mut context = TypeContext::new();
     context.insert_nominal_row(
