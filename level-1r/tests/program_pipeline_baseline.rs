@@ -2,6 +2,7 @@ use chiba_level1r::ast::{
     DataDecl, DataVariant, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
     TypeDecl, TypeField, UseDecl, Visibility,
 };
+use chiba_level1r::pattern::PatternDiagnostic;
 use chiba_level1r::typed::{Type, TypedExprKind};
 use chiba_level1r::{
     build_interface_summary, compile_program, compile_program_bundle, project_surface_many, Expr,
@@ -999,6 +1000,31 @@ def unwrap_or_zero(None: Option[i64]): i64 = 0",
     assert_eq!(output.program.defs[0].output.typed.ty, Type::I64);
     assert_eq!(output.program.defs[0].output.pattern.matches.len(), 1);
     assert!(output.program.defs[0].output.pattern.matches[0].exhaustive);
+}
+
+#[test]
+fn source_non_exhaustive_match_reaches_pattern_diagnostic_and_visual() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main(flag: bool): i64 = match flag {
+true => 1
+}",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert_eq!(main.pattern.matches.len(), 1);
+    assert!(!main.pattern.matches[0].exhaustive);
+    assert_eq!(
+        main.pattern.diagnostics,
+        vec![PatternDiagnostic::NonExhaustiveMatch {
+            scrutinee_type: Type::Bool,
+            missing: vec![chiba_level1r::ast::Pattern::lit_bool(false)],
+        }]
+    );
+    let visual = main.render_visual();
+    assert!(visual.contains("pattern:"));
+    assert!(visual.contains("NonExhaustiveMatch"));
+    assert!(visual.contains("Bool"));
 }
 
 #[test]
