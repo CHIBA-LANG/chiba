@@ -155,6 +155,11 @@ pub fn emit_wasm_gc_with_params(
 
 fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic> {
     core.ops.iter().find_map(|op| match op {
+        CoreOp::ReturnValue(value) if has_missing_projection(value) => {
+            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: value.debug_name(),
+            })
+        }
         CoreOp::ReturnValue(value) if contains_range_value(value) => {
             Some(BackendDiagnostic::UnsupportedI32ReturnValue {
                 value: value.debug_name(),
@@ -166,9 +171,12 @@ fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic>
             else_value,
         } => [cond, then_value, else_value]
             .into_iter()
-            .find(|value| contains_range_value(value))
-            .map(|value| BackendDiagnostic::UnsupportedI32ReturnValue {
-                value: value.debug_name(),
+            .find_map(|value| {
+                (has_missing_projection(value) || contains_range_value(value)).then(|| {
+                    BackendDiagnostic::UnsupportedI32ReturnValue {
+                        value: value.debug_name(),
+                    }
+                })
             }),
         CoreOp::ReturnMatch { scrutinee, .. } if contains_range_value(scrutinee) => {
             Some(BackendDiagnostic::UnsupportedI32ReturnValue {
@@ -177,6 +185,31 @@ fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic>
         }
         _ => None,
     })
+}
+
+fn has_missing_projection(value: &CoreValue) -> bool {
+    match value {
+        CoreValue::RecordField { record, field } => {
+            matches!(
+                record.as_ref(),
+                CoreValue::Record { fields } if !fields.iter().any(|candidate| candidate.name == *field)
+            ) || has_missing_projection(record)
+        }
+        CoreValue::TupleField { tuple, .. } => has_missing_projection(tuple),
+        CoreValue::Tuple { fields } => fields.iter().any(has_missing_projection),
+        CoreValue::Record { fields } => fields
+            .iter()
+            .any(|field| has_missing_projection(&field.value)),
+        CoreValue::Adt { args, .. } => args.iter().any(has_missing_projection),
+        CoreValue::Range { start, end } => {
+            has_missing_projection(start) || has_missing_projection(end)
+        }
+        CoreValue::Unit
+        | CoreValue::I64(_)
+        | CoreValue::Bool(_)
+        | CoreValue::Var(_)
+        | CoreValue::Rendered { .. } => false,
+    }
 }
 
 fn contains_range_value(value: &CoreValue) -> bool {
