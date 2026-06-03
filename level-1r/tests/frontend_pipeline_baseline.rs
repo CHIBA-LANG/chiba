@@ -297,7 +297,7 @@ def main() = helper(2)",
         .program
         .backend_link
         .linked_wat
-        .contains("(func $main__def1 (export \"main\") (result i32)"));
+        .contains(";; tailcall helper args=[2]"));
     assert!(output.program.defs[0]
         .output
         .cps
@@ -716,7 +716,7 @@ def main() = TWO",
 
 #[test]
 fn frontend_parses_call_before_infix_and_reaches_cps_shape() {
-    let parsed = parse_source_program("def main() = f(x) + 1").expect("parse");
+    let parsed = parse_source_program("def main(x) = f(x) + 1").expect("parse");
 
     match &parsed.program.items[0] {
         SourceItem::Def { body, .. } => {

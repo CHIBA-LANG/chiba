@@ -957,6 +957,15 @@ fn program_backend_artifacts(
             if is_entry {
                 entry_exported = true;
             }
+            if let Some(static_wat) = static_return_wat_from_fact(
+                &artifact,
+                &def_symbol(&def.name, index),
+                &static_names,
+                is_entry,
+            ) {
+                artifact.wat = static_wat;
+                artifact.diagnostics.clear();
+            }
             artifact.wat = relabel_program_wat(
                 &artifact,
                 &def_symbol(&def.name, index),
@@ -966,6 +975,24 @@ fn program_backend_artifacts(
             artifact
         })
         .collect()
+}
+
+fn static_return_wat_from_fact(
+    artifact: &BackendArtifact,
+    symbol: &str,
+    static_names: &BTreeSet<&str>,
+    is_entry: bool,
+) -> Option<String> {
+    let Some(CoreValue::Var(name)) = artifact.return_value.as_ref() else {
+        return None;
+    };
+    if !is_entry || !static_names.contains(name.as_str()) {
+        return None;
+    }
+    Some(format!(
+        "(module\n  (func ${symbol} (export \"main\") (result i32)\n    global.get ${}\n  )\n)\n",
+        global_symbol(name)
+    ))
 }
 
 fn relabel_program_wat(

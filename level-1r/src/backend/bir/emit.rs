@@ -137,7 +137,7 @@ pub fn emit_wasm_gc_with_params(
         };
     }
 
-    if let Some(diagnostic) = unsupported_i32_return_value(core) {
+    if let Some(diagnostic) = unsupported_i32_return_value(core, params) {
         return BackendArtifact {
             target: BackendTarget::WasmGc,
             wat: String::new(),
@@ -157,196 +157,95 @@ pub fn emit_wasm_gc_with_params(
     }
 }
 
-fn unsupported_i32_return_value(core: &CoreProgram) -> Option<BackendDiagnostic> {
-    core.ops.iter().find_map(|op| match op {
-        CoreOp::ReturnValue(value) if has_invalid_adt_ctor(value) => {
-            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
-                value: value.debug_name(),
-            })
+fn unsupported_i32_return_value(
+    core: &CoreProgram,
+    params: &[String],
+) -> Option<BackendDiagnostic> {
+    let env = RenderEnv::new(params);
+    core.ops
+        .iter()
+        .enumerate()
+        .find_map(|(index, op)| match op {
+            CoreOp::ReturnValue(value)
+                if return_value_is_tailcall_result(core, index, value, &env) =>
+            {
+                None
+            }
+            CoreOp::ReturnValue(value) => unsupported_i32_value(value, &env),
+            CoreOp::ReturnBranch {
+                cond,
+                then_value,
+                else_value,
+            } => [cond, then_value, else_value]
+                .into_iter()
+                .find_map(|value| unsupported_i32_value(value, &env)),
+            CoreOp::ReturnMatch { scrutinee, arms } => unsupported_i32_match(scrutinee, arms, &env),
+            CoreOp::TailCall { args, .. } => {
+                args.iter().find_map(|arg| unsupported_i32_value(arg, &env))
+            }
+            _ => None,
+        })
+}
+
+fn return_value_is_tailcall_result(
+    core: &CoreProgram,
+    index: usize,
+    value: &CoreValue,
+    env: &RenderEnv,
+) -> bool {
+    let CoreValue::Var(_) = value else {
+        return false;
+    };
+    matches!(
+        index.checked_sub(1).and_then(|previous| core.ops.get(previous)),
+        Some(CoreOp::TailCall { args, .. })
+            if args.iter().all(|arg| core_value_is_renderable_i32(arg, env))
+    )
+}
+
+fn unsupported_i32_value(value: &CoreValue, env: &RenderEnv) -> Option<BackendDiagnostic> {
+    (!core_value_is_renderable_i32(value, env)).then(|| {
+        BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: value.debug_name(),
         }
-        CoreOp::ReturnValue(value) if has_missing_projection(value) => {
-            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
-                value: value.debug_name(),
-            })
-        }
-        CoreOp::ReturnValue(value) if contains_range_value(value) => {
-            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
-                value: value.debug_name(),
-            })
-        }
-        CoreOp::ReturnValue(value) if returns_tuple_value(value) => {
-            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
-                value: value.debug_name(),
-            })
-        }
-        CoreOp::ReturnValue(value) if returns_record_value(value) => {
-            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
-                value: value.debug_name(),
-            })
-        }
-        CoreOp::ReturnValue(value) if contains_rendered_value(value) => {
-            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
-                value: value.debug_name(),
-            })
-        }
-        CoreOp::ReturnBranch {
-            cond,
-            then_value,
-            else_value,
-        } => [cond, then_value, else_value]
-            .into_iter()
-            .find_map(|value| {
-                (has_invalid_adt_ctor(value)
-                    || has_missing_projection(value)
-                    || contains_range_value(value)
-                    || returns_tuple_value(value)
-                    || returns_record_value(value)
-                    || contains_rendered_value(value))
-                .then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
-                    value: value.debug_name(),
-                })
-            }),
-        CoreOp::ReturnMatch { scrutinee, .. } if has_invalid_adt_ctor(scrutinee) => {
-            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
-                value: scrutinee.debug_name(),
-            })
-        }
-        CoreOp::ReturnMatch { scrutinee, .. } if contains_range_value(scrutinee) => {
-            Some(BackendDiagnostic::UnsupportedI32ReturnValue {
-                value: scrutinee.debug_name(),
-            })
-        }
-        _ => None,
     })
 }
 
-fn has_invalid_adt_ctor(value: &CoreValue) -> bool {
-    match value {
-        CoreValue::Adt {
-            ctor,
-            variants,
-            args,
-            ..
-        } => {
-            !variants.iter().any(|variant| variant == ctor) || args.iter().any(has_invalid_adt_ctor)
-        }
-        CoreValue::Tuple { fields } => fields.iter().any(has_invalid_adt_ctor),
-        CoreValue::TupleField { tuple, .. } => has_invalid_adt_ctor(tuple),
-        CoreValue::Record { fields } => fields
-            .iter()
-            .any(|field| has_invalid_adt_ctor(&field.value)),
-        CoreValue::RecordField { record, .. } => has_invalid_adt_ctor(record),
-        CoreValue::Range { start, end } => has_invalid_adt_ctor(start) || has_invalid_adt_ctor(end),
-        CoreValue::Unit
-        | CoreValue::I64(_)
-        | CoreValue::Bool(_)
-        | CoreValue::Var(_)
-        | CoreValue::Rendered { .. } => false,
-    }
+fn unsupported_i32_match(
+    scrutinee: &CoreValue,
+    arms: &[CoreMatchArm],
+    env: &RenderEnv,
+) -> Option<BackendDiagnostic> {
+    unsupported_i32_value(scrutinee, env)
+        .or_else(|| unsupported_i32_match_arms(scrutinee, arms, env))
 }
 
-fn has_missing_projection(value: &CoreValue) -> bool {
-    match value {
-        CoreValue::RecordField { record, field } => {
-            matches!(
-                record.as_ref(),
-                CoreValue::Record { fields } if !fields.iter().any(|candidate| candidate.name == *field)
-            ) || has_missing_projection(record)
+fn unsupported_i32_match_arms(
+    scrutinee: &CoreValue,
+    arms: &[CoreMatchArm],
+    env: &RenderEnv,
+) -> Option<BackendDiagnostic> {
+    let Some((first, rest)) = arms.split_first() else {
+        return None;
+    };
+    match &first.pattern {
+        CorePattern::Wildcard => unsupported_i32_value(&first.value, env),
+        CorePattern::Bind(name) => {
+            let arm_env = env.with_binding(name, scrutinee.clone());
+            unsupported_i32_value(&first.value, &arm_env)
         }
-        CoreValue::TupleField { tuple, field } => {
-            matches!(tuple.as_ref(), CoreValue::Tuple { .. } if tuple_field_value(tuple, field).is_none())
-                || has_missing_projection(tuple)
+        CorePattern::I64(_) | CorePattern::Bool(_) => unsupported_i32_value(&first.value, env)
+            .or_else(|| unsupported_i32_match_arms(scrutinee, rest, env)),
+        CorePattern::Constructor { data, ctor, args } => {
+            if let Some((_, arm_env)) =
+                constructor_match_env(scrutinee, data.as_deref(), ctor, args, env)
+            {
+                unsupported_i32_value(&first.value, &arm_env)
+                    .or_else(|| unsupported_i32_match_arms(scrutinee, rest, env))
+            } else {
+                unsupported_i32_match_arms(scrutinee, rest, env)
+            }
         }
-        CoreValue::Tuple { fields } => fields.iter().any(has_missing_projection),
-        CoreValue::Record { fields } => fields
-            .iter()
-            .any(|field| has_missing_projection(&field.value)),
-        CoreValue::Adt { args, .. } => args.iter().any(has_missing_projection),
-        CoreValue::Range { start, end } => {
-            has_missing_projection(start) || has_missing_projection(end)
-        }
-        CoreValue::Unit
-        | CoreValue::I64(_)
-        | CoreValue::Bool(_)
-        | CoreValue::Var(_)
-        | CoreValue::Rendered { .. } => false,
-    }
-}
-
-fn contains_range_value(value: &CoreValue) -> bool {
-    match value {
-        CoreValue::Range { .. } => true,
-        CoreValue::Tuple { fields } => fields.iter().any(contains_range_value),
-        CoreValue::TupleField { tuple, .. } => contains_range_value(tuple),
-        CoreValue::Record { fields } => fields
-            .iter()
-            .any(|field| contains_range_value(&field.value)),
-        CoreValue::RecordField { record, .. } => contains_range_value(record),
-        CoreValue::Adt { args, .. } => args.iter().any(contains_range_value),
-        CoreValue::Unit
-        | CoreValue::I64(_)
-        | CoreValue::Bool(_)
-        | CoreValue::Var(_)
-        | CoreValue::Rendered { .. } => false,
-    }
-}
-
-fn returns_tuple_value(value: &CoreValue) -> bool {
-    match value {
-        CoreValue::Tuple { .. } => true,
-        CoreValue::TupleField { tuple, field } => tuple_field_value(tuple, field)
-            .map(returns_tuple_value)
-            .unwrap_or(false),
-        CoreValue::RecordField { record, field } => record_field_value(record, field)
-            .map(returns_tuple_value)
-            .unwrap_or(false),
-        CoreValue::Record { fields } => {
-            fields.iter().any(|field| returns_tuple_value(&field.value))
-        }
-        CoreValue::Adt { args, .. } => args.iter().any(returns_tuple_value),
-        CoreValue::Range { start, end } => returns_tuple_value(start) || returns_tuple_value(end),
-        CoreValue::Unit
-        | CoreValue::I64(_)
-        | CoreValue::Bool(_)
-        | CoreValue::Var(_)
-        | CoreValue::Rendered { .. } => false,
-    }
-}
-
-fn returns_record_value(value: &CoreValue) -> bool {
-    match value {
-        CoreValue::Record { .. } => true,
-        CoreValue::TupleField { tuple, field } => tuple_field_value(tuple, field)
-            .map(returns_record_value)
-            .unwrap_or(false),
-        CoreValue::RecordField { record, field } => record_field_value(record, field)
-            .map(returns_record_value)
-            .unwrap_or(false),
-        CoreValue::Tuple { fields } => fields.iter().any(returns_record_value),
-        CoreValue::Adt { args, .. } => args.iter().any(returns_record_value),
-        CoreValue::Range { start, end } => returns_record_value(start) || returns_record_value(end),
-        CoreValue::Unit
-        | CoreValue::I64(_)
-        | CoreValue::Bool(_)
-        | CoreValue::Var(_)
-        | CoreValue::Rendered { .. } => false,
-    }
-}
-
-fn contains_rendered_value(value: &CoreValue) -> bool {
-    match value {
-        CoreValue::Rendered { .. } => true,
-        CoreValue::Tuple { fields } => fields.iter().any(contains_rendered_value),
-        CoreValue::TupleField { tuple, .. } => contains_rendered_value(tuple),
-        CoreValue::Record { fields } => fields
-            .iter()
-            .any(|field| contains_rendered_value(&field.value)),
-        CoreValue::RecordField { record, .. } => contains_rendered_value(record),
-        CoreValue::Adt { args, .. } => args.iter().any(contains_rendered_value),
-        CoreValue::Range { start, end } => {
-            contains_rendered_value(start) || contains_rendered_value(end)
-        }
-        CoreValue::Unit | CoreValue::I64(_) | CoreValue::Bool(_) | CoreValue::Var(_) => false,
     }
 }
 
@@ -423,8 +322,10 @@ fn render_wat(core: &CoreProgram, manifest: &BackendManifest, params: &[String])
         wat.push_str(&format!("  (func ${} (result i32)\n", entry.final_symbol));
         wat.push_str("    i32.const 0)\n");
     }
-    for op in &core.ops {
+    for (index, op) in core.ops.iter().enumerate() {
         match op {
+            CoreOp::ReturnValue(value)
+                if return_value_is_tailcall_result(core, index, value, &env) => {}
             CoreOp::ReturnValue(value) => {
                 let symbol = if return_index == 0 {
                     "main".to_string()
@@ -694,7 +595,18 @@ fn render_core_value_i32(wat: &mut String, value: &CoreValue, env: &RenderEnv) {
 
 fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
     match value {
-        CoreValue::Unit | CoreValue::I64(_) | CoreValue::Bool(_) | CoreValue::Adt { .. } => true,
+        CoreValue::Unit | CoreValue::I64(_) | CoreValue::Bool(_) => true,
+        CoreValue::Adt {
+            ctor,
+            variants,
+            args,
+            ..
+        } => {
+            variants.iter().any(|variant| variant == ctor)
+                && args
+                    .iter()
+                    .all(|arg| core_value_is_renderable_i32(arg, env))
+        }
         CoreValue::Var(name) => env
             .binding(name)
             .map(|value| core_value_is_renderable_i32(value, env))

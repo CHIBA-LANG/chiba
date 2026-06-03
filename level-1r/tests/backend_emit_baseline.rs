@@ -75,12 +75,103 @@ fn backend_records_tailcall_targets_in_serialized_output() {
     };
     let validation = CoreValidation::default();
 
-    let artifact = emit_wasm_gc(&core, &validation);
+    let artifact = emit_wasm_gc_with_params(&core, &validation, &["v".to_string()]);
 
     assert_eq!(artifact.diagnostics, vec![]);
     assert!(artifact.wat.contains("(func $math_Vec2_norm"));
     assert!(artifact.wat.contains(";; tailcall math_Vec2_norm args=[v]"));
     assert_eq!(artifact.manifest.entries[0].source_debug_name, "norm");
+}
+
+#[test]
+fn backend_skips_tailcall_result_temp_instead_of_faking_return_zero() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::DirectMethodTarget {
+                name: "helper".to_string(),
+                target: "helper".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "helper".to_string(),
+                args: vec![CoreValue::I64(7)],
+            },
+            CoreOp::ReturnValue(CoreValue::Var("w0".to_string())),
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact.wat.contains(";; tailcall helper args=[7]"));
+    assert!(artifact.wat.contains("call $helper"));
+    assert!(!artifact.wat.contains("core-return atom=w0"));
+    assert!(!artifact.wat.contains("(func $main"));
+}
+
+#[test]
+fn backend_rejects_tailcall_unbound_arg_instead_of_comment_only_success() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::DirectMethodTarget {
+                name: "norm".to_string(),
+                target: "math.Vec2.norm".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "math.Vec2.norm".to_string(),
+                args: vec![CoreValue::Var("v".to_string())],
+            },
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(
+        artifact.diagnostics,
+        vec![BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: "v".to_string(),
+        }]
+    );
+    assert_eq!(artifact.wat, "");
+}
+
+#[test]
+fn backend_rejects_tailcall_structural_arg_instead_of_dropping_call_body() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::DirectMethodTarget {
+                name: "take".to_string(),
+                target: "demo.take".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "demo.take".to_string(),
+                args: vec![CoreValue::Record {
+                    fields: vec![chiba_level1r::core::CoreRecordValueField {
+                        name: "x".to_string(),
+                        value: CoreValue::I64(1),
+                    }],
+                }],
+            },
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(
+        artifact.diagnostics,
+        vec![BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: "{x=1}".to_string(),
+        }]
+    );
+    assert_eq!(artifact.wat, "");
 }
 
 #[test]
