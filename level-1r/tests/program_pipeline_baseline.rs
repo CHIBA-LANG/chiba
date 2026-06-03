@@ -113,6 +113,15 @@ fn typed_partial_call_preserves_remaining_function_type() {
 }
 
 #[test]
+fn typed_continuation_storage_call_returns_answer_type() {
+    let output =
+        chiba_level1r::compile_source_program_bundle("def main(k: contN (i64) -> bool) = k(1)")
+            .expect("compile source");
+
+    assert_eq!(output.program.defs[0].output.typed.ty, Type::Bool);
+}
+
+#[test]
 fn program_bundle_selects_main_and_links_def_artifacts() {
     let program = SourceProgram::new(vec![
         def("helper", vec![], Expr::i64(1)),

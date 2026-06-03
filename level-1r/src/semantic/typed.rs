@@ -648,6 +648,13 @@ fn binary_result_type(lhs: &Type, rhs: &Type) -> Type {
 }
 
 fn call_result_type(callee: &Type, arity: usize) -> Type {
+    if let Type::Continuation { answer, .. } = callee {
+        return if arity == 1 {
+            answer.as_ref().clone()
+        } else {
+            Type::Unknown
+        };
+    }
     let mut current = callee;
     for _ in 0..arity {
         match current {
