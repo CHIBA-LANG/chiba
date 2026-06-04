@@ -1618,22 +1618,96 @@ def main() = 0
         "i64_to_i64"
     );
     assert!(wasi.backend_link.linked_wat.contains(
-        ";; extern-import wasi module=wasi_snapshot_preview1 name=fd_write signature=i64_to_i64"
+        ";; extern-import wasi symbol=root__fd_write module=wasi_snapshot_preview1 name=fd_write signature=i64_to_i64"
     ));
-    assert!(env
-        .backend_link
-        .linked_wat
-        .contains(";; extern-import c module=env name=fd_write signature=i64_to_i64"));
+    assert!(env.backend_link.linked_wat.contains(
+        ";; extern-import c symbol=root__fd_write module=env name=fd_write signature=i64_to_i64"
+    ));
     assert_eq!(
         env.backend_link.linked_wat,
         env_lower.backend_link.linked_wat
     );
     assert!(wasi
         .render_summary()
-        .contains("import wasi module=wasi_snapshot_preview1 name=fd_write signature=i64_to_i64"));
+        .contains("import wasi symbol=root__fd_write module=wasi_snapshot_preview1 name=fd_write signature=i64_to_i64"));
     assert!(wasi.diagnostics.is_empty());
     assert!(env.diagnostics.is_empty());
     assert!(renamed.diagnostics.is_empty());
+}
+
+#[test]
+fn program_extern_c_call_lowers_to_executable_env_import_wat() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def inc(value: i64): i64 = extern "C" "level1r_inc"
+def main() = inc(8)
+"#,
+    )
+    .expect("compile extern call")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+    assert!(main.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ExternFunctionTarget {
+                target,
+                abi: chiba_level1r::core::CoreExternAbi::C,
+                name,
+                signature,
+                ..
+            } if target == "inc" && name == "level1r_inc" && signature == "i64_to_i64"
+        )
+    }));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(import \"env\" \"level1r_inc\" (func $inc (param i32) (result i32)))"));
+    assert!(bundle.backend_link.linked_wat.contains(
+        ";; extern-import c symbol=inc module=env name=level1r_inc signature=i64_to_i64"
+    ));
+
+    let callable_wat = export_func_for_test(
+        &bundle.backend_link.linked_wat,
+        "$chiba_tailcall_0",
+        "tailcall_main",
+    );
+    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "9");
+}
+
+#[test]
+fn program_extern_target_does_not_ignore_local_shadowing() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def inc(value: i64): i64 = extern "C" "level1r_inc"
+def main(inc: (i64) -> i64) = inc(8)
+"#,
+    )
+    .expect("compile shadowing extern call")
+    .program;
+
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+    assert!(!main
+        .output
+        .core
+        .ops
+        .iter()
+        .any(|op| { matches!(op, chiba_level1r::core::CoreOp::ExternFunctionTarget { .. }) }));
+    assert!(!main
+        .output
+        .backend
+        .wat
+        .contains("(import \"env\" \"level1r_inc\""));
 }
 
 #[test]

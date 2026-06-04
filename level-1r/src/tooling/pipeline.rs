@@ -15,8 +15,8 @@ use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFact
 use crate::closure_simplify::{simplify_closure_core, ClosureSimplificationFacts};
 use crate::control::{analyze_control, ControlError, ControlFacts};
 use crate::core::{
-    lower_core_with_facts, validate_core, CallableStorageFact, CallableStorageKind, CoreProgram,
-    CoreValidation, CoreValue,
+    lower_core_with_facts, validate_core, CallableStorageFact, CallableStorageKind, CoreExternAbi,
+    CoreOp, CoreProgram, CoreValidation, CoreValue,
 };
 use crate::cps::{cps_program, CpsProgram};
 use crate::cps_usage::{
@@ -32,7 +32,9 @@ use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
 use crate::monomorphize::{schedule_monomorphization, MonomorphizationPlan};
 use crate::nanopass::PassReport;
 use crate::pattern::PatternFacts;
-use crate::resolve::{resolve_expr, resolve_expr_with_names, MethodIndex, NameIndex, ResolveFacts};
+use crate::resolve::{
+    resolve_expr, resolve_expr_with_names, MethodIndex, NameIndex, ResolveFacts, ResolvedName,
+};
 use crate::specialize::{plan_specialization, SpecializationFacts};
 use crate::std_audit::{audit_std_dependencies, StdAuditReport};
 use crate::surface::{
@@ -205,6 +207,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &TypeContext::new(),
         "root",
         &type_aliases,
+        &[],
     )
 }
 
@@ -220,6 +223,7 @@ fn compile_expr_with_indexes_and_generics(
     type_context: &TypeContext,
     current_namespace: &str,
     type_aliases: &TypeAliasIndex,
+    extern_functions: &[crate::surface::InterfaceFunction],
 ) -> CompileOutput {
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || {
@@ -317,7 +321,7 @@ fn compile_expr_with_indexes_and_generics(
     let explicit_callable_storage =
         explicit_callable_storage_facts(def_name, &typed_signature, &usage, &alpha.param_binders);
     let core = passes.record("L16Core", "CpsProgram", "CoreProgram", || {
-        lower_core_with_facts(
+        let mut core = lower_core_with_facts(
             &cps,
             &control.continuations,
             &closure,
@@ -325,7 +329,9 @@ fn compile_expr_with_indexes_and_generics(
             &lambda_lift,
             &specialize,
             &usage,
-        )
+        );
+        attach_extern_function_targets(&mut core, &resolve, extern_functions);
+        core
     });
     let closure_core_usage = passes.record(
         "L17ClosureCoreUsage",
@@ -595,15 +601,101 @@ fn backend_cache_config_for_interface(interface: &InterfaceSummary) -> BackendCa
     config
 }
 
+fn attach_extern_function_targets(
+    core: &mut CoreProgram,
+    resolve: &ResolveFacts,
+    extern_functions: &[crate::surface::InterfaceFunction],
+) {
+    let extern_by_symbol = extern_functions
+        .iter()
+        .filter(|function| function.extern_decl.is_some())
+        .map(|function| (function.symbol.as_str(), function))
+        .collect::<BTreeMap<_, _>>();
+    let mut facts = resolve
+        .resolved_names
+        .iter()
+        .filter_map(|name| {
+            let ResolvedName::Function { name, symbol } = name else {
+                return None;
+            };
+            let function = extern_by_symbol.get(symbol.as_str())?;
+            let extern_decl = function.extern_decl.as_ref()?;
+            Some(CoreOp::ExternFunctionTarget {
+                target: name.clone(),
+                owner: function.owner.clone(),
+                symbol: function.symbol.clone(),
+                abi: core_extern_abi(extern_decl.abi),
+                name: extern_decl.symbol.clone(),
+                signature: backend_extern_signature_hash(
+                    &function.param_types,
+                    &function.return_type,
+                ),
+            })
+        })
+        .collect::<Vec<_>>();
+    facts.sort_by(|left, right| {
+        render_core_extern_target_key(left).cmp(&render_core_extern_target_key(right))
+    });
+    facts.dedup_by(|left, right| {
+        render_core_extern_target_key(left) == render_core_extern_target_key(right)
+    });
+    core.ops.splice(0..0, facts);
+}
+
+fn render_core_extern_target_key(op: &CoreOp) -> String {
+    match op {
+        CoreOp::ExternFunctionTarget {
+            target,
+            owner,
+            symbol,
+            abi,
+            name,
+            signature,
+        } => format!(
+            "{}|{}|{}|{}|{}|{}",
+            target,
+            owner,
+            symbol,
+            render_core_extern_abi(*abi),
+            name,
+            signature
+        ),
+        _ => String::new(),
+    }
+}
+
+fn core_extern_abi(abi: ExternAbi) -> CoreExternAbi {
+    match abi {
+        ExternAbi::Wasi => CoreExternAbi::Wasi,
+        ExternAbi::C => CoreExternAbi::C,
+    }
+}
+
+fn render_core_extern_abi(abi: CoreExternAbi) -> &'static str {
+    match abi {
+        CoreExternAbi::Wasi => "wasi",
+        CoreExternAbi::C => "c",
+    }
+}
+
 fn attach_program_extern_imports(bundle: &mut BackendLinkedBundle, interface: &InterfaceSummary) {
     let mut imports = backend_extern_imports_for_interface(interface);
     if imports.is_empty() {
         return;
     }
+    let existing_imports = bundle.manifest.imports.clone();
     bundle.manifest.imports.append(&mut imports);
     sort_dedup_imports(&mut bundle.manifest.imports);
     if bundle.diagnostics.is_empty() && !bundle.linked_wat.is_empty() {
-        insert_extern_import_comments(&mut bundle.linked_wat, &bundle.manifest.imports);
+        let mut comment_imports = bundle
+            .manifest
+            .imports
+            .iter()
+            .filter(|import| !existing_imports.contains(import))
+            .cloned()
+            .collect::<Vec<_>>();
+        sort_dedup_imports(&mut comment_imports);
+        insert_extern_import_comments(&mut bundle.linked_wat, &comment_imports);
     }
 }
 
@@ -615,6 +707,7 @@ fn backend_extern_imports_for_interface(interface: &InterfaceSummary) -> Vec<Bac
             let extern_decl = function.extern_decl.as_ref()?;
             Some(BackendExternImport {
                 abi: backend_extern_abi(extern_decl.abi),
+                final_symbol: encode_debug_symbol(&function.symbol),
                 module: backend_extern_module(extern_decl.abi).to_string(),
                 name: extern_decl.symbol.clone(),
                 signature_hash: backend_extern_signature_hash(
@@ -635,8 +728,9 @@ fn insert_extern_import_comments(linked_wat: &mut String, imports: &[BackendExte
     let mut next = String::from("(module\n");
     for import in imports {
         next.push_str(&format!(
-            "  ;; extern-import {} module={} name={} signature={}\n",
+            "  ;; extern-import {} symbol={} module={} name={} signature={}\n",
             render_backend_extern_abi(import.abi),
+            import.final_symbol,
             import.module,
             import.name,
             import.signature_hash
@@ -875,6 +969,7 @@ fn compile_program_defs(
                         &type_context,
                         &current_namespace,
                         &type_aliases,
+                        &interface.functions,
                     );
                     output
                         .core
@@ -2144,8 +2239,9 @@ fn render_program_backend_link_summary(bundle: &BackendLinkedBundle) -> String {
     ));
     for import in &bundle.manifest.imports {
         out.push_str(&format!(
-            "      import {} module={} name={} signature={}\n",
+            "      import {} symbol={} module={} name={} signature={}\n",
             render_backend_extern_abi(import.abi),
+            import.final_symbol,
             import.module,
             import.name,
             import.signature_hash

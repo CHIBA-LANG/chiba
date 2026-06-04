@@ -290,6 +290,17 @@ fn render_core_op(op: &CoreOp) -> String {
         CoreOp::DynamicCallableTarget { target } => {
             format!("dynamic-callable-target {target}")
         }
+        CoreOp::ExternFunctionTarget {
+            target,
+            owner,
+            symbol,
+            abi,
+            name,
+            signature,
+        } => format!(
+            "extern-function-target {target} owner={owner} symbol={symbol} abi={} name={name} signature={signature}",
+            render_core_extern_abi(*abi)
+        ),
         CoreOp::Prompt { kind } => format!("prompt kind={}", render_continuation_kind(*kind)),
         CoreOp::CaptureContinuation {
             binder,
@@ -872,8 +883,9 @@ fn render_backend_manifest(out: &mut String, manifest: &BackendManifest) {
     for import in &manifest.imports {
         writeln!(
             out,
-            "import {} module={} name={} signature={}",
+            "import {} symbol={} module={} name={} signature={}",
             render_backend_extern_abi(import.abi),
+            import.final_symbol,
             import.module,
             import.name,
             import.signature_hash
@@ -901,6 +913,13 @@ fn render_backend_extern_abi(abi: BackendExternAbi) -> &'static str {
     match abi {
         BackendExternAbi::Wasi => "wasi",
         BackendExternAbi::C => "c",
+    }
+}
+
+fn render_core_extern_abi(abi: crate::core::CoreExternAbi) -> &'static str {
+    match abi {
+        crate::core::CoreExternAbi::Wasi => "wasi",
+        crate::core::CoreExternAbi::C => "c",
     }
 }
 

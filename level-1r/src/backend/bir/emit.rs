@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::control::ContinuationKind;
 use crate::core::{
-    CoreCapturedContinuation, CoreMatchArm, CoreOp, CorePattern, CoreProgram, CoreValidation,
-    CoreValue, OperatorIntrinsic, OwnershipDecision,
+    CoreCapturedContinuation, CoreExternAbi, CoreMatchArm, CoreOp, CorePattern, CoreProgram,
+    CoreValidation, CoreValue, OperatorIntrinsic, OwnershipDecision,
 };
 use crate::symbol::encode_debug_symbol;
 
@@ -105,6 +105,7 @@ pub enum BackendOwnershipRuntime {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BackendExternImport {
     pub abi: BackendExternAbi,
+    pub final_symbol: String,
     pub module: String,
     pub name: String,
     pub signature_hash: String,
@@ -330,10 +331,12 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
     for op in &core.ops {
         collect_manifest_entries(op, core, &mut entries);
     }
-    BackendManifest {
-        entries,
-        imports: Vec::new(),
+    let mut imports = Vec::new();
+    for op in &core.ops {
+        collect_manifest_imports(op, &mut imports);
     }
+    sort_dedup_imports(&mut imports);
+    BackendManifest { entries, imports }
 }
 
 fn collect_manifest_entries(
@@ -371,6 +374,7 @@ fn collect_manifest_entries(
         | CoreOp::ReturnBranch { .. }
         | CoreOp::ReturnMatch { .. }
         | CoreOp::DynamicCallableTarget { .. }
+        | CoreOp::ExternFunctionTarget { .. }
         | CoreOp::TupleConstruct { .. }
         | CoreOp::TupleFieldGet { .. }
         | CoreOp::RecordConstruct { .. }
@@ -387,6 +391,30 @@ fn collect_manifest_entries(
         | CoreOp::Match { .. }
         | CoreOp::StaticRowAccess { .. }
         | CoreOp::DynRowAdapterAccess { .. } => {}
+    }
+}
+
+fn collect_manifest_imports(op: &CoreOp, imports: &mut Vec<BackendExternImport>) {
+    match op {
+        CoreOp::ExternFunctionTarget {
+            target,
+            abi,
+            name,
+            signature,
+            ..
+        } => imports.push(BackendExternImport {
+            abi: backend_extern_abi_from_core(*abi),
+            final_symbol: final_symbol(target),
+            module: backend_extern_module_from_core(*abi).to_string(),
+            name: name.clone(),
+            signature_hash: signature.clone(),
+        }),
+        CoreOp::CaptureContinuation { captured, .. } => {
+            for op in &captured.ops {
+                collect_manifest_imports(op, imports);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -408,6 +436,9 @@ fn render_wat(
 
     let env = RenderEnv::new(params);
     let mut wat = String::from("(module\n");
+    for import in &manifest.imports {
+        render_extern_import_wat(&mut wat, import);
+    }
     let mut return_index = 0usize;
     let mut tailcall_index = 0usize;
     for entry in &manifest.entries {
@@ -636,6 +667,7 @@ fn render_wat(
             }
             CoreOp::DirectMethodTarget { .. }
             | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::ExternFunctionTarget { .. }
             | CoreOp::TailCallResult { .. }
             | CoreOp::TargetSpecificTerm { .. }
             | CoreOp::LiftedFunction { .. } => {}
@@ -669,6 +701,9 @@ fn render_continuation_wat(
     let result_binders = collect_tailcall_result_binders(&core.ops);
     let env = RenderEnv::new(params).with_locals(result_binders.clone());
     let mut wat = String::from("(module\n");
+    for import in &manifest.imports {
+        render_extern_import_wat(&mut wat, import);
+    }
     for entry in &manifest.entries {
         wat.push_str(&format!(
             "  ;; symbol {} source={} origin={}\n",
@@ -794,6 +829,7 @@ fn render_continuation_wat(
             }
             CoreOp::DirectMethodTarget { .. }
             | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::ExternFunctionTarget { .. }
             | CoreOp::TailCallResult { .. }
             | CoreOp::OperatorTarget { .. }
             | CoreOp::TargetSpecificTerm { .. }
@@ -1031,7 +1067,9 @@ fn render_captured_continuation_i32(
                 render_match_arms_i32(wat, scrutinee, arms, &env, 4)?;
                 return Ok(());
             }
-            CoreOp::OperatorTarget { .. } | CoreOp::DynamicCallableTarget { .. } => {}
+            CoreOp::OperatorTarget { .. }
+            | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::ExternFunctionTarget { .. } => {}
             _ => {
                 return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
                     op: "captured-context-op".to_string(),
@@ -1101,6 +1139,40 @@ fn render_operator_intrinsic_wat(
     wat.push_str("    local.get $rhs\n");
     wat.push_str(&format!("    {opcode}\n"));
     wat.push_str("  )\n");
+}
+
+fn render_extern_import_wat(wat: &mut String, import: &BackendExternImport) {
+    let Some((params, result)) = extern_import_wat_signature(&import.signature_hash) else {
+        return;
+    };
+    wat.push_str(&format!(
+        "  (import \"{}\" \"{}\" (func ${}",
+        escape_wat_string(&import.module),
+        escape_wat_string(&import.name),
+        import.final_symbol
+    ));
+    for param in params {
+        wat.push_str(&format!(" (param {param})"));
+    }
+    if let Some(result) = result {
+        wat.push_str(&format!(" (result {result})"));
+    }
+    wat.push_str("))\n");
+}
+
+fn extern_import_wat_signature(
+    signature: &str,
+) -> Option<(Vec<&'static str>, Option<&'static str>)> {
+    match signature {
+        "i64_to_i64" | "I64_to_I64" | "i64_to_I64" | "I64_to_i64" => {
+            Some((vec!["i32"], Some("i32")))
+        }
+        _ => None,
+    }
+}
+
+fn escape_wat_string(text: &str) -> String {
+    text.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn render_tailcall_result_chain(
@@ -1579,9 +1651,11 @@ pub fn link_backend_artifacts(mut artifacts: Vec<BackendArtifact>) -> BackendLin
 
     let mut linked_wat = String::from("(module\n");
     for import in &imports {
+        render_extern_import_wat(&mut linked_wat, import);
         linked_wat.push_str(&format!(
-            "  ;; extern-import {} module={} name={} signature={}\n",
+            "  ;; extern-import {} symbol={} module={} name={} signature={}\n",
             canonical_abi(import.abi),
+            escape_wat_comment(&import.final_symbol),
             escape_wat_comment(&import.module),
             escape_wat_comment(&import.name),
             escape_wat_comment(&import.signature_hash)
@@ -1595,6 +1669,9 @@ pub fn link_backend_artifacts(mut artifacts: Vec<BackendArtifact>) -> BackendLin
                 continue;
             }
             if line_index + 1 == lines.len() && *line == ")" {
+                continue;
+            }
+            if line.trim_start().starts_with("(import ") {
                 continue;
             }
             linked_wat.push_str(line);
@@ -1713,12 +1790,27 @@ fn ownership_decision_name(decision: OwnershipDecision) -> &'static str {
 
 fn canonical_import(import: &BackendExternImport) -> String {
     format!(
-        "{}::{}::{}::{}",
+        "{}::{}::{}::{}::{}",
         canonical_abi(import.abi),
+        import.final_symbol,
         import.module,
         import.name,
         import.signature_hash
     )
+}
+
+fn backend_extern_abi_from_core(abi: CoreExternAbi) -> BackendExternAbi {
+    match abi {
+        CoreExternAbi::Wasi => BackendExternAbi::Wasi,
+        CoreExternAbi::C => BackendExternAbi::C,
+    }
+}
+
+fn backend_extern_module_from_core(abi: CoreExternAbi) -> &'static str {
+    match abi {
+        CoreExternAbi::Wasi => "wasi_snapshot_preview1",
+        CoreExternAbi::C => "env",
+    }
 }
 
 fn canonical_abi(abi: BackendExternAbi) -> &'static str {

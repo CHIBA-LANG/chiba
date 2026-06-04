@@ -39,6 +39,14 @@ pub enum CoreOp {
     DynamicCallableTarget {
         target: String,
     },
+    ExternFunctionTarget {
+        target: String,
+        owner: String,
+        symbol: String,
+        abi: CoreExternAbi,
+        name: String,
+        signature: String,
+    },
     Prompt {
         kind: ContinuationKind,
     },
@@ -130,6 +138,12 @@ pub enum OperatorIntrinsic {
     I64Sub,
     I64Mul,
     I64Div,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CoreExternAbi {
+    Wasi,
+    C,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -945,6 +959,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
 fn op_has_tail_target(op: &CoreOp, func: &str) -> bool {
     match op {
         CoreOp::DynamicCallableTarget { target } => target == func,
+        CoreOp::ExternFunctionTarget { target, .. } => target == func,
         CoreOp::DirectMethodTarget { target, .. } => target == func,
         CoreOp::OperatorTarget { target, .. } => target == func,
         CoreOp::LiftedFunction { symbol, .. } => symbol == func,

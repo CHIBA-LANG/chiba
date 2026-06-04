@@ -814,6 +814,7 @@ fn backend_cache_key_distinguishes_target_features_and_imports() {
     let mut wasi = BackendCacheConfig::default();
     wasi.imports.push(BackendExternImport {
         abi: BackendExternAbi::Wasi,
+        final_symbol: "fd_write".to_string(),
         module: "wasi_snapshot_preview1".to_string(),
         name: "fd_write".to_string(),
         signature_hash: "i32_i32_i32_i32_to_i32".to_string(),
@@ -821,6 +822,7 @@ fn backend_cache_key_distinguishes_target_features_and_imports() {
     let mut env = BackendCacheConfig::default();
     env.imports.push(BackendExternImport {
         abi: BackendExternAbi::C,
+        final_symbol: "js_log".to_string(),
         module: "env".to_string(),
         name: "js_log".to_string(),
         signature_hash: "i32_to_unit".to_string(),
