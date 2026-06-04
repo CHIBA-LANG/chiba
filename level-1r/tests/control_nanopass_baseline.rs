@@ -69,6 +69,21 @@ fn contn_capture_under_unknown_call_is_replay_unsafe() {
 }
 
 #[test]
+fn core_validation_visual_dump_renders_structured_diagnostics() {
+    let output = compile_expr(&Expr::resetn(Expr::call(
+        Expr::var("f"),
+        Expr::shift("retry", Expr::call(Expr::var("retry"), Expr::i64(1))),
+    )));
+
+    let visual = output.render_visual();
+    assert!(visual.contains("core-validation:"));
+    assert!(visual.contains("diagnostics=1"));
+    assert!(visual.contains("diagnostic unsafe contn replay capture retry"));
+    assert!(!visual.contains("CoreValidation {"));
+    assert!(!visual.contains("UnsafeContNReplayCapture"));
+}
+
+#[test]
 fn nested_reset_uses_nearest_delimiter_for_continuation_kind() {
     let inner_contn = compile_expr(&Expr::reset(Expr::resetn(Expr::shift(
         "retry",

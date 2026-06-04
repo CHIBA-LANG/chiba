@@ -7,7 +7,7 @@ use crate::closure::ClosureFacts;
 use crate::closure_core_usage::ClosureCoreUsageFacts;
 use crate::closure_simplify::ClosureSimplificationFacts;
 use crate::control::{ContinuationKind, ControlFacts};
-use crate::core::{CoreProgram, CoreValidation};
+use crate::core::{CompilerIntrinsic, CoreDiagnostic, CoreProgram, CoreValidation};
 use crate::cps::CpsProgram;
 use crate::cps_usage::{ContinuationSimplificationFacts, CpsUsageFacts};
 use crate::lambda_lift::LambdaLiftFacts;
@@ -184,11 +184,116 @@ pub fn visual_report(
         closure_simplification: format!("{closure_simplification:#?}"),
         usage_audit: format!("{usage_audit:#?}"),
         std_audit: format!("{std_audit:#?}"),
-        core_validation: format!("{core_validation:#?}"),
+        core_validation: render_core_validation(core_validation),
         backend: format!("{backend:#?}"),
         backend_link: format!("{backend_link:#?}"),
         backend_cache_key: format!("{backend_cache_key:#?}"),
         nanopass: render_pass_report(passes),
+    }
+}
+
+fn render_core_validation(validation: &CoreValidation) -> String {
+    let mut out = String::new();
+    writeln!(out, "diagnostics={}", validation.diagnostics.len()).unwrap();
+    for diagnostic in &validation.diagnostics {
+        writeln!(out, "diagnostic {}", render_core_diagnostic(diagnostic)).unwrap();
+    }
+    out
+}
+
+fn render_core_diagnostic(diagnostic: &CoreDiagnostic) -> String {
+    match diagnostic {
+        CoreDiagnostic::TargetSpecificTerm { term } => {
+            format!("target-specific core term {term}")
+        }
+        CoreDiagnostic::LayoutHashMismatch {
+            key,
+            expected,
+            actual,
+        } => format!("layout hash mismatch {key}: expected {expected}, actual {actual}"),
+        CoreDiagnostic::DuplicateLayoutKey { key } => format!("duplicate layout key {key}"),
+        CoreDiagnostic::MissingContNPackage { binder } => {
+            format!("missing contn package {binder}")
+        }
+        CoreDiagnostic::UnsafeContNReplayCapture { binder } => {
+            format!("unsafe contn replay capture {binder}")
+        }
+        CoreDiagnostic::Cont1HasPackageLayout { key } => {
+            format!("cont1 has package layout {key}")
+        }
+        CoreDiagnostic::MissingDynRowLayout { layout } => {
+            format!("missing dyn row layout {layout}")
+        }
+        CoreDiagnostic::DynRowLayoutKindMismatch { layout } => {
+            format!("dyn row layout kind mismatch {layout}")
+        }
+        CoreDiagnostic::MissingStaticRowLayout { layout } => {
+            format!("missing static row layout {layout}")
+        }
+        CoreDiagnostic::StaticRowLayoutKindMismatch { layout } => {
+            format!("static row layout kind mismatch {layout}")
+        }
+        CoreDiagnostic::MissingTupleLayout { layout } => {
+            format!("missing tuple layout {layout}")
+        }
+        CoreDiagnostic::TupleLayoutKindMismatch { layout } => {
+            format!("tuple layout kind mismatch {layout}")
+        }
+        CoreDiagnostic::TupleFieldMissing { layout, field } => {
+            format!("tuple field missing {layout}.{field}")
+        }
+        CoreDiagnostic::MissingRecordLayout { layout } => {
+            format!("missing record layout {layout}")
+        }
+        CoreDiagnostic::RecordLayoutKindMismatch { layout } => {
+            format!("record layout kind mismatch {layout}")
+        }
+        CoreDiagnostic::RecordFieldMissing { layout, field } => {
+            format!("record field missing {layout}.{field}")
+        }
+        CoreDiagnostic::DanglingTailCallTarget { target } => {
+            format!("dangling tail-call target {target}")
+        }
+        CoreDiagnostic::EnvClosureMissingLayout { subject } => {
+            format!("env closure missing layout {subject}")
+        }
+        CoreDiagnostic::ClosureEnvLayoutHasNoFields { layout } => {
+            format!("closure env layout has no fields {layout}")
+        }
+        CoreDiagnostic::SendableCallableContainsContinuation { subject } => {
+            format!("sendable callable contains continuation {subject}")
+        }
+        CoreDiagnostic::Cont1CallableUsedMoreThanOnce { subject } => {
+            format!("cont1 callable used more than once {subject}")
+        }
+        CoreDiagnostic::SharedSendSubjectUsesRc { subject } => {
+            format!("shared send subject uses rc {subject}")
+        }
+        CoreDiagnostic::DynPayloadMustUseDynPackage { subject } => {
+            format!("dyn payload must use dyn package {subject}")
+        }
+        CoreDiagnostic::DuplicateLiftedFunctionSymbol { symbol } => {
+            format!("duplicate lifted function symbol {symbol}")
+        }
+        CoreDiagnostic::LiftedFunctionMissingClosureEnv {
+            source,
+            expected_layout,
+        } => format!("lifted function missing closure env {source}: {expected_layout}"),
+        CoreDiagnostic::CompilerIntrinsicOwnerMismatch {
+            intrinsic,
+            owner_namespace,
+            expected_owner_namespace,
+        } => format!(
+            "compiler intrinsic owner mismatch {}: {owner_namespace} vs {expected_owner_namespace}",
+            render_compiler_intrinsic(*intrinsic)
+        ),
+    }
+}
+
+fn render_compiler_intrinsic(intrinsic: CompilerIntrinsic) -> &'static str {
+    match intrinsic {
+        CompilerIntrinsic::TupleToAdt => "tuple_to_adt",
+        CompilerIntrinsic::AdtToTuple => "adt_to_tuple",
     }
 }
 
