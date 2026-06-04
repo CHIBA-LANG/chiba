@@ -121,6 +121,11 @@ fn compile_output_contains_monomorphization_plan_and_visual_dump() {
     assert!(output.monomorphize.jobs[0]
         .artifact
         .starts_with("mono::<expr>"));
-    assert!(output.render_visual().contains("monomorphize:"));
-    assert!(output.render_visual().contains("MonomorphizationPlan"));
+    let visual = output.render_visual();
+    assert!(visual.contains("monomorphize:"));
+    assert!(visual.contains("jobs=1"));
+    assert!(visual.contains("job 0 artifact=mono::<expr>"));
+    assert!(visual.contains("status=scheduled"));
+    assert!(!output.visual.monomorphize.contains("MonomorphizationPlan"));
+    assert!(!output.visual.monomorphize.contains("MonomorphizationJob"));
 }

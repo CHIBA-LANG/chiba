@@ -22,7 +22,7 @@ use crate::cps_usage::{
     ContinuationMaterialization, ContinuationSimplificationFacts, CpsUsageDiagnostic, CpsUsageFacts,
 };
 use crate::lambda_lift::LambdaLiftFacts;
-use crate::monomorphize::MonomorphizationPlan;
+use crate::monomorphize::{MonomorphizationPlan, MonomorphizationStatus};
 use crate::nanopass::PassReport;
 use crate::pattern::PatternFacts;
 use crate::resolve::{
@@ -177,7 +177,7 @@ pub fn visual_report(
         template: render_template_facts(template),
         specialize: render_specialization_facts(specialize),
         symbol_lineage: render_symbol_lineage(resolve, template, specialize),
-        monomorphize: format!("{monomorphize:#?}"),
+        monomorphize: render_monomorphization_plan(monomorphize),
         template_audit: format!("{template_audit:#?}"),
         typed_signature: typed_signature.to_string(),
         typed: format!("{typed:#?}"),
@@ -1217,6 +1217,49 @@ fn render_specialization_facts(specialize: &SpecializationFacts) -> String {
     }
     writeln!(out, "registry-entries={}", specialize.registry.len()).unwrap();
     out
+}
+
+fn render_monomorphization_plan(plan: &MonomorphizationPlan) -> String {
+    let mut out = String::new();
+    writeln!(out, "jobs={}", plan.jobs.len()).unwrap();
+    for (index, job) in plan.jobs.iter().enumerate() {
+        writeln!(
+            out,
+            "job {index} artifact={} status={} definition={} call-sites=[{}] {}",
+            job.artifact,
+            render_monomorphization_status(&job.status),
+            job.definition_note,
+            job.call_sites.join(", "),
+            render_specialization_key(&job.key)
+        )
+        .unwrap();
+    }
+    writeln!(out, "duplicates={}", plan.duplicates.len()).unwrap();
+    for duplicate in &plan.duplicates {
+        writeln!(
+            out,
+            "duplicate call-site={} joined-artifact={} {}",
+            duplicate.call_site,
+            duplicate.joined_artifact,
+            render_specialization_key(&duplicate.key)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_monomorphization_status(status: &MonomorphizationStatus) -> String {
+    match status {
+        MonomorphizationStatus::Scheduled => "scheduled".to_string(),
+        MonomorphizationStatus::InProgress => "in-progress".to_string(),
+        MonomorphizationStatus::Failed {
+            call_site,
+            definition_note,
+            diagnostic,
+        } => format!(
+            "failed call-site={call_site} definition={definition_note} diagnostic={diagnostic}"
+        ),
+    }
 }
 
 fn render_specialization_key(key: &SpecializationKey) -> String {
