@@ -1961,17 +1961,39 @@ fn frontend_parses_resetn_shift_as_contn_with_rc_usage_audit() {
         .iter()
         .any(|entry| entry.subject == "continuation::retry"
             && entry.rust_reference_signature == "let retry: Rc<ContNFrame>"));
-    assert_eq!(
-        main.backend.diagnostics,
-        vec![
-            chiba_level1r::backend::BackendDiagnostic::UnsupportedContinuationRuntime {
-                op: "prompt".to_string(),
-                kind: ContinuationKind::ContN,
-                binder: None,
-            }
-        ]
-    );
-    assert_eq!(main.backend.wat, "");
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert!(main.backend.wat.contains(";; prompt kind=contn"));
+    assert!(main
+        .backend
+        .wat
+        .contains(";; capture-cont binder=retry kind=contn"));
+}
+
+#[test]
+fn frontend_lowers_contn_repeated_resume_to_executable_backend_subset() {
+    let output = compile_source_program_bundle(
+        "def main() = resetn { shift retry { retry(1) + retry(2) } }",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert_eq!(main.control.errors, vec![]);
+    assert_eq!(main.control.continuations[0].kind, ContinuationKind::ContN);
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert!(main
+        .backend
+        .wat
+        .contains(";; continuation-runtime subset=prompt-capture-i32"));
+    assert!(main
+        .backend
+        .wat
+        .contains(";; resume-cont binder=retry kind=contn result=w0"));
+    assert!(main
+        .backend
+        .wat
+        .contains(";; resume-cont binder=retry kind=contn result=w1"));
+    assert!(main.backend.wat.contains("call $op_add_u28_w0_u29_"));
+    assert!(main.backend.wat.contains("local.get $w2"));
 }
 
 #[test]

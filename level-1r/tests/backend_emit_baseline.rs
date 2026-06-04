@@ -91,16 +91,73 @@ fn backend_records_tailcall_targets_in_serialized_output() {
 }
 
 #[test]
-fn backend_rejects_continuation_runtime_ops_until_lowering_is_executable() {
+fn backend_lowers_cont1_single_resume_to_i32_runtime_subset() {
     let core = CoreProgram {
         ops: vec![
             CoreOp::Prompt {
-                kind: ContinuationKind::ContN,
+                kind: ContinuationKind::Cont1,
             },
             CoreOp::CaptureContinuation {
-                binder: "retry".to_string(),
-                kind: ContinuationKind::ContN,
+                binder: "k".to_string(),
+                kind: ContinuationKind::Cont1,
             },
+            CoreOp::TailCall {
+                func: "k".to_string(),
+                args: vec![CoreValue::I64(7)],
+            },
+            CoreOp::TailCallResult {
+                binder: "w0".to_string(),
+            },
+            CoreOp::ReturnValue(CoreValue::Var("w0".to_string())),
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact
+        .wat
+        .contains(";; continuation-runtime subset=prompt-capture-i32"));
+    assert!(artifact.wat.contains(";; prompt kind=cont1"));
+    assert!(artifact.wat.contains(";; capture-cont binder=k kind=cont1"));
+    assert!(artifact
+        .wat
+        .contains(";; resume-cont binder=k kind=cont1 result=w0"));
+    assert!(artifact.wat.contains("i32.const 7"));
+    assert!(artifact.wat.contains("local.set $w0"));
+    assert!(artifact.wat.contains("local.get $w0"));
+    assert!(!artifact.wat.contains("kind=Cont1"));
+}
+
+#[test]
+fn backend_rejects_cont1_repeated_resume() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::Prompt {
+                kind: ContinuationKind::Cont1,
+            },
+            CoreOp::CaptureContinuation {
+                binder: "k".to_string(),
+                kind: ContinuationKind::Cont1,
+            },
+            CoreOp::TailCall {
+                func: "k".to_string(),
+                args: vec![CoreValue::I64(1)],
+            },
+            CoreOp::TailCallResult {
+                binder: "w0".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "k".to_string(),
+                args: vec![CoreValue::I64(2)],
+            },
+            CoreOp::TailCallResult {
+                binder: "w1".to_string(),
+            },
+            CoreOp::ReturnValue(CoreValue::Var("w1".to_string())),
         ],
         layouts: vec![],
         ownership: vec![],
@@ -112,14 +169,78 @@ fn backend_rejects_continuation_runtime_ops_until_lowering_is_executable() {
     assert_eq!(
         artifact.diagnostics,
         vec![BackendDiagnostic::UnsupportedContinuationRuntime {
-            op: "prompt".to_string(),
-            kind: ContinuationKind::ContN,
-            binder: None,
+            op: "resume-continuation".to_string(),
+            kind: ContinuationKind::Cont1,
+            binder: Some("k".to_string()),
         }]
     );
     assert_eq!(artifact.wat, "");
+}
+
+#[test]
+fn backend_lowers_contn_repeated_resume_to_i32_runtime_subset() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::Prompt {
+                kind: ContinuationKind::ContN,
+            },
+            CoreOp::CaptureContinuation {
+                binder: "retry".to_string(),
+                kind: ContinuationKind::ContN,
+            },
+            CoreOp::TailCall {
+                func: "retry".to_string(),
+                args: vec![CoreValue::I64(1)],
+            },
+            CoreOp::TailCallResult {
+                binder: "w0".to_string(),
+            },
+            CoreOp::TailCall {
+                func: "retry".to_string(),
+                args: vec![CoreValue::I64(2)],
+            },
+            CoreOp::TailCallResult {
+                binder: "w1".to_string(),
+            },
+            CoreOp::OperatorTarget {
+                protocol: "op_add".to_string(),
+                target: "op_add(w0)".to_string(),
+                intrinsic: Some(OperatorIntrinsic::I64Add),
+            },
+            CoreOp::TailCall {
+                func: "op_add(w0)".to_string(),
+                args: vec![
+                    CoreValue::Var("w0".to_string()),
+                    CoreValue::Var("w1".to_string()),
+                ],
+            },
+            CoreOp::TailCallResult {
+                binder: "w2".to_string(),
+            },
+            CoreOp::ReturnValue(CoreValue::Var("w2".to_string())),
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact.wat.contains(";; prompt kind=contn"));
+    assert!(artifact
+        .wat
+        .contains(";; capture-cont binder=retry kind=contn"));
+    assert!(artifact
+        .wat
+        .contains(";; resume-cont binder=retry kind=contn result=w0"));
+    assert!(artifact
+        .wat
+        .contains(";; resume-cont binder=retry kind=contn result=w1"));
+    assert!(artifact.wat.contains("call $op_add_u28_w0_u29_"));
+    assert!(artifact.wat.contains("local.set $w2"));
+    assert!(artifact.wat.contains("local.get $w2"));
     assert!(!artifact.wat.contains("kind=ContN"));
-    assert!(!artifact.wat.contains("kind=Cont1"));
 }
 
 #[test]

@@ -164,16 +164,6 @@ pub fn emit_wasm_gc_with_params(
         };
     }
 
-    if let Some(diagnostic) = unsupported_continuation_runtime(core) {
-        return BackendArtifact {
-            target: BackendTarget::WasmGc,
-            wat: String::new(),
-            manifest: manifest_for_core(core),
-            diagnostics: vec![diagnostic],
-            return_value: first_return_value(core),
-        };
-    }
-
     let manifest = manifest_for_core(core);
     let wat = match render_wat(core, &manifest, params) {
         Ok(wat) => wat,
@@ -195,24 +185,6 @@ pub fn emit_wasm_gc_with_params(
         diagnostics: vec![],
         return_value: first_return_value(core),
     }
-}
-
-fn unsupported_continuation_runtime(core: &CoreProgram) -> Option<BackendDiagnostic> {
-    core.ops.iter().find_map(|op| match op {
-        CoreOp::Prompt { kind } => Some(BackendDiagnostic::UnsupportedContinuationRuntime {
-            op: "prompt".to_string(),
-            kind: *kind,
-            binder: None,
-        }),
-        CoreOp::CaptureContinuation { binder, kind } => {
-            Some(BackendDiagnostic::UnsupportedContinuationRuntime {
-                op: "capture-continuation".to_string(),
-                kind: *kind,
-                binder: Some(binder.clone()),
-            })
-        }
-        _ => None,
-    })
 }
 
 fn unsupported_i32_return_value(
@@ -395,6 +367,10 @@ fn render_wat(
     manifest: &BackendManifest,
     params: &[String],
 ) -> Result<String, BackendDiagnostic> {
+    if core_contains_continuation_runtime(core) {
+        return render_continuation_wat(core, manifest, params);
+    }
+
     let env = RenderEnv::new(params);
     let mut wat = String::from("(module\n");
     let mut return_index = 0usize;
@@ -637,6 +613,282 @@ fn render_wat(
             }
         }
     }
+    wat.push_str(")\n");
+    Ok(wat)
+}
+
+fn core_contains_continuation_runtime(core: &CoreProgram) -> bool {
+    core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::Prompt { .. } | CoreOp::CaptureContinuation { .. }
+        )
+    })
+}
+
+fn render_continuation_wat(
+    core: &CoreProgram,
+    manifest: &BackendManifest,
+    params: &[String],
+) -> Result<String, BackendDiagnostic> {
+    let result_binders = core
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            CoreOp::TailCallResult { binder } => Some(binder.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let env = RenderEnv::new(params).with_locals(result_binders.clone());
+    let mut wat = String::from("(module\n");
+    for entry in &manifest.entries {
+        wat.push_str(&format!(
+            "  ;; symbol {} source={} origin={}\n",
+            entry.final_symbol, entry.source_debug_name, entry.pass_origin
+        ));
+    }
+    for op in &core.ops {
+        if let CoreOp::OperatorTarget {
+            protocol,
+            target,
+            intrinsic,
+        } = op
+        {
+            render_operator_intrinsic_wat(&mut wat, protocol, target, *intrinsic);
+        }
+    }
+
+    wat.push_str("  ;; continuation-runtime subset=prompt-capture-i32\n");
+    render_func_header(&mut wat, "main", Some("main"), &env);
+    for binder in &result_binders {
+        wat.push_str(&format!(
+            "    (local ${} i32)\n",
+            encode_debug_symbol(binder)
+        ));
+    }
+
+    let mut continuations = BTreeMap::<String, ContinuationKind>::new();
+    let mut cont1_consumed = BTreeSet::<String>::new();
+    let mut returned = false;
+    for (index, op) in core.ops.iter().enumerate() {
+        match op {
+            CoreOp::Prompt { kind } => {
+                wat.push_str(&format!(
+                    "    ;; prompt kind={}\n",
+                    render_continuation_kind(*kind)
+                ));
+            }
+            CoreOp::CaptureContinuation { binder, kind } => {
+                continuations.insert(binder.clone(), *kind);
+                wat.push_str(&format!(
+                    "    ;; capture-cont binder={} kind={}\n",
+                    escape_wat_comment(binder),
+                    render_continuation_kind(*kind)
+                ));
+            }
+            CoreOp::TailCall { func, args } if continuations.contains_key(func) => {
+                let kind = *continuations
+                    .get(func)
+                    .expect("checked continuation binder");
+                if kind == ContinuationKind::Cont1 && !cont1_consumed.insert(func.clone()) {
+                    return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
+                        op: "resume-continuation".to_string(),
+                        kind,
+                        binder: Some(func.clone()),
+                    });
+                }
+                let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
+                    return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
+                        op: "resume-without-result".to_string(),
+                        kind,
+                        binder: Some(func.clone()),
+                    });
+                };
+                let [arg] = args.as_slice() else {
+                    return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
+                        op: "resume-arity".to_string(),
+                        kind,
+                        binder: Some(func.clone()),
+                    });
+                };
+                wat.push_str(&format!(
+                    "    ;; resume-cont binder={} kind={} result={}\n",
+                    escape_wat_comment(func),
+                    render_continuation_kind(kind),
+                    escape_wat_comment(binder)
+                ));
+                render_core_value_i32(&mut wat, arg, &env)?;
+                wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
+            }
+            CoreOp::TailCall { func, args } => {
+                let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
+                    continue;
+                };
+                wat.push_str(&format!(
+                    "    ;; tailcall {} args=[{}]\n",
+                    final_symbol(func),
+                    args.iter()
+                        .map(CoreValue::debug_name)
+                        .map(|arg| escape_wat_comment(&arg))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+                for arg in args {
+                    render_core_value_i32(&mut wat, arg, &env)?;
+                }
+                wat.push_str(&format!("    call ${}\n", final_symbol(func)));
+                wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
+            }
+            CoreOp::ReturnValue(value) => {
+                render_core_value_i32(&mut wat, value, &env)?;
+                returned = true;
+            }
+            CoreOp::ReturnBranch {
+                cond,
+                then_value,
+                else_value,
+            } => {
+                render_core_value_i32(&mut wat, cond, &env)?;
+                wat.push_str("    if (result i32)\n");
+                render_core_value_i32_indented(&mut wat, then_value, &env, 6)?;
+                wat.push_str("    else\n");
+                render_core_value_i32_indented(&mut wat, else_value, &env, 6)?;
+                wat.push_str("    end\n");
+                returned = true;
+            }
+            CoreOp::ReturnMatch { scrutinee, arms } => {
+                render_match_arms_i32(&mut wat, scrutinee, arms, &env, 4)?;
+                returned = true;
+            }
+            CoreOp::DirectMethodTarget { .. }
+            | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::TailCallResult { .. }
+            | CoreOp::OperatorTarget { .. }
+            | CoreOp::TargetSpecificTerm { .. }
+            | CoreOp::LiftedFunction { .. } => {}
+            CoreOp::Branch { cond } => {
+                wat.push_str(&format!(
+                    "    ;; branch cond={}\n",
+                    escape_wat_comment(cond)
+                ));
+            }
+            CoreOp::Match {
+                scrutinee,
+                patterns,
+            } => {
+                wat.push_str(&format!(
+                    "    ;; match scrutinee={} arms={}\n",
+                    escape_wat_comment(scrutinee),
+                    patterns.len()
+                ));
+            }
+            CoreOp::TupleConstruct { layout, fields, .. } => {
+                wat.push_str(&format!(
+                    "    ;; tuple layout={} fields={}\n",
+                    escape_wat_comment(layout),
+                    fields.len()
+                ));
+            }
+            CoreOp::TupleFieldGet { layout, field, .. } => {
+                wat.push_str(&format!(
+                    "    ;; tuple-field layout={} field={}\n",
+                    escape_wat_comment(layout),
+                    escape_wat_comment(field)
+                ));
+            }
+            CoreOp::RecordConstruct { layout, fields } => {
+                wat.push_str(&format!(
+                    "    ;; record layout={} fields={}\n",
+                    escape_wat_comment(layout),
+                    fields.len()
+                ));
+            }
+            CoreOp::RecordUpdate {
+                base,
+                layout,
+                fields,
+            } => {
+                wat.push_str(&format!(
+                    "    ;; record-update base={} layout={} fields={}\n",
+                    escape_wat_comment(base),
+                    escape_wat_comment(layout),
+                    fields.len()
+                ));
+            }
+            CoreOp::RecordFieldGet { layout, field } => {
+                wat.push_str(&format!(
+                    "    ;; record-field layout={} field={}\n",
+                    escape_wat_comment(layout),
+                    escape_wat_comment(field)
+                ));
+            }
+            CoreOp::AdtConstruct {
+                data, ctor, args, ..
+            } => {
+                wat.push_str(&format!(
+                    "    ;; adt data={} ctor={} args={}\n",
+                    escape_wat_comment(data),
+                    escape_wat_comment(ctor),
+                    args.len()
+                ));
+            }
+            CoreOp::AdtTupleBridge {
+                data,
+                ctor,
+                tuple_fields,
+                tuple_to_adt_intrinsic,
+                adt_to_tuple_intrinsic,
+            } => {
+                wat.push_str(&format!(
+                    "    ;; adt-tuple-bridge data={} ctor={} fields={} tuple_to_adt={} adt_to_tuple={}\n",
+                    escape_wat_comment(data),
+                    escape_wat_comment(ctor),
+                    tuple_fields.len(),
+                    escape_wat_comment(tuple_to_adt_intrinsic.debug_name()),
+                    escape_wat_comment(adt_to_tuple_intrinsic.debug_name())
+                ));
+            }
+            CoreOp::CompilerIntrinsicUse {
+                intrinsic,
+                owner_namespace,
+                subject,
+            } => {
+                wat.push_str(&format!(
+                    "    ;; compiler-intrinsic owner={} intrinsic={} subject={}\n",
+                    escape_wat_comment(owner_namespace),
+                    escape_wat_comment(intrinsic.debug_name()),
+                    escape_wat_comment(subject)
+                ));
+            }
+            CoreOp::StaticRowAccess { field, layout } => {
+                wat.push_str(&format!(
+                    "    ;; static-row field={} layout={}\n",
+                    escape_wat_comment(field),
+                    escape_wat_comment(layout)
+                ));
+            }
+            CoreOp::DynRowAdapterAccess { subject, layout } => {
+                wat.push_str(&format!(
+                    "    ;; dyn-row subject={} layout={}\n",
+                    escape_wat_comment(subject),
+                    escape_wat_comment(layout)
+                ));
+            }
+        }
+    }
+    if !returned {
+        let (kind, binder) = continuations
+            .iter()
+            .next()
+            .map(|(binder, kind)| (*kind, Some(binder.clone())))
+            .unwrap_or((ContinuationKind::Cont1, None));
+        return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
+            op: "missing-continuation-return".to_string(),
+            kind,
+            binder,
+        });
+    }
+    wat.push_str("  )\n");
     wat.push_str(")\n");
     Ok(wat)
 }
