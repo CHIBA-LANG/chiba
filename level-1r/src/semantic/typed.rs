@@ -1628,7 +1628,7 @@ fn is_typed_resume_callee(binder: &str, callee: &TypedExpr) -> bool {
     )
 }
 
-fn common_type(left: &Type, right: &Type) -> Type {
+pub(crate) fn common_type(left: &Type, right: &Type) -> Type {
     if left == right {
         left.clone()
     } else if adt_nominal_instance_matches(left, right) {

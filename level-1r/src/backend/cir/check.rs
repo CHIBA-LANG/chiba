@@ -1,4 +1,4 @@
-use crate::typed::{Type, TypedExpr, TypedExprKind, UsageColor};
+use crate::typed::{common_type, Type, TypedExpr, TypedExprKind, UsageColor};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ControlFacts {
@@ -152,7 +152,7 @@ fn continuation_input_type(binder: &str, body: &TypedExpr) -> Type {
     collect_resume_inputs(binder, body, &mut inputs);
     inputs
         .into_iter()
-        .reduce(|left, right| if left == right { left } else { Type::Unknown })
+        .reduce(|left, right| common_type(&left, &right))
         .unwrap_or(Type::Unknown)
 }
 

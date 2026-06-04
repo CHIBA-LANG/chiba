@@ -438,6 +438,10 @@ def main() = resetn { match shift retry { retry(Option.Some(7)) + retry(Option.N
     assert_eq!(bundle.diagnostics, vec![]);
     assert!(bundle.backend_link.diagnostics.is_empty());
     assert_eq!(main.backend.diagnostics, vec![]);
+    assert_eq!(
+        main.control.continuations[0].input,
+        Type::Nominal("Option[i64]".to_string())
+    );
     assert_eq!(main.control.continuations[0].answer, Type::I64);
     assert_eq!(
         main.backend
