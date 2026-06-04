@@ -212,7 +212,13 @@ fn program_cont1_repeated_resume_is_rejected_by_backend() {
     let bundle = output.program;
     let main = &bundle.defs[0].output;
 
-    assert!(bundle.diagnostics.is_empty());
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::Cont1ResumedMoreThanOnce {
+            def: "main".to_string(),
+            binder: "k".to_string()
+        }]
+    );
     assert_eq!(
         main.backend.diagnostics,
         vec![

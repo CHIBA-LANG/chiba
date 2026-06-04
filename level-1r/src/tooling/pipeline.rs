@@ -19,7 +19,8 @@ use crate::core::{
 };
 use crate::cps::{cps_program, CpsProgram};
 use crate::cps_usage::{
-    analyze_cps_usage, simplify_continuations, ContinuationSimplificationFacts, CpsUsageFacts,
+    analyze_cps_usage, simplify_continuations, ContinuationSimplificationFacts, CpsUsageDiagnostic,
+    CpsUsageFacts,
 };
 use crate::debug::{render_visual_report, visual_report, VisualReport};
 use crate::frontend::{parse_source_program, FrontendError, FrontendOutput, SourceItemSpan};
@@ -173,6 +174,10 @@ pub enum ProgramDiagnostic {
         binder: String,
     },
     UnsafeMultiResumeCapture {
+        def: String,
+        binder: String,
+    },
+    Cont1ResumedMoreThanOnce {
         def: String,
         binder: String,
     },
@@ -526,6 +531,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     all_diagnostics.extend(global_init.diagnostics.iter().cloned().map(Into::into));
     all_diagnostics.extend(template_diagnostics(&defs));
     all_diagnostics.extend(control_diagnostics(&defs));
+    all_diagnostics.extend(cps_usage_diagnostics(&defs));
     if entry.is_none() {
         all_diagnostics.push(ProgramDiagnostic::MissingEntry);
     }
@@ -1242,6 +1248,25 @@ fn control_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
                     }
                     ControlError::UnsafeMultiResumeCapture { binder } => {
                         ProgramDiagnostic::UnsafeMultiResumeCapture {
+                            def: def.name.clone(),
+                            binder: binder.clone(),
+                        }
+                    }
+                })
+        })
+        .collect()
+}
+
+fn cps_usage_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
+    defs.iter()
+        .flat_map(|def| {
+            def.output
+                .cps_usage
+                .diagnostics
+                .iter()
+                .map(|diagnostic| match diagnostic {
+                    CpsUsageDiagnostic::Cont1ResumedMoreThanOnce { binder, .. } => {
+                        ProgramDiagnostic::Cont1ResumedMoreThanOnce {
                             def: def.name.clone(),
                             binder: binder.clone(),
                         }
@@ -2031,6 +2056,9 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
         }
         ProgramDiagnostic::UnsafeMultiResumeCapture { def, binder } => {
             format!("unsafe multi-resume capture {def}: {binder}")
+        }
+        ProgramDiagnostic::Cont1ResumedMoreThanOnce { def, binder } => {
+            format!("cont1 resumed more than once {def}: {binder}")
         }
         ProgramDiagnostic::MissingEntry => "missing entry".to_string(),
         ProgramDiagnostic::EntryHasParams { name, params } => {
