@@ -185,6 +185,78 @@ fn typed_continuation_boxed_storage_param_enters_callable_storage() {
 }
 
 #[test]
+fn program_cont1_single_resume_lowers_to_executable_wat() {
+    let output =
+        chiba_level1r::compile_source_program_bundle("def main() = reset { shift k { k(7) } }")
+            .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert!(main.backend.wat.contains(";; prompt kind=cont1"));
+    assert!(main
+        .backend
+        .wat
+        .contains(";; resume-cont binder=k kind=cont1 result=w0"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
+}
+
+#[test]
+fn program_cont1_repeated_resume_is_rejected_by_backend() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = reset { shift k { k(1) + k(2) } }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert!(bundle.diagnostics.is_empty());
+    assert_eq!(
+        main.backend.diagnostics,
+        vec![
+            chiba_level1r::backend::BackendDiagnostic::UnsupportedContinuationRuntime {
+                op: "resume-continuation".to_string(),
+                kind: chiba_level1r::control::ContinuationKind::Cont1,
+                binder: Some("k".to_string()),
+            }
+        ]
+    );
+    assert_eq!(bundle.backend_link.linked_wat, "");
+    assert_eq!(
+        bundle.backend_link.diagnostics,
+        vec![
+            chiba_level1r::backend::BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index: 0 }
+        ]
+    );
+}
+
+#[test]
+fn program_contn_repeated_resume_lowers_to_executable_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = resetn { shift retry { retry(1) + retry(2) } }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert!(main.backend.wat.contains(";; prompt kind=contn"));
+    assert!(main
+        .backend
+        .wat
+        .contains(";; resume-cont binder=retry kind=contn result=w0"));
+    assert!(main
+        .backend
+        .wat
+        .contains(";; resume-cont binder=retry kind=contn result=w1"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn interface_type_continuation_field_enters_callable_storage() {
     let program = SourceProgram::with_surface(
         None,
