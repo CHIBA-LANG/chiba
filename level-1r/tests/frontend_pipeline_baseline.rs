@@ -1961,6 +1961,17 @@ fn frontend_parses_resetn_shift_as_contn_with_rc_usage_audit() {
         .iter()
         .any(|entry| entry.subject == "continuation::retry"
             && entry.rust_reference_signature == "let retry: Rc<ContNFrame>"));
+    assert_eq!(
+        main.backend.diagnostics,
+        vec![
+            chiba_level1r::backend::BackendDiagnostic::UnsupportedContinuationRuntime {
+                op: "prompt".to_string(),
+                kind: ContinuationKind::ContN,
+                binder: None,
+            }
+        ]
+    );
+    assert_eq!(main.backend.wat, "");
 }
 
 #[test]

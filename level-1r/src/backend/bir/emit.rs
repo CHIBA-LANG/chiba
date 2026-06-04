@@ -45,8 +45,17 @@ pub struct BackendManifestEntry {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BackendDiagnostic {
-    CoreValidationFailed { diagnostics: usize },
-    UnsupportedI32ReturnValue { value: String },
+    CoreValidationFailed {
+        diagnostics: usize,
+    },
+    UnsupportedI32ReturnValue {
+        value: String,
+    },
+    UnsupportedContinuationRuntime {
+        op: String,
+        kind: ContinuationKind,
+        binder: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,6 +164,16 @@ pub fn emit_wasm_gc_with_params(
         };
     }
 
+    if let Some(diagnostic) = unsupported_continuation_runtime(core) {
+        return BackendArtifact {
+            target: BackendTarget::WasmGc,
+            wat: String::new(),
+            manifest: manifest_for_core(core),
+            diagnostics: vec![diagnostic],
+            return_value: first_return_value(core),
+        };
+    }
+
     let manifest = manifest_for_core(core);
     let wat = match render_wat(core, &manifest, params) {
         Ok(wat) => wat,
@@ -176,6 +195,24 @@ pub fn emit_wasm_gc_with_params(
         diagnostics: vec![],
         return_value: first_return_value(core),
     }
+}
+
+fn unsupported_continuation_runtime(core: &CoreProgram) -> Option<BackendDiagnostic> {
+    core.ops.iter().find_map(|op| match op {
+        CoreOp::Prompt { kind } => Some(BackendDiagnostic::UnsupportedContinuationRuntime {
+            op: "prompt".to_string(),
+            kind: *kind,
+            binder: None,
+        }),
+        CoreOp::CaptureContinuation { binder, kind } => {
+            Some(BackendDiagnostic::UnsupportedContinuationRuntime {
+                op: "capture-continuation".to_string(),
+                kind: *kind,
+                binder: Some(binder.clone()),
+            })
+        }
+        _ => None,
+    })
 }
 
 fn unsupported_i32_return_value(

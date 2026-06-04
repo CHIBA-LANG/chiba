@@ -91,7 +91,7 @@ fn backend_records_tailcall_targets_in_serialized_output() {
 }
 
 #[test]
-fn backend_continuation_comments_use_language_kind_not_rust_enum_debug() {
+fn backend_rejects_continuation_runtime_ops_until_lowering_is_executable() {
     let core = CoreProgram {
         ops: vec![
             CoreOp::Prompt {
@@ -109,11 +109,15 @@ fn backend_continuation_comments_use_language_kind_not_rust_enum_debug() {
 
     let artifact = emit_wasm_gc(&core, &CoreValidation::default());
 
-    assert_eq!(artifact.diagnostics, vec![]);
-    assert!(artifact.wat.contains(";; prompt kind=contn"));
-    assert!(artifact
-        .wat
-        .contains(";; capture-cont binder=retry kind=contn"));
+    assert_eq!(
+        artifact.diagnostics,
+        vec![BackendDiagnostic::UnsupportedContinuationRuntime {
+            op: "prompt".to_string(),
+            kind: ContinuationKind::ContN,
+            binder: None,
+        }]
+    );
+    assert_eq!(artifact.wat, "");
     assert!(!artifact.wat.contains("kind=ContN"));
     assert!(!artifact.wat.contains("kind=Cont1"));
 }
