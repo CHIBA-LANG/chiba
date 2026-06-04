@@ -3169,9 +3169,10 @@ fn global_init_rejects_unsupported_initializer_instead_of_faking_i32_zero() {
             expr: "helper()".to_string(),
         }]
     );
-    let diagnostic_text = format!("{:?}", bundle.diagnostics);
-    assert!(!diagnostic_text.contains("Call {"));
-    assert!(!diagnostic_text.contains("Var("));
+    let summary = bundle.render_summary();
+    assert!(summary.contains("unsupported static initializer VALUE: helper()"));
+    assert!(!summary.contains("Call {"));
+    assert!(!summary.contains("Var("));
     assert!(!bundle.backend_link.linked_wat.contains("global__VALUE"));
     assert!(!bundle
         .backend_link
@@ -3199,8 +3200,9 @@ fn global_init_rejects_unknown_static_reference_before_backend_lowering() {
             expr: "MISSING".to_string(),
         }]
     );
-    let diagnostic_text = format!("{:?}", bundle.diagnostics);
-    assert!(!diagnostic_text.contains("Var("));
+    let summary = bundle.render_summary();
+    assert!(summary.contains("unsupported static initializer VALUE: MISSING"));
+    assert!(!summary.contains("Var("));
     assert!(bundle.backend_link.diagnostics.is_empty());
     assert!(!bundle.backend_link.linked_wat.contains("global__VALUE"));
 }
@@ -3275,8 +3277,9 @@ fn global_init_if_let_binder_does_not_leak_to_else_initializer_branch() {
             expr: "value".to_string(),
         }]
     );
-    let diagnostic_text = format!("{:?}", bundle.diagnostics);
-    assert!(!diagnostic_text.contains("Var("));
+    let summary = bundle.render_summary();
+    assert!(summary.contains("unsupported static initializer PICKED: value"));
+    assert!(!summary.contains("Var("));
     assert!(bundle.backend_link.diagnostics.is_empty());
     assert!(!bundle.backend_link.linked_wat.contains("global__PICKED"));
 }
@@ -3431,8 +3434,9 @@ fn global_init_rejects_aggregate_static_initializer_instead_of_faking_i32_zero()
             expr: "{value: 13, ignored: 1}".to_string(),
         }]
     );
-    let diagnostic_text = format!("{:?}", bundle.diagnostics);
-    assert!(!diagnostic_text.contains("RecordField"));
+    let summary = bundle.render_summary();
+    assert!(summary.contains("unsupported static initializer BOX: {value: 13, ignored: 1}"));
+    assert!(!summary.contains("RecordField"));
     assert!(!bundle.backend_link.linked_wat.contains("global__BOX"));
     assert!(!bundle
         .backend_link

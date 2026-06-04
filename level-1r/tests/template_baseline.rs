@@ -135,10 +135,10 @@ fn explicit_instantiation_callee_name_is_source_facing_for_call_expr() {
             type_args: vec!["T".to_string()],
         }]
     );
-    let template_text = format!("{:?}", output.template);
-    assert!(template_text.contains("factory()"));
-    assert!(!template_text.contains("Call {"));
-    assert!(!template_text.contains("Var("));
+    let template_visual = &output.visual.template;
+    assert!(template_visual.contains("instantiate factory()[T]"));
+    assert!(!template_visual.contains("Call {"));
+    assert!(!template_visual.contains("Var("));
 }
 
 #[test]
