@@ -691,12 +691,24 @@ fn attach_program_extern_imports(bundle: &mut BackendLinkedBundle, interface: &I
             .manifest
             .imports
             .iter()
-            .filter(|import| !existing_imports.contains(import))
+            .filter(|import| !extern_import_runtime_exists(import, &existing_imports))
             .cloned()
             .collect::<Vec<_>>();
         sort_dedup_imports(&mut comment_imports);
         insert_extern_import_comments(&mut bundle.linked_wat, &comment_imports);
     }
+}
+
+fn extern_import_runtime_exists(
+    import: &BackendExternImport,
+    existing_imports: &[BackendExternImport],
+) -> bool {
+    existing_imports.iter().any(|existing| {
+        existing.abi == import.abi
+            && existing.module == import.module
+            && existing.name == import.name
+            && existing.signature_hash == import.signature_hash
+    })
 }
 
 fn backend_extern_imports_for_interface(interface: &InterfaceSummary) -> Vec<BackendExternImport> {
@@ -1606,6 +1618,15 @@ fn relabel_program_wat(artifact: &BackendArtifact, symbol: &str, is_entry: bool)
         wat = wat.replace(
             "(func $chiba_return_",
             &format!("(func ${symbol}__chiba_return_"),
+        );
+    } else {
+        wat = wat.replace(
+            "(func $chiba_tailcall_0 (result i32)",
+            &format!("(func ${symbol} (export \"main\") (result i32)"),
+        );
+        wat = wat.replace(
+            "(func $chiba_return_0 (result i32)",
+            &format!("(func ${symbol} (export \"main\") (result i32)"),
         );
     }
     wat

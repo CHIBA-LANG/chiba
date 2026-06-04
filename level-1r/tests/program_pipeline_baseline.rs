@@ -1063,12 +1063,7 @@ fn program_zero_arg_tailcall_lowers_to_executable_direct_call_wat() {
         .contains(";; tailcall helper args=[]"));
     assert!(bundle.backend_link.linked_wat.contains("call $helper"));
 
-    let callable_wat = export_func_for_test(
-        &bundle.backend_link.linked_wat,
-        "$chiba_tailcall_0",
-        "tailcall_main",
-    );
-    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "7");
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
 }
 
 #[test]
@@ -1101,12 +1096,7 @@ fn program_literal_arg_tailcall_lowers_to_executable_direct_call_wat() {
     assert!(bundle.backend_link.linked_wat.contains("i32.const 9"));
     assert!(bundle.backend_link.linked_wat.contains("call $helper"));
 
-    let callable_wat = export_func_for_test(
-        &bundle.backend_link.linked_wat,
-        "$chiba_tailcall_0",
-        "tailcall_main",
-    );
-    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "9");
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
 }
 
 #[test]
@@ -1130,12 +1120,7 @@ def main(): i64 = 1 |> id",
     }));
     assert!(bundle.backend_link.linked_wat.contains("call $id"));
 
-    let callable_wat = export_func_for_test(
-        &bundle.backend_link.linked_wat,
-        "$chiba_tailcall_0",
-        "tailcall_main",
-    );
-    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "1");
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
 }
 
 #[test]
@@ -1162,12 +1147,7 @@ def main(): i64 = 2 |> add(_, _)",
     }));
     assert!(bundle.backend_link.linked_wat.contains("call $add"));
 
-    let callable_wat = export_func_for_test(
-        &bundle.backend_link.linked_wat,
-        "$chiba_tailcall_0",
-        "tailcall_main",
-    );
-    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "4");
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "4");
 }
 
 #[test]
@@ -1187,12 +1167,7 @@ def main(): i64 = div(mul(sub(10, 4), 3), 2)",
     assert!(bundle.backend_link.linked_wat.contains("i32.mul"));
     assert!(bundle.backend_link.linked_wat.contains("i32.div_s"));
 
-    let callable_wat = export_func_for_test(
-        &bundle.backend_link.linked_wat,
-        "$chiba_tailcall_0",
-        "tailcall_main",
-    );
-    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "9");
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
 }
 
 #[test]
@@ -1230,12 +1205,7 @@ fn program_param_branch_lowers_to_executable_wat() {
         .contains("(func $helper (param $x i32) (result i32)"));
     assert!(bundle.backend_link.linked_wat.contains("local.get $x"));
 
-    let callable_wat = export_func_for_test(
-        &bundle.backend_link.linked_wat,
-        "$chiba_tailcall_0",
-        "tailcall_main",
-    );
-    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "22");
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "22");
 }
 
 #[test]
@@ -1283,12 +1253,7 @@ fn program_param_literal_match_lowers_to_executable_wat() {
         .contains("(func $helper (param $x i32) (result i32)"));
     assert!(bundle.backend_link.linked_wat.contains("local.get $x"));
 
-    let callable_wat = export_func_for_test(
-        &bundle.backend_link.linked_wat,
-        "$chiba_tailcall_0",
-        "tailcall_main",
-    );
-    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "10");
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "10");
 }
 
 #[test]
@@ -1673,12 +1638,7 @@ def main() = inc(8)
         ";; extern-import c symbol=inc module=env name=level1r_inc signature=i64_to_i64"
     ));
 
-    let callable_wat = export_func_for_test(
-        &bundle.backend_link.linked_wat,
-        "$chiba_tailcall_0",
-        "tailcall_main",
-    );
-    assert_eq!(run_wat_export(&callable_wat, "tailcall_main"), "9");
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
 }
 
 #[test]
@@ -3737,13 +3697,6 @@ fn run_wat_export(wat: &str, export: &str) -> String {
         .expect("wat stdout utf8")
         .trim()
         .to_string()
-}
-
-fn export_func_for_test(wat: &str, symbol: &str, export: &str) -> String {
-    wat.replace(
-        &format!("(func {symbol} (result i32)"),
-        &format!("(func {symbol} (export \"{export}\") (result i32)"),
-    )
 }
 
 #[test]
