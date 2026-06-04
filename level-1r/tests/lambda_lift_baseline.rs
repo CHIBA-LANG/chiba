@@ -47,7 +47,12 @@ fn visual_report_shows_lambda_lift_symbols() {
     let visual = output.render_visual();
 
     assert!(visual.contains("lambda-lift:"));
-    assert!(visual.contains("lift::0000::closure__x"));
-    assert!(visual.contains("lift::0001::closure__y"));
-    assert!(visual.contains("env_params"));
+    assert!(visual.contains("functions=2"));
+    assert!(visual
+        .contains("function 0 source=closure::x symbol=lift::0000::closure__x env=[] direct=true"));
+    assert!(visual.contains(
+        "function 1 source=closure::y symbol=lift::0001::closure__y env=[x] direct=false"
+    ));
+    assert!(!output.visual.lambda_lift.contains("LambdaLiftFacts"));
+    assert!(!output.visual.lambda_lift.contains("env_params"));
 }

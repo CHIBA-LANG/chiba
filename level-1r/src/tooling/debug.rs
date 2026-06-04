@@ -192,7 +192,7 @@ pub fn visual_report(
             continuation_simplification,
         ),
         closure: format!("{closure:#?}"),
-        lambda_lift: format!("{lambda_lift:#?}"),
+        lambda_lift: render_lambda_lift_facts(lambda_lift),
         core: format!("{core:#?}"),
         callable_storage: callable_storage.to_string(),
         closure_core_usage: render_closure_core_usage(closure_core_usage),
@@ -811,6 +811,23 @@ fn render_closure_simplification(facts: &ClosureSimplificationFacts) -> String {
             out,
             "continuation-package {package} decision={}",
             render_continuation_package_decision(*decision)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_lambda_lift_facts(facts: &LambdaLiftFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "functions={}", facts.functions.len()).unwrap();
+    for (index, function) in facts.functions.iter().enumerate() {
+        writeln!(
+            out,
+            "function {index} source={} symbol={} env=[{}] direct={}",
+            function.source,
+            function.symbol,
+            function.env_params.join(", "),
+            function.direct
         )
         .unwrap();
     }
