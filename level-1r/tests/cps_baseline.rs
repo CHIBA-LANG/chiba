@@ -4,6 +4,18 @@ use chiba_level1r::typed::type_expr;
 use chiba_level1r::usage::UseCount;
 use chiba_level1r::{compile_expr, Expr};
 
+fn cps_term_kind_name(term: &CpsTerm) -> &'static str {
+    match term {
+        CpsTerm::Halt(_) => "halt",
+        CpsTerm::AppFun { .. } => "app-fun",
+        CpsTerm::AppCont { .. } => "app-cont",
+        CpsTerm::Prompt { .. } => "prompt",
+        CpsTerm::Capture { .. } => "capture",
+        CpsTerm::Branch { .. } => "branch",
+        CpsTerm::Match { .. } => "match",
+    }
+}
+
 #[test]
 fn atom_variable_cps_is_halt_without_administrative_continuation() {
     let output = compile_expr(&Expr::var("x"));
@@ -48,7 +60,7 @@ fn lambda_adds_object_level_continuation_parameter() {
             assert!(k_param.starts_with('k'));
             assert_eq!(body.to_string(), format!("{k_param}(x)"));
         }
-        other => panic!("expected lambda atom, got {other:?}"),
+        other => panic!("expected lambda atom, got {}", cps_term_kind_name(&other)),
     }
 }
 

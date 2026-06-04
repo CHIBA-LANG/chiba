@@ -5,6 +5,30 @@ use chiba_level1r::{
     compile_expr, compile_program_bundle, Expr, ParamDecl, SourceItem, SourceProgram, Visibility,
 };
 
+fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
+    match kind {
+        TypedExprKind::Var(_) => "var",
+        TypedExprKind::Lit(_) => "literal",
+        TypedExprKind::Lambda { .. } => "lambda",
+        TypedExprKind::Call { .. } => "call",
+        TypedExprKind::Tuple { .. } => "tuple",
+        TypedExprKind::Record { .. } => "record",
+        TypedExprKind::RecordUpdate { .. } => "record-update",
+        TypedExprKind::AdtCtor { .. } => "adt-ctor",
+        TypedExprKind::Field { .. } => "field",
+        TypedExprKind::MethodCall { .. } => "method-call",
+        TypedExprKind::Index { .. } => "index",
+        TypedExprKind::Range { .. } => "range",
+        TypedExprKind::Binary { .. } => "binary",
+        TypedExprKind::If { .. } => "if",
+        TypedExprKind::IfLet { .. } => "if-let",
+        TypedExprKind::Match { .. } => "match",
+        TypedExprKind::Nominal { .. } => "nominal",
+        TypedExprKind::Reset { .. } => "reset",
+        TypedExprKind::Shift { .. } => "shift",
+    }
+}
+
 #[test]
 fn tuple_expression_has_stable_nominal_type_from_ordered_field_types() {
     let typed = type_expr(&Expr::tuple(vec![Expr::i64(1), Expr::bool(true)]));
@@ -15,7 +39,10 @@ fn tuple_expression_has_stable_nominal_type_from_ordered_field_types() {
             assert_eq!(nominal, "Tuple2_I64_Bool");
             assert_eq!(fields.len(), 2);
         }
-        other => panic!("expected tuple expression, got {other:?}"),
+        other => panic!(
+            "expected tuple expression, got {}",
+            typed_expr_kind_name(&other)
+        ),
     }
 }
 
@@ -91,7 +118,10 @@ fn tuple_positional_field_access_has_stable_underscore_names() {
             assert_eq!(name, "_2");
             assert_eq!(*access, FieldAccessKind::TuplePositionalRow { index: 1 });
         }
-        other => panic!("expected ordinary typed field access, got {other:?}"),
+        other => panic!(
+            "expected ordinary typed field access, got {}",
+            typed_expr_kind_name(other)
+        ),
     }
     assert_eq!(
         output.cps.to_string(),

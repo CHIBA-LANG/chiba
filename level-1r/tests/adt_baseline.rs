@@ -4,6 +4,30 @@ use chiba_level1r::pattern::PatternDiagnostic;
 use chiba_level1r::typed::{type_expr, Type, TypedExprKind};
 use chiba_level1r::{compile_expr, Expr};
 
+fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
+    match kind {
+        TypedExprKind::Var(_) => "var",
+        TypedExprKind::Lit(_) => "literal",
+        TypedExprKind::Lambda { .. } => "lambda",
+        TypedExprKind::Call { .. } => "call",
+        TypedExprKind::Tuple { .. } => "tuple",
+        TypedExprKind::Record { .. } => "record",
+        TypedExprKind::RecordUpdate { .. } => "record-update",
+        TypedExprKind::AdtCtor { .. } => "adt-ctor",
+        TypedExprKind::Field { .. } => "field",
+        TypedExprKind::MethodCall { .. } => "method-call",
+        TypedExprKind::Index { .. } => "index",
+        TypedExprKind::Range { .. } => "range",
+        TypedExprKind::Binary { .. } => "binary",
+        TypedExprKind::If { .. } => "if",
+        TypedExprKind::IfLet { .. } => "if-let",
+        TypedExprKind::Match { .. } => "match",
+        TypedExprKind::Nominal { .. } => "nominal",
+        TypedExprKind::Reset { .. } => "reset",
+        TypedExprKind::Shift { .. } => "shift",
+    }
+}
+
 fn option_some(value: Expr) -> Expr {
     Expr::adt_ctor("Option", "Some", vec!["Some", "None"], vec![value])
 }
@@ -35,7 +59,10 @@ fn adt_constructor_expression_carries_known_data_shape() {
             assert_eq!(variants, vec!["None".to_string(), "Some".to_string()]);
             assert_eq!(args.len(), 1);
         }
-        other => panic!("expected ADT ctor expression, got {other:?}"),
+        other => panic!(
+            "expected ADT ctor expression, got {}",
+            typed_expr_kind_name(&other)
+        ),
     }
 }
 

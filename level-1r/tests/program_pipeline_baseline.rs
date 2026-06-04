@@ -83,6 +83,30 @@ fn render_backend_failure_context(
     out
 }
 
+fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
+    match kind {
+        TypedExprKind::Var(_) => "var",
+        TypedExprKind::Lit(_) => "literal",
+        TypedExprKind::Lambda { .. } => "lambda",
+        TypedExprKind::Call { .. } => "call",
+        TypedExprKind::Tuple { .. } => "tuple",
+        TypedExprKind::Record { .. } => "record",
+        TypedExprKind::RecordUpdate { .. } => "record-update",
+        TypedExprKind::AdtCtor { .. } => "adt-ctor",
+        TypedExprKind::Field { .. } => "field",
+        TypedExprKind::MethodCall { .. } => "method-call",
+        TypedExprKind::Index { .. } => "index",
+        TypedExprKind::Range { .. } => "range",
+        TypedExprKind::Binary { .. } => "binary",
+        TypedExprKind::If { .. } => "if",
+        TypedExprKind::IfLet { .. } => "if-let",
+        TypedExprKind::Match { .. } => "match",
+        TypedExprKind::Nominal { .. } => "nominal",
+        TypedExprKind::Reset { .. } => "reset",
+        TypedExprKind::Shift { .. } => "shift",
+    }
+}
+
 #[test]
 fn compile_program_keeps_legacy_per_def_outputs() {
     let program = SourceProgram::new(vec![
@@ -2620,7 +2644,10 @@ fn method_self_record_update_preserves_nominal_receiver_type_in_body() {
             assert_eq!(fields[0].name, "value");
             assert_eq!(fields[0].value.ty, Type::Nominal("T".to_string()));
         }
-        other => panic!("expected typed record update, got {other:?}"),
+        other => panic!(
+            "expected typed record update, got {}",
+            typed_expr_kind_name(other)
+        ),
     }
 }
 
@@ -2655,7 +2682,10 @@ def main() = 0",
             assert_eq!(fields[0].name, "value");
             assert_eq!(fields[0].value.ty, Type::Nominal("T".to_string()));
         }
-        other => panic!("expected typed record update, got {other:?}"),
+        other => panic!(
+            "expected typed record update, got {}",
+            typed_expr_kind_name(other)
+        ),
     }
     assert!(update.core.ops.iter().any(|op| {
         matches!(
@@ -2700,7 +2730,10 @@ fn method_self_field_access_uses_row_style_type_shape() {
             assert_eq!(receiver.ty, Type::Nominal("Box[T]".to_string()));
             assert_eq!(name, "value");
         }
-        other => panic!("expected typed field access, got {other:?}"),
+        other => panic!(
+            "expected typed field access, got {}",
+            typed_expr_kind_name(other)
+        ),
     }
 }
 

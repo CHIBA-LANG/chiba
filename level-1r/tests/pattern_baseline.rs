@@ -1,10 +1,34 @@
 use chiba_level1r::ast::Pattern;
 use chiba_level1r::pattern::PatternDiagnostic;
-use chiba_level1r::typed::{type_expr_with_context, Type, TypeContext, TypeEnv};
+use chiba_level1r::typed::{type_expr_with_context, Type, TypeContext, TypeEnv, TypedExprKind};
 use chiba_level1r::{
     compile_expr, compile_program_bundle, compile_source_program_bundle, Expr, Literal, ParamDecl,
     SourceItem, SourceProgram, TemplateParamSource, TypeDecl, TypeField, Visibility,
 };
+
+fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
+    match kind {
+        TypedExprKind::Var(_) => "var",
+        TypedExprKind::Lit(_) => "literal",
+        TypedExprKind::Lambda { .. } => "lambda",
+        TypedExprKind::Call { .. } => "call",
+        TypedExprKind::Tuple { .. } => "tuple",
+        TypedExprKind::Record { .. } => "record",
+        TypedExprKind::RecordUpdate { .. } => "record-update",
+        TypedExprKind::AdtCtor { .. } => "adt-ctor",
+        TypedExprKind::Field { .. } => "field",
+        TypedExprKind::MethodCall { .. } => "method-call",
+        TypedExprKind::Index { .. } => "index",
+        TypedExprKind::Range { .. } => "range",
+        TypedExprKind::Binary { .. } => "binary",
+        TypedExprKind::If { .. } => "if",
+        TypedExprKind::IfLet { .. } => "if-let",
+        TypedExprKind::Match { .. } => "match",
+        TypedExprKind::Nominal { .. } => "nominal",
+        TypedExprKind::Reset { .. } => "reset",
+        TypedExprKind::Shift { .. } => "shift",
+    }
+}
 
 #[test]
 fn bool_match_is_exhaustive_when_both_literals_are_covered() {
@@ -187,7 +211,10 @@ fn tuple_pattern_does_not_infer_fields_from_nominal_string_shape() {
         chiba_level1r::typed::TypedExprKind::IfLet { then_branch, .. } => {
             assert_eq!(then_branch.ty, Type::Unknown);
         }
-        other => panic!("expected if-let typed expr, got {other:?}"),
+        other => panic!(
+            "expected if-let typed expr, got {}",
+            typed_expr_kind_name(&other)
+        ),
     }
 }
 

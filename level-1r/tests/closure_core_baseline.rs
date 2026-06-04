@@ -3,6 +3,19 @@ use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{CoreOp, LayoutKind};
 use chiba_level1r::{compile_expr, Expr};
 
+fn layout_kind_name(kind: &LayoutKind) -> &'static str {
+    match kind {
+        LayoutKind::RowShape(_) => "row-shape",
+        LayoutKind::DynRowPackage(_) => "dyn-row-package",
+        LayoutKind::ContinuationPackage(_) => "continuation-package",
+        LayoutKind::Cont1StateMachine(_) => "cont1-state-machine",
+        LayoutKind::ClosureEnv(_) => "closure-env",
+        LayoutKind::TupleStruct(_) => "tuple-struct",
+        LayoutKind::RecordStruct(_) => "record-struct",
+        LayoutKind::AdtShape(_) => "adt-shape",
+    }
+}
+
 #[test]
 fn no_capture_lambda_is_direct_no_capture() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
@@ -45,7 +58,10 @@ fn nested_lambda_captures_outer_binder_with_stable_env_field() {
             assert_eq!(env.fields.len(), 1);
             assert_eq!(env.fields[0].name, "x");
         }
-        other => panic!("expected closure env layout, got {other:?}"),
+        other => panic!(
+            "expected closure env layout, got {}",
+            layout_kind_name(other)
+        ),
     }
     assert_eq!(output.core_validation.diagnostics, vec![]);
 }

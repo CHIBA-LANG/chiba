@@ -8,6 +8,30 @@ use chiba_level1r::{
     TypeField, Visibility,
 };
 
+fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
+    match kind {
+        TypedExprKind::Var(_) => "var",
+        TypedExprKind::Lit(_) => "literal",
+        TypedExprKind::Lambda { .. } => "lambda",
+        TypedExprKind::Call { .. } => "call",
+        TypedExprKind::Tuple { .. } => "tuple",
+        TypedExprKind::Record { .. } => "record",
+        TypedExprKind::RecordUpdate { .. } => "record-update",
+        TypedExprKind::AdtCtor { .. } => "adt-ctor",
+        TypedExprKind::Field { .. } => "field",
+        TypedExprKind::MethodCall { .. } => "method-call",
+        TypedExprKind::Index { .. } => "index",
+        TypedExprKind::Range { .. } => "range",
+        TypedExprKind::Binary { .. } => "binary",
+        TypedExprKind::If { .. } => "if",
+        TypedExprKind::IfLet { .. } => "if-let",
+        TypedExprKind::Match { .. } => "match",
+        TypedExprKind::Nominal { .. } => "nominal",
+        TypedExprKind::Reset { .. } => "reset",
+        TypedExprKind::Shift { .. } => "shift",
+    }
+}
+
 #[test]
 fn record_literal_type_canonicalizes_field_order() {
     let typed = type_expr(&Expr::record(vec![
@@ -33,7 +57,10 @@ fn record_literal_type_canonicalizes_field_order() {
             assert_eq!(fields[0].name, "y");
             assert_eq!(fields[1].name, "x");
         }
-        other => panic!("expected record expression, got {other:?}"),
+        other => panic!(
+            "expected record expression, got {}",
+            typed_expr_kind_name(&other)
+        ),
     }
 }
 

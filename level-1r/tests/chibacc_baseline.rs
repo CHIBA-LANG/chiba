@@ -25,6 +25,13 @@ fn grammar(start: &str, rules: Vec<Rule>) -> Grammar {
     }
 }
 
+fn labeled_ast_kind_name(ast: &LabeledAst) -> &'static str {
+    match ast {
+        LabeledAst::Ok { .. } => "ok",
+        LabeledAst::Err { .. } => "err",
+    }
+}
+
 #[test]
 fn parser_consumes_token_sequence_into_labeled_ast() {
     let grammar = grammar(
@@ -58,7 +65,7 @@ fn parser_consumes_token_sequence_into_labeled_ast() {
             assert_eq!(consumed, 4);
             assert!(matches!(ast, Ast::Node { .. }));
         }
-        other => panic!("expected OK parse, got {other:?}"),
+        other => panic!("expected OK parse, got {}", labeled_ast_kind_name(&other)),
     }
 }
 
@@ -194,7 +201,10 @@ fn pratt_parser_preserves_precedence_for_calculator_shape() {
                 Ast::Node { label, .. } if label == "MulExpr"
             ));
         }
-        other => panic!("expected precedence parse, got {other:?}"),
+        other => panic!(
+            "expected precedence parse, got {}",
+            labeled_ast_kind_name(&other)
+        ),
     }
 }
 
@@ -222,7 +232,10 @@ fn pratt_parser_uses_lbp_rbp_for_left_associative_infix() {
                 Ast::Node { label, .. } if label == "AddExpr"
             ));
         }
-        other => panic!("expected left associative parse, got {other:?}"),
+        other => panic!(
+            "expected left associative parse, got {}",
+            labeled_ast_kind_name(&other)
+        ),
     }
 }
 
