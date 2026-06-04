@@ -300,6 +300,96 @@ fn program_reset_shift_answer_type_uses_captured_context() {
 }
 
 #[test]
+fn program_cont1_single_resume_replays_captured_branch_context() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = reset { if shift k { k(true) } { 11 } else { 22 } }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert_eq!(main.control.continuations[0].input, Type::Bool);
+    assert_eq!(main.control.continuations[0].answer, Type::I64);
+    assert!(main
+        .backend
+        .wat
+        .contains(";; resume-cont binder=k kind=cont1"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "11");
+}
+
+#[test]
+fn program_contn_repeated_resume_replays_captured_branch_context() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = resetn { if shift retry { retry(true) + retry(false) } { 11 } else { 22 } }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert_eq!(main.control.continuations[0].input, Type::Bool);
+    assert_eq!(main.control.continuations[0].answer, Type::I64);
+    assert_eq!(
+        main.backend
+            .wat
+            .matches(";; resume-cont binder=retry kind=contn result=")
+            .count(),
+        2
+    );
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "33");
+}
+
+#[test]
+fn program_cont1_single_resume_replays_captured_match_context() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = reset { match shift k { k(1) } { 1 => 11, _ => 22 } }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert_eq!(main.control.continuations[0].input, Type::I64);
+    assert_eq!(main.control.continuations[0].answer, Type::I64);
+    assert!(main
+        .backend
+        .wat
+        .contains(";; resume-cont binder=k kind=cont1"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "11");
+}
+
+#[test]
+fn program_contn_repeated_resume_replays_captured_match_context() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = resetn { match shift retry { retry(1) + retry(2) } { 1 => 11, _ => 22 } }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert_eq!(main.control.continuations[0].input, Type::I64);
+    assert_eq!(main.control.continuations[0].answer, Type::I64);
+    assert_eq!(
+        main.backend
+            .wat
+            .matches(";; resume-cont binder=retry kind=contn result=")
+            .count(),
+        2
+    );
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "33");
+}
+
+#[test]
 fn interface_type_continuation_field_enters_callable_storage() {
     let program = SourceProgram::with_surface(
         None,

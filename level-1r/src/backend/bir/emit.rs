@@ -1038,6 +1038,23 @@ fn render_captured_continuation_i32(
                 render_core_value_i32(wat, value, &env)?;
                 return Ok(());
             }
+            CoreOp::ReturnBranch {
+                cond,
+                then_value,
+                else_value,
+            } => {
+                render_core_value_i32(wat, cond, &env)?;
+                wat.push_str("    if (result i32)\n");
+                render_core_value_i32_indented(wat, then_value, &env, 6)?;
+                wat.push_str("    else\n");
+                render_core_value_i32_indented(wat, else_value, &env, 6)?;
+                wat.push_str("    end\n");
+                return Ok(());
+            }
+            CoreOp::ReturnMatch { scrutinee, arms } => {
+                render_match_arms_i32(wat, scrutinee, arms, &env, 4)?;
+                return Ok(());
+            }
             CoreOp::OperatorTarget { .. } | CoreOp::DynamicCallableTarget { .. } => {}
             _ => {
                 return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
