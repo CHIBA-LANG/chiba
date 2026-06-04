@@ -7,8 +7,8 @@ use chiba_level1r::pattern::PatternDiagnostic;
 use chiba_level1r::typed::{Type, TypedExprKind};
 use chiba_level1r::{
     build_interface_summary, compile_program, compile_program_bundle,
-    compile_program_with_interface, parse_source_program, project_surface_many, Expr,
-    ProgramCompileOutput, ProgramDiagnostic,
+    compile_program_with_interface, compile_source_program_bundle, parse_source_program,
+    project_surface_many, Expr, ProgramCompileOutput, ProgramDiagnostic,
 };
 use std::process::Command;
 
@@ -1567,6 +1567,49 @@ fn program_surface_reports_extern_and_def_duplicate_in_same_namespace() {
         .contains(&ProgramDiagnostic::DuplicateDef {
             name: "fd_write".to_string(),
         }));
+}
+
+#[test]
+fn program_backend_cache_key_includes_source_extern_imports() {
+    let wasi = compile_source_program_bundle(
+        r#"
+def fd_write(fd: i64): i64 = extern "wasi" "fd_write"
+def main() = 0
+"#,
+    )
+    .expect("compile wasi extern")
+    .program;
+    let env = compile_source_program_bundle(
+        r#"
+def fd_write(fd: i64): i64 = extern "C" "fd_write"
+def main() = 0
+"#,
+    )
+    .expect("compile env extern")
+    .program;
+    let env_lower = compile_source_program_bundle(
+        r#"
+def fd_write(fd: i64): i64 = extern "c" "fd_write"
+def main() = 0
+"#,
+    )
+    .expect("compile lowercase env extern")
+    .program;
+    let renamed = compile_source_program_bundle(
+        r#"
+def fd_write(fd: i64): i64 = extern "wasi" "proc_exit"
+def main() = 0
+"#,
+    )
+    .expect("compile renamed extern")
+    .program;
+
+    assert_ne!(wasi.backend_cache_key, env.backend_cache_key);
+    assert_eq!(env.backend_cache_key, env_lower.backend_cache_key);
+    assert_ne!(wasi.backend_cache_key, renamed.backend_cache_key);
+    assert!(wasi.diagnostics.is_empty());
+    assert!(env.diagnostics.is_empty());
+    assert!(renamed.diagnostics.is_empty());
 }
 
 #[test]

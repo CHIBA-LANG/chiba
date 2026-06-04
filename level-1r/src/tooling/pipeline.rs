@@ -7,8 +7,8 @@ use crate::ast::{
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_params, link_backend_artifacts, BackendArtifact,
-    BackendCacheConfig, BackendCacheKey, BackendDiagnostic, BackendLinkDiagnostic,
-    BackendLinkedBundle,
+    BackendCacheConfig, BackendCacheKey, BackendDiagnostic, BackendExternAbi, BackendExternImport,
+    BackendLinkDiagnostic, BackendLinkedBundle,
 };
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -566,7 +566,12 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         "P8ProgramBackendCacheKey",
         "BackendLinkedBundle",
         "BackendCacheKey",
-        || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
+        || {
+            backend_cache_key(
+                &backend_link,
+                &backend_cache_config_for_interface(&interface),
+            )
+        },
     );
     ProgramCompileOutput {
         namespace: normalized_program.namespace.clone(),
@@ -581,6 +586,53 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         backend_cache_key,
         passes,
     }
+}
+
+fn backend_cache_config_for_interface(interface: &InterfaceSummary) -> BackendCacheConfig {
+    let mut config = BackendCacheConfig::default();
+    config.imports = interface
+        .functions
+        .iter()
+        .filter_map(|function| {
+            let extern_decl = function.extern_decl.as_ref()?;
+            Some(BackendExternImport {
+                abi: backend_extern_abi(extern_decl.abi),
+                module: backend_extern_module(extern_decl.abi).to_string(),
+                name: extern_decl.symbol.clone(),
+                signature_hash: backend_extern_signature_hash(
+                    &function.param_types,
+                    &function.return_type,
+                ),
+            })
+        })
+        .collect();
+    config
+}
+
+fn backend_extern_abi(abi: ExternAbi) -> BackendExternAbi {
+    match abi {
+        ExternAbi::Wasi => BackendExternAbi::Wasi,
+        ExternAbi::C => BackendExternAbi::C,
+    }
+}
+
+fn backend_extern_module(abi: ExternAbi) -> &'static str {
+    match abi {
+        ExternAbi::Wasi => "wasi_snapshot_preview1",
+        ExternAbi::C => "env",
+    }
+}
+
+fn backend_extern_signature_hash(
+    params: &[Option<String>],
+    return_type: &Option<String>,
+) -> String {
+    let params = params
+        .iter()
+        .map(|param| param.as_deref().unwrap_or("_"))
+        .collect::<Vec<_>>()
+        .join("_");
+    format!("{}_to_{}", params, return_type.as_deref().unwrap_or("unit"))
 }
 
 fn normalize_pattern_clause_defs(program: &SourceProgram) -> SourceProgram {
