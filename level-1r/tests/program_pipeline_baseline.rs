@@ -222,13 +222,12 @@ fn program_cont1_repeated_resume_is_rejected_by_backend() {
     assert_eq!(
         main.backend.diagnostics,
         vec![
-            chiba_level1r::backend::BackendDiagnostic::UnsupportedContinuationRuntime {
-                op: "resume-continuation".to_string(),
-                kind: chiba_level1r::control::ContinuationKind::Cont1,
-                binder: Some("k".to_string()),
+            chiba_level1r::backend::BackendDiagnostic::Cont1ResumedMoreThanOnce {
+                binder: "k".to_string()
             }
         ]
     );
+    assert_eq!(main.backend.wat, "");
     assert_eq!(bundle.backend_link.linked_wat, "");
     assert_eq!(
         bundle.backend_link.diagnostics,
@@ -360,6 +359,40 @@ fn program_contn_repeated_resume_replays_captured_reset_context() {
         2
     );
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "23");
+}
+
+#[test]
+fn program_cont1_repeated_resume_is_rejected_before_program_backend_link() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = reset { 10 + shift k { k(1) + k(2) } }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::Cont1ResumedMoreThanOnce {
+            def: "main".to_string(),
+            binder: "k".to_string()
+        }]
+    );
+    assert_eq!(
+        main.backend.diagnostics,
+        vec![
+            chiba_level1r::backend::BackendDiagnostic::Cont1ResumedMoreThanOnce {
+                binder: "k".to_string()
+            }
+        ]
+    );
+    assert_eq!(main.backend.wat, "");
+    assert_eq!(
+        bundle.backend_link.diagnostics,
+        vec![
+            chiba_level1r::backend::BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index: 0 }
+        ]
+    );
+    assert_eq!(bundle.backend_link.linked_wat, "");
 }
 
 #[test]

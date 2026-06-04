@@ -51,6 +51,9 @@ pub enum BackendDiagnostic {
     UnsupportedI32ReturnValue {
         value: String,
     },
+    Cont1ResumedMoreThanOnce {
+        binder: String,
+    },
     UnsupportedContinuationRuntime {
         op: String,
         kind: ContinuationKind,

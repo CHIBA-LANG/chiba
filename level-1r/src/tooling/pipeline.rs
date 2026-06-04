@@ -7,7 +7,8 @@ use crate::ast::{
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_params, link_backend_artifacts, BackendArtifact,
-    BackendCacheConfig, BackendCacheKey, BackendLinkDiagnostic, BackendLinkedBundle,
+    BackendCacheConfig, BackendCacheKey, BackendDiagnostic, BackendLinkDiagnostic,
+    BackendLinkedBundle,
 };
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -514,7 +515,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         "GlobalInitPlan",
         || analyze_global_init(&normalized_program),
     );
-    let defs = passes.record(
+    let mut defs = passes.record(
         "P5ProgramDefs",
         "SourceProgram+InterfaceSummary",
         "ProgramDefOutput",
@@ -531,6 +532,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     all_diagnostics.extend(template_diagnostics(&defs));
     all_diagnostics.extend(control_diagnostics(&defs));
     all_diagnostics.extend(cps_usage_diagnostics(&defs));
+    apply_program_backend_gates(&mut defs);
     if entry.is_none() {
         all_diagnostics.push(ProgramDiagnostic::MissingEntry);
     }
@@ -1274,6 +1276,41 @@ fn cps_usage_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
                 })
         })
         .collect()
+}
+
+fn apply_program_backend_gates(defs: &mut [ProgramDefOutput]) {
+    for def in defs {
+        for diagnostic in &def.output.cps_usage.diagnostics {
+            match diagnostic {
+                CpsUsageDiagnostic::Cont1ResumedMoreThanOnce { binder, .. } => {
+                    def.output.backend.wat.clear();
+                    def.output.backend.diagnostics.retain(|diagnostic| {
+                        !matches!(
+                            diagnostic,
+                            BackendDiagnostic::UnsupportedContinuationRuntime {
+                                op,
+                                kind: crate::control::ContinuationKind::Cont1,
+                                binder: Some(existing),
+                            } if op == "resume-continuation" && existing == binder
+                        )
+                    });
+                    if !def.output.backend.diagnostics.iter().any(|diagnostic| {
+                        matches!(
+                            diagnostic,
+                            BackendDiagnostic::Cont1ResumedMoreThanOnce { binder: existing }
+                                if existing == binder
+                        )
+                    }) {
+                        def.output.backend.diagnostics.push(
+                            BackendDiagnostic::Cont1ResumedMoreThanOnce {
+                                binder: binder.clone(),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn program_backend_artifacts(
