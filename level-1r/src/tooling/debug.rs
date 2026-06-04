@@ -6,7 +6,7 @@ use crate::backend::{
     BackendArtifact, BackendCacheKey, BackendDiagnostic, BackendLinkDiagnostic,
     BackendLinkedBundle, BackendManifest, BackendTarget,
 };
-use crate::closure::ClosureFacts;
+use crate::closure::{ClosureFacts, ClosureStorageKind};
 use crate::closure_core_usage::ClosureCoreUsageFacts;
 use crate::closure_simplify::{
     ClosurePackageDecision, ClosureSimplificationFacts, CodePointerDecision,
@@ -191,7 +191,7 @@ pub fn visual_report(
         continuation_simplification: render_continuation_simplification(
             continuation_simplification,
         ),
-        closure: format!("{closure:#?}"),
+        closure: render_closure_facts(closure),
         lambda_lift: render_lambda_lift_facts(lambda_lift),
         core: format!("{core:#?}"),
         callable_storage: callable_storage.to_string(),
@@ -704,6 +704,43 @@ fn render_continuation_simplification(facts: &ContinuationSimplificationFacts) -
         .unwrap();
     }
     out
+}
+
+fn render_closure_facts(facts: &ClosureFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "closures={}", facts.closures.len()).unwrap();
+    for (index, closure) in facts.closures.iter().enumerate() {
+        writeln!(
+            out,
+            "closure {index} param={} storage={} captures={}",
+            closure.param,
+            render_closure_storage_kind(closure.storage),
+            closure.captures.len()
+        )
+        .unwrap();
+        for capture in &closure.captures {
+            let binder = capture
+                .binder
+                .map(|binder| binder.to_string())
+                .unwrap_or_else(|| "none".to_string());
+            writeln!(
+                out,
+                "closure {index} capture {} binder={} usage={}",
+                capture.name,
+                binder,
+                render_usage_color(capture.usage)
+            )
+            .unwrap();
+        }
+    }
+    out
+}
+
+fn render_closure_storage_kind(kind: ClosureStorageKind) -> &'static str {
+    match kind {
+        ClosureStorageKind::DirectNoCapture => "direct-no-capture",
+        ClosureStorageKind::EnvClosure => "env-closure",
+    }
 }
 
 fn render_closure_core_usage(facts: &ClosureCoreUsageFacts) -> String {

@@ -51,6 +51,25 @@ fn nested_lambda_captures_outer_binder_with_stable_env_field() {
 }
 
 #[test]
+fn closure_visual_renders_structured_facts_without_rust_debug_shape() {
+    let output = compile_expr(&Expr::lambda(
+        "x",
+        Expr::lambda("y", Expr::call(Expr::var("x"), Expr::var("y"))),
+    ));
+    let visual = &output.visual.closure;
+
+    assert!(visual.contains("closures=2"));
+    assert!(visual.contains("closure 0 param=x storage=direct-no-capture captures=0"));
+    assert!(visual.contains("closure 1 param=y storage=env-closure captures=1"));
+    assert!(visual.contains("closure 1 capture x binder=%0 usage=N"));
+    assert!(!visual.contains("ClosureFacts"));
+    assert!(!visual.contains("ClosureFact"));
+    assert!(!visual.contains("CaptureFact"));
+    assert!(!visual.contains("DirectNoCapture"));
+    assert!(!visual.contains("EnvClosure"));
+}
+
+#[test]
 fn no_capture_lambda_does_not_allocate_closure_env_layout() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
 
