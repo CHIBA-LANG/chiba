@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
 
 use crate::ast::{
-    BinaryOp, DataDecl, DataVariant, Expr, ExternAbi, ExternDecl, MethodReceiver, NamespaceDecl,
-    ParamDecl, Pattern, SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
+    render_source_pattern, BinaryOp, DataDecl, DataVariant, Expr, ExternAbi, ExternDecl,
+    MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, TypeDecl,
+    TypeField, UseDecl, Visibility,
 };
 use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
+use crate::regex::RegexError;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FrontendOutput {
@@ -84,7 +86,9 @@ pub fn render_frontend_error(source: &str, error: &FrontendError) -> String {
 
 fn render_lex_error(source: &str, error: &LexError) -> String {
     match error {
-        LexError::Regex(error) => format!("frontend lexer regex error: {error:?}"),
+        LexError::Regex(error) => {
+            format!("frontend lexer regex error: {}", render_regex_error(error))
+        }
         LexError::NoRule { offset, found } => render_source_error(
             source,
             *offset,
@@ -98,6 +102,16 @@ fn render_lex_error(source: &str, error: &LexError) -> String {
             *offset,
             format!("lexer rule `{rule}` matched empty text"),
         ),
+    }
+}
+
+fn render_regex_error(error: &RegexError) -> String {
+    match error {
+        RegexError::UnexpectedEnd => "unexpected end of regex".to_string(),
+        RegexError::UnclosedClass => "unclosed character class".to_string(),
+        RegexError::UnsupportedPcreFeature(feature) => {
+            format!("unsupported PCRE feature `{feature}`")
+        }
     }
 }
 
@@ -1024,7 +1038,7 @@ impl FrontendParser {
                 Pattern::Bind(name) => name,
                 other => {
                     return Err(FrontendError::UnexpectedToken {
-                        found: format!("{other:?}"),
+                        found: render_source_pattern(&other),
                         lexeme: "@".to_string(),
                         expected: vec!["binding name before @".to_string()],
                         offset: at_offset,

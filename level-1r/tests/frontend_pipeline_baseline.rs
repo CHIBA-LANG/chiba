@@ -10,7 +10,8 @@ use chiba_level1r::template::TemplateObligation;
 use chiba_level1r::typed::Type;
 use chiba_level1r::typed::UsageColor;
 use chiba_level1r::{
-    compile_program_bundle, compile_source_program_bundle, parse_source_program, FrontendError,
+    compile_program_bundle, compile_source_program_bundle, parse_source_program,
+    render_frontend_error, FrontendError,
 };
 
 #[test]
@@ -2188,6 +2189,32 @@ fn frontend_reports_lexer_errors_for_unknown_characters() {
     let err = parse_source_program("def main() = $").unwrap_err();
 
     assert!(matches!(err, FrontendError::Lex(_)));
+}
+
+#[test]
+fn frontend_renders_regex_error_without_rust_debug_shape() {
+    let err = FrontendError::Lex(chiba_level1r::chibalex::LexError::Regex(
+        chiba_level1r::regex::RegexError::UnsupportedPcreFeature("lookaround"),
+    ));
+
+    let rendered = render_frontend_error("", &err);
+
+    assert!(rendered.contains("unsupported PCRE feature `lookaround`"));
+    assert!(!rendered.contains("UnsupportedPcreFeature"));
+    assert!(!rendered.contains("Regex("));
+}
+
+#[test]
+fn frontend_renders_pattern_at_error_without_rust_debug_shape() {
+    let source = "def main() = match value { (head, tail) @ whole => whole, _ => 0 }";
+    let err = parse_source_program(source).unwrap_err();
+
+    let rendered = render_frontend_error(source, &err);
+
+    assert!(rendered.contains("unexpected token (head, tail) `@`"));
+    assert!(rendered.contains("expected binding name before @"));
+    assert!(!rendered.contains("Tuple("));
+    assert!(!rendered.contains("Pattern"));
 }
 
 #[test]
