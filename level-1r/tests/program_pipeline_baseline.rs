@@ -249,6 +249,43 @@ fn typed_continuation_boxed_storage_param_enters_callable_storage() {
 }
 
 #[test]
+fn typed_cont1_storage_param_repeated_call_is_rejected_by_core() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main(k: cont1 (i64) -> i64) = k(1) + k(2)",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert!(main.core.callable_storage.iter().any(|fact| {
+        fact.subject == "param::k"
+            && fact.kind == chiba_level1r::core::CallableStorageKind::BoxedCont1
+            && fact.usage == chiba_level1r::typed::UsageColor::Many
+            && fact.send == chiba_level1r::typed::SendColor::NotSend
+    }));
+    assert_eq!(
+        main.core_validation.diagnostics,
+        vec![
+            chiba_level1r::core::CoreDiagnostic::Cont1CallableUsedMoreThanOnce {
+                subject: "param::k".to_string()
+            }
+        ]
+    );
+    assert_eq!(
+        main.backend.diagnostics,
+        vec![chiba_level1r::backend::BackendDiagnostic::CoreValidationFailed { diagnostics: 1 }]
+    );
+    assert_eq!(main.backend.wat, "");
+    assert_eq!(bundle.backend_link.linked_wat, "");
+    assert_eq!(
+        bundle.backend_link.diagnostics,
+        vec![
+            chiba_level1r::backend::BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index: 0 }
+        ]
+    );
+}
+
+#[test]
 fn program_cont1_single_resume_lowers_to_executable_wat() {
     let output =
         chiba_level1r::compile_source_program_bundle("def main() = reset { shift k { k(7) } }")

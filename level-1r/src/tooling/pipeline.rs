@@ -312,7 +312,8 @@ fn compile_expr_with_indexes_and_generics(
     let lambda_lift = passes.record("L15LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
         lift_lambdas(&closure)
     });
-    let explicit_callable_storage = explicit_callable_storage_facts(def_name, &typed_signature);
+    let explicit_callable_storage =
+        explicit_callable_storage_facts(def_name, &typed_signature, &usage);
     let core = passes.record("L16Core", "CpsProgram", "CoreProgram", || {
         lower_core_with_facts(
             &cps,
@@ -816,6 +817,7 @@ impl TypedSignature {
 fn explicit_callable_storage_facts(
     def_name: &str,
     signature: &TypedSignature,
+    usage: &UsageFacts,
 ) -> Vec<CallableStorageFact> {
     let mut facts = signature
         .params
@@ -831,7 +833,12 @@ fn explicit_callable_storage_facts(
                 usage: if multi {
                     crate::typed::UsageColor::Many
                 } else {
-                    crate::typed::UsageColor::One
+                    usage
+                        .vars
+                        .get(&param.name)
+                        .copied()
+                        .unwrap_or(crate::usage::UseCount::Zero)
+                        .color()
                 },
                 send: crate::typed::SendColor::NotSend,
             }),
