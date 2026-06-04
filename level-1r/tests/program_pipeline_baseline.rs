@@ -8,7 +8,7 @@ use chiba_level1r::typed::{Type, TypedExprKind};
 use chiba_level1r::{
     build_interface_summary, compile_program, compile_program_bundle,
     compile_program_with_interface, parse_source_program, project_surface_many, Expr,
-    ProgramDiagnostic,
+    ProgramCompileOutput, ProgramDiagnostic,
 };
 use std::process::Command;
 
@@ -41,6 +41,46 @@ fn extern_def(name: &str, abi: ExternAbi, symbol: &str) -> SourceItem {
         Some("i64".to_string()),
         ExternDecl::new(abi, symbol),
     )
+}
+
+fn assert_backend_link_clean(bundle: &ProgramCompileOutput, def_index: usize) {
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "{}",
+        render_backend_failure_context(bundle, Some(def_index))
+    );
+}
+
+fn assert_backend_link_clean_all(bundle: &ProgramCompileOutput) {
+    assert!(
+        bundle.backend_link.diagnostics.is_empty(),
+        "{}",
+        render_backend_failure_context(bundle, None)
+    );
+}
+
+fn render_backend_failure_context(
+    bundle: &ProgramCompileOutput,
+    def_index: Option<usize>,
+) -> String {
+    let mut out = String::new();
+    out.push_str(&bundle.render_summary());
+    match def_index {
+        Some(index) => {
+            out.push_str("def visual:\n");
+            out.push_str(&bundle.defs[index].output.render_visual());
+        }
+        None => {
+            out.push_str("defs visual:\n");
+            for def in &bundle.defs {
+                out.push_str(&format!("def {}\n", def.name));
+                out.push_str(&def.output.render_visual());
+            }
+        }
+    }
+    out.push_str("linked wat:\n");
+    out.push_str(&bundle.backend_link.linked_wat);
+    out
 }
 
 #[test]
@@ -720,14 +760,7 @@ fn program_branch_return_lowers_to_executable_wat_if() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.defs[0].output.backend.diagnostics,
-        bundle.defs[0].output.core_validation.diagnostics,
-        bundle.defs[0].output.backend.wat
-    );
+    assert_backend_link_clean(&bundle, 0);
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -791,14 +824,7 @@ fn program_tuple_field_return_lowers_to_executable_wat_value() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.defs[0].output.backend.diagnostics,
-        bundle.defs[0].output.core_validation.diagnostics,
-        bundle.defs[0].output.backend.wat
-    );
+    assert_backend_link_clean(&bundle, 0);
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -837,14 +863,7 @@ fn program_record_field_return_lowers_to_executable_wat_value() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.defs[0].output.backend.diagnostics,
-        bundle.defs[0].output.core_validation.diagnostics,
-        bundle.defs[0].output.backend.wat
-    );
+    assert_backend_link_clean(&bundle, 0);
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -889,14 +908,7 @@ fn program_record_update_field_return_lowers_to_executable_wat_value() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.defs[0].output.backend.diagnostics,
-        bundle.defs[0].output.core_validation.diagnostics,
-        bundle.defs[0].output.backend.wat
-    );
+    assert_backend_link_clean(&bundle, 0);
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -934,12 +946,7 @@ fn program_zero_arg_tailcall_lowers_to_executable_direct_call_wat() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.backend_link.linked_wat
-    );
+    assert_backend_link_clean_all(&bundle);
     assert!(bundle.defs[1].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -975,12 +982,7 @@ fn program_literal_arg_tailcall_lowers_to_executable_direct_call_wat() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.backend_link.linked_wat
-    );
+    assert_backend_link_clean_all(&bundle);
     assert!(bundle.defs[1].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1014,12 +1016,7 @@ def main(): i64 = 1 |> id",
     let bundle = &output.program;
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.backend_link.linked_wat
-    );
+    assert_backend_link_clean_all(&bundle);
     assert!(bundle.defs[1].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1048,12 +1045,7 @@ def main(): i64 = 2 |> add(_, _)",
     let bundle = &output.program;
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.backend_link.linked_wat
-    );
+    assert_backend_link_clean_all(&bundle);
     assert!(bundle.defs[1].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1087,21 +1079,7 @@ def main(): i64 = div(mul(sub(10, 4), 3), 2)",
     let bundle = &output.program;
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\ndef diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle
-            .defs
-            .iter()
-            .map(|def| (
-                def.name.as_str(),
-                &def.output.backend.diagnostics,
-                &def.output.core_validation.diagnostics
-            ))
-            .collect::<Vec<_>>(),
-        bundle.backend_link.linked_wat
-    );
+    assert_backend_link_clean_all(bundle);
     assert!(bundle.backend_link.linked_wat.contains("i32.sub"));
     assert!(bundle.backend_link.linked_wat.contains("i32.mul"));
     assert!(bundle.backend_link.linked_wat.contains("i32.div_s"));
@@ -1132,12 +1110,7 @@ fn program_param_branch_lowers_to_executable_wat() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.backend_link.linked_wat
-    );
+    assert_backend_link_clean_all(&bundle);
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1186,12 +1159,7 @@ fn program_param_literal_match_lowers_to_executable_wat() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.backend_link.linked_wat
-    );
+    assert_backend_link_clean_all(&bundle);
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1231,14 +1199,7 @@ fn program_adt_constructor_return_lowers_to_executable_tag_wat() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.defs[0].output.backend.diagnostics,
-        bundle.defs[0].output.core_validation.diagnostics,
-        bundle.defs[0].output.backend.wat
-    );
+    assert_backend_link_clean(&bundle, 0);
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1277,14 +1238,7 @@ fn program_branch_can_return_executable_adt_constructor_tag() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.defs[0].output.backend.diagnostics,
-        bundle.defs[0].output.core_validation.diagnostics,
-        bundle.defs[0].output.backend.wat
-    );
+    assert_backend_link_clean(&bundle, 0);
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1328,14 +1282,7 @@ fn program_zero_arg_adt_match_lowers_to_executable_tag_match_wat() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.defs[0].output.backend.diagnostics,
-        bundle.defs[0].output.core_validation.diagnostics,
-        bundle.defs[0].output.backend.wat
-    );
+    assert_backend_link_clean(&bundle, 0);
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1399,14 +1346,7 @@ fn program_adt_payload_match_lowers_to_executable_payload_wat() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.defs[0].output.backend.diagnostics,
-        bundle.defs[0].output.core_validation.diagnostics,
-        bundle.defs[0].output.backend.wat
-    );
+    assert_backend_link_clean(&bundle, 0);
     assert!(bundle.defs[0].output.core.ops.iter().any(|op| {
         matches!(
             op,
@@ -1470,14 +1410,7 @@ fn program_adt_payload_literal_pattern_checks_payload_before_arm_body() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.diagnostics, vec![]);
-    assert!(
-        bundle.backend_link.diagnostics.is_empty(),
-        "backend link diagnostics: {:?}\nbackend diagnostics: {:?}\ncore diagnostics: {:?}\nwat:\n{}",
-        bundle.backend_link.diagnostics,
-        bundle.defs[0].output.backend.diagnostics,
-        bundle.defs[0].output.core_validation.diagnostics,
-        bundle.defs[0].output.backend.wat
-    );
+    assert_backend_link_clean(&bundle, 0);
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "8");
 }
 
