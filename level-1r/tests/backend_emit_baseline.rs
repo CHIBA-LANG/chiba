@@ -171,10 +171,8 @@ fn backend_rejects_cont1_repeated_resume() {
 
     assert_eq!(
         artifact.diagnostics,
-        vec![BackendDiagnostic::UnsupportedContinuationRuntime {
-            op: "resume-continuation".to_string(),
-            kind: ContinuationKind::Cont1,
-            binder: Some("k".to_string()),
+        vec![BackendDiagnostic::Cont1ResumedMoreThanOnce {
+            binder: "k".to_string(),
         }]
     );
     assert_eq!(artifact.wat, "");

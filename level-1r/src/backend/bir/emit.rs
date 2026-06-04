@@ -721,10 +721,8 @@ fn render_continuation_wat(
                     .expect("checked continuation binder")
                     .clone();
                 if kind == ContinuationKind::Cont1 && !cont1_consumed.insert(func.clone()) {
-                    return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
-                        op: "resume-continuation".to_string(),
-                        kind,
-                        binder: Some(func.clone()),
+                    return Err(BackendDiagnostic::Cont1ResumedMoreThanOnce {
+                        binder: func.clone(),
                     });
                 }
                 let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
