@@ -8,7 +8,10 @@ use crate::backend::{
 };
 use crate::closure::ClosureFacts;
 use crate::closure_core_usage::ClosureCoreUsageFacts;
-use crate::closure_simplify::ClosureSimplificationFacts;
+use crate::closure_simplify::{
+    ClosurePackageDecision, ClosureSimplificationFacts, CodePointerDecision,
+    ContinuationPackageDecision, EnvFieldDecision,
+};
 use crate::control::{ContinuationKind, ControlError, ControlFacts, ReplaySafety};
 use crate::core::{
     CallableStorageKind, CompilerIntrinsic, CoreDiagnostic, CoreProgram, CoreValidation,
@@ -191,7 +194,7 @@ pub fn visual_report(
         core: format!("{core:#?}"),
         callable_storage: callable_storage.to_string(),
         closure_core_usage: render_closure_core_usage(closure_core_usage),
-        closure_simplification: format!("{closure_simplification:#?}"),
+        closure_simplification: render_closure_simplification(closure_simplification),
         usage_audit: format!("{usage_audit:#?}"),
         std_audit: format!("{std_audit:#?}"),
         core_validation: render_core_validation(core_validation),
@@ -684,6 +687,81 @@ fn render_callable_storage_kind(kind: CallableStorageKind) -> &'static str {
         CallableStorageKind::BoxedCont1 => "boxed-cont1",
         CallableStorageKind::ContNPackage => "contn-package",
         CallableStorageKind::ErasedCallableAdt => "erased-callable-adt",
+    }
+}
+
+fn render_closure_simplification(facts: &ClosureSimplificationFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "closure-packages={}", facts.closure_packages.len()).unwrap();
+    for (subject, decision) in &facts.closure_packages {
+        writeln!(
+            out,
+            "closure-package {subject} decision={}",
+            render_closure_package_decision(*decision)
+        )
+        .unwrap();
+    }
+    writeln!(out, "env-fields={}", facts.env_fields.len()).unwrap();
+    for (field, decision) in &facts.env_fields {
+        writeln!(
+            out,
+            "env-field {field} decision={}",
+            render_env_field_decision(*decision)
+        )
+        .unwrap();
+    }
+    writeln!(out, "code-pointers={}", facts.code_pointers.len()).unwrap();
+    for (symbol, decision) in &facts.code_pointers {
+        writeln!(
+            out,
+            "code-pointer {symbol} decision={}",
+            render_code_pointer_decision(*decision)
+        )
+        .unwrap();
+    }
+    writeln!(
+        out,
+        "continuation-packages={}",
+        facts.continuation_packages.len()
+    )
+    .unwrap();
+    for (package, decision) in &facts.continuation_packages {
+        writeln!(
+            out,
+            "continuation-package {package} decision={}",
+            render_continuation_package_decision(*decision)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_closure_package_decision(decision: ClosurePackageDecision) -> &'static str {
+    match decision {
+        ClosurePackageDecision::EraseNoCapture => "erase-no-capture",
+        ClosurePackageDecision::DirectifySingleUse => "directify-single-use",
+        ClosurePackageDecision::KeepEnvPackage => "keep-env-package",
+    }
+}
+
+fn render_env_field_decision(decision: EnvFieldDecision) -> &'static str {
+    match decision {
+        EnvFieldDecision::RemoveDeadField => "remove-dead-field",
+        EnvFieldDecision::KeepField => "keep-field",
+    }
+}
+
+fn render_code_pointer_decision(decision: CodePointerDecision) -> &'static str {
+    match decision {
+        CodePointerDecision::KnownDirectCall => "known-direct-call",
+        CodePointerDecision::KeepIndirectCodePointer => "keep-indirect-code-pointer",
+    }
+}
+
+fn render_continuation_package_decision(decision: ContinuationPackageDecision) -> &'static str {
+    match decision {
+        ContinuationPackageDecision::RemoveUnusedPackage => "remove-unused-package",
+        ContinuationPackageDecision::KeepRepeatablePackage => "keep-repeatable-package",
     }
 }
 

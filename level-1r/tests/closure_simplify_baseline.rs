@@ -112,6 +112,16 @@ fn dead_env_field_and_unused_continuation_package_are_marked_removable() {
 fn closure_simplification_visual_dump_is_present() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
 
-    assert!(output.render_visual().contains("closure-simplification:"));
-    assert!(output.render_visual().contains("EraseNoCapture"));
+    let visual = output.render_visual();
+    assert!(visual.contains("closure-simplification:"));
+    assert!(visual.contains("closure-package closure::x decision=erase-no-capture"));
+    assert!(visual.contains("code-pointer lift::0000::closure__x decision=known-direct-call"));
+    assert!(!output
+        .visual
+        .closure_simplification
+        .contains("ClosureSimplificationFacts"));
+    assert!(!output
+        .visual
+        .closure_simplification
+        .contains("EraseNoCapture"));
 }
