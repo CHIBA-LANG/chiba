@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use crate::alpha::AlphaFacts;
+use crate::alpha::{AlphaDiagnostic, AlphaExprKind, AlphaFacts};
 use crate::ast::{render_source_binary_op, render_source_expr, Expr};
 use crate::backend::{
     BackendArtifact, BackendCacheKey, BackendDiagnostic, BackendLinkDiagnostic,
@@ -172,7 +172,7 @@ pub fn visual_report(
 ) -> VisualReport {
     VisualReport {
         source: render_source_expr(source),
-        alpha: format!("{alpha:#?}"),
+        alpha: render_alpha_facts(alpha),
         resolve: render_resolve_facts(resolve),
         template: render_template_facts(template),
         specialize: render_specialization_facts(specialize),
@@ -212,6 +212,60 @@ fn render_core_validation(validation: &CoreValidation) -> String {
         writeln!(out, "diagnostic {}", render_core_diagnostic(diagnostic)).unwrap();
     }
     out
+}
+
+fn render_alpha_facts(facts: &AlphaFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "root={}", render_alpha_expr_kind(&facts.expr.kind)).unwrap();
+    writeln!(out, "binders={}", facts.binders.len()).unwrap();
+    for binder in &facts.binders {
+        let namespace = if binder.namespace.is_empty() {
+            "<local>".to_string()
+        } else {
+            binder.namespace.join("::")
+        };
+        writeln!(
+            out,
+            "binder {} name={} namespace={}",
+            binder.id, binder.name, namespace
+        )
+        .unwrap();
+    }
+    writeln!(out, "diagnostics={}", facts.diagnostics.len()).unwrap();
+    for diagnostic in &facts.diagnostics {
+        writeln!(out, "diagnostic {}", render_alpha_diagnostic(diagnostic)).unwrap();
+    }
+    out
+}
+
+fn render_alpha_expr_kind(kind: &AlphaExprKind) -> &'static str {
+    match kind {
+        AlphaExprKind::Var(_) => "var",
+        AlphaExprKind::Lit(_) => "literal",
+        AlphaExprKind::Lambda { .. } => "lambda",
+        AlphaExprKind::Call { .. } => "call",
+        AlphaExprKind::Tuple(_) => "tuple",
+        AlphaExprKind::Record(_) => "record",
+        AlphaExprKind::RecordUpdate { .. } => "record-update",
+        AlphaExprKind::AdtCtor { .. } => "adt-ctor",
+        AlphaExprKind::Field { .. } => "field",
+        AlphaExprKind::MethodCall { .. } => "method-call",
+        AlphaExprKind::Index { .. } => "index",
+        AlphaExprKind::Range { .. } => "range",
+        AlphaExprKind::Binary { .. } => "binary",
+        AlphaExprKind::If { .. } => "if",
+        AlphaExprKind::IfLet { .. } => "if-let",
+        AlphaExprKind::Match { .. } => "match",
+        AlphaExprKind::Nominal { .. } => "nominal",
+        AlphaExprKind::Reset { .. } => "reset",
+        AlphaExprKind::Shift { .. } => "shift",
+    }
+}
+
+fn render_alpha_diagnostic(diagnostic: &AlphaDiagnostic) -> String {
+    match diagnostic {
+        AlphaDiagnostic::UndefinedVar { name } => format!("undefined-var {name}"),
+    }
 }
 
 fn render_core_diagnostic(diagnostic: &CoreDiagnostic) -> String {

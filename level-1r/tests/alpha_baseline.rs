@@ -163,5 +163,10 @@ fn visual_report_contains_alpha_layer_and_pass_event() {
     let visual = output.render_visual();
 
     assert!(visual.contains("alpha:"));
+    assert!(visual.contains("root=lambda"));
+    assert!(visual.contains("binder %0 name=x namespace=<local>"));
+    assert!(visual.contains("diagnostics=0"));
+    assert!(!output.visual.alpha.contains("AlphaFacts"));
+    assert!(!output.visual.alpha.contains("AlphaExprKind"));
     assert!(visual.contains("L1Alpha: SourceExpr -> AlphaFacts"));
 }
