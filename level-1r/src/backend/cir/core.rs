@@ -218,6 +218,10 @@ pub enum CoreValue {
     Record {
         fields: Vec<CoreRecordValueField>,
     },
+    RecordUpdate {
+        base: Box<CoreValue>,
+        fields: Vec<CoreRecordValueField>,
+    },
     RecordField {
         record: Box<CoreValue>,
         field: String,
@@ -267,6 +271,14 @@ impl CoreValue {
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("{{{fields}}}")
+            }
+            CoreValue::RecordUpdate { base, fields } => {
+                let fields = fields
+                    .iter()
+                    .map(|field| format!("{}={}", field.name, field.value.debug_name()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{{{} | {fields}}}", base.debug_name())
             }
             CoreValue::RecordField { record, field } => {
                 format!("{}.{}", record.debug_name(), field)
@@ -1209,6 +1221,16 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
             end: Box::new(core_value(end)),
         },
         CpsAtom::Record { fields, .. } => CoreValue::Record {
+            fields: fields
+                .iter()
+                .map(|field| CoreRecordValueField {
+                    name: field.name.clone(),
+                    value: core_value(&field.value),
+                })
+                .collect(),
+        },
+        CpsAtom::RecordUpdate { base, fields, .. } => CoreValue::RecordUpdate {
+            base: Box::new(core_value(base)),
             fields: fields
                 .iter()
                 .map(|field| CoreRecordValueField {

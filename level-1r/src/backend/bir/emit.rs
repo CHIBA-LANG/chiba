@@ -1265,6 +1265,7 @@ fn render_core_value_i32(
         | CoreValue::Tuple { .. }
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
+        | CoreValue::RecordUpdate { .. }
         | CoreValue::Rendered { .. } => {
             return Err(unsupported_i32_render_diagnostic(value));
         }
@@ -1305,6 +1306,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         CoreValue::Tuple { .. }
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
+        | CoreValue::RecordUpdate { .. }
         | CoreValue::Rendered { .. } => false,
     }
 }
@@ -1334,13 +1336,18 @@ fn record_field_value<'a>(
     env: &'a RenderEnv,
 ) -> Option<&'a CoreValue> {
     let record = resolve_core_value_binding(record, env);
-    let CoreValue::Record { fields } = record else {
-        return None;
-    };
-    fields
-        .iter()
-        .find(|candidate| candidate.name == field)
-        .map(|candidate| &candidate.value)
+    match record {
+        CoreValue::Record { fields } => fields
+            .iter()
+            .find(|candidate| candidate.name == field)
+            .map(|candidate| &candidate.value),
+        CoreValue::RecordUpdate { base, fields } => fields
+            .iter()
+            .find(|candidate| candidate.name == field)
+            .map(|candidate| &candidate.value)
+            .or_else(|| record_field_value(base, field, env)),
+        _ => None,
+    }
 }
 
 fn render_core_value_i32_indented(
