@@ -1,4 +1,4 @@
-use crate::alpha::{alpha_expr, AlphaFacts};
+use crate::alpha::{alpha_expr_with_params, AlphaBinder, AlphaFacts};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
@@ -222,7 +222,9 @@ fn compile_expr_with_indexes_and_generics(
     type_aliases: &TypeAliasIndex,
 ) -> CompileOutput {
     let mut passes = PassReport::default();
-    let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || alpha_expr(expr));
+    let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || {
+        alpha_expr_with_params(expr, params)
+    });
     let resolve = passes.record("L2Resolve", "AlphaExpr", "ResolveFacts", || {
         if names == NameIndex::default() && methods == MethodIndex::default() {
             resolve_expr(&alpha.expr, MethodIndex::default())
@@ -313,7 +315,7 @@ fn compile_expr_with_indexes_and_generics(
         lift_lambdas(&closure)
     });
     let explicit_callable_storage =
-        explicit_callable_storage_facts(def_name, &typed_signature, &usage);
+        explicit_callable_storage_facts(def_name, &typed_signature, &usage, &alpha.param_binders);
     let core = passes.record("L16Core", "CpsProgram", "CoreProgram", || {
         lower_core_with_facts(
             &cps,
@@ -818,6 +820,7 @@ fn explicit_callable_storage_facts(
     def_name: &str,
     signature: &TypedSignature,
     usage: &UsageFacts,
+    param_binders: &[AlphaBinder],
 ) -> Vec<CallableStorageFact> {
     let mut facts = signature
         .params
@@ -833,10 +836,10 @@ fn explicit_callable_storage_facts(
                 usage: if multi {
                     crate::typed::UsageColor::Many
                 } else {
-                    usage
-                        .vars
-                        .get(&param.name)
-                        .copied()
+                    param_binders
+                        .iter()
+                        .find(|binder| binder.name == param.name)
+                        .and_then(|binder| usage.binders.get(&binder.id).copied())
                         .unwrap_or(crate::usage::UseCount::Zero)
                         .color()
                 },

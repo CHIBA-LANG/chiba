@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use crate::ast::{BinaryOp, Expr, Literal, Pattern};
+use crate::ast::{BinaryOp, Expr, Literal, ParamDecl, Pattern};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BinderId(pub usize);
@@ -145,6 +145,7 @@ pub struct ResolvedVar {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AlphaFacts {
     pub expr: AlphaExpr,
+    pub param_binders: Vec<AlphaBinder>,
     pub binders: Vec<AlphaBinder>,
     pub diagnostics: Vec<AlphaDiagnostic>,
 }
@@ -163,13 +164,24 @@ struct AlphaCtx {
 }
 
 pub fn alpha_expr(expr: &Expr) -> AlphaFacts {
+    alpha_expr_with_params(expr, &[])
+}
+
+pub fn alpha_expr_with_params(expr: &Expr, params: &[ParamDecl]) -> AlphaFacts {
     let mut ctx = AlphaCtx {
         scopes: vec![BTreeMap::new()],
         ..AlphaCtx::default()
     };
+    let mut param_binders = Vec::new();
+    for param in params {
+        let before = ctx.binders.len();
+        ctx.alpha_pattern(&param.pattern);
+        param_binders.extend(ctx.binders[before..].iter().cloned());
+    }
     let expr = ctx.alpha(expr);
     AlphaFacts {
         expr,
+        param_binders,
         binders: ctx.binders,
         diagnostics: ctx.diagnostics,
     }

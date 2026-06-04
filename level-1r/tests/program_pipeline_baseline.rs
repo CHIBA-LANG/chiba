@@ -249,6 +249,25 @@ fn typed_continuation_boxed_storage_param_enters_callable_storage() {
 }
 
 #[test]
+fn source_def_params_enter_alpha_scope_and_usage_by_binder_id() {
+    let output = chiba_level1r::compile_source_program_bundle("def main(x: i64) = x + x")
+        .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert_eq!(main.alpha.param_binders.len(), 1);
+    let param = &main.alpha.param_binders[0];
+    assert_eq!(param.name, "x");
+    assert!(main.alpha.diagnostics.is_empty());
+    assert_eq!(
+        main.usage.binders.get(&param.id).copied(),
+        Some(chiba_level1r::usage::UseCount::Many)
+    );
+    assert_eq!(main.usage.vars.get("x").copied(), None);
+    assert!(main.visual.alpha.contains("params=1"));
+    assert!(main.visual.alpha.contains("param %0 name=x"));
+}
+
+#[test]
 fn typed_cont1_storage_param_repeated_call_is_rejected_by_core() {
     let output = chiba_level1r::compile_source_program_bundle(
         "def main(k: cont1 (i64) -> i64) = k(1) + k(2)",
@@ -283,6 +302,29 @@ fn typed_cont1_storage_param_repeated_call_is_rejected_by_core() {
             chiba_level1r::backend::BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index: 0 }
         ]
     );
+}
+
+#[test]
+fn typed_cont1_storage_param_usage_ignores_shadowing_local_binder() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main(k: cont1 (i64) -> i64) = (k: I64): I64 => k + k",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert!(main.core.callable_storage.iter().any(|fact| {
+        fact.subject == "param::k"
+            && fact.kind == chiba_level1r::core::CallableStorageKind::BoxedCont1
+            && fact.usage == chiba_level1r::typed::UsageColor::One
+            && fact.send == chiba_level1r::typed::SendColor::NotSend
+    }));
+    assert!(!main.core_validation.diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic,
+            chiba_level1r::core::CoreDiagnostic::Cont1CallableUsedMoreThanOnce { subject }
+                if subject == "param::k"
+        )
+    }));
 }
 
 #[test]

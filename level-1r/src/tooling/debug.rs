@@ -619,6 +619,10 @@ fn render_target_specific_core_term(term: TargetSpecificCoreTerm) -> &'static st
 fn render_alpha_facts(facts: &AlphaFacts) -> String {
     let mut out = String::new();
     writeln!(out, "root={}", render_alpha_expr_kind(&facts.expr.kind)).unwrap();
+    writeln!(out, "params={}", facts.param_binders.len()).unwrap();
+    for binder in &facts.param_binders {
+        writeln!(out, "param {} name={}", binder.id, binder.name).unwrap();
+    }
     writeln!(out, "binders={}", facts.binders.len()).unwrap();
     for binder in &facts.binders {
         let namespace = if binder.namespace.is_empty() {
