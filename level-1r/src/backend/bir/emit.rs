@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::control::ContinuationKind;
 use crate::core::{
-    CoreMatchArm, CoreOp, CorePattern, CoreProgram, CoreValidation, CoreValue, OperatorIntrinsic,
-    OwnershipDecision,
+    CoreCapturedContinuation, CoreMatchArm, CoreOp, CorePattern, CoreProgram, CoreValidation,
+    CoreValue, OperatorIntrinsic, OwnershipDecision,
 };
 use crate::symbol::encode_debug_symbol;
 
@@ -215,6 +215,9 @@ fn unsupported_i32_return_value(
                 env = env.with_locals(vec![binder.clone()]);
                 None
             }
+            CoreOp::CaptureContinuation { captured, .. } => {
+                unsupported_i32_captured_continuation(captured, &env)
+            }
             _ => None,
         } {
             return Some(diagnostic);
@@ -256,6 +259,48 @@ fn unsupported_i32_value(value: &CoreValue, env: &RenderEnv) -> Option<BackendDi
             value: value.debug_name(),
         }
     })
+}
+
+fn unsupported_i32_captured_continuation(
+    captured: &CoreCapturedContinuation,
+    env: &RenderEnv,
+) -> Option<BackendDiagnostic> {
+    let mut env = env
+        .with_locals(vec![captured.param.clone()])
+        .with_binding(&captured.param, CoreValue::I64(0));
+    for op in &captured.ops {
+        match op {
+            CoreOp::ReturnValue(value) => {
+                if let Some(diagnostic) = unsupported_i32_value(value, &env) {
+                    return Some(diagnostic);
+                }
+            }
+            CoreOp::ReturnBranch {
+                cond,
+                then_value,
+                else_value,
+            } => {
+                if let Some(diagnostic) = [cond, then_value, else_value]
+                    .into_iter()
+                    .find_map(|value| unsupported_i32_value(value, &env))
+                {
+                    return Some(diagnostic);
+                }
+            }
+            CoreOp::TailCall { args, .. } => {
+                if let Some(diagnostic) =
+                    args.iter().find_map(|arg| unsupported_i32_value(arg, &env))
+                {
+                    return Some(diagnostic);
+                }
+            }
+            CoreOp::TailCallResult { binder } => {
+                env = env.with_locals(vec![binder.clone()]);
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn unsupported_i32_match(
@@ -308,51 +353,63 @@ fn first_return_value(core: &CoreProgram) -> Option<CoreValue> {
 fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
     let mut entries = Vec::new();
     for op in &core.ops {
-        match op {
-            CoreOp::LiftedFunction { source, symbol, .. } => entries.push(BackendManifestEntry {
-                final_symbol: final_symbol(symbol),
-                source_debug_name: source.clone(),
-                pass_origin: "L15LambdaLift".to_string(),
-                ownership: ownership_for_subject(core, source),
-            }),
-            CoreOp::DirectMethodTarget { name, target } => entries.push(BackendManifestEntry {
-                final_symbol: final_symbol(target),
-                source_debug_name: name.clone(),
-                pass_origin: "L16Core".to_string(),
-                ownership: ownership_for_subject(core, target),
-            }),
-            CoreOp::OperatorTarget {
-                protocol, target, ..
-            } => entries.push(BackendManifestEntry {
-                final_symbol: final_symbol(target),
-                source_debug_name: protocol.clone(),
-                pass_origin: "L16Core".to_string(),
-                ownership: ownership_for_subject(core, target),
-            }),
-            CoreOp::ReturnValue(_)
-            | CoreOp::ReturnBranch { .. }
-            | CoreOp::ReturnMatch { .. }
-            | CoreOp::DynamicCallableTarget { .. }
-            | CoreOp::TupleConstruct { .. }
-            | CoreOp::TupleFieldGet { .. }
-            | CoreOp::RecordConstruct { .. }
-            | CoreOp::RecordUpdate { .. }
-            | CoreOp::RecordFieldGet { .. }
-            | CoreOp::AdtConstruct { .. }
-            | CoreOp::AdtTupleBridge { .. }
-            | CoreOp::CompilerIntrinsicUse { .. }
-            | CoreOp::TargetSpecificTerm { .. }
-            | CoreOp::TailCallResult { .. }
-            | CoreOp::TailCall { .. }
-            | CoreOp::Prompt { .. }
-            | CoreOp::CaptureContinuation { .. }
-            | CoreOp::Branch { .. }
-            | CoreOp::Match { .. }
-            | CoreOp::StaticRowAccess { .. }
-            | CoreOp::DynRowAdapterAccess { .. } => {}
-        }
+        collect_manifest_entries(op, core, &mut entries);
     }
     BackendManifest { entries }
+}
+
+fn collect_manifest_entries(
+    op: &CoreOp,
+    core: &CoreProgram,
+    entries: &mut Vec<BackendManifestEntry>,
+) {
+    match op {
+        CoreOp::LiftedFunction { source, symbol, .. } => entries.push(BackendManifestEntry {
+            final_symbol: final_symbol(symbol),
+            source_debug_name: source.clone(),
+            pass_origin: "L15LambdaLift".to_string(),
+            ownership: ownership_for_subject(core, source),
+        }),
+        CoreOp::DirectMethodTarget { name, target } => entries.push(BackendManifestEntry {
+            final_symbol: final_symbol(target),
+            source_debug_name: name.clone(),
+            pass_origin: "L16Core".to_string(),
+            ownership: ownership_for_subject(core, target),
+        }),
+        CoreOp::OperatorTarget {
+            protocol, target, ..
+        } => entries.push(BackendManifestEntry {
+            final_symbol: final_symbol(target),
+            source_debug_name: protocol.clone(),
+            pass_origin: "L16Core".to_string(),
+            ownership: ownership_for_subject(core, target),
+        }),
+        CoreOp::CaptureContinuation { captured, .. } => {
+            for op in &captured.ops {
+                collect_manifest_entries(op, core, entries);
+            }
+        }
+        CoreOp::ReturnValue(_)
+        | CoreOp::ReturnBranch { .. }
+        | CoreOp::ReturnMatch { .. }
+        | CoreOp::DynamicCallableTarget { .. }
+        | CoreOp::TupleConstruct { .. }
+        | CoreOp::TupleFieldGet { .. }
+        | CoreOp::RecordConstruct { .. }
+        | CoreOp::RecordUpdate { .. }
+        | CoreOp::RecordFieldGet { .. }
+        | CoreOp::AdtConstruct { .. }
+        | CoreOp::AdtTupleBridge { .. }
+        | CoreOp::CompilerIntrinsicUse { .. }
+        | CoreOp::TargetSpecificTerm { .. }
+        | CoreOp::TailCallResult { .. }
+        | CoreOp::TailCall { .. }
+        | CoreOp::Prompt { .. }
+        | CoreOp::Branch { .. }
+        | CoreOp::Match { .. }
+        | CoreOp::StaticRowAccess { .. }
+        | CoreOp::DynRowAdapterAccess { .. } => {}
+    }
 }
 
 fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipDecision> {
@@ -578,7 +635,7 @@ fn render_wat(
                     render_continuation_kind(*kind)
                 ));
             }
-            CoreOp::CaptureContinuation { binder, kind } => {
+            CoreOp::CaptureContinuation { binder, kind, .. } => {
                 wat.push_str(&format!(
                     "  ;; capture-cont binder={} kind={}\n",
                     escape_wat_comment(binder),
@@ -631,14 +688,7 @@ fn render_continuation_wat(
     manifest: &BackendManifest,
     params: &[String],
 ) -> Result<String, BackendDiagnostic> {
-    let result_binders = core
-        .ops
-        .iter()
-        .filter_map(|op| match op {
-            CoreOp::TailCallResult { binder } => Some(binder.clone()),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
+    let result_binders = collect_tailcall_result_binders(&core.ops);
     let env = RenderEnv::new(params).with_locals(result_binders.clone());
     let mut wat = String::from("(module\n");
     for entry in &manifest.entries {
@@ -647,15 +697,16 @@ fn render_continuation_wat(
             entry.final_symbol, entry.source_debug_name, entry.pass_origin
         ));
     }
-    for op in &core.ops {
-        if let CoreOp::OperatorTarget {
+    for op in collect_operator_targets(&core.ops) {
+        let CoreOp::OperatorTarget {
             protocol,
             target,
             intrinsic,
         } = op
-        {
-            render_operator_intrinsic_wat(&mut wat, protocol, target, *intrinsic);
-        }
+        else {
+            continue;
+        };
+        render_operator_intrinsic_wat(&mut wat, protocol, target, *intrinsic);
     }
 
     wat.push_str("  ;; continuation-runtime subset=prompt-capture-i32\n");
@@ -667,7 +718,7 @@ fn render_continuation_wat(
         ));
     }
 
-    let mut continuations = BTreeMap::<String, ContinuationKind>::new();
+    let mut continuations = BTreeMap::<String, (ContinuationKind, CoreCapturedContinuation)>::new();
     let mut cont1_consumed = BTreeSet::<String>::new();
     let mut returned = false;
     for (index, op) in core.ops.iter().enumerate() {
@@ -678,8 +729,12 @@ fn render_continuation_wat(
                     render_continuation_kind(*kind)
                 ));
             }
-            CoreOp::CaptureContinuation { binder, kind } => {
-                continuations.insert(binder.clone(), *kind);
+            CoreOp::CaptureContinuation {
+                binder,
+                kind,
+                captured,
+            } => {
+                continuations.insert(binder.clone(), (*kind, captured.clone()));
                 wat.push_str(&format!(
                     "    ;; capture-cont binder={} kind={}\n",
                     escape_wat_comment(binder),
@@ -687,9 +742,10 @@ fn render_continuation_wat(
                 ));
             }
             CoreOp::TailCall { func, args } if continuations.contains_key(func) => {
-                let kind = *continuations
+                let (kind, captured) = continuations
                     .get(func)
-                    .expect("checked continuation binder");
+                    .expect("checked continuation binder")
+                    .clone();
                 if kind == ContinuationKind::Cont1 && !cont1_consumed.insert(func.clone()) {
                     return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
                         op: "resume-continuation".to_string(),
@@ -717,7 +773,7 @@ fn render_continuation_wat(
                     render_continuation_kind(kind),
                     escape_wat_comment(binder)
                 ));
-                render_core_value_i32(&mut wat, arg, &env)?;
+                render_captured_continuation_i32(&mut wat, &captured, arg, &env, core)?;
                 wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
             }
             CoreOp::TailCall { func, args } => {
@@ -880,7 +936,7 @@ fn render_continuation_wat(
         let (kind, binder) = continuations
             .iter()
             .next()
-            .map(|(binder, kind)| (*kind, Some(binder.clone())))
+            .map(|(binder, (kind, _))| (*kind, Some(binder.clone())))
             .unwrap_or((ContinuationKind::Cont1, None));
         return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
             op: "missing-continuation-return".to_string(),
@@ -893,11 +949,127 @@ fn render_continuation_wat(
     Ok(wat)
 }
 
+fn collect_tailcall_result_binders(ops: &[CoreOp]) -> Vec<String> {
+    let mut binders = Vec::new();
+    for op in ops {
+        match op {
+            CoreOp::TailCallResult { binder } => binders.push(binder.clone()),
+            CoreOp::CaptureContinuation { captured, .. } => {
+                binders.extend(collect_tailcall_result_binders(&captured.ops));
+            }
+            _ => {}
+        }
+    }
+    binders
+}
+
+fn collect_operator_targets(ops: &[CoreOp]) -> Vec<&CoreOp> {
+    let mut targets = Vec::new();
+    for op in ops {
+        match op {
+            CoreOp::OperatorTarget { .. } => targets.push(op),
+            CoreOp::CaptureContinuation { captured, .. } => {
+                targets.extend(collect_operator_targets(&captured.ops));
+            }
+            _ => {}
+        }
+    }
+    targets
+}
+
 fn render_continuation_kind(kind: ContinuationKind) -> &'static str {
     match kind {
         ContinuationKind::Cont1 => "cont1",
         ContinuationKind::ContN => "contn",
     }
+}
+
+fn render_captured_continuation_i32(
+    wat: &mut String,
+    captured: &CoreCapturedContinuation,
+    arg: &CoreValue,
+    env: &RenderEnv,
+    core: &CoreProgram,
+) -> Result<(), BackendDiagnostic> {
+    let captured_locals = captured
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            CoreOp::TailCallResult { binder } => Some(binder.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let mut env = env
+        .with_locals(
+            std::iter::once(captured.param.clone())
+                .chain(captured_locals.iter().cloned())
+                .collect(),
+        )
+        .with_binding(&captured.param, arg.clone());
+
+    for (index, op) in captured.ops.iter().enumerate() {
+        match op {
+            CoreOp::TailCall { func, args } => {
+                let Some(CoreOp::TailCallResult { binder }) = captured.ops.get(index + 1) else {
+                    return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
+                        op: "captured-tailcall-without-result".to_string(),
+                        kind: continuation_kind_for_captured(core, captured),
+                        binder: None,
+                    });
+                };
+                wat.push_str(&format!(
+                    "    ;; captured-tailcall {} args=[{}]\n",
+                    final_symbol(func),
+                    args.iter()
+                        .map(CoreValue::debug_name)
+                        .map(|arg| escape_wat_comment(&arg))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+                for arg in args {
+                    render_core_value_i32(wat, arg, &env)?;
+                }
+                wat.push_str(&format!("    call ${}\n", final_symbol(func)));
+                wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
+                env = env.with_locals(vec![binder.clone()]);
+            }
+            CoreOp::TailCallResult { .. } => {}
+            CoreOp::ReturnValue(value) => {
+                render_core_value_i32(wat, value, &env)?;
+                return Ok(());
+            }
+            CoreOp::OperatorTarget { .. } | CoreOp::DynamicCallableTarget { .. } => {}
+            _ => {
+                return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
+                    op: "captured-context-op".to_string(),
+                    kind: continuation_kind_for_captured(core, captured),
+                    binder: None,
+                });
+            }
+        }
+    }
+    Err(BackendDiagnostic::UnsupportedContinuationRuntime {
+        op: "captured-context-missing-return".to_string(),
+        kind: continuation_kind_for_captured(core, captured),
+        binder: None,
+    })
+}
+
+fn continuation_kind_for_captured(
+    core: &CoreProgram,
+    captured: &CoreCapturedContinuation,
+) -> ContinuationKind {
+    core.ops
+        .iter()
+        .find_map(|op| match op {
+            CoreOp::CaptureContinuation {
+                kind,
+                captured: candidate,
+                ..
+            } if candidate == captured => Some(*kind),
+            _ => None,
+        })
+        .unwrap_or(ContinuationKind::Cont1)
 }
 
 fn render_operator_intrinsic_wat(

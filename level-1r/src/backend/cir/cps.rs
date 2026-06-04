@@ -86,6 +86,7 @@ pub enum CpsTerm {
     Capture {
         multi: bool,
         binder: String,
+        captured: CpsAtom,
         body: Box<CpsTerm>,
     },
     Branch {
@@ -130,6 +131,7 @@ impl OperatorKind {
 #[derive(Default)]
 struct CpsCtx {
     next_id: usize,
+    next_resume_id: usize,
 }
 
 impl CpsCtx {
@@ -137,6 +139,12 @@ impl CpsCtx {
         let id = self.next_id;
         self.next_id += 1;
         format!("{prefix}{id}")
+    }
+
+    fn fresh_resume(&mut self) -> String {
+        let id = self.next_resume_id;
+        self.next_resume_id += 1;
+        format!("resume{id}")
     }
 }
 
@@ -382,10 +390,22 @@ fn transform(
         }
         TypedExprKind::Shift { binder, body } => {
             let kind = controls.last().copied().unwrap_or(ContinuationKind::Cont1);
-            let body = transform(body, k, controls, ctx);
+            let captured_param = ctx.fresh_resume();
+            let captured_body = k(CpsAtom::Var(captured_param.clone()), ctx);
+            let captured = CpsAtom::ContLambda {
+                param: captured_param,
+                body: Box::new(captured_body),
+            };
+            let body = transform(
+                body,
+                Box::new(|value, _| CpsTerm::Halt(value)),
+                controls,
+                ctx,
+            );
             CpsTerm::Capture {
                 multi: kind == ContinuationKind::ContN,
                 binder: binder.clone(),
+                captured,
                 body: Box::new(body),
             }
         }
@@ -878,12 +898,13 @@ impl fmt::Display for CpsTerm {
             CpsTerm::Capture {
                 multi,
                 binder,
+                captured,
                 body,
             } => {
                 if *multi {
-                    write!(f, "shift@contN {binder} {{ {body} }}")
+                    write!(f, "shift@contN {binder} captured={captured} {{ {body} }}")
                 } else {
-                    write!(f, "shift@cont1 {binder} {{ {body} }}")
+                    write!(f, "shift@cont1 {binder} captured={captured} {{ {body} }}")
                 }
             }
             CpsTerm::Branch {

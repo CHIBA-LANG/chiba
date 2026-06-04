@@ -5,7 +5,8 @@ use chiba_level1r::backend::{
 };
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
-    CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue, OperatorIntrinsic,
+    CoreCapturedContinuation, CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue,
+    OperatorIntrinsic,
 };
 use chiba_level1r::{compile_expr, Expr};
 
@@ -100,6 +101,7 @@ fn backend_lowers_cont1_single_resume_to_i32_runtime_subset() {
             CoreOp::CaptureContinuation {
                 binder: "k".to_string(),
                 kind: ContinuationKind::Cont1,
+                captured: captured_identity_core("resume"),
             },
             CoreOp::TailCall {
                 func: "k".to_string(),
@@ -142,6 +144,7 @@ fn backend_rejects_cont1_repeated_resume() {
             CoreOp::CaptureContinuation {
                 binder: "k".to_string(),
                 kind: ContinuationKind::Cont1,
+                captured: captured_identity_core("resume"),
             },
             CoreOp::TailCall {
                 func: "k".to_string(),
@@ -187,6 +190,7 @@ fn backend_lowers_contn_repeated_resume_to_i32_runtime_subset() {
             CoreOp::CaptureContinuation {
                 binder: "retry".to_string(),
                 kind: ContinuationKind::ContN,
+                captured: captured_identity_core("resume"),
             },
             CoreOp::TailCall {
                 func: "retry".to_string(),
@@ -837,4 +841,11 @@ fn backend_cache_key_distinguishes_target_features_and_imports() {
         output.backend_cache_key,
         backend_cache_key(&output.backend_link, &BackendCacheConfig::default())
     );
+}
+
+fn captured_identity_core(param: &str) -> CoreCapturedContinuation {
+    CoreCapturedContinuation {
+        param: param.to_string(),
+        ops: vec![CoreOp::ReturnValue(CoreValue::Var(param.to_string()))],
+    }
 }

@@ -71,6 +71,7 @@ fn visit_term(term: &CpsTerm, facts: &mut CpsUsageFacts) {
         CpsTerm::Capture {
             multi,
             binder,
+            captured,
             body,
         } => {
             let kind = if *multi {
@@ -95,6 +96,7 @@ fn visit_term(term: &CpsTerm, facts: &mut CpsUsageFacts) {
                     materialization: materialization(kind, count),
                 },
             );
+            visit_atom(captured, facts);
             visit_term(body, facts);
         }
         CpsTerm::Branch {
@@ -185,7 +187,10 @@ fn count_term_refs(term: &CpsTerm, binder: &str, count: &mut UseCount) {
             count_atom_refs(value, binder, count);
         }
         CpsTerm::Prompt { body, .. } => count_term_refs(body, binder, count),
-        CpsTerm::Capture { body, .. } => count_term_refs(body, binder, count),
+        CpsTerm::Capture { captured, body, .. } => {
+            count_atom_refs(captured, binder, count);
+            count_term_refs(body, binder, count);
+        }
         CpsTerm::Branch {
             cond,
             then_term,

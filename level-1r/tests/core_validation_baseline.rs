@@ -1,9 +1,9 @@
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
     validate_core, CallableStorageFact, CallableStorageKind, ClosureEnvField, ClosureEnvLayout,
-    CompilerIntrinsic, ContinuationEnvLayout, CoreDiagnostic, CoreOp, CoreProgram, CoreValue,
-    LayoutFact, LayoutKind, OwnershipDecision, OwnershipFact, OwnershipSubjectKind,
-    TargetSpecificCoreTerm, TupleLayout,
+    CompilerIntrinsic, ContinuationEnvLayout, CoreCapturedContinuation, CoreDiagnostic, CoreOp,
+    CoreProgram, CoreValue, LayoutFact, LayoutKind, OwnershipDecision, OwnershipFact,
+    OwnershipSubjectKind, TargetSpecificCoreTerm, TupleLayout,
 };
 use chiba_level1r::template::{canonical_open_row, ShapeType};
 use chiba_level1r::typed::{SendColor, UsageColor};
@@ -74,6 +74,7 @@ fn validator_rejects_missing_contn_package_layout() {
         ops: vec![CoreOp::CaptureContinuation {
             binder: "retry".to_string(),
             kind: ContinuationKind::ContN,
+            captured: captured_identity_core("resume"),
         }],
         layouts: vec![],
         ownership: vec![],
@@ -88,6 +89,13 @@ fn validator_rejects_missing_contn_package_layout() {
             binder: "retry".to_string()
         }]
     );
+}
+
+fn captured_identity_core(param: &str) -> CoreCapturedContinuation {
+    CoreCapturedContinuation {
+        param: param.to_string(),
+        ops: vec![CoreOp::ReturnValue(CoreValue::Var(param.to_string()))],
+    }
 }
 
 #[test]

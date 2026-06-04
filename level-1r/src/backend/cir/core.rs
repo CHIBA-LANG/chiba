@@ -45,6 +45,7 @@ pub enum CoreOp {
     CaptureContinuation {
         binder: String,
         kind: ContinuationKind,
+        captured: CoreCapturedContinuation,
     },
     DirectMethodTarget {
         name: String,
@@ -175,6 +176,12 @@ impl CompilerIntrinsic {
 pub struct CoreMatchArm {
     pub pattern: CorePattern,
     pub value: CoreValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CoreCapturedContinuation {
+    pub param: String,
+    pub ops: Vec<CoreOp>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -556,15 +563,22 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             });
             lower_term(body, continuations, ops);
         }
-        CpsTerm::Capture { binder, body, .. } => {
+        CpsTerm::Capture {
+            binder,
+            captured,
+            body,
+            ..
+        } => {
             let kind = continuations
                 .iter()
                 .find(|fact| fact.binder == *binder)
                 .map(|fact| fact.kind)
                 .unwrap_or(ContinuationKind::Cont1);
+            let captured = lower_captured_continuation(captured, continuations);
             ops.push(CoreOp::CaptureContinuation {
                 binder: binder.clone(),
                 kind,
+                captured,
             });
             lower_term(body, continuations, ops);
         }
@@ -611,6 +625,26 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             for arm in arms {
                 lower_term(&arm.body, continuations, ops);
             }
+        }
+    }
+}
+
+fn lower_captured_continuation(
+    captured: &CpsAtom,
+    continuations: &[ContinuationFact],
+) -> CoreCapturedContinuation {
+    if let CpsAtom::ContLambda { param, body } = captured {
+        let mut ops = Vec::new();
+        lower_term(body, continuations, &mut ops);
+        CoreCapturedContinuation {
+            param: param.clone(),
+            ops,
+        }
+    } else {
+        let param = render_atom(captured);
+        CoreCapturedContinuation {
+            param: param.clone(),
+            ops: vec![CoreOp::ReturnValue(CoreValue::Var(param))],
         }
     }
 }
@@ -831,6 +865,7 @@ fn validate_continuation_packages(program: &CoreProgram, diagnostics: &mut Vec<C
         if let CoreOp::CaptureContinuation {
             binder,
             kind: ContinuationKind::ContN,
+            ..
         } = op
         {
             let has_package = program.layouts.iter().any(|layout| {
@@ -851,22 +886,43 @@ fn validate_continuation_packages(program: &CoreProgram, diagnostics: &mut Vec<C
 
 fn validate_tail_calls(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
     for op in &program.ops {
-        if let CoreOp::TailCall { func, .. } = op {
-            if !is_known_tail_target(program, func) {
-                diagnostics.push(CoreDiagnostic::DanglingTailCallTarget {
-                    target: func.clone(),
-                });
+        validate_tail_call_op(program, op, diagnostics);
+    }
+}
+
+fn validate_tail_call_op(
+    program: &CoreProgram,
+    op: &CoreOp,
+    diagnostics: &mut Vec<CoreDiagnostic>,
+) {
+    match op {
+        CoreOp::TailCall { func, .. } if !is_known_tail_target(program, func) => {
+            diagnostics.push(CoreDiagnostic::DanglingTailCallTarget {
+                target: func.clone(),
+            });
+        }
+        CoreOp::CaptureContinuation { captured, .. } => {
+            for op in &captured.ops {
+                validate_tail_call_op(program, op, diagnostics);
             }
         }
+        _ => {}
     }
 }
 
 fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
-    program.ops.iter().any(|op| match op {
+    program.ops.iter().any(|op| op_has_tail_target(op, func))
+}
+
+fn op_has_tail_target(op: &CoreOp, func: &str) -> bool {
+    match op {
         CoreOp::DynamicCallableTarget { target } => target == func,
         CoreOp::DirectMethodTarget { target, .. } => target == func,
         CoreOp::OperatorTarget { target, .. } => target == func,
         CoreOp::LiftedFunction { symbol, .. } => symbol == func,
+        CoreOp::CaptureContinuation { captured, .. } => {
+            captured.ops.iter().any(|op| op_has_tail_target(op, func))
+        }
         CoreOp::ReturnValue(_)
         | CoreOp::TargetSpecificTerm { .. }
         | CoreOp::ReturnBranch { .. }
@@ -882,12 +938,11 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         | CoreOp::TailCallResult { .. }
         | CoreOp::TailCall { .. }
         | CoreOp::Prompt { .. }
-        | CoreOp::CaptureContinuation { .. }
         | CoreOp::Branch { .. }
         | CoreOp::Match { .. }
         | CoreOp::StaticRowAccess { .. }
         | CoreOp::DynRowAdapterAccess { .. } => false,
-    })
+    }
 }
 
 fn validate_record_field_access(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {

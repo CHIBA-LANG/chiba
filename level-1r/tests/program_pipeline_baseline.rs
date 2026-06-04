@@ -257,6 +257,35 @@ fn program_contn_repeated_resume_lowers_to_executable_wat() {
 }
 
 #[test]
+fn program_contn_repeated_resume_replays_captured_reset_context() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = resetn { 10 + shift retry { retry(1) + retry(2) } }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert_eq!(
+        main.backend
+            .wat
+            .matches(";; resume-cont binder=retry kind=contn result=")
+            .count(),
+        2
+    );
+    assert_eq!(
+        main.backend
+            .wat
+            .matches(";; captured-tailcall op_add")
+            .count(),
+        2
+    );
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "23");
+}
+
+#[test]
 fn interface_type_continuation_field_enters_callable_storage() {
     let program = SourceProgram::with_surface(
         None,

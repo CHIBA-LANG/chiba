@@ -68,10 +68,14 @@ fn core_ir_preserves_continuation_kind_without_backend_terms() {
     assert!(output.core.ops.contains(&CoreOp::Prompt {
         kind: ContinuationKind::ContN
     }));
-    assert!(output.core.ops.contains(&CoreOp::CaptureContinuation {
-        binder: "retry".to_string(),
-        kind: ContinuationKind::ContN
-    }));
+    assert!(output.core.ops.iter().any(|op| matches!(
+        op,
+        CoreOp::CaptureContinuation {
+            binder,
+            kind: ContinuationKind::ContN,
+            ..
+        } if binder == "retry"
+    )));
 
     let rendered = format!("{:#?}", output.core);
     assert!(!rendered.contains("Wasm"));

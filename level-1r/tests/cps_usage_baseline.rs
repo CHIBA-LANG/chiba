@@ -26,6 +26,7 @@ fn cont1_single_resume_is_inline_single_use() {
         term: CpsTerm::Capture {
             multi: false,
             binder: "k".to_string(),
+            captured: captured_identity_cps("resume"),
             body: Box::new(CpsTerm::AppCont {
                 kont: CpsAtom::Var("k".to_string()),
                 value: CpsAtom::Lit(chiba_level1r::Literal::I64(1)),
@@ -72,6 +73,7 @@ fn contn_single_or_many_resume_uses_multi_resume_package() {
         term: CpsTerm::Capture {
             multi: true,
             binder: "retry".to_string(),
+            captured: captured_identity_cps("resume"),
             body: Box::new(CpsTerm::Halt(CpsAtom::Var("retry".to_string()))),
         },
     };
@@ -116,6 +118,7 @@ fn repeated_resume_cps(multi: bool, binder: &str) -> CpsProgram {
         term: CpsTerm::Capture {
             multi,
             binder: binder.to_string(),
+            captured: captured_identity_cps("resume"),
             body: Box::new(CpsTerm::AppFun {
                 func: CpsAtom::Var("store".to_string()),
                 args: vec![CpsAtom::Var(binder.to_string())],
@@ -128,5 +131,12 @@ fn repeated_resume_cps(multi: bool, binder: &str) -> CpsProgram {
                 },
             }),
         },
+    }
+}
+
+fn captured_identity_cps(param: &str) -> CpsAtom {
+    CpsAtom::ContLambda {
+        param: param.to_string(),
+        body: Box::new(CpsTerm::Halt(CpsAtom::Var(param.to_string()))),
     }
 }
