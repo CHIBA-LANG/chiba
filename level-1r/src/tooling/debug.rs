@@ -37,7 +37,7 @@ use crate::template::{
 use crate::template_audit::TemplateAuditReport;
 use crate::typed::{RecordTypeField, Type, TypedExpr};
 use crate::usage::{UsageFacts, UseCount};
-use crate::usage_audit::UsageAuditReport;
+use crate::usage_audit::{RustReferenceOwnership, UsageAuditDiagnostic, UsageAuditReport};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VisualReport {
@@ -195,7 +195,7 @@ pub fn visual_report(
         callable_storage: callable_storage.to_string(),
         closure_core_usage: render_closure_core_usage(closure_core_usage),
         closure_simplification: render_closure_simplification(closure_simplification),
-        usage_audit: format!("{usage_audit:#?}"),
+        usage_audit: render_usage_audit(usage_audit),
         std_audit: format!("{std_audit:#?}"),
         core_validation: render_core_validation(core_validation),
         backend: render_backend_artifact(backend),
@@ -762,6 +762,64 @@ fn render_continuation_package_decision(decision: ContinuationPackageDecision) -
     match decision {
         ContinuationPackageDecision::RemoveUnusedPackage => "remove-unused-package",
         ContinuationPackageDecision::KeepRepeatablePackage => "keep-repeatable-package",
+    }
+}
+
+fn render_usage_audit(report: &UsageAuditReport) -> String {
+    let mut out = String::new();
+    writeln!(out, "entries={}", report.entries.len()).unwrap();
+    for entry in &report.entries {
+        writeln!(
+            out,
+            "entry {} source={} typed={} usage={} rust-ref={} rust-ownership={} ownership={} aligned={}",
+            entry.subject,
+            entry.source_signature,
+            entry.typed_signature,
+            entry.usage_signature,
+            entry.rust_reference_signature,
+            render_rust_reference_ownership(entry.rust_reference_ownership),
+            entry
+                .ownership
+                .map(render_ownership_decision)
+                .unwrap_or_else(|| "none".to_string()),
+            entry.aligned
+        )
+        .unwrap();
+    }
+    writeln!(out, "diagnostics={}", report.diagnostics.len()).unwrap();
+    for diagnostic in &report.diagnostics {
+        writeln!(
+            out,
+            "diagnostic {}",
+            render_usage_audit_diagnostic(diagnostic)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_rust_reference_ownership(ownership: RustReferenceOwnership) -> &'static str {
+    match ownership {
+        RustReferenceOwnership::MoveOnly => "move-only",
+        RustReferenceOwnership::SharedRc => "shared-rc",
+        RustReferenceOwnership::Obligation => "obligation",
+    }
+}
+
+fn render_usage_audit_diagnostic(diagnostic: &UsageAuditDiagnostic) -> String {
+    match diagnostic {
+        UsageAuditDiagnostic::RcRequiresManyUsage { subject, usage } => {
+            format!(
+                "rc-requires-many-usage {subject} usage={}",
+                render_usage_color(*usage)
+            )
+        }
+        UsageAuditDiagnostic::ManyUsageNeedsSharedRustReference {
+            subject,
+            rust_reference_signature,
+        } => format!(
+            "many-usage-needs-shared-rust-reference {subject} rust-ref={rust_reference_signature}"
+        ),
     }
 }
 

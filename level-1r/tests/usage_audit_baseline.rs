@@ -100,9 +100,12 @@ fn visual_report_contains_four_layer_usage_audit() {
     let visual = output.render_visual();
 
     assert!(visual.contains("usage-audit:"));
-    assert!(visual.contains("source_signature"));
-    assert!(visual.contains("typed_signature"));
-    assert!(visual.contains("usage_signature"));
-    assert!(visual.contains("rust_reference_signature"));
-    assert!(visual.contains("rust_reference_ownership"));
+    assert!(visual.contains("entry var::x source=x + x"));
+    assert!(visual.contains("typed=x: Unknown"));
+    assert!(visual.contains("usage=x: N Unknown"));
+    assert!(visual.contains("rust-ref=let x: Rc<Unknown>"));
+    assert!(visual.contains("rust-ownership=shared-rc"));
+    assert!(visual.contains("ownership=rc"));
+    assert!(!output.visual.usage_audit.contains("UsageAuditReport"));
+    assert!(!output.visual.usage_audit.contains("source_signature"));
 }
