@@ -16,8 +16,9 @@ use crate::closure_simplify::{
 };
 use crate::control::{ContinuationKind, ControlError, ControlFacts, ReplaySafety};
 use crate::core::{
-    CallableStorageKind, CompilerIntrinsic, CoreDiagnostic, CoreProgram, CoreValidation,
-    OwnershipDecision,
+    CallableStorageKind, CompilerIntrinsic, CoreCapturedContinuation, CoreDiagnostic, CoreMatchArm,
+    CoreOp, CorePattern, CoreProgram, CoreRecordValueField, CoreValidation, CoreValue, LayoutKind,
+    OperatorIntrinsic, OwnershipDecision, OwnershipSubjectKind, TargetSpecificCoreTerm,
 };
 use crate::cps::CpsProgram;
 use crate::cps_usage::{
@@ -195,7 +196,7 @@ pub fn visual_report(
         ),
         closure: render_closure_facts(closure),
         lambda_lift: render_lambda_lift_facts(lambda_lift),
-        core: format!("{core:#?}"),
+        core: render_core_program(core),
         callable_storage: callable_storage.to_string(),
         closure_core_usage: render_closure_core_usage(closure_core_usage),
         closure_simplification: render_closure_simplification(closure_simplification),
@@ -216,6 +217,412 @@ fn render_core_validation(validation: &CoreValidation) -> String {
         writeln!(out, "diagnostic {}", render_core_diagnostic(diagnostic)).unwrap();
     }
     out
+}
+
+fn render_core_program(program: &CoreProgram) -> String {
+    let mut out = String::new();
+    writeln!(out, "ops={}", program.ops.len()).unwrap();
+    for (index, op) in program.ops.iter().enumerate() {
+        writeln!(out, "op {index} {}", render_core_op(op)).unwrap();
+    }
+    writeln!(out, "layouts={}", program.layouts.len()).unwrap();
+    for layout in &program.layouts {
+        writeln!(
+            out,
+            "layout {} hash={} {}",
+            layout.key,
+            layout.hash,
+            render_layout_kind(&layout.kind)
+        )
+        .unwrap();
+    }
+    writeln!(out, "ownership={}", program.ownership.len()).unwrap();
+    for fact in &program.ownership {
+        writeln!(
+            out,
+            "ownership {} kind={} decision={}",
+            fact.subject,
+            render_ownership_subject_kind(fact.kind),
+            render_ownership_decision(fact.decision)
+        )
+        .unwrap();
+    }
+    writeln!(out, "callable-storage={}", program.callable_storage.len()).unwrap();
+    for fact in &program.callable_storage {
+        writeln!(
+            out,
+            "callable {} kind={} usage={} send={}",
+            fact.subject,
+            render_callable_storage_kind(fact.kind),
+            render_usage_color(fact.usage),
+            render_send_color(fact.send)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_core_op(op: &CoreOp) -> String {
+    match op {
+        CoreOp::ReturnValue(value) => format!("return {}", render_core_value(value)),
+        CoreOp::ReturnBranch {
+            cond,
+            then_value,
+            else_value,
+        } => format!(
+            "return-branch cond={} then={} else={}",
+            render_core_value(cond),
+            render_core_value(then_value),
+            render_core_value(else_value)
+        ),
+        CoreOp::ReturnMatch { scrutinee, arms } => {
+            let arms = arms
+                .iter()
+                .map(render_core_match_arm)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "return-match scrutinee={} arms=[{}]",
+                render_core_value(scrutinee),
+                arms
+            )
+        }
+        CoreOp::TailCall { func, args } => {
+            let args = args
+                .iter()
+                .map(render_core_value)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("tail-call {func} args=[{args}]")
+        }
+        CoreOp::TailCallResult { binder } => format!("tail-call-result {binder}"),
+        CoreOp::DynamicCallableTarget { target } => {
+            format!("dynamic-callable-target {target}")
+        }
+        CoreOp::Prompt { kind } => format!("prompt kind={}", render_continuation_kind(*kind)),
+        CoreOp::CaptureContinuation {
+            binder,
+            kind,
+            captured,
+        } => format!(
+            "capture-continuation {binder} kind={} {}",
+            render_continuation_kind(*kind),
+            render_captured_continuation(captured)
+        ),
+        CoreOp::DirectMethodTarget { name, target } => {
+            format!("direct-method-target {name} -> {target}")
+        }
+        CoreOp::OperatorTarget {
+            protocol,
+            target,
+            intrinsic,
+        } => format!(
+            "operator-target protocol={protocol} target={target} intrinsic={}",
+            intrinsic.map(render_operator_intrinsic).unwrap_or("none")
+        ),
+        CoreOp::StaticRowAccess { field, layout } => {
+            format!("static-row-access field={field} layout={layout}")
+        }
+        CoreOp::DynRowAdapterAccess { subject, layout } => {
+            format!("dyn-row-adapter-access subject={subject} layout={layout}")
+        }
+        CoreOp::Branch { cond } => format!("branch cond={cond}"),
+        CoreOp::Match {
+            scrutinee,
+            patterns,
+        } => {
+            format!(
+                "match scrutinee={scrutinee} patterns=[{}]",
+                patterns.join(", ")
+            )
+        }
+        CoreOp::TupleConstruct {
+            nominal,
+            layout,
+            fields,
+        } => format!(
+            "tuple-construct nominal={nominal} layout={layout} fields=[{}]",
+            fields.join(", ")
+        ),
+        CoreOp::TupleFieldGet {
+            nominal,
+            layout,
+            field,
+            field_index,
+        } => format!(
+            "tuple-field-get nominal={nominal} layout={layout} field={field} index={field_index}"
+        ),
+        CoreOp::RecordConstruct { layout, fields } => {
+            format!(
+                "record-construct layout={layout} fields=[{}]",
+                fields.join(", ")
+            )
+        }
+        CoreOp::RecordUpdate {
+            base,
+            layout,
+            fields,
+        } => format!(
+            "record-update base={base} layout={layout} fields=[{}]",
+            fields.join(", ")
+        ),
+        CoreOp::RecordFieldGet { layout, field } => {
+            format!("record-field-get layout={layout} field={field}")
+        }
+        CoreOp::AdtConstruct {
+            data,
+            ctor,
+            variants,
+            args,
+        } => format!(
+            "adt-construct {data}.{ctor} variants=[{}] args=[{}]",
+            variants.join(", "),
+            args.join(", ")
+        ),
+        CoreOp::AdtTupleBridge {
+            data,
+            ctor,
+            tuple_fields,
+            tuple_to_adt_intrinsic,
+            adt_to_tuple_intrinsic,
+        } => format!(
+            "adt-tuple-bridge {data}.{ctor} tuple-fields=[{}] tuple-to-adt={} adt-to-tuple={}",
+            tuple_fields.join(", "),
+            render_compiler_intrinsic(*tuple_to_adt_intrinsic),
+            render_compiler_intrinsic(*adt_to_tuple_intrinsic)
+        ),
+        CoreOp::CompilerIntrinsicUse {
+            intrinsic,
+            owner_namespace,
+            subject,
+        } => format!(
+            "compiler-intrinsic-use {} owner={} subject={}",
+            render_compiler_intrinsic(*intrinsic),
+            owner_namespace,
+            subject
+        ),
+        CoreOp::TargetSpecificTerm { term } => {
+            format!(
+                "target-specific-term {}",
+                render_target_specific_core_term(*term)
+            )
+        }
+        CoreOp::LiftedFunction {
+            source,
+            symbol,
+            env_params,
+            direct,
+        } => format!(
+            "lifted-function source={source} symbol={symbol} env=[{}] direct={direct}",
+            env_params.join(", ")
+        ),
+    }
+}
+
+fn render_core_match_arm(arm: &CoreMatchArm) -> String {
+    format!(
+        "{} => {}",
+        render_core_pattern(&arm.pattern),
+        render_core_value(&arm.value)
+    )
+}
+
+fn render_captured_continuation(captured: &CoreCapturedContinuation) -> String {
+    let ops = captured
+        .ops
+        .iter()
+        .map(render_core_op)
+        .collect::<Vec<_>>()
+        .join("; ");
+    format!("param={} ops=[{}]", captured.param, ops)
+}
+
+fn render_core_pattern(pattern: &CorePattern) -> String {
+    match pattern {
+        CorePattern::Wildcard => "_".to_string(),
+        CorePattern::Bind(name) => name.clone(),
+        CorePattern::I64(value) => value.to_string(),
+        CorePattern::Bool(value) => value.to_string(),
+        CorePattern::Constructor { data, ctor, args } => {
+            let args = args
+                .iter()
+                .map(render_core_pattern)
+                .collect::<Vec<_>>()
+                .join(", ");
+            match data {
+                Some(data) => format!("{data}.{ctor}({args})"),
+                None => format!("{ctor}({args})"),
+            }
+        }
+    }
+}
+
+fn render_core_value(value: &CoreValue) -> String {
+    match value {
+        CoreValue::Unit => "unit".to_string(),
+        CoreValue::I64(value) => value.to_string(),
+        CoreValue::Bool(value) => value.to_string(),
+        CoreValue::Var(name) => name.clone(),
+        CoreValue::Tuple { fields } => {
+            let fields = fields
+                .iter()
+                .map(render_core_value)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({fields})")
+        }
+        CoreValue::TupleField {
+            tuple,
+            field,
+            field_index,
+        } => format!("{}.{}#{}", render_core_value(tuple), field, field_index),
+        CoreValue::Range { start, end } => {
+            format!("{}..{}", render_core_value(start), render_core_value(end))
+        }
+        CoreValue::Record { fields } => {
+            let fields = fields
+                .iter()
+                .map(render_core_record_value_field)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{{fields}}}")
+        }
+        CoreValue::RecordUpdate { base, fields } => {
+            let fields = fields
+                .iter()
+                .map(render_core_record_value_field)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{{} | {fields}}}", render_core_value(base))
+        }
+        CoreValue::RecordField { record, field } => {
+            format!("{}.{}", render_core_value(record), field)
+        }
+        CoreValue::Adt {
+            data,
+            ctor,
+            variants,
+            args,
+        } => {
+            let args = args
+                .iter()
+                .map(render_core_value)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "{data}.{ctor} variants=[{}] args=[{}]",
+                variants.join(", "),
+                args
+            )
+        }
+        CoreValue::Rendered { debug } => format!("rendered({debug})"),
+    }
+}
+
+fn render_core_record_value_field(field: &CoreRecordValueField) -> String {
+    format!("{}={}", field.name, render_core_value(&field.value))
+}
+
+fn render_layout_kind(kind: &LayoutKind) -> String {
+    match kind {
+        LayoutKind::RowShape(shape) => format!("row-shape {}", render_row_shape(shape)),
+        LayoutKind::DynRowPackage(contract) => {
+            format!("dyn-row-package {}", render_dyn_contract(contract))
+        }
+        LayoutKind::ContinuationPackage(env) => {
+            format!(
+                "continuation-package {}",
+                render_continuation_env_layout(env)
+            )
+        }
+        LayoutKind::Cont1StateMachine(env) => {
+            format!(
+                "cont1-state-machine {}",
+                render_continuation_env_layout(env)
+            )
+        }
+        LayoutKind::ClosureEnv(env) => {
+            let fields = env
+                .fields
+                .iter()
+                .map(render_closure_env_field)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("closure-env closure={} fields=[{}]", env.closure, fields)
+        }
+        LayoutKind::TupleStruct(tuple) => format!(
+            "tuple-struct nominal={} fields=[{}]",
+            tuple.nominal,
+            tuple.fields.join(", ")
+        ),
+        LayoutKind::RecordStruct(record) => {
+            format!("record-struct fields=[{}]", record.fields.join(", "))
+        }
+        LayoutKind::AdtShape(adt) => format!(
+            "adt-shape data={} variants=[{}]",
+            adt.data,
+            adt.variants.join(", ")
+        ),
+    }
+}
+
+fn render_continuation_env_layout(env: &crate::core::ContinuationEnvLayout) -> String {
+    let fields = env
+        .fields
+        .iter()
+        .map(render_closure_env_field)
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "binder={} kind={} fields=[{}] replay={} clone-on-resume={} consumed-state-machine={}",
+        env.binder,
+        render_continuation_kind(env.kind),
+        fields,
+        render_replay_safety(env.replay_safety),
+        env.clone_on_resume,
+        env.consumed_state_machine
+    )
+}
+
+fn render_closure_env_field(field: &crate::core::ClosureEnvField) -> String {
+    format!(
+        "{}: usage={} send={}",
+        field.name,
+        render_usage_color(field.usage),
+        render_send_color(field.send)
+    )
+}
+
+fn render_ownership_subject_kind(kind: OwnershipSubjectKind) -> String {
+    match kind {
+        OwnershipSubjectKind::Value => "value".to_string(),
+        OwnershipSubjectKind::Binder => "binder".to_string(),
+        OwnershipSubjectKind::DynRowPackage => "dyn-row-package".to_string(),
+        OwnershipSubjectKind::DynRowPayload { send } => {
+            format!("dyn-row-payload send={}", render_send_color(send))
+        }
+        OwnershipSubjectKind::Continuation => "continuation".to_string(),
+        OwnershipSubjectKind::SharedSendValue => "shared-send-value".to_string(),
+    }
+}
+
+fn render_operator_intrinsic(intrinsic: OperatorIntrinsic) -> &'static str {
+    match intrinsic {
+        OperatorIntrinsic::I64Add => "i64-add",
+        OperatorIntrinsic::I64Sub => "i64-sub",
+        OperatorIntrinsic::I64Mul => "i64-mul",
+        OperatorIntrinsic::I64Div => "i64-div",
+    }
+}
+
+fn render_target_specific_core_term(term: TargetSpecificCoreTerm) -> &'static str {
+    match term {
+        TargetSpecificCoreTerm::Wasm => "wasm",
+        TargetSpecificCoreTerm::Wat => "wat",
+        TargetSpecificCoreTerm::Binaryen => "binaryen",
+        TargetSpecificCoreTerm::Funcref => "funcref",
+        TargetSpecificCoreTerm::Eqref => "eqref",
+    }
 }
 
 fn render_alpha_facts(facts: &AlphaFacts) -> String {

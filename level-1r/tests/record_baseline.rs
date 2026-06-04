@@ -93,6 +93,27 @@ fn record_field_access_infers_type_and_validates_layout() {
 }
 
 #[test]
+fn core_visual_renders_structured_facts_without_rust_debug_shape() {
+    let output = compile_expr(&Expr::field(
+        Expr::record(vec![("x", Expr::i64(1)), ("y", Expr::bool(true))]),
+        "y",
+    ));
+    let visual = &output.visual.core;
+
+    assert!(visual.contains("ops="));
+    assert!(visual.contains("record-construct layout=record::x+y fields=[x, y]"));
+    assert!(visual.contains("record-field-get layout=record::x+y field=y"));
+    assert!(visual.contains("layout record::x+y hash="));
+    assert!(visual.contains("record-struct fields=[x, y]"));
+    assert!(visual.contains("callable-storage="));
+    assert!(!visual.contains("CoreProgram"));
+    assert!(!visual.contains("CoreOp"));
+    assert!(!visual.contains("RecordFieldGet"));
+    assert!(!visual.contains("LayoutKind"));
+    assert!(!visual.contains("RecordStruct"));
+}
+
+#[test]
 fn typed_visual_renders_structured_expr_without_rust_debug_shape() {
     let output = compile_expr(&Expr::field(
         Expr::record(vec![("x", Expr::i64(1)), ("y", Expr::bool(true))]),
