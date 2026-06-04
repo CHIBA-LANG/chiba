@@ -2485,9 +2485,12 @@ mod tests {
                 }
             ]
         );
-        let diagnostic_text = format!("{:?}", lowered.diagnostics);
-        assert!(!diagnostic_text.contains("Call {"));
-        assert!(!diagnostic_text.contains("Var("));
+        let [BackendLinkDiagnostic::UnsupportedStaticInitializerLowering { expr, .. }] =
+            lowered.diagnostics.as_slice()
+        else {
+            panic!("expected unsupported static initializer diagnostic");
+        };
+        assert_eq!(expr, "helper()");
         assert!(!lowered.linked_wat.contains("global__VALUE"));
         assert!(!lowered.linked_wat.contains("unsupported static init"));
         assert!(!lowered.linked_wat.contains("(i32.const 0)"));
@@ -2529,8 +2532,12 @@ mod tests {
                 }
             ]
         );
-        let diagnostic_text = format!("{:?}", lowered.diagnostics);
-        assert!(!diagnostic_text.contains("AdtCtor"));
+        let [BackendLinkDiagnostic::UnsupportedStaticInitializerLowering { expr, .. }] =
+            lowered.diagnostics.as_slice()
+        else {
+            panic!("expected unsupported static initializer diagnostic");
+        };
+        assert_eq!(expr, "Option.Ghost()");
         assert!(!lowered.linked_wat.contains("global__VALUE"));
         assert!(!lowered.linked_wat.contains("(i32.const 0)"));
     }

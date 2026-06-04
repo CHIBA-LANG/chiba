@@ -1,4 +1,4 @@
-use chiba_level1r::chibalex::{compile_lexer, LexerRule, LexerSpec};
+use chiba_level1r::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec};
 
 fn basic_lexer() -> chiba_level1r::chibalex::Lexer {
     compile_lexer(LexerSpec {
@@ -170,5 +170,11 @@ fn lexer_reports_no_rule_without_scanner_fallback() {
     let lexer = basic_lexer();
     let err = lexer.lex("@").unwrap_err();
 
-    assert!(format!("{err:?}").contains("NoRule"));
+    assert_eq!(
+        err,
+        LexError::NoRule {
+            offset: 0,
+            found: Some('@')
+        }
+    );
 }
