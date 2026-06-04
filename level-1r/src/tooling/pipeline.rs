@@ -12,7 +12,7 @@ use crate::backend::{
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
 use crate::closure_simplify::{simplify_closure_core, ClosureSimplificationFacts};
-use crate::control::{analyze_control, ControlFacts};
+use crate::control::{analyze_control, ControlError, ControlFacts};
 use crate::core::{
     lower_core_with_facts, validate_core, CallableStorageFact, CallableStorageKind, CoreProgram,
     CoreValidation, CoreValue,
@@ -167,6 +167,14 @@ pub enum ProgramDiagnostic {
         callee: String,
         previous_type_args: Vec<String>,
         type_args: Vec<String>,
+    },
+    ShiftOutsideReset {
+        def: String,
+        binder: String,
+    },
+    UnsafeMultiResumeCapture {
+        def: String,
+        binder: String,
     },
     MissingEntry,
     EntryHasParams {
@@ -517,6 +525,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     let mut all_diagnostics = diagnostics;
     all_diagnostics.extend(global_init.diagnostics.iter().cloned().map(Into::into));
     all_diagnostics.extend(template_diagnostics(&defs));
+    all_diagnostics.extend(control_diagnostics(&defs));
     if entry.is_none() {
         all_diagnostics.push(ProgramDiagnostic::MissingEntry);
     }
@@ -1212,6 +1221,31 @@ fn template_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
                         previous_type_args: previous_type_args.clone(),
                         type_args: type_args.clone(),
                     },
+                })
+        })
+        .collect()
+}
+
+fn control_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
+    defs.iter()
+        .flat_map(|def| {
+            def.output
+                .control
+                .errors
+                .iter()
+                .map(|diagnostic| match diagnostic {
+                    ControlError::ShiftOutsideReset { binder } => {
+                        ProgramDiagnostic::ShiftOutsideReset {
+                            def: def.name.clone(),
+                            binder: binder.clone(),
+                        }
+                    }
+                    ControlError::UnsafeMultiResumeCapture { binder } => {
+                        ProgramDiagnostic::UnsafeMultiResumeCapture {
+                            def: def.name.clone(),
+                            binder: binder.clone(),
+                        }
+                    }
                 })
         })
         .collect()
@@ -1992,6 +2026,12 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
             previous_type_args.join(", "),
             type_args.join(", ")
         ),
+        ProgramDiagnostic::ShiftOutsideReset { def, binder } => {
+            format!("shift outside reset {def}: {binder}")
+        }
+        ProgramDiagnostic::UnsafeMultiResumeCapture { def, binder } => {
+            format!("unsafe multi-resume capture {def}: {binder}")
+        }
         ProgramDiagnostic::MissingEntry => "missing entry".to_string(),
         ProgramDiagnostic::EntryHasParams { name, params } => {
             format!("entry has params {name}({})", params.join(", "))

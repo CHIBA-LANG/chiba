@@ -272,6 +272,13 @@ def main() = resetn { f(shift retry { retry(1) }) }",
         .output;
 
     assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::UnsafeMultiResumeCapture {
+            def: "main".to_string(),
+            binder: "retry".to_string()
+        }]
+    );
+    assert_eq!(
         main.control.errors,
         vec![
             chiba_level1r::control::ControlError::UnsafeMultiResumeCapture {
@@ -296,6 +303,27 @@ def main() = resetn { f(shift retry { retry(1) }) }",
         vec![
             chiba_level1r::backend::BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index: 1 }
         ]
+    );
+}
+
+#[test]
+fn program_shift_outside_reset_reaches_program_diagnostics() {
+    let output = chiba_level1r::compile_source_program_bundle("def main() = shift k { k(1) }")
+        .expect("compile source");
+    let bundle = output.program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::ShiftOutsideReset {
+            def: "main".to_string(),
+            binder: "k".to_string()
+        }]
+    );
+    assert_eq!(
+        bundle.defs[0].output.control.errors,
+        vec![chiba_level1r::control::ControlError::ShiftOutsideReset {
+            binder: "k".to_string()
+        }]
     );
 }
 
