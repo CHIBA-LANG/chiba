@@ -1,6 +1,6 @@
 use chiba_level1r::ast::BinaryOp;
 use chiba_level1r::closure::ClosureFacts;
-use chiba_level1r::control::ContinuationKind;
+use chiba_level1r::control::{ContinuationKind, ReplaySafety};
 use chiba_level1r::core::{
     lower_core_with_facts, LayoutKind, OwnershipDecision, OwnershipFact, OwnershipSubjectKind,
 };
@@ -83,6 +83,7 @@ fn contn_core_keeps_continuation_package_layout_fact() {
             LayoutKind::ContinuationPackage(env)
                 if env.kind == ContinuationKind::ContN
                     && env.binder == "retry"
+                    && env.replay_safety == ReplaySafety::Safe
                     && env.clone_on_resume
                     && !env.consumed_state_machine
         )
@@ -102,6 +103,7 @@ fn cont1_core_keeps_consumed_state_machine_layout_fact() {
             LayoutKind::Cont1StateMachine(env)
                 if env.kind == ContinuationKind::Cont1
                     && env.binder == "k"
+                    && env.replay_safety == ReplaySafety::Safe
                     && !env.clone_on_resume
                     && env.consumed_state_machine
         )

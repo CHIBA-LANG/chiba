@@ -1,6 +1,6 @@
 use crate::ast::render_source_pattern;
 use crate::closure::{CaptureFact, ClosureFacts, ClosureStorageKind};
-use crate::control::{ContinuationFact, ContinuationKind};
+use crate::control::{ContinuationFact, ContinuationKind, ReplaySafety};
 use crate::cps::{CpsAtom, CpsProgram, CpsTerm, OperatorKind};
 use crate::lambda_lift::LambdaLiftFacts;
 use crate::resolve::OperatorSurface;
@@ -322,6 +322,7 @@ pub struct ContinuationEnvLayout {
     pub binder: String,
     pub kind: ContinuationKind,
     pub fields: Vec<ClosureEnvField>,
+    pub replay_safety: ReplaySafety,
     pub clone_on_resume: bool,
     pub consumed_state_machine: bool,
 }
@@ -1633,6 +1634,7 @@ fn continuation_env_layout(fact: &ContinuationFact) -> ContinuationEnvLayout {
         binder: fact.binder.clone(),
         kind: fact.kind,
         fields: Vec::new(),
+        replay_safety: fact.replay_safety,
         clone_on_resume: fact.kind == ContinuationKind::ContN,
         consumed_state_machine: fact.kind == ContinuationKind::Cont1,
     }

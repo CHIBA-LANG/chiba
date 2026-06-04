@@ -1,6 +1,6 @@
 use chiba_level1r::ast::BinaryOp;
-use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::control::ControlError;
+use chiba_level1r::control::{ContinuationKind, ReplaySafety};
 use chiba_level1r::typed::{Type, UsageColor};
 use chiba_level1r::{compile_expr, Expr};
 
@@ -14,6 +14,7 @@ fn reset_shift_captures_cont1_from_delimiter() {
     assert_eq!(fact.binder, "k");
     assert_eq!(fact.kind, ContinuationKind::Cont1);
     assert_eq!(fact.usage, UsageColor::One);
+    assert_eq!(fact.replay_safety, ReplaySafety::Safe);
     assert!(output.cps.to_string().contains("shift@cont1 k"));
 }
 
@@ -27,6 +28,7 @@ fn resetn_shift_captures_contn_from_delimiter() {
     assert_eq!(fact.binder, "retry");
     assert_eq!(fact.kind, ContinuationKind::ContN);
     assert_eq!(fact.usage, UsageColor::Many);
+    assert_eq!(fact.replay_safety, ReplaySafety::Safe);
     assert!(output.cps.to_string().contains("shift@contN retry"));
 }
 
@@ -179,6 +181,18 @@ fn nanopass_report_keeps_ordered_debuggable_passes() {
     assert!(visual.contains("L22BackendEmit: CoreProgram+CoreValidation -> BackendArtifact"));
     assert!(visual.contains("L23BackendLink: BackendArtifact -> BackendLinkedBundle"));
     assert!(visual.contains("L24BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
+}
+
+#[test]
+fn control_visual_dump_shows_replay_safety_color() {
+    let output = compile_expr(&Expr::resetn(Expr::shift(
+        "retry",
+        Expr::call(Expr::var("retry"), Expr::i64(1)),
+    )));
+
+    let visual = output.render_visual();
+    assert!(visual.contains("control:"));
+    assert!(visual.contains("replay_safety: Safe"));
 }
 
 #[test]

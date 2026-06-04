@@ -13,12 +13,20 @@ pub struct ContinuationFact {
     pub input: Type,
     pub answer: Type,
     pub usage: UsageColor,
+    pub replay_safety: ReplaySafety,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ContinuationKind {
     Cont1,
     ContN,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ReplaySafety {
+    Safe,
+    Unsafe,
+    RollbackRegion,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -137,12 +145,89 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
                         ContinuationKind::Cont1 => UsageColor::One,
                         ContinuationKind::ContN => UsageColor::Many,
                     },
+                    replay_safety: replay_safety_for(boundary.kind, body),
                 }),
                 None => facts.errors.push(ControlError::ShiftOutsideReset {
                     binder: binder.clone(),
                 }),
             }
             visit(body, stack, facts);
+        }
+    }
+}
+
+fn replay_safety_for(kind: ContinuationKind, body: &TypedExpr) -> ReplaySafety {
+    match kind {
+        ContinuationKind::Cont1 => ReplaySafety::Safe,
+        ContinuationKind::ContN => {
+            if contains_replay_unsafe_expr(body) {
+                ReplaySafety::Unsafe
+            } else {
+                ReplaySafety::Safe
+            }
+        }
+    }
+}
+
+fn contains_replay_unsafe_expr(expr: &TypedExpr) -> bool {
+    match &expr.kind {
+        TypedExprKind::Var(_) | TypedExprKind::Lit(_) => false,
+        TypedExprKind::Lambda { body, .. } => contains_replay_unsafe_expr(body),
+        TypedExprKind::Call { callee, args } => {
+            contains_replay_unsafe_expr(callee) || args.iter().any(contains_replay_unsafe_expr)
+        }
+        TypedExprKind::Tuple { fields, .. } => fields.iter().any(contains_replay_unsafe_expr),
+        TypedExprKind::Record { fields } => fields
+            .iter()
+            .any(|field| contains_replay_unsafe_expr(&field.value)),
+        TypedExprKind::RecordUpdate { base, fields } => {
+            contains_replay_unsafe_expr(base)
+                || fields
+                    .iter()
+                    .any(|field| contains_replay_unsafe_expr(&field.value))
+        }
+        TypedExprKind::AdtCtor { args, .. } => args.iter().any(contains_replay_unsafe_expr),
+        TypedExprKind::Field { receiver, .. } => contains_replay_unsafe_expr(receiver),
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            contains_replay_unsafe_expr(receiver) || args.iter().any(contains_replay_unsafe_expr)
+        }
+        TypedExprKind::Index { receiver, index } => {
+            contains_replay_unsafe_expr(receiver) || contains_replay_unsafe_expr(index)
+        }
+        TypedExprKind::Range { start, end } => {
+            contains_replay_unsafe_expr(start) || contains_replay_unsafe_expr(end)
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            contains_replay_unsafe_expr(lhs) || contains_replay_unsafe_expr(rhs)
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            contains_replay_unsafe_expr(cond)
+                || contains_replay_unsafe_expr(then_branch)
+                || contains_replay_unsafe_expr(else_branch)
+        }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            contains_replay_unsafe_expr(scrutinee)
+                || contains_replay_unsafe_expr(then_branch)
+                || contains_replay_unsafe_expr(else_branch)
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            contains_replay_unsafe_expr(scrutinee)
+                || arms
+                    .iter()
+                    .any(|arm| contains_replay_unsafe_expr(&arm.body))
+        }
+        TypedExprKind::Nominal { expr, .. } => contains_replay_unsafe_expr(expr),
+        TypedExprKind::Reset { body, .. } | TypedExprKind::Shift { body, .. } => {
+            contains_replay_unsafe_expr(body)
         }
     }
 }

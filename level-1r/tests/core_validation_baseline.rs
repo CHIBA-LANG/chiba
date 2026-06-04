@@ -1,4 +1,4 @@
-use chiba_level1r::control::ContinuationKind;
+use chiba_level1r::control::{ContinuationKind, ReplaySafety};
 use chiba_level1r::core::{
     validate_core, CallableStorageFact, CallableStorageKind, ClosureEnvField, ClosureEnvLayout,
     CompilerIntrinsic, ContinuationEnvLayout, CoreCapturedContinuation, CoreDiagnostic, CoreOp,
@@ -168,6 +168,7 @@ fn continuation_env(binder: &str, kind: ContinuationKind) -> ContinuationEnvLayo
         binder: binder.to_string(),
         kind,
         fields: Vec::<ClosureEnvField>::new(),
+        replay_safety: ReplaySafety::Safe,
         clone_on_resume: kind == ContinuationKind::ContN,
         consumed_state_machine: kind == ContinuationKind::Cont1,
     }
