@@ -2,8 +2,8 @@ use crate::alpha::{alpha_expr, AlphaFacts};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
-    render_source_expr, Expr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem,
-    SourceProgram, UseDecl,
+    render_source_expr, Expr, ExternAbi, ExternDecl, MethodReceiver, NamespaceDecl, ParamDecl,
+    Pattern, SourceItem, SourceProgram, UseDecl, Visibility,
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_params, link_backend_artifacts, BackendArtifact,
@@ -2009,8 +2009,8 @@ impl ProgramCompileOutput {
         ));
         out.push_str(&format!("  defs={}\n", self.defs.len()));
         out.push_str(&render_global_init_summary(&self.global_init));
-        out.push_str(&format!("  surface={:#?}\n", self.surface));
-        out.push_str(&format!("  interface={:#?}\n", self.interface));
+        out.push_str(&render_project_surface_summary(&self.surface));
+        out.push_str(&render_interface_summary_summary(&self.interface));
         out.push_str(&format!("  entry={}\n", render_program_entry(&self.entry)));
         out.push_str(&render_program_diagnostics_summary(&self.diagnostics));
         out.push_str("  passes:\n");
@@ -2030,6 +2030,244 @@ fn render_imports_summary(imports: impl Iterator<Item = String>) -> String {
         "<none>".to_string()
     } else {
         imports.join(", ")
+    }
+}
+
+fn render_project_surface_summary(surface: &ProjectSurface) -> String {
+    let mut out = String::new();
+    out.push_str("  surface:\n");
+    out.push_str(&format!("    namespace={}\n", surface.namespace));
+    out.push_str(&format!(
+        "    imports={}\n",
+        render_imports_summary(surface.imports.iter().cloned())
+    ));
+    out.push_str(&format!("    defs={}\n", surface.defs.len()));
+    for def in &surface.defs {
+        out.push_str(&format!(
+            "      def {}::{} visibility={} receiver={} generics={} arity={} params={} return={} extern={}\n",
+            def.owner,
+            def.name,
+            render_visibility(def.visibility),
+            render_receiver(&def.receiver),
+            render_string_values(&def.generics),
+            def.arity,
+            render_optional_string_values(&def.param_types),
+            render_optional_string(&def.return_type),
+            render_extern_decl(&def.extern_decl)
+        ));
+    }
+    out.push_str(&format!("    statics={}\n", surface.statics.len()));
+    for static_value in &surface.statics {
+        out.push_str(&format!(
+            "      static {}::{} visibility={} type={}\n",
+            static_value.owner,
+            static_value.name,
+            render_visibility(static_value.visibility),
+            render_optional_string(&static_value.ty)
+        ));
+    }
+    out.push_str(&format!("    types={}\n", surface.types.len()));
+    for ty in &surface.types {
+        out.push_str(&format!(
+            "      type {}::{} generics={} alias={} fields={} phantoms={}\n",
+            ty.owner,
+            ty.name,
+            render_string_values(&ty.generics),
+            render_optional_string(&ty.alias_target),
+            render_surface_type_fields(&ty.fields),
+            render_string_values(&ty.phantom_markers)
+        ));
+    }
+    out.push_str(&format!("    data={}\n", surface.data.len()));
+    for data in &surface.data {
+        out.push_str(&format!(
+            "      data {}::{} generics={} variants={}\n",
+            data.owner,
+            data.name,
+            render_string_values(&data.generics),
+            render_string_values(&data.variants)
+        ));
+    }
+    out.push_str(&format!(
+        "    constructors={}\n",
+        surface.constructors.len()
+    ));
+    for ctor in &surface.constructors {
+        out.push_str(&format!(
+            "      constructor {}::{}.{} arity={} payloads={}\n",
+            ctor.owner,
+            ctor.data,
+            ctor.name,
+            ctor.arity,
+            render_string_values(&ctor.payload_types)
+        ));
+    }
+    out
+}
+
+fn render_interface_summary_summary(interface: &InterfaceSummary) -> String {
+    let mut out = String::new();
+    out.push_str("  interface:\n");
+    out.push_str(&format!(
+        "    namespace={} hash={}\n",
+        interface.namespace, interface.stable_hash
+    ));
+    out.push_str(&format!(
+        "    imports={}\n",
+        render_imports_summary(interface.imports.iter().cloned())
+    ));
+    out.push_str(&format!("    functions={}\n", interface.functions.len()));
+    for function in &interface.functions {
+        out.push_str(&format!(
+            "      function {} owner={} source={} visibility={} receiver={} generics={} arity={} params={} return={} extern={}\n",
+            function.symbol,
+            function.owner,
+            function.source_name,
+            render_visibility(function.visibility),
+            render_receiver(&function.receiver),
+            render_string_values(&function.generics),
+            function.arity,
+            render_optional_string_values(&function.param_types),
+            render_optional_string(&function.return_type),
+            render_extern_decl(&function.extern_decl)
+        ));
+    }
+    out.push_str(&format!("    statics={}\n", interface.statics.len()));
+    for static_value in &interface.statics {
+        out.push_str(&format!(
+            "      static {} owner={} source={} visibility={} type={}\n",
+            static_value.symbol,
+            static_value.owner,
+            static_value.source_name,
+            render_visibility(static_value.visibility),
+            render_optional_string(&static_value.ty)
+        ));
+    }
+    out.push_str(&format!("    types={}\n", interface.types.len()));
+    for ty in &interface.types {
+        out.push_str(&format!(
+            "      type {} owner={} source={} generics={} alias={} fields={} phantoms={}\n",
+            ty.symbol,
+            ty.owner,
+            ty.name,
+            render_string_values(&ty.generics),
+            render_optional_string(&ty.alias_target),
+            render_interface_type_fields(&ty.fields),
+            render_string_values(&ty.phantom_markers)
+        ));
+    }
+    out.push_str(&format!("    data={}\n", interface.data.len()));
+    for data in &interface.data {
+        out.push_str(&format!(
+            "      data {} owner={} source={} generics={} variants={}\n",
+            data.symbol,
+            data.owner,
+            data.name,
+            render_string_values(&data.generics),
+            render_string_values(&data.variants)
+        ));
+    }
+    out.push_str(&format!(
+        "    constructors={}\n",
+        interface.constructors.len()
+    ));
+    for ctor in &interface.constructors {
+        out.push_str(&format!(
+            "      constructor {} data={} owner={} source={}.{} arity={} payloads={}\n",
+            ctor.symbol,
+            ctor.data_symbol,
+            ctor.owner,
+            ctor.data,
+            ctor.name,
+            ctor.arity,
+            render_string_values(&ctor.payload_types)
+        ));
+    }
+    out
+}
+
+fn render_surface_type_fields(fields: &[crate::surface::SurfaceTypeField]) -> String {
+    render_string_values(
+        &fields
+            .iter()
+            .map(|field| format!("{}: {}", field.name, field.ty))
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn render_interface_type_fields(fields: &[crate::surface::InterfaceTypeField]) -> String {
+    render_string_values(
+        &fields
+            .iter()
+            .map(|field| format!("{}: {}", field.name, field.ty))
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn render_visibility(visibility: Visibility) -> &'static str {
+    match visibility {
+        Visibility::Public => "public",
+        Visibility::Private => "private",
+    }
+}
+
+fn render_receiver(receiver: &Option<MethodReceiver>) -> String {
+    match receiver {
+        Some(receiver) => {
+            format!(
+                "{}{}",
+                receiver.name,
+                render_generics_suffix(&receiver.generics)
+            )
+        }
+        None => "<none>".to_string(),
+    }
+}
+
+fn render_generics_suffix(generics: &[String]) -> String {
+    if generics.is_empty() {
+        String::new()
+    } else {
+        format!("[{}]", generics.join(", "))
+    }
+}
+
+fn render_optional_string(value: &Option<String>) -> &str {
+    value.as_deref().unwrap_or("<inferred>")
+}
+
+fn render_optional_string_values(values: &[Option<String>]) -> String {
+    render_string_values(
+        &values
+            .iter()
+            .map(|value| render_optional_string(value).to_string())
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn render_string_values(values: &[String]) -> String {
+    if values.is_empty() {
+        "[]".to_string()
+    } else {
+        format!("[{}]", values.join(", "))
+    }
+}
+
+fn render_extern_decl(extern_decl: &Option<ExternDecl>) -> String {
+    match extern_decl {
+        Some(extern_decl) => format!(
+            "{}:{}",
+            render_extern_abi(extern_decl.abi),
+            extern_decl.symbol
+        ),
+        None => "<none>".to_string(),
+    }
+}
+
+fn render_extern_abi(abi: ExternAbi) -> &'static str {
+    match abi {
+        ExternAbi::Wasi => "wasi",
+        ExternAbi::C => "c",
     }
 }
 

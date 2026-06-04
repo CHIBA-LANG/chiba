@@ -1863,9 +1863,13 @@ fn program_surface_and_interface_summary_preserve_owner_namespace() {
     assert_eq!(bundle.interface.stable_hash.len(), 16);
 
     let summary = bundle.render_summary();
-    assert!(summary.contains("surface=ProjectSurface"));
-    assert!(summary.contains("interface=InterfaceSummary"));
+    assert!(summary.contains("surface:"));
+    assert!(summary.contains("interface:"));
+    assert!(summary.contains("namespace=parser.core"));
+    assert!(summary.contains("constructor parser.core::Option.Some"));
     assert!(summary.contains("parser.core::Option.Some"));
+    assert!(!summary.contains("surface=ProjectSurface"));
+    assert!(!summary.contains("interface=InterfaceSummary"));
 }
 
 #[test]
@@ -1905,7 +1909,12 @@ def public_value(): i64 = SECRET",
         output.program.interface.statics[0].visibility,
         Visibility::Private
     );
-    assert!(output.program.render_summary().contains("visibility"));
+    let summary = output.program.render_summary();
+    assert!(summary.contains("def demo.math::hidden visibility=private"));
+    assert!(summary.contains("def demo.math::public_value visibility=public"));
+    assert!(summary.contains("static demo.math::SECRET visibility=private"));
+    assert!(summary
+        .contains("function demo.math::hidden owner=demo.math source=hidden visibility=private"));
 }
 
 #[test]
@@ -2003,8 +2012,12 @@ fn interface_summary_preserves_function_signature_types() {
         bundle.interface.functions[0].return_type,
         Some("I64".to_string())
     );
-    assert!(bundle.render_summary().contains("param_types"));
-    assert!(bundle.render_summary().contains("return_type"));
+    let summary = bundle.render_summary();
+    assert!(summary.contains("function parser.core::id"));
+    assert!(summary.contains("params=[I64]"));
+    assert!(summary.contains("return=I64"));
+    assert!(!summary.contains("param_types"));
+    assert!(!summary.contains("return_type"));
 }
 
 #[test]
@@ -2165,7 +2178,10 @@ fn interface_summary_preserves_type_alias_target() {
         bundle.interface.types[0].alias_target,
         Some("i64".to_string())
     );
-    assert!(bundle.render_summary().contains("alias_target"));
+    let summary = bundle.render_summary();
+    assert!(summary.contains("type parser.core::UserId"));
+    assert!(summary.contains("alias=i64"));
+    assert!(!summary.contains("alias_target"));
 }
 
 #[test]
@@ -2557,7 +2573,10 @@ fn interface_summary_splits_type_fields_from_phantom_markers() {
         bundle.interface.types[0].phantom_markers,
         vec!["PhantomUser".to_string(), "AuditMarker".to_string()]
     );
-    assert!(bundle.render_summary().contains("phantom_markers"));
+    let summary = bundle.render_summary();
+    assert!(summary.contains("fields=[id: i64]"));
+    assert!(summary.contains("phantoms=[PhantomUser, AuditMarker]"));
+    assert!(!summary.contains("phantom_markers"));
 }
 
 #[test]
