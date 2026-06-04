@@ -107,10 +107,20 @@ fn cps_usage_counts_object_level_lambdas() {
     let output = compile_expr(&Expr::call(Expr::var("f"), Expr::var("x")));
 
     assert_eq!(output.cps_usage.continuation_lambdas.len(), 1);
-    assert!(output.render_visual().contains("cps-usage:"));
+    let visual = output.render_visual();
+    assert!(visual.contains("cps-usage:"));
+    assert!(visual.contains("continuation-simplification:"));
+    assert!(output.visual.cps_usage.contains("continuation-lambdas=1"));
+    assert!(output.visual.cps_usage.contains("diagnostics=0"));
     assert!(output
-        .render_visual()
-        .contains("continuation-simplification:"));
+        .visual
+        .continuation_simplification
+        .contains("decisions=0"));
+    assert!(!output.visual.cps_usage.contains("CpsUsageFacts"));
+    assert!(!output
+        .visual
+        .continuation_simplification
+        .contains("ContinuationSimplificationFacts"));
 }
 
 fn repeated_resume_cps(multi: bool, binder: &str) -> CpsProgram {

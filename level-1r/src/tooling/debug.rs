@@ -14,7 +14,9 @@ use crate::core::{
     CompilerIntrinsic, CoreDiagnostic, CoreProgram, CoreValidation, OwnershipDecision,
 };
 use crate::cps::CpsProgram;
-use crate::cps_usage::{ContinuationSimplificationFacts, CpsUsageFacts};
+use crate::cps_usage::{
+    ContinuationMaterialization, ContinuationSimplificationFacts, CpsUsageDiagnostic, CpsUsageFacts,
+};
 use crate::lambda_lift::LambdaLiftFacts;
 use crate::monomorphize::MonomorphizationPlan;
 use crate::nanopass::PassReport;
@@ -30,7 +32,7 @@ use crate::template::{
 };
 use crate::template_audit::TemplateAuditReport;
 use crate::typed::TypedExpr;
-use crate::usage::UsageFacts;
+use crate::usage::{UsageFacts, UseCount};
 use crate::usage_audit::UsageAuditReport;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -179,8 +181,10 @@ pub fn visual_report(
         control: format!("{control:#?}"),
         usage: format!("{usage:#?}"),
         cps: cps.to_string(),
-        cps_usage: format!("{cps_usage:#?}"),
-        continuation_simplification: format!("{continuation_simplification:#?}"),
+        cps_usage: render_cps_usage_facts(cps_usage),
+        continuation_simplification: render_continuation_simplification(
+            continuation_simplification,
+        ),
         closure: format!("{closure:#?}"),
         lambda_lift: format!("{lambda_lift:#?}"),
         core: format!("{core:#?}"),
@@ -475,6 +479,96 @@ fn render_ownership_decision(decision: OwnershipDecision) -> String {
         OwnershipDecision::DynPackage => "dyn-package",
     }
     .to_string()
+}
+
+fn render_cps_usage_facts(facts: &CpsUsageFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "continuations={}", facts.continuations.len()).unwrap();
+    for (binder, usage) in &facts.continuations {
+        writeln!(
+            out,
+            "continuation {binder} kind={} count={} materialization={}",
+            render_continuation_kind(usage.kind),
+            render_use_count(usage.count),
+            render_continuation_materialization(usage.materialization)
+        )
+        .unwrap();
+    }
+    writeln!(out, "function-lambdas={}", facts.function_lambdas.len()).unwrap();
+    for (name, count) in &facts.function_lambdas {
+        writeln!(
+            out,
+            "function-lambda {name} count={}",
+            render_use_count(*count)
+        )
+        .unwrap();
+    }
+    writeln!(
+        out,
+        "continuation-lambdas={}",
+        facts.continuation_lambdas.len()
+    )
+    .unwrap();
+    for (name, count) in &facts.continuation_lambdas {
+        writeln!(
+            out,
+            "continuation-lambda {name} count={}",
+            render_use_count(*count)
+        )
+        .unwrap();
+    }
+    writeln!(out, "diagnostics={}", facts.diagnostics.len()).unwrap();
+    for diagnostic in &facts.diagnostics {
+        writeln!(
+            out,
+            "diagnostic {}",
+            render_cps_usage_diagnostic(diagnostic)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_continuation_simplification(facts: &ContinuationSimplificationFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "decisions={}", facts.decisions.len()).unwrap();
+    for (binder, decision) in &facts.decisions {
+        writeln!(
+            out,
+            "decision {binder} materialization={}",
+            render_continuation_materialization(*decision)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_cps_usage_diagnostic(diagnostic: &CpsUsageDiagnostic) -> String {
+    match diagnostic {
+        CpsUsageDiagnostic::Cont1ResumedMoreThanOnce { binder, count } => format!(
+            "cont1 resumed more than once {binder} count={}",
+            render_use_count(*count)
+        ),
+    }
+}
+
+fn render_continuation_materialization(
+    materialization: ContinuationMaterialization,
+) -> &'static str {
+    match materialization {
+        ContinuationMaterialization::Dead => "dead",
+        ContinuationMaterialization::InlineSingleUse => "inline-single-use",
+        ContinuationMaterialization::OneShotStateMachine => "one-shot-state-machine",
+        ContinuationMaterialization::MultiResumePackage => "multi-resume-package",
+    }
+}
+
+fn render_use_count(count: UseCount) -> &'static str {
+    match count {
+        UseCount::Zero => "0",
+        UseCount::One => "1",
+        UseCount::Many => "many",
+    }
 }
 
 fn render_symbol_lineage(
