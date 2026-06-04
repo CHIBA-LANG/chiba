@@ -34,7 +34,9 @@ use crate::template::{
     DynAdapterKind, DynRowContract, RowOpenness, RowShape, ShapeType, TemplateDiagnostic,
     TemplateFacts, TemplateObligation, TemplateParamSource,
 };
-use crate::template_audit::TemplateAuditReport;
+use crate::template_audit::{
+    TemplateAuditDiagnostic, TemplateAuditReport, TemplateObligationSource,
+};
 use crate::typed::{RecordTypeField, Type, TypedExpr};
 use crate::usage::{UsageFacts, UseCount};
 use crate::usage_audit::{RustReferenceOwnership, UsageAuditDiagnostic, UsageAuditReport};
@@ -178,7 +180,7 @@ pub fn visual_report(
         specialize: render_specialization_facts(specialize),
         symbol_lineage: render_symbol_lineage(resolve, template, specialize),
         monomorphize: render_monomorphization_plan(monomorphize),
-        template_audit: format!("{template_audit:#?}"),
+        template_audit: render_template_audit(template_audit),
         typed_signature: typed_signature.to_string(),
         typed: format!("{typed:#?}"),
         pattern: format!("{pattern:#?}"),
@@ -1433,6 +1435,69 @@ fn render_template_facts(template: &TemplateFacts) -> String {
         writeln!(out, "diagnostic {}", render_template_diagnostic(diagnostic)).unwrap();
     }
     out
+}
+
+fn render_template_audit(report: &TemplateAuditReport) -> String {
+    let mut out = String::new();
+    writeln!(out, "obligations={}", report.obligations.len()).unwrap();
+    for (index, entry) in report.obligations.iter().enumerate() {
+        writeln!(
+            out,
+            "obligation {index} source={} definition-check={} instantiation-discharge={} monomorphized={} rust-trait-solver={} specialization-key={} explanation={}",
+            render_template_obligation_source(entry.source),
+            entry.definition_time_check,
+            entry.instantiation_time_discharge,
+            entry.monomorphized,
+            entry.rust_trait_solver_used,
+            entry.specialization_key,
+            entry.explanation
+        )
+        .unwrap();
+    }
+    writeln!(out, "diagnostics={}", report.diagnostics.len()).unwrap();
+    for diagnostic in &report.diagnostics {
+        writeln!(
+            out,
+            "diagnostic {}",
+            render_template_audit_diagnostic(diagnostic)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_template_obligation_source(source: TemplateObligationSource) -> &'static str {
+    match source {
+        TemplateObligationSource::RowShape => "row-shape",
+        TemplateObligationSource::Field => "field",
+        TemplateObligationSource::Method => "method",
+        TemplateObligationSource::Function => "function",
+        TemplateObligationSource::Static => "static",
+        TemplateObligationSource::Constructor => "constructor",
+        TemplateObligationSource::Operator => "operator",
+        TemplateObligationSource::DynAdapter => "dyn-adapter",
+    }
+}
+
+fn render_template_audit_diagnostic(diagnostic: &TemplateAuditDiagnostic) -> String {
+    match diagnostic {
+        TemplateAuditDiagnostic::MissingDefinitionTimeCheck { source } => format!(
+            "missing-definition-time-check {}",
+            render_template_obligation_source(*source)
+        ),
+        TemplateAuditDiagnostic::MissingInstantiationDischarge { source } => format!(
+            "missing-instantiation-discharge {}",
+            render_template_obligation_source(*source)
+        ),
+        TemplateAuditDiagnostic::MissingMonomorphization { source } => format!(
+            "missing-monomorphization {}",
+            render_template_obligation_source(*source)
+        ),
+        TemplateAuditDiagnostic::RustTraitSolverLeak { source } => format!(
+            "rust-trait-solver-leak {}",
+            render_template_obligation_source(*source)
+        ),
+    }
 }
 
 fn render_template_param_source(source: TemplateParamSource) -> &'static str {

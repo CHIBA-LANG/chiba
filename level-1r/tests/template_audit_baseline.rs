@@ -80,6 +80,13 @@ fn visual_report_contains_template_audit_layer() {
     let visual = output.render_visual();
 
     assert!(visual.contains("template-audit:"));
+    assert!(visual.contains("source=field"));
+    assert!(visual.contains("definition-check=true"));
+    assert!(visual.contains("instantiation-discharge=true"));
+    assert!(visual.contains("monomorphized=true"));
+    assert!(visual.contains("rust-trait-solver=false"));
+    assert!(!output.visual.template_audit.contains("TemplateAuditReport"));
+    assert!(!output.visual.template_audit.contains("TemplateAuditEntry"));
     assert!(visual.contains(
         "L6TemplateAudit: TemplateFacts+SpecializationFacts+MonomorphizationPlan -> TemplateAuditReport"
     ));
