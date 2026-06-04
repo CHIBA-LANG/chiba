@@ -32,6 +32,7 @@ pub enum ReplaySafety {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ControlError {
     ShiftOutsideReset { binder: String },
+    UnsafeMultiResumeCapture { binder: String },
 }
 
 #[derive(Clone, Debug)]
@@ -42,68 +43,76 @@ struct Boundary {
 
 pub fn analyze_control(expr: &TypedExpr) -> ControlFacts {
     let mut facts = ControlFacts::default();
-    visit(expr, &mut Vec::new(), &mut facts);
+    visit(expr, &mut Vec::new(), &mut facts, ReplaySafety::Safe);
     facts
 }
 
-fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) {
+fn visit(
+    expr: &TypedExpr,
+    stack: &mut Vec<Boundary>,
+    facts: &mut ControlFacts,
+    replay_context: ReplaySafety,
+) {
     match &expr.kind {
         TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
-        TypedExprKind::Lambda { body, .. } => visit(body, stack, facts),
+        TypedExprKind::Lambda { body, .. } => visit(body, stack, facts, ReplaySafety::Safe),
         TypedExprKind::Call { callee, args } => {
-            visit(callee, stack, facts);
+            let child_context = replay_context.join(ReplaySafety::Unsafe);
+            visit(callee, stack, facts, child_context);
             for arg in args {
-                visit(arg, stack, facts);
+                visit(arg, stack, facts, child_context);
             }
         }
         TypedExprKind::Tuple { fields, .. } => {
             for field in fields {
-                visit(field, stack, facts);
+                visit(field, stack, facts, replay_context);
             }
         }
         TypedExprKind::Record { fields } => {
             for field in fields {
-                visit(&field.value, stack, facts);
+                visit(&field.value, stack, facts, replay_context);
             }
         }
         TypedExprKind::RecordUpdate { base, fields } => {
-            visit(base, stack, facts);
+            visit(base, stack, facts, replay_context);
             for field in fields {
-                visit(&field.value, stack, facts);
+                visit(&field.value, stack, facts, replay_context);
             }
         }
         TypedExprKind::AdtCtor { args, .. } => {
             for arg in args {
-                visit(arg, stack, facts);
+                visit(arg, stack, facts, replay_context);
             }
         }
-        TypedExprKind::Field { receiver, .. } => visit(receiver, stack, facts),
+        TypedExprKind::Field { receiver, .. } => visit(receiver, stack, facts, replay_context),
         TypedExprKind::MethodCall { receiver, args, .. } => {
-            visit(receiver, stack, facts);
+            let child_context = replay_context.join(ReplaySafety::Unsafe);
+            visit(receiver, stack, facts, child_context);
             for arg in args {
-                visit(arg, stack, facts);
+                visit(arg, stack, facts, child_context);
             }
         }
         TypedExprKind::Index { receiver, index } => {
-            visit(receiver, stack, facts);
-            visit(index, stack, facts);
+            let child_context = replay_context.join(ReplaySafety::Unsafe);
+            visit(receiver, stack, facts, child_context);
+            visit(index, stack, facts, child_context);
         }
         TypedExprKind::Range { start, end } => {
-            visit(start, stack, facts);
-            visit(end, stack, facts);
+            visit(start, stack, facts, replay_context);
+            visit(end, stack, facts, replay_context);
         }
         TypedExprKind::Binary { lhs, rhs, .. } => {
-            visit(lhs, stack, facts);
-            visit(rhs, stack, facts);
+            visit(lhs, stack, facts, replay_context);
+            visit(rhs, stack, facts, replay_context);
         }
         TypedExprKind::If {
             cond,
             then_branch,
             else_branch,
         } => {
-            visit(cond, stack, facts);
-            visit(then_branch, stack, facts);
-            visit(else_branch, stack, facts);
+            visit(cond, stack, facts, replay_context);
+            visit(then_branch, stack, facts, replay_context);
+            visit(else_branch, stack, facts, replay_context);
         }
         TypedExprKind::IfLet {
             scrutinee,
@@ -111,17 +120,17 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
             else_branch,
             ..
         } => {
-            visit(scrutinee, stack, facts);
-            visit(then_branch, stack, facts);
-            visit(else_branch, stack, facts);
+            visit(scrutinee, stack, facts, replay_context);
+            visit(then_branch, stack, facts, replay_context);
+            visit(else_branch, stack, facts, replay_context);
         }
         TypedExprKind::Match { scrutinee, arms } => {
-            visit(scrutinee, stack, facts);
+            visit(scrutinee, stack, facts, replay_context);
             for arm in arms {
-                visit(&arm.body, stack, facts);
+                visit(&arm.body, stack, facts, replay_context);
             }
         }
-        TypedExprKind::Nominal { expr, .. } => visit(expr, stack, facts),
+        TypedExprKind::Nominal { expr, .. } => visit(expr, stack, facts, replay_context),
         TypedExprKind::Reset { multi, body } => {
             stack.push(Boundary {
                 kind: if *multi {
@@ -131,104 +140,57 @@ fn visit(expr: &TypedExpr, stack: &mut Vec<Boundary>, facts: &mut ControlFacts) 
                 },
                 answer: expr.ty.clone(),
             });
-            visit(body, stack, facts);
+            visit(body, stack, facts, ReplaySafety::Safe);
             stack.pop();
         }
         TypedExprKind::Shift { binder, body } => {
             match stack.last() {
-                Some(boundary) => facts.continuations.push(ContinuationFact {
-                    binder: binder.clone(),
-                    kind: boundary.kind,
-                    input: continuation_input_type(binder, body),
-                    answer: boundary.answer.clone(),
-                    usage: match boundary.kind {
-                        ContinuationKind::Cont1 => UsageColor::One,
-                        ContinuationKind::ContN => UsageColor::Many,
-                    },
-                    replay_safety: replay_safety_for(boundary.kind, body),
-                }),
+                Some(boundary) => {
+                    let replay_safety = replay_safety_for(boundary.kind, replay_context);
+                    facts.continuations.push(ContinuationFact {
+                        binder: binder.clone(),
+                        kind: boundary.kind,
+                        input: continuation_input_type(binder, body),
+                        answer: boundary.answer.clone(),
+                        usage: match boundary.kind {
+                            ContinuationKind::Cont1 => UsageColor::One,
+                            ContinuationKind::ContN => UsageColor::Many,
+                        },
+                        replay_safety,
+                    });
+                    if boundary.kind == ContinuationKind::ContN
+                        && replay_safety == ReplaySafety::Unsafe
+                    {
+                        facts.errors.push(ControlError::UnsafeMultiResumeCapture {
+                            binder: binder.clone(),
+                        });
+                    }
+                }
                 None => facts.errors.push(ControlError::ShiftOutsideReset {
                     binder: binder.clone(),
                 }),
             }
-            visit(body, stack, facts);
+            visit(body, stack, facts, ReplaySafety::Safe);
         }
     }
 }
 
-fn replay_safety_for(kind: ContinuationKind, body: &TypedExpr) -> ReplaySafety {
+impl ReplaySafety {
+    fn join(self, other: Self) -> Self {
+        match (self, other) {
+            (ReplaySafety::Unsafe, _) | (_, ReplaySafety::Unsafe) => ReplaySafety::Unsafe,
+            (ReplaySafety::RollbackRegion, _) | (_, ReplaySafety::RollbackRegion) => {
+                ReplaySafety::RollbackRegion
+            }
+            (ReplaySafety::Safe, ReplaySafety::Safe) => ReplaySafety::Safe,
+        }
+    }
+}
+
+fn replay_safety_for(kind: ContinuationKind, context: ReplaySafety) -> ReplaySafety {
     match kind {
         ContinuationKind::Cont1 => ReplaySafety::Safe,
-        ContinuationKind::ContN => {
-            if contains_replay_unsafe_expr(body) {
-                ReplaySafety::Unsafe
-            } else {
-                ReplaySafety::Safe
-            }
-        }
-    }
-}
-
-fn contains_replay_unsafe_expr(expr: &TypedExpr) -> bool {
-    match &expr.kind {
-        TypedExprKind::Var(_) | TypedExprKind::Lit(_) => false,
-        TypedExprKind::Lambda { body, .. } => contains_replay_unsafe_expr(body),
-        TypedExprKind::Call { callee, args } => {
-            contains_replay_unsafe_expr(callee) || args.iter().any(contains_replay_unsafe_expr)
-        }
-        TypedExprKind::Tuple { fields, .. } => fields.iter().any(contains_replay_unsafe_expr),
-        TypedExprKind::Record { fields } => fields
-            .iter()
-            .any(|field| contains_replay_unsafe_expr(&field.value)),
-        TypedExprKind::RecordUpdate { base, fields } => {
-            contains_replay_unsafe_expr(base)
-                || fields
-                    .iter()
-                    .any(|field| contains_replay_unsafe_expr(&field.value))
-        }
-        TypedExprKind::AdtCtor { args, .. } => args.iter().any(contains_replay_unsafe_expr),
-        TypedExprKind::Field { receiver, .. } => contains_replay_unsafe_expr(receiver),
-        TypedExprKind::MethodCall { receiver, args, .. } => {
-            contains_replay_unsafe_expr(receiver) || args.iter().any(contains_replay_unsafe_expr)
-        }
-        TypedExprKind::Index { receiver, index } => {
-            contains_replay_unsafe_expr(receiver) || contains_replay_unsafe_expr(index)
-        }
-        TypedExprKind::Range { start, end } => {
-            contains_replay_unsafe_expr(start) || contains_replay_unsafe_expr(end)
-        }
-        TypedExprKind::Binary { lhs, rhs, .. } => {
-            contains_replay_unsafe_expr(lhs) || contains_replay_unsafe_expr(rhs)
-        }
-        TypedExprKind::If {
-            cond,
-            then_branch,
-            else_branch,
-        } => {
-            contains_replay_unsafe_expr(cond)
-                || contains_replay_unsafe_expr(then_branch)
-                || contains_replay_unsafe_expr(else_branch)
-        }
-        TypedExprKind::IfLet {
-            scrutinee,
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            contains_replay_unsafe_expr(scrutinee)
-                || contains_replay_unsafe_expr(then_branch)
-                || contains_replay_unsafe_expr(else_branch)
-        }
-        TypedExprKind::Match { scrutinee, arms } => {
-            contains_replay_unsafe_expr(scrutinee)
-                || arms
-                    .iter()
-                    .any(|arm| contains_replay_unsafe_expr(&arm.body))
-        }
-        TypedExprKind::Nominal { expr, .. } => contains_replay_unsafe_expr(expr),
-        TypedExprKind::Reset { body, .. } | TypedExprKind::Shift { body, .. } => {
-            contains_replay_unsafe_expr(body)
-        }
+        ContinuationKind::ContN => context,
     }
 }
 

@@ -33,6 +33,42 @@ fn resetn_shift_captures_contn_from_delimiter() {
 }
 
 #[test]
+fn contn_replay_safety_uses_captured_context_not_shift_body() {
+    let output = compile_expr(&Expr::resetn(Expr::binary(
+        BinaryOp::Add,
+        Expr::i64(10),
+        Expr::shift("retry", Expr::call(Expr::var("retry"), Expr::i64(1))),
+    )));
+
+    assert_eq!(output.control.errors, vec![]);
+    assert_eq!(output.control.continuations.len(), 1);
+    assert_eq!(
+        output.control.continuations[0].replay_safety,
+        ReplaySafety::Safe
+    );
+}
+
+#[test]
+fn contn_capture_under_unknown_call_is_replay_unsafe() {
+    let output = compile_expr(&Expr::resetn(Expr::call(
+        Expr::var("f"),
+        Expr::shift("retry", Expr::call(Expr::var("retry"), Expr::i64(1))),
+    )));
+
+    assert_eq!(output.control.continuations.len(), 1);
+    assert_eq!(
+        output.control.continuations[0].replay_safety,
+        ReplaySafety::Unsafe
+    );
+    assert_eq!(
+        output.control.errors,
+        vec![ControlError::UnsafeMultiResumeCapture {
+            binder: "retry".to_string()
+        }]
+    );
+}
+
+#[test]
 fn nested_reset_uses_nearest_delimiter_for_continuation_kind() {
     let inner_contn = compile_expr(&Expr::reset(Expr::resetn(Expr::shift(
         "retry",

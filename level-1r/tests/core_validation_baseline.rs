@@ -91,6 +91,34 @@ fn validator_rejects_missing_contn_package_layout() {
     );
 }
 
+#[test]
+fn validator_rejects_unsafe_contn_replay_capture() {
+    let program = CoreProgram {
+        ops: vec![CoreOp::CaptureContinuation {
+            binder: "retry".to_string(),
+            kind: ContinuationKind::ContN,
+            captured: captured_identity_core("resume"),
+        }],
+        layouts: vec![LayoutFact {
+            key: "continuation::contn::retry".to_string(),
+            hash: 0,
+            kind: LayoutKind::ContinuationPackage(continuation_env_with_replay_safety(
+                "retry",
+                ContinuationKind::ContN,
+                ReplaySafety::Unsafe,
+            )),
+        }],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    assert!(validate_core(&program).diagnostics.contains(
+        &CoreDiagnostic::UnsafeContNReplayCapture {
+            binder: "retry".to_string()
+        }
+    ));
+}
+
 fn captured_identity_core(param: &str) -> CoreCapturedContinuation {
     CoreCapturedContinuation {
         param: param.to_string(),
@@ -164,11 +192,19 @@ fn validator_rejects_cont1_package_and_send_rc_contradiction() {
 }
 
 fn continuation_env(binder: &str, kind: ContinuationKind) -> ContinuationEnvLayout {
+    continuation_env_with_replay_safety(binder, kind, ReplaySafety::Safe)
+}
+
+fn continuation_env_with_replay_safety(
+    binder: &str,
+    kind: ContinuationKind,
+    replay_safety: ReplaySafety,
+) -> ContinuationEnvLayout {
     ContinuationEnvLayout {
         binder: binder.to_string(),
         kind,
         fields: Vec::<ClosureEnvField>::new(),
-        replay_safety: ReplaySafety::Safe,
+        replay_safety,
         clone_on_resume: kind == ContinuationKind::ContN,
         consumed_state_machine: kind == ContinuationKind::Cont1,
     }

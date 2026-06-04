@@ -424,6 +424,9 @@ pub enum CoreDiagnostic {
     MissingContNPackage {
         binder: String,
     },
+    UnsafeContNReplayCapture {
+        binder: String,
+    },
     Cont1HasPackageLayout {
         key: String,
     },
@@ -890,6 +893,18 @@ fn validate_continuation_packages(program: &CoreProgram, diagnostics: &mut Vec<C
             });
             if !has_package {
                 diagnostics.push(CoreDiagnostic::MissingContNPackage {
+                    binder: binder.clone(),
+                });
+            } else if program.layouts.iter().any(|layout| {
+                matches!(
+                    &layout.kind,
+                    LayoutKind::ContinuationPackage(env)
+                        if env.kind == ContinuationKind::ContN
+                            && env.binder == *binder
+                            && env.replay_safety == ReplaySafety::Unsafe
+                )
+            }) {
+                diagnostics.push(CoreDiagnostic::UnsafeContNReplayCapture {
                     binder: binder.clone(),
                 });
             }

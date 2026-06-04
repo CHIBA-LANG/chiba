@@ -257,6 +257,49 @@ fn program_contn_repeated_resume_lowers_to_executable_wat() {
 }
 
 #[test]
+fn program_contn_capture_under_function_call_is_replay_unsafe() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def f(x: I64): I64 = x
+def main() = resetn { f(shift retry { retry(1) }) }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def")
+        .output;
+
+    assert_eq!(
+        main.control.errors,
+        vec![
+            chiba_level1r::control::ControlError::UnsafeMultiResumeCapture {
+                binder: "retry".to_string()
+            }
+        ]
+    );
+    assert_eq!(
+        main.control.continuations[0].replay_safety,
+        chiba_level1r::control::ReplaySafety::Unsafe
+    );
+    assert_eq!(
+        main.core_validation.diagnostics,
+        vec![
+            chiba_level1r::core::CoreDiagnostic::UnsafeContNReplayCapture {
+                binder: "retry".to_string()
+            }
+        ]
+    );
+    assert_eq!(
+        bundle.backend_link.diagnostics,
+        vec![
+            chiba_level1r::backend::BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index: 1 }
+        ]
+    );
+}
+
+#[test]
 fn program_contn_repeated_resume_replays_captured_reset_context() {
     let output = chiba_level1r::compile_source_program_bundle(
         "def main() = resetn { 10 + shift retry { retry(1) + retry(2) } }",
