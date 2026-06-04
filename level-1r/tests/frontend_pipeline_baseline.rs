@@ -1979,6 +1979,7 @@ fn frontend_lowers_contn_repeated_resume_to_executable_backend_subset() {
 
     assert_eq!(main.control.errors, vec![]);
     assert_eq!(main.control.continuations[0].kind, ContinuationKind::ContN);
+    assert_eq!(main.control.continuations[0].input, Type::I64);
     assert_eq!(main.backend.diagnostics, vec![]);
     assert!(main
         .backend

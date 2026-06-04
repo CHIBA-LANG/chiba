@@ -363,6 +363,20 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
 }
 
 pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext) -> TypedExpr {
+    type_expr_with_context_and_controls(expr, env, context, &mut Vec::new())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ContinuationTypeBoundary {
+    multi: bool,
+}
+
+fn type_expr_with_context_and_controls(
+    expr: &Expr,
+    env: &TypeEnv,
+    context: &TypeContext,
+    controls: &mut Vec<ContinuationTypeBoundary>,
+) -> TypedExpr {
     match expr {
         Expr::Var(name) => typed(
             TypedExprKind::Var(name.clone()),
@@ -378,7 +392,7 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             let param_ty = Type::Unknown;
             let mut env = env.clone();
             env.insert(param.clone(), param_ty.clone());
-            let body = type_expr_with_context(body, &env, context);
+            let body = type_expr_with_context_and_controls(body, &env, context, controls);
             let ty = Type::Func(Box::new(param_ty.clone()), Box::new(body.ty.clone()));
             typed(
                 TypedExprKind::Lambda {
@@ -390,10 +404,10 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             )
         }
         Expr::Call { callee, args } => {
-            let callee = type_expr_with_context(callee, env, context);
+            let callee = type_expr_with_context_and_controls(callee, env, context, controls);
             let args = args
                 .iter()
-                .map(|arg| type_expr_with_context(arg, env, context))
+                .map(|arg| type_expr_with_context_and_controls(arg, env, context, controls))
                 .collect::<Vec<_>>();
             let ty = call_result_type(&callee.ty, args.len());
             typed(
@@ -404,11 +418,13 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
                 ty,
             )
         }
-        Expr::Instantiate { callee, .. } => type_expr_with_context(callee, env, context),
+        Expr::Instantiate { callee, .. } => {
+            type_expr_with_context_and_controls(callee, env, context, controls)
+        }
         Expr::Tuple(fields) => {
             let fields: Vec<_> = fields
                 .iter()
-                .map(|field| type_expr_with_context(field, env, context))
+                .map(|field| type_expr_with_context_and_controls(field, env, context, controls))
                 .collect();
             let field_types = fields
                 .iter()
@@ -427,19 +443,29 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
                 .iter()
                 .map(|field| TypedRecordField {
                     name: field.name.clone(),
-                    value: type_expr_with_context(&field.value, env, context),
+                    value: type_expr_with_context_and_controls(
+                        &field.value,
+                        env,
+                        context,
+                        controls,
+                    ),
                 })
                 .collect::<Vec<_>>();
             let ty = Type::Record(record_type_fields(&fields));
             typed(TypedExprKind::Record { fields }, ty)
         }
         Expr::RecordUpdate { base, fields } => {
-            let base = type_expr_with_context(base, env, context);
+            let base = type_expr_with_context_and_controls(base, env, context, controls);
             let fields = fields
                 .iter()
                 .map(|field| TypedRecordField {
                     name: field.name.clone(),
-                    value: type_expr_with_context(&field.value, env, context),
+                    value: type_expr_with_context_and_controls(
+                        &field.value,
+                        env,
+                        context,
+                        controls,
+                    ),
                 })
                 .collect::<Vec<_>>();
             let ty = record_update_type(&base.ty, &fields);
@@ -459,7 +485,7 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
         } => {
             let args = args
                 .iter()
-                .map(|arg| type_expr_with_context(arg, env, context))
+                .map(|arg| type_expr_with_context_and_controls(arg, env, context, controls))
                 .collect::<Vec<_>>();
             typed(
                 TypedExprKind::AdtCtor {
@@ -475,7 +501,7 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             )
         }
         Expr::Field { receiver, name } => {
-            let receiver = type_expr_with_context(receiver, env, context);
+            let receiver = type_expr_with_context_and_controls(receiver, env, context, controls);
             let access = field_access_kind(&receiver.ty, name);
             let ty = match access {
                 FieldAccessKind::TuplePositionalRow { index } => {
@@ -499,10 +525,10 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             name,
             args,
         } => {
-            let receiver = type_expr_with_context(receiver, env, context);
+            let receiver = type_expr_with_context_and_controls(receiver, env, context, controls);
             let args = args
                 .iter()
-                .map(|arg| type_expr_with_context(arg, env, context))
+                .map(|arg| type_expr_with_context_and_controls(arg, env, context, controls))
                 .collect::<Vec<_>>();
             let ty = field_callable_result_type(&receiver.ty, name, args.len(), context);
             typed(
@@ -515,8 +541,8 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             )
         }
         Expr::Index { receiver, index } => {
-            let receiver = type_expr_with_context(receiver, env, context);
-            let index = type_expr_with_context(index, env, context);
+            let receiver = type_expr_with_context_and_controls(receiver, env, context, controls);
+            let index = type_expr_with_context_and_controls(index, env, context, controls);
             typed(
                 TypedExprKind::Index {
                     receiver: Box::new(receiver),
@@ -526,8 +552,8 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             )
         }
         Expr::Range { start, end } => {
-            let start = type_expr_with_context(start, env, context);
-            let end = type_expr_with_context(end, env, context);
+            let start = type_expr_with_context_and_controls(start, env, context, controls);
+            let end = type_expr_with_context_and_controls(end, env, context, controls);
             typed(
                 TypedExprKind::Range {
                     start: Box::new(start),
@@ -537,8 +563,8 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             )
         }
         Expr::Binary { op, lhs, rhs } => {
-            let lhs = type_expr_with_context(lhs, env, context);
-            let rhs = type_expr_with_context(rhs, env, context);
+            let lhs = type_expr_with_context_and_controls(lhs, env, context, controls);
+            let rhs = type_expr_with_context_and_controls(rhs, env, context, controls);
             let ty = binary_result_type(&lhs.ty, &rhs.ty);
             typed(
                 TypedExprKind::Binary {
@@ -554,9 +580,11 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             then_branch,
             else_branch,
         } => {
-            let cond = type_expr_with_context(cond, env, context);
-            let then_branch = type_expr_with_context(then_branch, env, context);
-            let else_branch = type_expr_with_context(else_branch, env, context);
+            let cond = type_expr_with_context_and_controls(cond, env, context, controls);
+            let then_branch =
+                type_expr_with_context_and_controls(then_branch, env, context, controls);
+            let else_branch =
+                type_expr_with_context_and_controls(else_branch, env, context, controls);
             let ty = common_type(&then_branch.ty, &else_branch.ty);
             typed(
                 TypedExprKind::If {
@@ -573,11 +601,13 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             then_branch,
             else_branch,
         } => {
-            let scrutinee = type_expr_with_context(scrutinee, env, context);
+            let scrutinee = type_expr_with_context_and_controls(scrutinee, env, context, controls);
             let mut then_env = env.clone();
             then_env.extend(context.pattern_bindings_for(pattern, &scrutinee.ty));
-            let then_branch = type_expr_with_context(then_branch, &then_env, context);
-            let else_branch = type_expr_with_context(else_branch, env, context);
+            let then_branch =
+                type_expr_with_context_and_controls(then_branch, &then_env, context, controls);
+            let else_branch =
+                type_expr_with_context_and_controls(else_branch, env, context, controls);
             let ty = common_type(&then_branch.ty, &else_branch.ty);
             typed(
                 TypedExprKind::IfLet {
@@ -590,7 +620,7 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             )
         }
         Expr::Match { scrutinee, arms } => {
-            let scrutinee = type_expr_with_context(scrutinee, env, context);
+            let scrutinee = type_expr_with_context_and_controls(scrutinee, env, context, controls);
             let arms: Vec<_> = arms
                 .iter()
                 .map(|arm| {
@@ -598,7 +628,9 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
                     arm_env.extend(context.pattern_bindings_for(&arm.pattern, &scrutinee.ty));
                     TypedMatchArm {
                         pattern: arm.pattern.clone(),
-                        body: type_expr_with_context(&arm.body, &arm_env, context),
+                        body: type_expr_with_context_and_controls(
+                            &arm.body, &arm_env, context, controls,
+                        ),
                     }
                 })
                 .collect();
@@ -616,7 +648,7 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             )
         }
         Expr::Nominal { name, expr } => {
-            let expr = type_expr_with_context(expr, env, context);
+            let expr = type_expr_with_context_and_controls(expr, env, context, controls);
             typed(
                 TypedExprKind::Nominal {
                     name: name.clone(),
@@ -626,7 +658,9 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             )
         }
         Expr::Reset { multi, body } => {
-            let body = type_expr_with_context(body, env, context);
+            controls.push(ContinuationTypeBoundary { multi: *multi });
+            let body = type_expr_with_context_and_controls(body, env, context, controls);
+            controls.pop();
             typed(
                 TypedExprKind::Reset {
                     multi: *multi,
@@ -636,7 +670,18 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
             )
         }
         Expr::Shift { binder, body } => {
-            let body = type_expr_with_context(body, env, context);
+            let mut env = env.clone();
+            if let Some(boundary) = controls.last() {
+                env.insert(
+                    binder.clone(),
+                    Type::Continuation {
+                        multi: boundary.multi,
+                        input: Box::new(Type::Unknown),
+                        answer: Box::new(Type::Unknown),
+                    },
+                );
+            }
+            let body = type_expr_with_context_and_controls(body, &env, context, controls);
             typed(
                 TypedExprKind::Shift {
                     binder: binder.clone(),

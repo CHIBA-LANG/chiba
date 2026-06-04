@@ -1,6 +1,7 @@
+use chiba_level1r::ast::BinaryOp;
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::control::ControlError;
-use chiba_level1r::typed::UsageColor;
+use chiba_level1r::typed::{Type, UsageColor};
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -27,6 +28,61 @@ fn resetn_shift_captures_contn_from_delimiter() {
     assert_eq!(fact.kind, ContinuationKind::ContN);
     assert_eq!(fact.usage, UsageColor::Many);
     assert!(output.cps.to_string().contains("shift@contN retry"));
+}
+
+#[test]
+fn nested_reset_uses_nearest_delimiter_for_continuation_kind() {
+    let inner_contn = compile_expr(&Expr::reset(Expr::resetn(Expr::shift(
+        "retry",
+        Expr::i64(0),
+    ))));
+    let inner_cont1 = compile_expr(&Expr::resetn(Expr::reset(Expr::shift("k", Expr::i64(0)))));
+
+    assert_eq!(inner_contn.control.errors, vec![]);
+    assert_eq!(inner_contn.control.continuations.len(), 1);
+    assert_eq!(inner_contn.control.continuations[0].binder, "retry");
+    assert_eq!(
+        inner_contn.control.continuations[0].kind,
+        ContinuationKind::ContN
+    );
+    assert_eq!(inner_cont1.control.errors, vec![]);
+    assert_eq!(inner_cont1.control.continuations.len(), 1);
+    assert_eq!(inner_cont1.control.continuations[0].binder, "k");
+    assert_eq!(
+        inner_cont1.control.continuations[0].kind,
+        ContinuationKind::Cont1
+    );
+}
+
+#[test]
+fn shift_resume_input_type_is_collected_from_typed_resume_calls() {
+    let single = compile_expr(&Expr::reset(Expr::shift(
+        "k",
+        Expr::call(Expr::var("k"), Expr::i64(7)),
+    )));
+    let repeated_same = compile_expr(&Expr::resetn(Expr::shift(
+        "retry",
+        Expr::binary(
+            BinaryOp::Add,
+            Expr::call(Expr::var("retry"), Expr::i64(1)),
+            Expr::call(Expr::var("retry"), Expr::i64(2)),
+        ),
+    )));
+    let repeated_conflict = compile_expr(&Expr::resetn(Expr::shift(
+        "retry",
+        Expr::binary(
+            BinaryOp::Add,
+            Expr::call(Expr::var("retry"), Expr::i64(1)),
+            Expr::call(Expr::var("retry"), Expr::bool(true)),
+        ),
+    )));
+
+    assert_eq!(single.control.continuations[0].input, Type::I64);
+    assert_eq!(repeated_same.control.continuations[0].input, Type::I64);
+    assert_eq!(
+        repeated_conflict.control.continuations[0].input,
+        Type::Unknown
+    );
 }
 
 #[test]
