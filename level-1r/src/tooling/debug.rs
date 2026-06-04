@@ -11,7 +11,8 @@ use crate::closure_core_usage::ClosureCoreUsageFacts;
 use crate::closure_simplify::ClosureSimplificationFacts;
 use crate::control::{ContinuationKind, ControlError, ControlFacts, ReplaySafety};
 use crate::core::{
-    CompilerIntrinsic, CoreDiagnostic, CoreProgram, CoreValidation, OwnershipDecision,
+    CallableStorageKind, CompilerIntrinsic, CoreDiagnostic, CoreProgram, CoreValidation,
+    OwnershipDecision,
 };
 use crate::cps::CpsProgram;
 use crate::cps_usage::{
@@ -189,7 +190,7 @@ pub fn visual_report(
         lambda_lift: format!("{lambda_lift:#?}"),
         core: format!("{core:#?}"),
         callable_storage: callable_storage.to_string(),
-        closure_core_usage: format!("{closure_core_usage:#?}"),
+        closure_core_usage: render_closure_core_usage(closure_core_usage),
         closure_simplification: format!("{closure_simplification:#?}"),
         usage_audit: format!("{usage_audit:#?}"),
         std_audit: format!("{std_audit:#?}"),
@@ -619,6 +620,71 @@ fn render_continuation_simplification(facts: &ContinuationSimplificationFacts) -
         .unwrap();
     }
     out
+}
+
+fn render_closure_core_usage(facts: &ClosureCoreUsageFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "closure-packages={}", facts.closure_packages.len()).unwrap();
+    for (subject, package) in &facts.closure_packages {
+        writeln!(
+            out,
+            "closure-package {subject} storage={} count={} send={}",
+            render_callable_storage_kind(package.storage),
+            render_use_count(package.count),
+            render_send_color(package.send)
+        )
+        .unwrap();
+    }
+    writeln!(out, "env-fields={}", facts.env_fields.len()).unwrap();
+    for (key, field) in &facts.env_fields {
+        writeln!(
+            out,
+            "env-field {key} closure={} field={} usage={} send={}",
+            field.closure,
+            field.field,
+            render_usage_color(field.color),
+            render_send_color(field.send)
+        )
+        .unwrap();
+    }
+    writeln!(out, "code-pointers={}", facts.code_pointers.len()).unwrap();
+    for (symbol, pointer) in &facts.code_pointers {
+        writeln!(
+            out,
+            "code-pointer {symbol} source={} count={} direct={}",
+            pointer.source,
+            render_use_count(pointer.count),
+            pointer.known_direct
+        )
+        .unwrap();
+    }
+    writeln!(
+        out,
+        "continuation-packages={}",
+        facts.continuation_packages.len()
+    )
+    .unwrap();
+    for (package, usage) in &facts.continuation_packages {
+        writeln!(
+            out,
+            "continuation-package {package} kind={} count={}",
+            render_continuation_kind(usage.kind),
+            render_use_count(usage.count)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_callable_storage_kind(kind: CallableStorageKind) -> &'static str {
+    match kind {
+        CallableStorageKind::DirectFn => "direct-fn",
+        CallableStorageKind::NoCaptureClosure => "no-capture-closure",
+        CallableStorageKind::EnvClosure => "env-closure",
+        CallableStorageKind::BoxedCont1 => "boxed-cont1",
+        CallableStorageKind::ContNPackage => "contn-package",
+        CallableStorageKind::ErasedCallableAdt => "erased-callable-adt",
+    }
 }
 
 fn render_cps_usage_diagnostic(diagnostic: &CpsUsageDiagnostic) -> String {

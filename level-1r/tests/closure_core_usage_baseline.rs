@@ -74,6 +74,14 @@ fn closure_core_usage_visual_dump_is_present() {
     let direct = analyze_closure_core_usage(&output.core);
 
     assert_eq!(direct, output.closure_core_usage);
-    assert!(output.render_visual().contains("closure-core-usage:"));
-    assert!(output.render_visual().contains("code_pointers"));
+    let visual = output.render_visual();
+    assert!(visual.contains("closure-core-usage:"));
+    assert!(visual.contains("code-pointers=1"));
+    assert!(visual
+        .contains("code-pointer lift::0000::closure__x source=closure::x count=1 direct=true"));
+    assert!(!output
+        .visual
+        .closure_core_usage
+        .contains("ClosureCoreUsageFacts"));
+    assert!(!output.visual.closure_core_usage.contains("code_pointers"));
 }
