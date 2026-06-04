@@ -1712,8 +1712,9 @@ true => 1
     );
     let visual = main.render_visual();
     assert!(visual.contains("pattern:"));
-    assert!(visual.contains("NonExhaustiveMatch"));
-    assert!(visual.contains("Bool"));
+    assert!(visual.contains("diagnostic non-exhaustive-match scrutinee=bool missing=[false]"));
+    assert!(!visual.contains("NonExhaustiveMatch"));
+    assert!(!visual.contains("scrutinee_type"));
 }
 
 #[test]

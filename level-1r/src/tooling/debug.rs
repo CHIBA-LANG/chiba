@@ -1,7 +1,9 @@
 use std::fmt::Write;
 
 use crate::alpha::{AlphaDiagnostic, AlphaExprKind, AlphaFacts};
-use crate::ast::{render_source_binary_op, render_source_expr, Expr};
+use crate::ast::{
+    render_source_binary_op, render_source_expr, render_source_literal, render_source_pattern, Expr,
+};
 use crate::backend::{
     BackendArtifact, BackendCacheKey, BackendDiagnostic, BackendLinkDiagnostic,
     BackendLinkedBundle, BackendManifest, BackendTarget,
@@ -24,7 +26,7 @@ use crate::cps_usage::{
 use crate::lambda_lift::LambdaLiftFacts;
 use crate::monomorphize::{MonomorphizationPlan, MonomorphizationStatus};
 use crate::nanopass::PassReport;
-use crate::pattern::PatternFacts;
+use crate::pattern::{PatternDiagnostic, PatternFacts};
 use crate::resolve::{
     OperatorSurface, ResolveDiagnostic, ResolveFacts, ResolvedCall, ResolvedName,
 };
@@ -183,7 +185,7 @@ pub fn visual_report(
         template_audit: render_template_audit(template_audit),
         typed_signature: typed_signature.to_string(),
         typed: format!("{typed:#?}"),
-        pattern: format!("{pattern:#?}"),
+        pattern: render_pattern_facts(pattern),
         control: render_control_facts(control),
         usage: render_usage_facts(usage),
         cps: cps.to_string(),
@@ -635,6 +637,71 @@ fn render_control_facts(facts: &ControlFacts) -> String {
         writeln!(out, "error {}", render_control_error(error)).unwrap();
     }
     out
+}
+
+fn render_pattern_facts(facts: &PatternFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "matches={}", facts.matches.len()).unwrap();
+    for (index, fact) in facts.matches.iter().enumerate() {
+        let literals = fact
+            .covered_literals
+            .iter()
+            .map(render_source_literal)
+            .collect::<Vec<_>>()
+            .join(", ");
+        writeln!(
+            out,
+            "match {index} scrutinee={} literals=[{}] constructors=[{}] wildcard={} exhaustive={}",
+            render_type(&fact.scrutinee_type),
+            literals,
+            fact.covered_constructors.join(", "),
+            fact.has_wildcard,
+            fact.exhaustive
+        )
+        .unwrap();
+    }
+    writeln!(out, "envs={}", facts.envs.len()).unwrap();
+    for (index, env) in facts.envs.iter().enumerate() {
+        writeln!(
+            out,
+            "env {index} bindings=[{}] success-binds={} failure-binds={}",
+            env.bindings.join(", "),
+            env.success_branch_binds,
+            env.failure_branch_binds
+        )
+        .unwrap();
+    }
+    writeln!(out, "diagnostics={}", facts.diagnostics.len()).unwrap();
+    for diagnostic in &facts.diagnostics {
+        writeln!(out, "diagnostic {}", render_pattern_diagnostic(diagnostic)).unwrap();
+    }
+    out
+}
+
+fn render_pattern_diagnostic(diagnostic: &PatternDiagnostic) -> String {
+    match diagnostic {
+        PatternDiagnostic::NonExhaustiveMatch {
+            scrutinee_type,
+            missing,
+        } => {
+            let missing = missing
+                .iter()
+                .map(render_source_pattern)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "non-exhaustive-match scrutinee={} missing=[{}]",
+                render_type(scrutinee_type),
+                missing
+            )
+        }
+        PatternDiagnostic::DuplicateBinding { name } => {
+            format!("duplicate-binding {name}")
+        }
+        PatternDiagnostic::ChainedAtPattern { name } => {
+            format!("chained-at-pattern {name}")
+        }
+    }
 }
 
 fn render_control_error(error: &ControlError) -> String {

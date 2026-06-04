@@ -60,6 +60,28 @@ fn bool_match_reports_missing_literal() {
 }
 
 #[test]
+fn pattern_visual_renders_structured_facts_without_rust_debug_shape() {
+    let output = compile_expr(&Expr::match_expr(
+        Expr::bool(true),
+        vec![(Pattern::lit_bool(true), Expr::i64(1))],
+    ));
+    let visual = &output.visual.pattern;
+
+    assert!(visual.contains("matches=1"));
+    assert!(visual.contains(
+        "match 0 scrutinee=bool literals=[true] constructors=[] wildcard=false exhaustive=false"
+    ));
+    assert!(visual.contains("diagnostics=1"));
+    assert!(visual.contains("diagnostic non-exhaustive-match scrutinee=bool missing=[false]"));
+    assert!(!visual.contains("PatternFacts"));
+    assert!(!visual.contains("MatchExhaustivenessFact"));
+    assert!(!visual.contains("PatternEnvFact"));
+    assert!(!visual.contains("NonExhaustiveMatch"));
+    assert!(!visual.contains("scrutinee_type"));
+    assert!(!visual.contains("covered_literals"));
+}
+
+#[test]
 fn non_bool_literal_match_without_wildcard_requires_fallback() {
     let output = compile_expr(&Expr::match_expr(
         Expr::var("tag"),
@@ -89,6 +111,10 @@ fn if_let_records_success_only_pattern_environment() {
     assert_eq!(env.bindings, vec!["value".to_string()]);
     assert_eq!(env.success_branch_binds, true);
     assert_eq!(env.failure_branch_binds, false);
+    assert!(output
+        .visual
+        .pattern
+        .contains("env 0 bindings=[value] success-binds=true failure-binds=false"));
 }
 
 #[test]
