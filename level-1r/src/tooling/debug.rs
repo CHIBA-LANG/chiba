@@ -2,12 +2,17 @@ use std::fmt::Write;
 
 use crate::alpha::AlphaFacts;
 use crate::ast::{render_source_binary_op, render_source_expr, Expr};
-use crate::backend::{BackendArtifact, BackendCacheKey, BackendLinkedBundle};
+use crate::backend::{
+    BackendArtifact, BackendCacheKey, BackendDiagnostic, BackendLinkDiagnostic,
+    BackendLinkedBundle, BackendManifest, BackendTarget,
+};
 use crate::closure::ClosureFacts;
 use crate::closure_core_usage::ClosureCoreUsageFacts;
 use crate::closure_simplify::ClosureSimplificationFacts;
 use crate::control::{ContinuationKind, ControlFacts};
-use crate::core::{CompilerIntrinsic, CoreDiagnostic, CoreProgram, CoreValidation};
+use crate::core::{
+    CompilerIntrinsic, CoreDiagnostic, CoreProgram, CoreValidation, OwnershipDecision,
+};
 use crate::cps::CpsProgram;
 use crate::cps_usage::{ContinuationSimplificationFacts, CpsUsageFacts};
 use crate::lambda_lift::LambdaLiftFacts;
@@ -185,9 +190,9 @@ pub fn visual_report(
         usage_audit: format!("{usage_audit:#?}"),
         std_audit: format!("{std_audit:#?}"),
         core_validation: render_core_validation(core_validation),
-        backend: format!("{backend:#?}"),
-        backend_link: format!("{backend_link:#?}"),
-        backend_cache_key: format!("{backend_cache_key:#?}"),
+        backend: render_backend_artifact(backend),
+        backend_link: render_backend_link(backend_link),
+        backend_cache_key: render_backend_cache_key(backend_cache_key),
         nanopass: render_pass_report(passes),
     }
 }
@@ -295,6 +300,181 @@ fn render_compiler_intrinsic(intrinsic: CompilerIntrinsic) -> &'static str {
         CompilerIntrinsic::TupleToAdt => "tuple_to_adt",
         CompilerIntrinsic::AdtToTuple => "adt_to_tuple",
     }
+}
+
+fn render_backend_artifact(artifact: &BackendArtifact) -> String {
+    let mut out = String::new();
+    writeln!(out, "target={}", render_backend_target(artifact.target)).unwrap();
+    writeln!(out, "wat-lines={}", artifact.wat.lines().count()).unwrap();
+    writeln!(
+        out,
+        "return={}",
+        artifact
+            .return_value
+            .as_ref()
+            .map(render_core_value_summary)
+            .unwrap_or_else(|| "none".to_string())
+    )
+    .unwrap();
+    render_backend_manifest(&mut out, &artifact.manifest);
+    writeln!(out, "diagnostics={}", artifact.diagnostics.len()).unwrap();
+    for diagnostic in &artifact.diagnostics {
+        writeln!(out, "diagnostic {}", render_backend_diagnostic(diagnostic)).unwrap();
+    }
+    out
+}
+
+fn render_backend_link(bundle: &BackendLinkedBundle) -> String {
+    let mut out = String::new();
+    writeln!(out, "target={}", render_backend_target(bundle.target)).unwrap();
+    writeln!(
+        out,
+        "linked-wat-lines={}",
+        bundle.linked_wat.lines().count()
+    )
+    .unwrap();
+    render_backend_manifest(&mut out, &bundle.manifest);
+    writeln!(out, "diagnostics={}", bundle.diagnostics.len()).unwrap();
+    for diagnostic in &bundle.diagnostics {
+        writeln!(
+            out,
+            "diagnostic {}",
+            render_backend_link_diagnostic(diagnostic)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_backend_cache_key(key: &BackendCacheKey) -> String {
+    let mut out = String::new();
+    writeln!(out, "target={}", render_backend_target(key.target)).unwrap();
+    writeln!(out, "digest={}", key.digest).unwrap();
+    out
+}
+
+fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
+    match value {
+        crate::core::CoreValue::Unit => "unit".to_string(),
+        crate::core::CoreValue::I64(value) => format!("i64({value})"),
+        crate::core::CoreValue::Bool(value) => format!("bool({value})"),
+        crate::core::CoreValue::Var(name) => format!("var({name})"),
+        crate::core::CoreValue::Tuple { fields } => {
+            format!("tuple/{}", fields.len())
+        }
+        crate::core::CoreValue::TupleField {
+            tuple,
+            field,
+            field_index,
+        } => format!(
+            "tuple-field {}.{}#{}",
+            render_core_value_summary(tuple),
+            field,
+            field_index
+        ),
+        crate::core::CoreValue::Range { start, end } => format!(
+            "range({}..{})",
+            render_core_value_summary(start),
+            render_core_value_summary(end)
+        ),
+        crate::core::CoreValue::Record { fields } => {
+            format!("record/{}", fields.len())
+        }
+        crate::core::CoreValue::RecordUpdate { base, fields } => {
+            format!(
+                "record-update {} +{}",
+                render_core_value_summary(base),
+                fields.len()
+            )
+        }
+        crate::core::CoreValue::RecordField { record, field } => {
+            format!("record-field {}.{field}", render_core_value_summary(record))
+        }
+        crate::core::CoreValue::Adt {
+            data, ctor, args, ..
+        } => {
+            format!("adt {data}.{ctor}/{}", args.len())
+        }
+        crate::core::CoreValue::Rendered { debug } => format!("rendered {debug}"),
+    }
+}
+
+fn render_backend_manifest(out: &mut String, manifest: &BackendManifest) {
+    writeln!(out, "manifest-entries={}", manifest.entries.len()).unwrap();
+    for entry in &manifest.entries {
+        writeln!(
+            out,
+            "symbol {} source={} origin={} ownership={}",
+            entry.final_symbol,
+            entry.source_debug_name,
+            entry.pass_origin,
+            entry
+                .ownership
+                .map(render_ownership_decision)
+                .unwrap_or_else(|| "none".to_string())
+        )
+        .unwrap();
+    }
+}
+
+fn render_backend_diagnostic(diagnostic: &BackendDiagnostic) -> String {
+    match diagnostic {
+        BackendDiagnostic::CoreValidationFailed { diagnostics } => {
+            format!("core validation failed diagnostics={diagnostics}")
+        }
+        BackendDiagnostic::UnsupportedI32ReturnValue { value } => {
+            format!("unsupported i32 return value {value}")
+        }
+        BackendDiagnostic::UnsupportedContinuationRuntime { op, kind, binder } => {
+            format!(
+                "unsupported continuation runtime {op} kind={} binder={}",
+                render_continuation_kind(*kind),
+                binder.as_deref().unwrap_or("none")
+            )
+        }
+    }
+}
+
+fn render_backend_link_diagnostic(diagnostic: &BackendLinkDiagnostic) -> String {
+    match diagnostic {
+        BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index } => {
+            format!("artifact emit failed {artifact_index}")
+        }
+        BackendLinkDiagnostic::DuplicateFinalSymbol { symbol } => {
+            format!("duplicate final symbol {symbol}")
+        }
+        BackendLinkDiagnostic::UnsupportedStaticInitializerLowering { static_name, expr } => {
+            format!("unsupported static initializer lowering {static_name}: {expr}")
+        }
+        BackendLinkDiagnostic::TargetMismatch {
+            artifact_index,
+            expected,
+            actual,
+        } => format!(
+            "target mismatch {artifact_index}: expected {}, actual {}",
+            render_backend_target(*expected),
+            render_backend_target(*actual)
+        ),
+    }
+}
+
+fn render_backend_target(target: BackendTarget) -> &'static str {
+    match target {
+        BackendTarget::WasmGc => "wasm-gc",
+    }
+}
+
+fn render_ownership_decision(decision: OwnershipDecision) -> String {
+    match decision {
+        OwnershipDecision::StackValue => "stack-value",
+        OwnershipDecision::InplaceReuse => "inplace-reuse",
+        OwnershipDecision::Rc => "rc",
+        OwnershipDecision::Arc => "arc",
+        OwnershipDecision::StaticData => "static-data",
+        OwnershipDecision::BorrowedView => "borrowed-view",
+        OwnershipDecision::DynPackage => "dyn-package",
+    }
+    .to_string()
 }
 
 fn render_symbol_lineage(

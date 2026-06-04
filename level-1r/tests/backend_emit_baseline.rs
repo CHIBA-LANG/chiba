@@ -605,9 +605,13 @@ fn backend_rejects_structural_core_return_instead_of_debug_comment_fake_wat() {
 fn visual_report_contains_backend_artifact() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
 
-    assert!(output.render_visual().contains("backend:"));
-    assert!(output.render_visual().contains("BackendArtifact"));
-    assert!(output.render_visual().contains("WasmGc"));
+    let visual = output.render_visual();
+    assert!(visual.contains("backend:"));
+    assert!(visual.contains("target=wasm-gc"));
+    assert!(visual.contains("manifest-entries=1"));
+    assert!(visual.contains("symbol lift__0000__closure__x"));
+    assert!(!output.visual.backend.contains("BackendArtifact"));
+    assert!(!output.visual.backend.contains("WasmGc"));
 }
 
 #[test]
@@ -762,8 +766,10 @@ fn pipeline_records_backend_link_artifact() {
     let visual = output.render_visual();
     assert!(visual.contains("backend-link:"));
     assert!(visual.contains("backend-cache-key:"));
-    assert!(visual.contains("BackendLinkedBundle"));
-    assert!(visual.contains("BackendCacheKey"));
+    assert!(visual.contains("diagnostic artifact emit failed 0"));
+    assert!(visual.contains("digest="));
+    assert!(!output.visual.backend_link.contains("BackendLinkedBundle"));
+    assert!(!output.visual.backend_cache_key.contains("BackendCacheKey"));
     assert!(visual.contains("L23BackendLink: BackendArtifact -> BackendLinkedBundle"));
     assert!(visual.contains("L24BackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
 }
