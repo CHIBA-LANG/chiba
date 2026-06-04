@@ -39,7 +39,7 @@ use crate::template::{
 use crate::template_audit::{
     TemplateAuditDiagnostic, TemplateAuditReport, TemplateObligationSource,
 };
-use crate::typed::{RecordTypeField, Type, TypedExpr};
+use crate::typed::{FieldAccessKind, RecordTypeField, Type, TypedExpr, TypedExprKind};
 use crate::usage::{UsageFacts, UseCount};
 use crate::usage_audit::{RustReferenceOwnership, UsageAuditDiagnostic, UsageAuditReport};
 
@@ -184,7 +184,7 @@ pub fn visual_report(
         monomorphize: render_monomorphization_plan(monomorphize),
         template_audit: render_template_audit(template_audit),
         typed_signature: typed_signature.to_string(),
-        typed: format!("{typed:#?}"),
+        typed: render_typed_expr(typed),
         pattern: render_pattern_facts(pattern),
         control: render_control_facts(control),
         usage: render_usage_facts(usage),
@@ -637,6 +637,201 @@ fn render_control_facts(facts: &ControlFacts) -> String {
         writeln!(out, "error {}", render_control_error(error)).unwrap();
     }
     out
+}
+
+fn render_typed_expr(expr: &TypedExpr) -> String {
+    let mut out = String::new();
+    render_typed_expr_into(expr, 0, &mut out);
+    out
+}
+
+fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
+    let indent = "  ".repeat(depth);
+    writeln!(
+        out,
+        "{indent}node kind={} type={} usage={} send={}",
+        render_typed_expr_kind(&expr.kind),
+        render_type(&expr.ty),
+        render_usage_color(expr.usage),
+        render_send_color(expr.send)
+    )
+    .unwrap();
+    match &expr.kind {
+        TypedExprKind::Var(name) => {
+            writeln!(out, "{indent}  var {name}").unwrap();
+        }
+        TypedExprKind::Lit(literal) => {
+            writeln!(out, "{indent}  literal {}", render_source_literal(literal)).unwrap();
+        }
+        TypedExprKind::Lambda {
+            param,
+            param_ty,
+            body,
+        } => {
+            writeln!(out, "{indent}  param {param}: {}", render_type(param_ty)).unwrap();
+            render_typed_child("body", body, depth, out);
+        }
+        TypedExprKind::Call { callee, args } => {
+            render_typed_child("callee", callee, depth, out);
+            for (index, arg) in args.iter().enumerate() {
+                render_typed_child(&format!("arg {index}"), arg, depth, out);
+            }
+        }
+        TypedExprKind::Tuple { fields, nominal } => {
+            writeln!(out, "{indent}  nominal {nominal}").unwrap();
+            for (index, field) in fields.iter().enumerate() {
+                render_typed_child(&format!("field {index}"), field, depth, out);
+            }
+        }
+        TypedExprKind::Record { fields } => {
+            for field in fields {
+                render_typed_child(&format!("field {}", field.name), &field.value, depth, out);
+            }
+        }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            render_typed_child("base", base, depth, out);
+            for field in fields {
+                render_typed_child(&format!("update {}", field.name), &field.value, depth, out);
+            }
+        }
+        TypedExprKind::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => {
+            writeln!(
+                out,
+                "{indent}  constructor {data}.{ctor} variants=[{}]",
+                variants.join(", ")
+            )
+            .unwrap();
+            for (index, arg) in args.iter().enumerate() {
+                render_typed_child(&format!("arg {index}"), arg, depth, out);
+            }
+        }
+        TypedExprKind::Field {
+            receiver,
+            name,
+            access,
+        } => {
+            writeln!(
+                out,
+                "{indent}  field {name} access={}",
+                render_field_access_kind(access)
+            )
+            .unwrap();
+            render_typed_child("receiver", receiver, depth, out);
+        }
+        TypedExprKind::MethodCall {
+            receiver,
+            name,
+            args,
+        } => {
+            writeln!(out, "{indent}  method {name}").unwrap();
+            render_typed_child("receiver", receiver, depth, out);
+            for (index, arg) in args.iter().enumerate() {
+                render_typed_child(&format!("arg {index}"), arg, depth, out);
+            }
+        }
+        TypedExprKind::Index { receiver, index } => {
+            render_typed_child("receiver", receiver, depth, out);
+            render_typed_child("index", index, depth, out);
+        }
+        TypedExprKind::Range { start, end } => {
+            render_typed_child("start", start, depth, out);
+            render_typed_child("end", end, depth, out);
+        }
+        TypedExprKind::Binary { op, lhs, rhs } => {
+            writeln!(out, "{indent}  op {}", render_source_binary_op(*op)).unwrap();
+            render_typed_child("lhs", lhs, depth, out);
+            render_typed_child("rhs", rhs, depth, out);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            render_typed_child("cond", cond, depth, out);
+            render_typed_child("then", then_branch, depth, out);
+            render_typed_child("else", else_branch, depth, out);
+        }
+        TypedExprKind::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => {
+            writeln!(out, "{indent}  pattern {}", render_source_pattern(pattern)).unwrap();
+            render_typed_child("scrutinee", scrutinee, depth, out);
+            render_typed_child("then", then_branch, depth, out);
+            render_typed_child("else", else_branch, depth, out);
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            render_typed_child("scrutinee", scrutinee, depth, out);
+            for (index, arm) in arms.iter().enumerate() {
+                writeln!(
+                    out,
+                    "{indent}  arm {index} pattern {}",
+                    render_source_pattern(&arm.pattern)
+                )
+                .unwrap();
+                render_typed_child("body", &arm.body, depth + 1, out);
+            }
+        }
+        TypedExprKind::Nominal { name, expr } => {
+            writeln!(out, "{indent}  nominal {name}").unwrap();
+            render_typed_child("expr", expr, depth, out);
+        }
+        TypedExprKind::Reset { multi, body } => {
+            let kind = if *multi { "contn" } else { "cont1" };
+            writeln!(out, "{indent}  reset-kind {kind}").unwrap();
+            render_typed_child("body", body, depth, out);
+        }
+        TypedExprKind::Shift { binder, body } => {
+            writeln!(out, "{indent}  binder {binder}").unwrap();
+            render_typed_child("body", body, depth, out);
+        }
+    }
+}
+
+fn render_typed_child(label: &str, expr: &TypedExpr, depth: usize, out: &mut String) {
+    let indent = "  ".repeat(depth);
+    writeln!(out, "{indent}  {label}:").unwrap();
+    render_typed_expr_into(expr, depth + 2, out);
+}
+
+fn render_typed_expr_kind(kind: &TypedExprKind) -> &'static str {
+    match kind {
+        TypedExprKind::Var(_) => "var",
+        TypedExprKind::Lit(_) => "literal",
+        TypedExprKind::Lambda { .. } => "lambda",
+        TypedExprKind::Call { .. } => "call",
+        TypedExprKind::Tuple { .. } => "tuple",
+        TypedExprKind::Record { .. } => "record",
+        TypedExprKind::RecordUpdate { .. } => "record-update",
+        TypedExprKind::AdtCtor { .. } => "adt-ctor",
+        TypedExprKind::Field { .. } => "field",
+        TypedExprKind::MethodCall { .. } => "method-call",
+        TypedExprKind::Index { .. } => "index",
+        TypedExprKind::Range { .. } => "range",
+        TypedExprKind::Binary { .. } => "binary",
+        TypedExprKind::If { .. } => "if",
+        TypedExprKind::IfLet { .. } => "if-let",
+        TypedExprKind::Match { .. } => "match",
+        TypedExprKind::Nominal { .. } => "nominal",
+        TypedExprKind::Reset { .. } => "reset",
+        TypedExprKind::Shift { .. } => "shift",
+    }
+}
+
+fn render_field_access_kind(access: &FieldAccessKind) -> String {
+    match access {
+        FieldAccessKind::RecordOrNominal => "record-or-nominal".to_string(),
+        FieldAccessKind::TuplePositionalRow { index } => {
+            format!("tuple-positional-row index={index}")
+        }
+    }
 }
 
 fn render_pattern_facts(facts: &PatternFacts) -> String {

@@ -93,6 +93,30 @@ fn record_field_access_infers_type_and_validates_layout() {
 }
 
 #[test]
+fn typed_visual_renders_structured_expr_without_rust_debug_shape() {
+    let output = compile_expr(&Expr::field(
+        Expr::record(vec![("x", Expr::i64(1)), ("y", Expr::bool(true))]),
+        "y",
+    ));
+    let visual = &output.visual.typed;
+
+    assert!(visual.contains("node kind=field type=bool usage=obligation send=obligation"));
+    assert!(visual.contains("field y access=record-or-nominal"));
+    assert!(
+        visual.contains("node kind=record type={x: i64, y: bool} usage=obligation send=obligation")
+    );
+    assert!(visual.contains("field x:"));
+    assert!(visual.contains("literal 1"));
+    assert!(visual.contains("field y:"));
+    assert!(visual.contains("literal true"));
+    assert!(!visual.contains("TypedExpr"));
+    assert!(!visual.contains("TypedExprKind"));
+    assert!(!visual.contains("RecordOrNominal"));
+    assert!(!visual.contains("TuplePositionalRow"));
+    assert!(!visual.contains("param_ty"));
+}
+
+#[test]
 fn record_field_callable_method_call_uses_field_return_type() {
     let expr = Expr::method_call(
         Expr::record(vec![("apply", Expr::lambda("x", Expr::i64(7)))]),
