@@ -36,7 +36,10 @@ fn discharged_method_target_enters_core_without_wasm_terms() {
         name: "norm".to_string(),
         target: "math.Vec2.norm".to_string(),
     }));
-    assert!(!format!("{core:#?}").contains("funcref"));
+    assert!(!core
+        .ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::TargetSpecificTerm { .. })));
 }
 
 #[test]

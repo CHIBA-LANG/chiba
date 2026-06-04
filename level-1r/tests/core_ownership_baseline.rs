@@ -116,11 +116,18 @@ fn cont1_core_keeps_consumed_state_machine_layout_fact() {
 #[test]
 fn core_ir_facts_stay_target_neutral() {
     let output = compile_expr(&Expr::field(Expr::var("user"), "name"));
-    let rendered = format!("{:#?}", output.core);
+    let visual = &output.visual.core;
 
-    assert!(!rendered.contains("Wasm"));
-    assert!(!rendered.contains("WAT"));
-    assert!(!rendered.contains("Binaryen"));
-    assert!(!rendered.contains("funcref"));
-    assert!(!rendered.contains("eqref"));
+    assert!(visual.contains("static-row-access field=name"));
+    assert!(output
+        .core
+        .layouts
+        .iter()
+        .any(|layout| matches!(&layout.kind, LayoutKind::RowShape(_))));
+    assert!(!visual.contains("target-specific-term"));
+    assert!(!visual.contains("Wasm"));
+    assert!(!visual.contains("WAT"));
+    assert!(!visual.contains("Binaryen"));
+    assert!(!visual.contains("funcref"));
+    assert!(!visual.contains("eqref"));
 }

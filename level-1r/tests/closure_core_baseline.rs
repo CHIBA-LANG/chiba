@@ -96,10 +96,13 @@ fn core_ir_preserves_continuation_kind_without_backend_terms() {
         } if binder == "retry"
     )));
 
-    let rendered = format!("{:#?}", output.core);
-    assert!(!rendered.contains("Wasm"));
-    assert!(!rendered.contains("WAT"));
-    assert!(!rendered.contains("Binaryen"));
-    assert!(!rendered.contains("funcref"));
-    assert!(!rendered.contains("eqref"));
+    let visual = &output.visual.core;
+    assert!(visual.contains("prompt kind=contn"));
+    assert!(visual.contains("capture-continuation retry kind=contn"));
+    assert!(!visual.contains("target-specific-term"));
+    assert!(!visual.contains("Wasm"));
+    assert!(!visual.contains("WAT"));
+    assert!(!visual.contains("Binaryen"));
+    assert!(!visual.contains("funcref"));
+    assert!(!visual.contains("eqref"));
 }
