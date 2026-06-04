@@ -4,6 +4,30 @@ use chiba_level1r::closure::ClosureStorageKind;
 use chiba_level1r::usage::UseCount;
 use chiba_level1r::{compile_expr, Expr};
 
+fn alpha_expr_kind_name(kind: &AlphaExprKind) -> &'static str {
+    match kind {
+        AlphaExprKind::Var(_) => "var",
+        AlphaExprKind::Lit(_) => "literal",
+        AlphaExprKind::Lambda { .. } => "lambda",
+        AlphaExprKind::Call { .. } => "call",
+        AlphaExprKind::Tuple(_) => "tuple",
+        AlphaExprKind::Record(_) => "record",
+        AlphaExprKind::RecordUpdate { .. } => "record-update",
+        AlphaExprKind::AdtCtor { .. } => "adt-ctor",
+        AlphaExprKind::Field { .. } => "field",
+        AlphaExprKind::MethodCall { .. } => "method-call",
+        AlphaExprKind::Index { .. } => "index",
+        AlphaExprKind::Range { .. } => "range",
+        AlphaExprKind::Binary { .. } => "binary",
+        AlphaExprKind::If { .. } => "if",
+        AlphaExprKind::IfLet { .. } => "if-let",
+        AlphaExprKind::Match { .. } => "match",
+        AlphaExprKind::Nominal { .. } => "nominal",
+        AlphaExprKind::Reset { .. } => "reset",
+        AlphaExprKind::Shift { .. } => "shift",
+    }
+}
+
 #[test]
 fn local_shadowing_gets_distinct_stable_binder_ids() {
     let output = compile_expr(&Expr::lambda(
@@ -67,9 +91,12 @@ fn undefined_variable_gets_diagnostic_without_fake_binder() {
     match &facts.expr.kind {
         AlphaExprKind::Call { callee, .. } => match &callee.kind {
             AlphaExprKind::Var(var) => assert_eq!(var.target, None),
-            other => panic!("expected unresolved var, got {other:?}"),
+            other => panic!(
+                "expected unresolved var, got {}",
+                alpha_expr_kind_name(other)
+            ),
         },
-        other => panic!("expected call, got {other:?}"),
+        other => panic!("expected call, got {}", alpha_expr_kind_name(other)),
     }
 }
 
@@ -131,7 +158,10 @@ fn if_let_pattern_can_shadow_param_without_leaking_to_failure_branch() {
     assert_ne!(param, pattern);
 
     let AlphaExprKind::Lambda { body, .. } = &facts.expr.kind else {
-        panic!("expected lambda, got {:?}", facts.expr.kind);
+        panic!(
+            "expected lambda, got {}",
+            alpha_expr_kind_name(&facts.expr.kind)
+        );
     };
     let AlphaExprKind::IfLet {
         scrutinee,
@@ -140,20 +170,29 @@ fn if_let_pattern_can_shadow_param_without_leaking_to_failure_branch() {
         ..
     } = &body.kind
     else {
-        panic!("expected if-let, got {:?}", body.kind);
+        panic!("expected if-let, got {}", alpha_expr_kind_name(&body.kind));
     };
 
     match &scrutinee.kind {
         AlphaExprKind::Var(var) => assert_eq!(var.target, Some(param)),
-        other => panic!("expected scrutinee var, got {other:?}"),
+        other => panic!(
+            "expected scrutinee var, got {}",
+            alpha_expr_kind_name(other)
+        ),
     }
     match &then_branch.kind {
         AlphaExprKind::Var(var) => assert_eq!(var.target, Some(pattern)),
-        other => panic!("expected success branch var, got {other:?}"),
+        other => panic!(
+            "expected success branch var, got {}",
+            alpha_expr_kind_name(other)
+        ),
     }
     match &else_branch.kind {
         AlphaExprKind::Var(var) => assert_eq!(var.target, Some(param)),
-        other => panic!("expected failure branch var, got {other:?}"),
+        other => panic!(
+            "expected failure branch var, got {}",
+            alpha_expr_kind_name(other)
+        ),
     }
 }
 
