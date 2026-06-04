@@ -1163,10 +1163,25 @@ fn render_extern_import_wat(wat: &mut String, import: &BackendExternImport) {
 fn extern_import_wat_signature(
     signature: &str,
 ) -> Option<(Vec<&'static str>, Option<&'static str>)> {
-    match signature {
-        "i64_to_i64" | "I64_to_I64" | "i64_to_I64" | "I64_to_i64" => {
-            Some((vec!["i32"], Some("i32")))
-        }
+    let (params, result) = signature.split_once("_to_")?;
+    let params = if params.is_empty() {
+        Vec::new()
+    } else {
+        params
+            .split('_')
+            .map(extern_scalar_wat_type)
+            .collect::<Option<Vec<_>>>()?
+    };
+    let result = match result {
+        "unit" | "Unit" => None,
+        scalar => Some(extern_scalar_wat_type(scalar)?),
+    };
+    Some((params, result))
+}
+
+fn extern_scalar_wat_type(scalar: &str) -> Option<&'static str> {
+    match scalar {
+        "i64" | "I64" | "bool" | "Bool" => Some("i32"),
         _ => None,
     }
 }

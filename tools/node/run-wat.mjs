@@ -84,6 +84,9 @@ async function makeImports(wat, args) {
       level1r_inc(value) {
         return Number(value) + 1;
       },
+      level1r_add(left, right) {
+        return Number(left) + Number(right);
+      },
       share_state() {
         return 0n;
       },
