@@ -6,9 +6,9 @@ use crate::ast::{
     Pattern, SourceItem, SourceProgram, UseDecl, Visibility,
 };
 use crate::backend::{
-    backend_cache_key, emit_wasm_gc_with_params, link_backend_artifacts, BackendArtifact,
-    BackendCacheConfig, BackendCacheKey, BackendDiagnostic, BackendExternAbi, BackendExternImport,
-    BackendLinkDiagnostic, BackendLinkedBundle,
+    backend_cache_key, emit_wasm_gc_with_params, link_backend_artifacts, sort_dedup_imports,
+    BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendDiagnostic, BackendExternAbi,
+    BackendExternImport, BackendLinkDiagnostic, BackendLinkedBundle,
 };
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -554,11 +554,12 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         "ProgramDefOutput+EntrySelection+GlobalInitPlan",
         "BackendLinkedBundle",
         || {
-            let linked = link_backend_artifacts(program_backend_artifacts(
+            let mut linked = link_backend_artifacts(program_backend_artifacts(
                 &defs,
                 entry.as_deref(),
                 &global_init,
             ));
+            attach_program_extern_imports(&mut linked, &interface);
             lower_global_init_into_linked_wat(linked, &global_init)
         },
     );
@@ -590,7 +591,24 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
 
 fn backend_cache_config_for_interface(interface: &InterfaceSummary) -> BackendCacheConfig {
     let mut config = BackendCacheConfig::default();
-    config.imports = interface
+    config.imports = backend_extern_imports_for_interface(interface);
+    config
+}
+
+fn attach_program_extern_imports(bundle: &mut BackendLinkedBundle, interface: &InterfaceSummary) {
+    let mut imports = backend_extern_imports_for_interface(interface);
+    if imports.is_empty() {
+        return;
+    }
+    bundle.manifest.imports.append(&mut imports);
+    sort_dedup_imports(&mut bundle.manifest.imports);
+    if bundle.diagnostics.is_empty() && !bundle.linked_wat.is_empty() {
+        insert_extern_import_comments(&mut bundle.linked_wat, &bundle.manifest.imports);
+    }
+}
+
+fn backend_extern_imports_for_interface(interface: &InterfaceSummary) -> Vec<BackendExternImport> {
+    let mut imports = interface
         .functions
         .iter()
         .filter_map(|function| {
@@ -605,8 +623,34 @@ fn backend_cache_config_for_interface(interface: &InterfaceSummary) -> BackendCa
                 ),
             })
         })
-        .collect();
-    config
+        .collect::<Vec<_>>();
+    sort_dedup_imports(&mut imports);
+    imports
+}
+
+fn insert_extern_import_comments(linked_wat: &mut String, imports: &[BackendExternImport]) {
+    let Some(body) = linked_wat.strip_prefix("(module\n") else {
+        return;
+    };
+    let mut next = String::from("(module\n");
+    for import in imports {
+        next.push_str(&format!(
+            "  ;; extern-import {} module={} name={} signature={}\n",
+            render_backend_extern_abi(import.abi),
+            import.module,
+            import.name,
+            import.signature_hash
+        ));
+    }
+    next.push_str(body);
+    *linked_wat = next;
+}
+
+fn render_backend_extern_abi(abi: BackendExternAbi) -> &'static str {
+    match abi {
+        BackendExternAbi::Wasi => "wasi",
+        BackendExternAbi::C => "c",
+    }
 }
 
 fn backend_extern_abi(abi: ExternAbi) -> BackendExternAbi {
@@ -2075,6 +2119,7 @@ impl ProgramCompileOutput {
         out.push_str(&render_interface_summary_summary(&self.interface));
         out.push_str(&format!("  entry={}\n", render_program_entry(&self.entry)));
         out.push_str(&render_program_diagnostics_summary(&self.diagnostics));
+        out.push_str(&render_program_backend_link_summary(&self.backend_link));
         out.push_str("  passes:\n");
         for event in &self.passes.events {
             out.push_str(&format!(
@@ -2083,6 +2128,69 @@ impl ProgramCompileOutput {
             ));
         }
         out
+    }
+}
+
+fn render_program_backend_link_summary(bundle: &BackendLinkedBundle) -> String {
+    let mut out = String::new();
+    out.push_str("  backend-link:\n");
+    out.push_str(&format!(
+        "    linked-wat-lines={}\n",
+        bundle.linked_wat.lines().count()
+    ));
+    out.push_str(&format!(
+        "    manifest-imports={}\n",
+        bundle.manifest.imports.len()
+    ));
+    for import in &bundle.manifest.imports {
+        out.push_str(&format!(
+            "      import {} module={} name={} signature={}\n",
+            render_backend_extern_abi(import.abi),
+            import.module,
+            import.name,
+            import.signature_hash
+        ));
+    }
+    out.push_str(&format!(
+        "    manifest-entries={}\n",
+        bundle.manifest.entries.len()
+    ));
+    out.push_str(&format!("    diagnostics={}\n", bundle.diagnostics.len()));
+    for diagnostic in &bundle.diagnostics {
+        out.push_str(&format!(
+            "      diagnostic {}\n",
+            render_backend_link_diagnostic(diagnostic)
+        ));
+    }
+    out
+}
+
+fn render_backend_link_diagnostic(diagnostic: &BackendLinkDiagnostic) -> String {
+    match diagnostic {
+        BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index } => {
+            format!("artifact emit failed {artifact_index}")
+        }
+        BackendLinkDiagnostic::DuplicateFinalSymbol { symbol } => {
+            format!("duplicate final symbol {symbol}")
+        }
+        BackendLinkDiagnostic::UnsupportedStaticInitializerLowering { static_name, expr } => {
+            format!("unsupported static initializer lowering {static_name}: {expr}")
+        }
+        BackendLinkDiagnostic::TargetMismatch {
+            artifact_index,
+            expected,
+            actual,
+        } => format!(
+            "target mismatch {artifact_index}: expected {}, actual {}",
+            render_backend_target(*expected),
+            render_backend_target(*actual)
+        ),
+    }
+}
+
+fn render_backend_target(target: crate::backend::BackendTarget) -> &'static str {
+    match target {
+        crate::backend::BackendTarget::WasmGc => "wasm-gc",
     }
 }
 

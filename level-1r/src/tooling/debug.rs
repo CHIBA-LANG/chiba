@@ -5,7 +5,7 @@ use crate::ast::{
     render_source_binary_op, render_source_expr, render_source_literal, render_source_pattern, Expr,
 };
 use crate::backend::{
-    BackendArtifact, BackendCacheKey, BackendDiagnostic, BackendLinkDiagnostic,
+    BackendArtifact, BackendCacheKey, BackendDiagnostic, BackendExternAbi, BackendLinkDiagnostic,
     BackendLinkedBundle, BackendManifest, BackendTarget,
 };
 use crate::closure::{ClosureFacts, ClosureStorageKind};
@@ -868,6 +868,18 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
 }
 
 fn render_backend_manifest(out: &mut String, manifest: &BackendManifest) {
+    writeln!(out, "manifest-imports={}", manifest.imports.len()).unwrap();
+    for import in &manifest.imports {
+        writeln!(
+            out,
+            "import {} module={} name={} signature={}",
+            render_backend_extern_abi(import.abi),
+            import.module,
+            import.name,
+            import.signature_hash
+        )
+        .unwrap();
+    }
     writeln!(out, "manifest-entries={}", manifest.entries.len()).unwrap();
     for entry in &manifest.entries {
         writeln!(
@@ -882,6 +894,13 @@ fn render_backend_manifest(out: &mut String, manifest: &BackendManifest) {
                 .unwrap_or_else(|| "none".to_string())
         )
         .unwrap();
+    }
+}
+
+fn render_backend_extern_abi(abi: BackendExternAbi) -> &'static str {
+    match abi {
+        BackendExternAbi::Wasi => "wasi",
+        BackendExternAbi::C => "c",
     }
 }
 

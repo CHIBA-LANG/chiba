@@ -1607,6 +1607,30 @@ def main() = 0
     assert_ne!(wasi.backend_cache_key, env.backend_cache_key);
     assert_eq!(env.backend_cache_key, env_lower.backend_cache_key);
     assert_ne!(wasi.backend_cache_key, renamed.backend_cache_key);
+    assert_eq!(wasi.backend_link.manifest.imports.len(), 1);
+    assert_eq!(
+        wasi.backend_link.manifest.imports[0].module,
+        "wasi_snapshot_preview1"
+    );
+    assert_eq!(wasi.backend_link.manifest.imports[0].name, "fd_write");
+    assert_eq!(
+        wasi.backend_link.manifest.imports[0].signature_hash,
+        "i64_to_i64"
+    );
+    assert!(wasi.backend_link.linked_wat.contains(
+        ";; extern-import wasi module=wasi_snapshot_preview1 name=fd_write signature=i64_to_i64"
+    ));
+    assert!(env
+        .backend_link
+        .linked_wat
+        .contains(";; extern-import c module=env name=fd_write signature=i64_to_i64"));
+    assert_eq!(
+        env.backend_link.linked_wat,
+        env_lower.backend_link.linked_wat
+    );
+    assert!(wasi
+        .render_summary()
+        .contains("import wasi module=wasi_snapshot_preview1 name=fd_write signature=i64_to_i64"));
     assert!(wasi.diagnostics.is_empty());
     assert!(env.diagnostics.is_empty());
     assert!(renamed.diagnostics.is_empty());

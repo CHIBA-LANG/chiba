@@ -33,6 +33,7 @@ pub enum BackendTarget {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BackendManifest {
     pub entries: Vec<BackendManifestEntry>,
+    pub imports: Vec<BackendExternImport>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -329,7 +330,10 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
     for op in &core.ops {
         collect_manifest_entries(op, core, &mut entries);
     }
-    BackendManifest { entries }
+    BackendManifest {
+        entries,
+        imports: Vec::new(),
+    }
 }
 
 fn collect_manifest_entries(
@@ -1521,6 +1525,7 @@ pub fn link_backend_artifacts(mut artifacts: Vec<BackendArtifact>) -> BackendLin
     let mut diagnostics = Vec::new();
     let mut seen_symbols = BTreeSet::new();
     let mut entries = Vec::new();
+    let mut imports = Vec::new();
 
     for (artifact_index, artifact) in artifacts.iter().enumerate() {
         if artifact.target != target {
@@ -1541,15 +1546,17 @@ pub fn link_backend_artifacts(mut artifacts: Vec<BackendArtifact>) -> BackendLin
             }
             entries.push(entry.clone());
         }
+        imports.extend(artifact.manifest.imports.iter().cloned());
     }
 
     entries.sort_by(|left, right| left.final_symbol.cmp(&right.final_symbol));
+    sort_dedup_imports(&mut imports);
 
     if !diagnostics.is_empty() {
         return BackendLinkedBundle {
             target,
             linked_wat: String::new(),
-            manifest: BackendManifest { entries },
+            manifest: BackendManifest { entries, imports },
             diagnostics,
         };
     }
@@ -1571,6 +1578,15 @@ pub fn link_backend_artifacts(mut artifacts: Vec<BackendArtifact>) -> BackendLin
     });
 
     let mut linked_wat = String::from("(module\n");
+    for import in &imports {
+        linked_wat.push_str(&format!(
+            "  ;; extern-import {} module={} name={} signature={}\n",
+            canonical_abi(import.abi),
+            escape_wat_comment(&import.module),
+            escape_wat_comment(&import.name),
+            escape_wat_comment(&import.signature_hash)
+        ));
+    }
     for (artifact_index, artifact) in artifacts.iter().enumerate() {
         linked_wat.push_str(&format!("  ;; linked artifact {artifact_index}\n"));
         let lines = artifact.wat.lines().collect::<Vec<_>>();
@@ -1590,7 +1606,7 @@ pub fn link_backend_artifacts(mut artifacts: Vec<BackendArtifact>) -> BackendLin
     BackendLinkedBundle {
         target,
         linked_wat,
-        manifest: BackendManifest { entries },
+        manifest: BackendManifest { entries, imports },
         diagnostics,
     }
 }
@@ -1630,7 +1646,8 @@ pub fn backend_cache_key(
     encoded.push('\n');
 
     let mut imports = config.imports.clone();
-    imports.sort_by(|left, right| canonical_import(left).cmp(&canonical_import(right)));
+    imports.extend(bundle.manifest.imports.iter().cloned());
+    sort_dedup_imports(&mut imports);
     for import in &imports {
         encoded.push_str("import=");
         encoded.push_str(&canonical_import(import));
@@ -1662,6 +1679,11 @@ pub fn backend_cache_key(
         target: bundle.target,
         digest: stable_digest(&encoded),
     }
+}
+
+pub fn sort_dedup_imports(imports: &mut Vec<BackendExternImport>) {
+    imports.sort_by(|left, right| canonical_import(left).cmp(&canonical_import(right)));
+    imports.dedup_by(|left, right| canonical_import(left) == canonical_import(right));
 }
 
 fn backend_target_name(target: BackendTarget) -> &'static str {
