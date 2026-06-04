@@ -243,7 +243,10 @@ fn control_visual_dump_shows_replay_safety_color() {
 
     let visual = output.render_visual();
     assert!(visual.contains("control:"));
-    assert!(visual.contains("replay_safety: Safe"));
+    assert!(visual.contains("continuation retry kind=contn"));
+    assert!(visual.contains("replay=safe"));
+    assert!(!output.visual.control.contains("ControlFacts"));
+    assert!(!output.visual.control.contains("replay_safety"));
 }
 
 #[test]

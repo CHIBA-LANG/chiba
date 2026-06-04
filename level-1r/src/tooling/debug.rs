@@ -9,7 +9,7 @@ use crate::backend::{
 use crate::closure::ClosureFacts;
 use crate::closure_core_usage::ClosureCoreUsageFacts;
 use crate::closure_simplify::ClosureSimplificationFacts;
-use crate::control::{ContinuationKind, ControlFacts};
+use crate::control::{ContinuationKind, ControlError, ControlFacts, ReplaySafety};
 use crate::core::{
     CompilerIntrinsic, CoreDiagnostic, CoreProgram, CoreValidation, OwnershipDecision,
 };
@@ -31,7 +31,7 @@ use crate::template::{
     TemplateFacts, TemplateObligation, TemplateParamSource,
 };
 use crate::template_audit::TemplateAuditReport;
-use crate::typed::TypedExpr;
+use crate::typed::{RecordTypeField, Type, TypedExpr};
 use crate::usage::{UsageFacts, UseCount};
 use crate::usage_audit::UsageAuditReport;
 
@@ -178,7 +178,7 @@ pub fn visual_report(
         typed_signature: typed_signature.to_string(),
         typed: format!("{typed:#?}"),
         pattern: format!("{pattern:#?}"),
-        control: format!("{control:#?}"),
+        control: render_control_facts(control),
         usage: format!("{usage:#?}"),
         cps: cps.to_string(),
         cps_usage: render_cps_usage_facts(cps_usage),
@@ -527,6 +527,84 @@ fn render_cps_usage_facts(facts: &CpsUsageFacts) -> String {
         .unwrap();
     }
     out
+}
+
+fn render_control_facts(facts: &ControlFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "continuations={}", facts.continuations.len()).unwrap();
+    for continuation in &facts.continuations {
+        writeln!(
+            out,
+            "continuation {} kind={} input={} answer={} usage={} replay={}",
+            continuation.binder,
+            render_continuation_kind(continuation.kind),
+            render_type(&continuation.input),
+            render_type(&continuation.answer),
+            render_usage_color(continuation.usage),
+            render_replay_safety(continuation.replay_safety)
+        )
+        .unwrap();
+    }
+    writeln!(out, "errors={}", facts.errors.len()).unwrap();
+    for error in &facts.errors {
+        writeln!(out, "error {}", render_control_error(error)).unwrap();
+    }
+    out
+}
+
+fn render_control_error(error: &ControlError) -> String {
+    match error {
+        ControlError::ShiftOutsideReset { binder } => format!("shift outside reset {binder}"),
+        ControlError::UnsafeMultiResumeCapture { binder } => {
+            format!("unsafe multi-resume capture {binder}")
+        }
+    }
+}
+
+fn render_replay_safety(replay: ReplaySafety) -> &'static str {
+    match replay {
+        ReplaySafety::Safe => "safe",
+        ReplaySafety::Unsafe => "unsafe",
+        ReplaySafety::RollbackRegion => "rollback-region",
+    }
+}
+
+fn render_type(ty: &Type) -> String {
+    match ty {
+        Type::Unknown => "_".to_string(),
+        Type::I64 => "i64".to_string(),
+        Type::Bool => "bool".to_string(),
+        Type::Tuple(fields) => {
+            let fields = fields
+                .iter()
+                .map(render_type)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("Tuple[{fields}]")
+        }
+        Type::Record(fields) => render_record_type(fields),
+        Type::Adt { name, .. } | Type::Nominal(name) => name.clone(),
+        Type::Func(param, result) => {
+            format!("({}) -> {}", render_type(param), render_type(result))
+        }
+        Type::Continuation {
+            multi,
+            input,
+            answer,
+        } => {
+            let name = if *multi { "ContN" } else { "Cont1" };
+            format!("{name}[{}, {}]", render_type(input), render_type(answer))
+        }
+    }
+}
+
+fn render_record_type(fields: &[RecordTypeField]) -> String {
+    let fields = fields
+        .iter()
+        .map(|field| format!("{}: {}", field.name, render_type(&field.ty)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{{{fields}}}")
 }
 
 fn render_continuation_simplification(facts: &ContinuationSimplificationFacts) -> String {
