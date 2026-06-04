@@ -1,20 +1,31 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ast::{Expr, MatchArm, RecordField, SourceItem, SourceProgram};
+use crate::ast::{
+    render_source_expr, Expr, MatchArm, Pattern, RecordField, SourceItem, SourceProgram,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GlobalInitPlan {
     pub statics: Vec<GlobalStatic>,
     pub init_order: Vec<String>,
+    pub init_order_ids: Vec<GlobalStaticId>,
     pub diagnostics: Vec<GlobalInitDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct GlobalStaticId {
+    pub owner: String,
+    pub name: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GlobalStatic {
+    pub owner: String,
     pub name: String,
     pub ty: Option<String>,
     pub body: Expr,
     pub dependencies: Vec<String>,
+    pub dependency_ids: Vec<GlobalStaticId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,13 +51,18 @@ pub enum GlobalInitDiagnostic {
 }
 
 pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
+    let owner = program
+        .namespace
+        .as_ref()
+        .map(|namespace| namespace.dotted())
+        .unwrap_or_else(|| "root".to_string());
     let mut function_names = BTreeSet::new();
     let mut static_names = BTreeSet::new();
     let mut diagnostics = Vec::new();
 
     for item in &program.items {
         match item {
-            SourceItem::Def { name, .. } => {
+            SourceItem::Def { name, .. } | SourceItem::ExternDef { name, .. } => {
                 function_names.insert(name.clone());
             }
             SourceItem::StaticValue { name, .. } => {
@@ -70,16 +86,22 @@ pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
                 collect_expr_vars(body, &mut refs);
                 let dependencies = refs
                     .into_iter()
-                    .filter(|dep| static_names.contains(dep) && dep != name)
+                    .filter(|dep| static_names.contains(dep))
+                    .collect::<Vec<_>>();
+                let dependency_ids = dependencies
+                    .iter()
+                    .map(|dep| GlobalStaticId::new(owner.clone(), dep.clone()))
                     .collect::<Vec<_>>();
                 Some(GlobalStatic {
+                    owner: owner.clone(),
                     name: name.clone(),
                     ty: ty.clone(),
                     body: body.clone(),
                     dependencies,
+                    dependency_ids,
                 })
             }
-            SourceItem::Def { .. } => None,
+            SourceItem::Def { .. } | SourceItem::ExternDef { .. } => None,
         })
         .collect::<Vec<_>>();
 
@@ -87,26 +109,47 @@ pub fn analyze_global_init(program: &SourceProgram) -> GlobalInitPlan {
         validate_static_initializer(static_value, &statics, &static_names, &mut diagnostics);
     }
 
-    let mut graph = BTreeMap::<String, Vec<String>>::new();
+    let mut graph = BTreeMap::<GlobalStaticId, Vec<GlobalStaticId>>::new();
     for static_value in &statics {
-        let deps = graph.entry(static_value.name.clone()).or_default();
-        for dep in &static_value.dependencies {
+        let deps = graph
+            .entry(GlobalStaticId::new(
+                static_value.owner.clone(),
+                static_value.name.clone(),
+            ))
+            .or_default();
+        for dep in &static_value.dependency_ids {
             if !deps.contains(dep) {
                 deps.push(dep.clone());
             }
         }
     }
-    let (init_order, cycles) = topo_sort(&graph);
+    let (init_order_ids, cycles) = topo_sort(&graph);
     diagnostics.extend(
         cycles
             .into_iter()
-            .map(|cycle| GlobalInitDiagnostic::StaticInitCycle { cycle }),
+            .map(|cycle| GlobalInitDiagnostic::StaticInitCycle {
+                cycle: cycle.into_iter().map(|id| id.name).collect(),
+            }),
     );
+    let init_order = init_order_ids
+        .iter()
+        .map(|id| id.name.clone())
+        .collect::<Vec<_>>();
 
     GlobalInitPlan {
         statics,
         init_order,
+        init_order_ids,
         diagnostics,
+    }
+}
+
+impl GlobalStaticId {
+    pub fn new(owner: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            owner: owner.into(),
+            name: name.into(),
+        }
     }
 }
 
@@ -116,24 +159,33 @@ fn validate_static_initializer(
     static_names: &BTreeSet<String>,
     diagnostics: &mut Vec<GlobalInitDiagnostic>,
 ) {
-    validate_static_initializer_expr(
+    validate_static_initializer_expr_scoped(
         &static_value.body,
         &static_value.name,
         statics,
         static_names,
         diagnostics,
+        &BTreeSet::new(),
     );
 }
 
-fn validate_static_initializer_expr(
+fn validate_static_initializer_expr_scoped(
     expr: &Expr,
     static_name: &str,
     statics: &[GlobalStatic],
     static_names: &BTreeSet<String>,
     diagnostics: &mut Vec<GlobalInitDiagnostic>,
+    bound: &BTreeSet<String>,
 ) -> bool {
     match expr {
-        Expr::Var(_) => true,
+        Expr::Var(name) if bound.contains(name) || static_names.contains(name) => true,
+        Expr::Var(_) => {
+            diagnostics.push(GlobalInitDiagnostic::UnsupportedStaticInitializer {
+                static_name: static_name.to_string(),
+                expr: render_source_expr(expr),
+            });
+            false
+        }
         Expr::Lit(_) => true,
         Expr::AdtCtor {
             data,
@@ -151,112 +203,140 @@ fn validate_static_initializer_expr(
                 supported = false;
             }
             for arg in args {
-                supported &= validate_static_initializer_expr(
+                supported &= validate_static_initializer_expr_scoped(
                     arg,
                     static_name,
                     statics,
                     static_names,
                     diagnostics,
+                    bound,
                 );
             }
             supported
         }
-        Expr::Field { receiver, name } => {
+        Expr::Field { receiver, name, .. } => {
             if let Some(value) = static_record_field_expr(receiver, name, statics) {
-                validate_static_initializer_expr(
+                validate_static_initializer_expr_scoped(
                     value,
                     static_name,
                     statics,
                     static_names,
                     diagnostics,
+                    bound,
                 )
             } else {
                 diagnostics.push(GlobalInitDiagnostic::UnsupportedStaticInitializer {
                     static_name: static_name.to_string(),
-                    expr: format!("{expr:?}"),
+                    expr: render_source_expr(expr),
                 });
                 false
             }
         }
         Expr::Binary { lhs, rhs, .. } => {
-            validate_static_initializer_expr(lhs, static_name, statics, static_names, diagnostics)
-                & validate_static_initializer_expr(
-                    rhs,
-                    static_name,
-                    statics,
-                    static_names,
-                    diagnostics,
-                )
+            validate_static_initializer_expr_scoped(
+                lhs,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+                bound,
+            ) & validate_static_initializer_expr_scoped(
+                rhs,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+                bound,
+            )
         }
         Expr::If {
             cond,
             then_branch,
             else_branch,
         } => {
-            validate_static_initializer_expr(cond, static_name, statics, static_names, diagnostics)
-                & validate_static_initializer_expr(
-                    then_branch,
-                    static_name,
-                    statics,
-                    static_names,
-                    diagnostics,
-                )
-                & validate_static_initializer_expr(
-                    else_branch,
-                    static_name,
-                    statics,
-                    static_names,
-                    diagnostics,
-                )
-        }
-        Expr::IfLet {
-            pattern: _,
-            scrutinee,
-            then_branch,
-            else_branch,
-        } => {
-            validate_static_initializer_expr(
-                scrutinee,
+            validate_static_initializer_expr_scoped(
+                cond,
                 static_name,
                 statics,
                 static_names,
                 diagnostics,
-            ) & validate_static_initializer_expr(
+                bound,
+            ) & validate_static_initializer_expr_scoped(
                 then_branch,
                 static_name,
                 statics,
                 static_names,
                 diagnostics,
-            ) & validate_static_initializer_expr(
+                bound,
+            ) & validate_static_initializer_expr_scoped(
                 else_branch,
                 static_name,
                 statics,
                 static_names,
                 diagnostics,
+                bound,
             )
         }
-        Expr::Match { scrutinee, arms } => {
-            let mut supported = validate_static_initializer_expr(
+        Expr::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => {
+            let then_bound = with_pattern_bindings(bound, pattern);
+            validate_static_initializer_expr_scoped(
                 scrutinee,
                 static_name,
                 statics,
                 static_names,
                 diagnostics,
+                bound,
+            ) & validate_static_initializer_expr_scoped(
+                then_branch,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+                &then_bound,
+            ) & validate_static_initializer_expr_scoped(
+                else_branch,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+                bound,
+            )
+        }
+        Expr::Match { scrutinee, arms } => {
+            let mut supported = validate_static_initializer_expr_scoped(
+                scrutinee,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+                bound,
             );
-            for MatchArm { body, .. } in arms {
-                supported &= validate_static_initializer_expr(
+            for MatchArm { pattern, body } in arms {
+                let arm_bound = with_pattern_bindings(bound, pattern);
+                supported &= validate_static_initializer_expr_scoped(
                     body,
                     static_name,
                     statics,
                     static_names,
                     diagnostics,
+                    &arm_bound,
                 );
             }
             supported
         }
-        Expr::Nominal { expr, .. } => {
-            validate_static_initializer_expr(expr, static_name, statics, static_names, diagnostics)
-        }
+        Expr::Nominal { expr, .. } => validate_static_initializer_expr_scoped(
+            expr,
+            static_name,
+            statics,
+            static_names,
+            diagnostics,
+            bound,
+        ),
         Expr::Tuple { .. }
         | Expr::Record { .. }
         | Expr::RecordUpdate { .. }
@@ -270,7 +350,7 @@ fn validate_static_initializer_expr(
         | Expr::Shift { .. } => {
             diagnostics.push(GlobalInitDiagnostic::UnsupportedStaticInitializer {
                 static_name: static_name.to_string(),
-                expr: format!("{expr:?}"),
+                expr: render_source_expr(expr),
             });
             false
         }
@@ -310,8 +390,10 @@ fn static_record_field_expr_seen<'a>(
     }
 }
 
-fn topo_sort(graph: &BTreeMap<String, Vec<String>>) -> (Vec<String>, Vec<Vec<String>>) {
-    let mut marks = BTreeMap::<String, Mark>::new();
+fn topo_sort(
+    graph: &BTreeMap<GlobalStaticId, Vec<GlobalStaticId>>,
+) -> (Vec<GlobalStaticId>, Vec<Vec<GlobalStaticId>>) {
+    let mut marks = BTreeMap::<GlobalStaticId, Mark>::new();
     let mut order = Vec::new();
     let mut cycles = Vec::new();
     let mut stack = Vec::new();
@@ -329,19 +411,19 @@ fn topo_sort(graph: &BTreeMap<String, Vec<String>>) -> (Vec<String>, Vec<Vec<Str
 }
 
 fn visit(
-    name: &str,
-    graph: &BTreeMap<String, Vec<String>>,
-    marks: &mut BTreeMap<String, Mark>,
-    stack: &mut Vec<String>,
-    order: &mut Vec<String>,
-    cycles: &mut Vec<Vec<String>>,
+    name: &GlobalStaticId,
+    graph: &BTreeMap<GlobalStaticId, Vec<GlobalStaticId>>,
+    marks: &mut BTreeMap<GlobalStaticId, Mark>,
+    stack: &mut Vec<GlobalStaticId>,
+    order: &mut Vec<GlobalStaticId>,
+    cycles: &mut Vec<Vec<GlobalStaticId>>,
 ) {
     match marks.get(name) {
         Some(Mark::Done) => return,
         Some(Mark::Visiting) => {
             if let Some(start) = stack.iter().position(|entry| entry == name) {
                 let mut cycle = stack[start..].to_vec();
-                cycle.push(name.to_string());
+                cycle.push(name.clone());
                 if !cycles.contains(&cycle) {
                     cycles.push(cycle);
                 }
@@ -351,16 +433,16 @@ fn visit(
         None => {}
     }
 
-    marks.insert(name.to_string(), Mark::Visiting);
-    stack.push(name.to_string());
+    marks.insert(name.clone(), Mark::Visiting);
+    stack.push(name.clone());
     if let Some(deps) = graph.get(name) {
         for dep in deps {
             visit(dep, graph, marks, stack, order, cycles);
         }
     }
     stack.pop();
-    marks.insert(name.to_string(), Mark::Done);
-    order.push(name.to_string());
+    marks.insert(name.clone(), Mark::Done);
+    order.push(name.clone());
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -370,83 +452,115 @@ enum Mark {
 }
 
 fn collect_expr_vars(expr: &Expr, refs: &mut BTreeSet<String>) {
+    collect_expr_vars_scoped(expr, refs, &BTreeSet::new());
+}
+
+fn collect_expr_vars_scoped(expr: &Expr, refs: &mut BTreeSet<String>, bound: &BTreeSet<String>) {
     match expr {
         Expr::Var(name) => {
-            refs.insert(name.clone());
+            if !bound.contains(name) {
+                refs.insert(name.clone());
+            }
         }
         Expr::Lit(_) => {}
-        Expr::Lambda { body, .. } => collect_expr_vars(body, refs),
+        Expr::Lambda { param, body } => {
+            let next_bound = with_bound_names(bound, std::iter::once(param.clone()));
+            collect_expr_vars_scoped(body, refs, &next_bound);
+        }
         Expr::Call { callee, args } => {
-            collect_expr_vars(callee, refs);
-            collect_exprs(args, refs);
+            collect_expr_vars_scoped(callee, refs, bound);
+            collect_exprs(args, refs, bound);
         }
-        Expr::Instantiate { callee, .. } => collect_expr_vars(callee, refs),
-        Expr::Tuple(fields) => collect_exprs(fields, refs),
-        Expr::Record(fields) => collect_record_fields(fields, refs),
+        Expr::Instantiate { callee, .. } => collect_expr_vars_scoped(callee, refs, bound),
+        Expr::Tuple(fields) => collect_exprs(fields, refs, bound),
+        Expr::Record(fields) => collect_record_fields(fields, refs, bound),
         Expr::RecordUpdate { base, fields } => {
-            collect_expr_vars(base, refs);
-            collect_record_fields(fields, refs);
+            collect_expr_vars_scoped(base, refs, bound);
+            collect_record_fields(fields, refs, bound);
         }
-        Expr::AdtCtor { args, .. } => collect_exprs(args, refs),
-        Expr::Field { receiver, .. } => collect_expr_vars(receiver, refs),
+        Expr::AdtCtor { args, .. } => collect_exprs(args, refs, bound),
+        Expr::Field { receiver, .. } => collect_expr_vars_scoped(receiver, refs, bound),
         Expr::MethodCall { receiver, args, .. } => {
-            collect_expr_vars(receiver, refs);
-            collect_exprs(args, refs);
+            collect_expr_vars_scoped(receiver, refs, bound);
+            collect_exprs(args, refs, bound);
         }
         Expr::Index { receiver, index } => {
-            collect_expr_vars(receiver, refs);
-            collect_expr_vars(index, refs);
+            collect_expr_vars_scoped(receiver, refs, bound);
+            collect_expr_vars_scoped(index, refs, bound);
         }
         Expr::Range { start, end } => {
-            collect_expr_vars(start, refs);
-            collect_expr_vars(end, refs);
+            collect_expr_vars_scoped(start, refs, bound);
+            collect_expr_vars_scoped(end, refs, bound);
         }
         Expr::Binary { lhs, rhs, .. } => {
-            collect_expr_vars(lhs, refs);
-            collect_expr_vars(rhs, refs);
+            collect_expr_vars_scoped(lhs, refs, bound);
+            collect_expr_vars_scoped(rhs, refs, bound);
         }
         Expr::If {
             cond,
             then_branch,
             else_branch,
         } => {
-            collect_expr_vars(cond, refs);
-            collect_expr_vars(then_branch, refs);
-            collect_expr_vars(else_branch, refs);
+            collect_expr_vars_scoped(cond, refs, bound);
+            collect_expr_vars_scoped(then_branch, refs, bound);
+            collect_expr_vars_scoped(else_branch, refs, bound);
         }
         Expr::IfLet {
+            pattern,
             scrutinee,
             then_branch,
             else_branch,
-            ..
         } => {
-            collect_expr_vars(scrutinee, refs);
-            collect_expr_vars(then_branch, refs);
-            collect_expr_vars(else_branch, refs);
+            collect_expr_vars_scoped(scrutinee, refs, bound);
+            let then_bound = with_pattern_bindings(bound, pattern);
+            collect_expr_vars_scoped(then_branch, refs, &then_bound);
+            collect_expr_vars_scoped(else_branch, refs, bound);
         }
         Expr::Match { scrutinee, arms } => {
-            collect_expr_vars(scrutinee, refs);
-            collect_match_arms(arms, refs);
+            collect_expr_vars_scoped(scrutinee, refs, bound);
+            collect_match_arms(arms, refs, bound);
         }
-        Expr::Nominal { expr, .. } => collect_expr_vars(expr, refs),
-        Expr::Reset { body, .. } | Expr::Shift { body, .. } => collect_expr_vars(body, refs),
+        Expr::Nominal { expr, .. } => collect_expr_vars_scoped(expr, refs, bound),
+        Expr::Reset { body, .. } => collect_expr_vars_scoped(body, refs, bound),
+        Expr::Shift { binder, body } => {
+            let next_bound = with_bound_names(bound, std::iter::once(binder.clone()));
+            collect_expr_vars_scoped(body, refs, &next_bound);
+        }
     }
 }
 
-fn collect_exprs(exprs: &[Expr], refs: &mut BTreeSet<String>) {
+fn collect_exprs(exprs: &[Expr], refs: &mut BTreeSet<String>, bound: &BTreeSet<String>) {
     for expr in exprs {
-        collect_expr_vars(expr, refs);
+        collect_expr_vars_scoped(expr, refs, bound);
     }
 }
 
-fn collect_record_fields(fields: &[RecordField], refs: &mut BTreeSet<String>) {
+fn collect_record_fields(
+    fields: &[RecordField],
+    refs: &mut BTreeSet<String>,
+    bound: &BTreeSet<String>,
+) {
     for field in fields {
-        collect_expr_vars(&field.value, refs);
+        collect_expr_vars_scoped(&field.value, refs, bound);
     }
 }
 
-fn collect_match_arms(arms: &[MatchArm], refs: &mut BTreeSet<String>) {
+fn collect_match_arms(arms: &[MatchArm], refs: &mut BTreeSet<String>, bound: &BTreeSet<String>) {
     for arm in arms {
-        collect_expr_vars(&arm.body, refs);
+        let arm_bound = with_pattern_bindings(bound, &arm.pattern);
+        collect_expr_vars_scoped(&arm.body, refs, &arm_bound);
     }
+}
+
+fn with_pattern_bindings(bound: &BTreeSet<String>, pattern: &Pattern) -> BTreeSet<String> {
+    with_bound_names(bound, pattern.bindings())
+}
+
+fn with_bound_names(
+    bound: &BTreeSet<String>,
+    names: impl IntoIterator<Item = String>,
+) -> BTreeSet<String> {
+    let mut next = bound.clone();
+    next.extend(names);
+    next
 }

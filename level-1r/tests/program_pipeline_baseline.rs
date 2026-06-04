@@ -1,11 +1,13 @@
 use chiba_level1r::ast::{
-    DataDecl, DataVariant, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
-    TypeDecl, TypeField, UseDecl, Visibility,
+    DataDecl, DataVariant, ExternAbi, ExternDecl, MethodReceiver, NamespaceDecl, ParamDecl,
+    SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
 };
+use chiba_level1r::core::CoreOp;
 use chiba_level1r::pattern::PatternDiagnostic;
 use chiba_level1r::typed::{Type, TypedExprKind};
 use chiba_level1r::{
-    build_interface_summary, compile_program, compile_program_bundle, project_surface_many, Expr,
+    build_interface_summary, compile_program, compile_program_bundle,
+    compile_program_with_interface, parse_source_program, project_surface_many, Expr,
     ProgramDiagnostic,
 };
 use std::process::Command;
@@ -29,6 +31,16 @@ fn static_value(name: &str, ty: Option<&str>, body: Expr) -> SourceItem {
         visibility: Visibility::Public,
         body,
     }
+}
+
+fn extern_def(name: &str, abi: ExternAbi, symbol: &str) -> SourceItem {
+    SourceItem::extern_def(
+        name,
+        Vec::new(),
+        Vec::new(),
+        Some("i64".to_string()),
+        ExternDecl::new(abi, symbol),
+    )
 }
 
 #[test]
@@ -327,8 +339,9 @@ fn program_tuple_field_return_lowers_to_executable_wat_value() {
         matches!(
             op,
             chiba_level1r::core::CoreOp::ReturnValue(
-                chiba_level1r::core::CoreValue::TupleField { tuple, field }
+                chiba_level1r::core::CoreValue::TupleField { tuple, field, field_index }
             ) if field == "_2"
+                && *field_index == 1
                 && matches!(
                     tuple.as_ref(),
                     chiba_level1r::core::CoreValue::Tuple { fields }
@@ -1040,6 +1053,148 @@ fn program_bundle_reports_duplicate_defs_and_entry_params() {
 }
 
 #[test]
+fn program_surface_reports_extern_and_def_duplicate_in_same_namespace() {
+    let program = SourceProgram::new(vec![
+        extern_def("fd_write", ExternAbi::Wasi, "fd_write"),
+        def("fd_write", vec![], Expr::i64(0)),
+        def("main", vec![], Expr::i64(0)),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::DuplicateDef {
+            name: "fd_write".to_string(),
+        }));
+}
+
+#[test]
+fn program_surface_allows_same_function_name_across_owner_namespaces() {
+    let left = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["left".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![def("shared", vec![], Expr::i64(1))],
+    );
+    let right = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["right".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![extern_def("shared", ExternAbi::C, "shared")],
+    );
+    let surface = project_surface_many(&[right, left]);
+    let diagnostics = chiba_level1r::pipeline::program_surface_diagnostics(&surface);
+
+    assert_eq!(
+        surface
+            .defs
+            .iter()
+            .map(|def| format!("{}::{}", def.owner, def.name))
+            .collect::<Vec<_>>(),
+        vec!["left::shared".to_string(), "right::shared".to_string()]
+    );
+    assert!(!diagnostics.contains(&ProgramDiagnostic::DuplicateDef {
+        name: "shared".to_string(),
+    }));
+}
+
+#[test]
+fn program_surface_allows_same_top_level_names_across_owner_namespaces() {
+    let left = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["left".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Shared",
+            Vec::new(),
+            vec![TypeField::new("value", "i64")],
+        )],
+        vec![DataDecl::new(
+            "Payload",
+            Vec::new(),
+            vec![DataVariant::new("Same", Vec::new())],
+        )],
+        vec![
+            static_value("CONFIG", Some("i64"), Expr::i64(1)),
+            def("main", vec![], Expr::i64(0)),
+        ],
+    );
+    let right = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["right".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Shared",
+            Vec::new(),
+            vec![TypeField::new("value", "bool")],
+        )],
+        vec![DataDecl::new(
+            "Payload",
+            Vec::new(),
+            vec![DataVariant::new("Same", Vec::new())],
+        )],
+        vec![
+            static_value("CONFIG", Some("i64"), Expr::i64(2)),
+            def("main", vec![], Expr::i64(0)),
+        ],
+    );
+    let surface = project_surface_many(&[right, left]);
+    let diagnostics = chiba_level1r::pipeline::program_surface_diagnostics(&surface);
+
+    assert_eq!(
+        surface
+            .types
+            .iter()
+            .map(|ty| format!("{}::{}", ty.owner, ty.name))
+            .collect::<Vec<_>>(),
+        vec!["left::Shared".to_string(), "right::Shared".to_string()]
+    );
+    assert_eq!(
+        surface
+            .data
+            .iter()
+            .map(|data| format!("{}::{}", data.owner, data.name))
+            .collect::<Vec<_>>(),
+        vec!["left::Payload".to_string(), "right::Payload".to_string()]
+    );
+    assert_eq!(
+        surface
+            .statics
+            .iter()
+            .map(|static_value| format!("{}::{}", static_value.owner, static_value.name))
+            .collect::<Vec<_>>(),
+        vec!["left::CONFIG".to_string(), "right::CONFIG".to_string()]
+    );
+    assert!(!diagnostics.contains(&ProgramDiagnostic::DuplicateType {
+        name: "Shared".to_string(),
+    }));
+    assert!(!diagnostics.contains(&ProgramDiagnostic::DuplicateData {
+        name: "Payload".to_string(),
+    }));
+    assert!(
+        !diagnostics.contains(&ProgramDiagnostic::DuplicateTopLevelName {
+            name: "Shared".to_string(),
+        })
+    );
+    assert!(
+        !diagnostics.contains(&ProgramDiagnostic::DuplicateTopLevelName {
+            name: "Payload".to_string(),
+        })
+    );
+    assert!(
+        !diagnostics.contains(&ProgramDiagnostic::DuplicateTopLevelName {
+            name: "CONFIG".to_string(),
+        })
+    );
+    assert!(
+        !diagnostics.contains(&ProgramDiagnostic::DuplicateTopLevelName {
+            name: "main".to_string(),
+        })
+    );
+}
+
+#[test]
 fn pattern_clause_defs_lower_to_single_dispatcher_without_duplicate_def() {
     let program = SourceProgram::with_surface(
         None,
@@ -1339,6 +1494,7 @@ fn project_surface_many_merges_namespaces_deterministically() {
     assert_eq!(forward_summary.functions[0].symbol, "lexer::scan");
     assert_eq!(forward_summary.functions[1].symbol, "parser::parse");
     assert_eq!(forward_summary.types[0].symbol, "lexer::TokenId");
+    assert_eq!(forward_summary.types[0].owner, "lexer");
     assert_eq!(forward_summary.types[0].name, "TokenId");
     assert_eq!(forward_summary.data[0].symbol, "parser::Ast");
     assert_eq!(forward_summary.constructors[0].symbol, "parser::Ast.Node");
@@ -1384,6 +1540,68 @@ fn interface_summary_preserves_function_signature_types() {
     );
     assert!(bundle.render_summary().contains("param_types"));
     assert!(bundle.render_summary().contains("return_type"));
+}
+
+#[test]
+fn interface_summary_hash_ignores_function_body_changes() {
+    let one = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "parse".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::new("input", Some("Token".to_string()))],
+            return_type: Some("Ast".to_string()),
+            body: Expr::i64(1),
+        }],
+    );
+    let two = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "parse".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::new("input", Some("Token".to_string()))],
+            return_type: Some("Ast".to_string()),
+            body: Expr::i64(2),
+        }],
+    );
+
+    assert_eq!(
+        compile_program_bundle(&one).interface.stable_hash,
+        compile_program_bundle(&two).interface.stable_hash
+    );
+}
+
+#[test]
+fn interface_summary_hash_keeps_owner_namespace_identity() {
+    let parser = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![def("shared", vec![], Expr::i64(1))],
+    );
+    let lexer = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["lexer".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![def("shared", vec![], Expr::i64(1))],
+    );
+
+    assert_ne!(
+        compile_program_bundle(&parser).interface.stable_hash,
+        compile_program_bundle(&lexer).interface.stable_hash
+    );
 }
 
 #[test]
@@ -1454,6 +1672,7 @@ fn interface_summary_preserves_row_style_type_decl_shape() {
     assert_eq!(bundle.surface.types[0].fields[0].name, "value");
     assert_eq!(bundle.surface.types[0].fields[0].ty, "T");
     assert_eq!(bundle.interface.types[0].symbol, "parser.core::Box");
+    assert_eq!(bundle.interface.types[0].owner, "parser.core");
     assert_eq!(bundle.interface.types[0].name, "Box");
     assert_eq!(bundle.interface.types[0].fields[0].name, "value");
     assert_eq!(bundle.interface.types[0].fields[0].ty, "T");
@@ -1519,6 +1738,332 @@ fn typed_signature_resolves_type_alias_headers() {
         Some("i64".to_string())
     );
     assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+}
+
+#[test]
+fn typed_signature_resolves_local_alias_when_project_has_same_alias_name() {
+    let current = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["current".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::alias("UserId", Vec::new(), "i64")],
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "id".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::new("value", Some("UserId".to_string()))],
+            return_type: Some("UserId".to_string()),
+            body: Expr::var("value"),
+        }],
+    );
+    let imported = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["imported".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::alias("UserId", Vec::new(), "bool")],
+        Vec::new(),
+        Vec::new(),
+    );
+    let interface =
+        build_interface_summary(&project_surface_many(&[imported.clone(), current.clone()]));
+    let output = compile_program_with_interface(&current, &interface);
+
+    assert_eq!(
+        output[0].output.typed_signature.params[0].ty,
+        "i64".to_string()
+    );
+    assert_eq!(
+        output[0].output.typed_signature.return_type,
+        Some("i64".to_string())
+    );
+    assert_eq!(output[0].output.typed.ty, Type::I64);
+}
+
+#[test]
+fn typed_signature_does_not_guess_alias_when_owner_is_ambiguous() {
+    let consumer = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["consumer".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "id".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::new("value", Some("UserId".to_string()))],
+            return_type: Some("UserId".to_string()),
+            body: Expr::var("value"),
+        }],
+    );
+    let left = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["left".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::alias("UserId", Vec::new(), "i64")],
+        Vec::new(),
+        Vec::new(),
+    );
+    let right = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["right".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::alias("UserId", Vec::new(), "bool")],
+        Vec::new(),
+        Vec::new(),
+    );
+    let interface = build_interface_summary(&project_surface_many(&[
+        right.clone(),
+        consumer.clone(),
+        left.clone(),
+    ]));
+    let output = compile_program_with_interface(&consumer, &interface);
+
+    assert_eq!(
+        output[0].output.typed_signature.params[0].ty,
+        "UserId".to_string()
+    );
+    assert_eq!(
+        output[0].output.typed_signature.return_type,
+        Some("UserId".to_string())
+    );
+    assert_eq!(
+        output[0].output.typed.ty,
+        Type::Nominal("UserId".to_string())
+    );
+}
+
+#[test]
+fn typed_context_resolves_local_nominal_row_when_project_has_same_type_name() {
+    let current = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["current".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            Vec::new(),
+            vec![TypeField::new("value", "i64")],
+        )],
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "read".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::new("box", Some("Box".to_string()))],
+            return_type: None,
+            body: Expr::field(Expr::var("box"), "value"),
+        }],
+    );
+    let imported = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["imported".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            Vec::new(),
+            vec![TypeField::new("value", "bool")],
+        )],
+        Vec::new(),
+        Vec::new(),
+    );
+    let interface = build_interface_summary(&project_surface_many(&[imported, current.clone()]));
+    let output = compile_program_with_interface(&current, &interface);
+
+    assert_eq!(output[0].output.typed.ty, Type::I64);
+}
+
+#[test]
+fn typed_context_does_not_guess_nominal_row_when_owner_is_ambiguous() {
+    let consumer = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["consumer".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "read".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::new("box", Some("Box".to_string()))],
+            return_type: None,
+            body: Expr::field(Expr::var("box"), "value"),
+        }],
+    );
+    let left = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["left".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            Vec::new(),
+            vec![TypeField::new("value", "i64")],
+        )],
+        Vec::new(),
+        Vec::new(),
+    );
+    let right = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["right".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            Vec::new(),
+            vec![TypeField::new("value", "bool")],
+        )],
+        Vec::new(),
+        Vec::new(),
+    );
+    let interface =
+        build_interface_summary(&project_surface_many(&[right, consumer.clone(), left]));
+    let output = compile_program_with_interface(&consumer, &interface);
+
+    assert_eq!(output[0].output.typed.ty, Type::Unknown);
+}
+
+#[test]
+fn typed_context_uses_unique_external_constructor_payload_from_interface() {
+    let consumer = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["consumer".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "unwrap".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::pattern(
+                chiba_level1r::ast::Pattern::ctor(
+                    "Some",
+                    vec![chiba_level1r::ast::Pattern::bind("x")],
+                ),
+                Some("Option[i64]".to_string()),
+            )],
+            return_type: None,
+            body: Expr::var("x"),
+        }],
+    );
+    let library = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["library".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            vec!["T".to_string()],
+            vec![
+                DataVariant::new("Some", vec!["T".to_string()]),
+                DataVariant::new("None", Vec::new()),
+            ],
+        )],
+        Vec::new(),
+    );
+    let interface = build_interface_summary(&project_surface_many(&[library, consumer.clone()]));
+    let output = compile_program_with_interface(&consumer, &interface);
+
+    assert_eq!(
+        output[0].output.typed_signature.params[0].binding_types,
+        vec![("x".to_string(), Type::I64)]
+    );
+    assert_eq!(output[0].output.typed.ty, Type::I64);
+}
+
+#[test]
+fn typed_context_resolves_local_constructor_payload_when_project_has_same_data_name() {
+    let current = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["current".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            Vec::new(),
+            vec![DataVariant::new("Some", vec!["i64".to_string()])],
+        )],
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "unwrap".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::pattern(
+                chiba_level1r::ast::Pattern::ctor(
+                    "Some",
+                    vec![chiba_level1r::ast::Pattern::bind("x")],
+                ),
+                Some("Option".to_string()),
+            )],
+            return_type: None,
+            body: Expr::var("x"),
+        }],
+    );
+    let imported = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["imported".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            Vec::new(),
+            vec![DataVariant::new("Some", vec!["bool".to_string()])],
+        )],
+        Vec::new(),
+    );
+    let interface = build_interface_summary(&project_surface_many(&[imported, current.clone()]));
+    let output = compile_program_with_interface(&current, &interface);
+
+    assert_eq!(
+        output[0].output.typed_signature.params[0].binding_types,
+        vec![("x".to_string(), Type::I64)]
+    );
+    assert_eq!(output[0].output.typed.ty, Type::I64);
+}
+
+#[test]
+fn typed_context_does_not_guess_constructor_payload_when_owner_is_ambiguous() {
+    let consumer = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["consumer".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "unwrap".to_string(),
+            visibility: Visibility::Public,
+            params: vec![ParamDecl::pattern(
+                chiba_level1r::ast::Pattern::ctor(
+                    "Some",
+                    vec![chiba_level1r::ast::Pattern::bind("x")],
+                ),
+                Some("Option[i64]".to_string()),
+            )],
+            return_type: None,
+            body: Expr::var("x"),
+        }],
+    );
+    let left = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["left".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            Vec::new(),
+            vec![DataVariant::new("Some", vec!["i64".to_string()])],
+        )],
+        Vec::new(),
+    );
+    let right = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["right".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            Vec::new(),
+            vec![DataVariant::new("Some", vec!["bool".to_string()])],
+        )],
+        Vec::new(),
+    );
+    let interface =
+        build_interface_summary(&project_surface_many(&[right, consumer.clone(), left]));
+    let output = compile_program_with_interface(&consumer, &interface);
+
+    assert_eq!(
+        output[0].output.typed_signature.params[0].binding_types,
+        vec![("x".to_string(), Type::Unknown)]
+    );
+    assert_eq!(output[0].output.typed.ty, Type::Unknown);
 }
 
 #[test]
@@ -1663,6 +2208,50 @@ fn method_self_record_update_preserves_nominal_receiver_type_in_body() {
 }
 
 #[test]
+fn source_method_self_with_generics_reaches_typed_and_core_record_update() {
+    let parsed = parse_source_program(
+        "type Box[T] = { value: T }
+def Box[T].update(self: Self, value: T): Self = { self | value: value }
+def main() = 0",
+    )
+    .expect("parse source");
+
+    let bundle = compile_program_bundle(&parsed.program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    let update = &bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "update")
+        .expect("update def")
+        .output;
+
+    assert_eq!(
+        update.typed_signature.render("update"),
+        "def update(self: Box[T], value: T): Box[T]"
+    );
+    assert_eq!(update.typed.ty, Type::Nominal("Box[T]".to_string()));
+    match &update.typed.kind {
+        TypedExprKind::RecordUpdate { base, fields } => {
+            assert_eq!(base.ty, Type::Nominal("Box[T]".to_string()));
+            assert_eq!(fields.len(), 1);
+            assert_eq!(fields[0].name, "value");
+            assert_eq!(fields[0].value.ty, Type::Nominal("T".to_string()));
+        }
+        other => panic!("expected typed record update, got {other:?}"),
+    }
+    assert!(update.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::RecordUpdate { base, layout, fields }
+                if base == "self"
+                    && layout == "record::value"
+                    && fields == &vec!["value".to_string()]
+        )
+    }));
+}
+
+#[test]
 fn method_self_field_access_uses_row_style_type_shape() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec![
@@ -1690,7 +2279,7 @@ fn method_self_field_access_uses_row_style_type_shape() {
 
     assert_eq!(typed.ty, Type::Nominal("T".to_string()));
     match &typed.kind {
-        TypedExprKind::Field { receiver, name } => {
+        TypedExprKind::Field { receiver, name, .. } => {
             assert_eq!(receiver.ty, Type::Nominal("Box[T]".to_string()));
             assert_eq!(name, "value");
         }
@@ -1810,6 +2399,52 @@ fn program_surface_and_interface_preserve_static_values_separately_from_function
 }
 
 #[test]
+fn global_init_preserves_static_owner_namespace_in_linked_symbol() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec![
+            "compiler".to_string(),
+            "core".to_string(),
+        ])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![
+            static_value("CONFIG", Some("i64"), Expr::i64(8)),
+            def("main", vec![], Expr::var("CONFIG")),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_eq!(bundle.global_init.statics[0].owner, "compiler.core");
+    assert_eq!(bundle.global_init.statics[0].dependency_ids, Vec::new());
+    assert_eq!(
+        bundle
+            .global_init
+            .init_order_ids
+            .iter()
+            .map(|id| format!("{}::{}", id.owner, id.name))
+            .collect::<Vec<_>>(),
+        vec!["compiler.core::CONFIG".to_string()]
+    );
+    assert_eq!(bundle.interface.statics[0].symbol, "compiler.core::CONFIG");
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__compiler_core__CONFIG (mut i32) (i32.const 8)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.get $global__compiler_core__CONFIG"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("global.get $global__CONFIG"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "8");
+}
+
+#[test]
 fn global_init_allows_ordered_and_forward_static_dependencies() {
     let program = SourceProgram::new(vec![
         static_value("THREE", Some("i64"), Expr::var("TWO")),
@@ -1848,8 +2483,43 @@ fn global_init_allows_ordered_and_forward_static_dependencies() {
         ]
     );
     assert_eq!(
+        bundle
+            .global_init
+            .statics
+            .iter()
+            .map(|static_value| {
+                (
+                    static_value.name.as_str(),
+                    static_value
+                        .dependency_ids
+                        .iter()
+                        .map(|id| format!("{}::{}", id.owner, id.name))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            ("THREE", vec!["root::TWO".to_string()]),
+            ("ONE", Vec::<String>::new()),
+            ("TWO", vec!["root::ONE".to_string()]),
+        ]
+    );
+    assert_eq!(
         bundle.global_init.init_order,
         vec!["ONE".to_string(), "TWO".to_string(), "THREE".to_string()]
+    );
+    assert_eq!(
+        bundle
+            .global_init
+            .init_order_ids
+            .iter()
+            .map(|id| format!("{}::{}", id.owner, id.name))
+            .collect::<Vec<_>>(),
+        vec![
+            "root::ONE".to_string(),
+            "root::TWO".to_string(),
+            "root::THREE".to_string(),
+        ]
     );
     assert_eq!(
         bundle.defs[0].output.backend.return_value,
@@ -2012,9 +2682,12 @@ fn global_init_rejects_unsupported_initializer_instead_of_faking_i32_zero() {
         bundle.diagnostics,
         vec![ProgramDiagnostic::UnsupportedStaticInitializer {
             static_name: "VALUE".to_string(),
-            expr: "Call { callee: Var(\"helper\"), args: [] }".to_string(),
+            expr: "helper()".to_string(),
         }]
     );
+    let diagnostic_text = format!("{:?}", bundle.diagnostics);
+    assert!(!diagnostic_text.contains("Call {"));
+    assert!(!diagnostic_text.contains("Var("));
     assert!(!bundle.backend_link.linked_wat.contains("global__VALUE"));
     assert!(!bundle
         .backend_link
@@ -2024,6 +2697,28 @@ fn global_init_rejects_unsupported_initializer_instead_of_faking_i32_zero() {
         .backend_link
         .linked_wat
         .contains("(global $global__VALUE (mut i32) (i32.const 0)"));
+}
+
+#[test]
+fn global_init_rejects_unknown_static_reference_before_backend_lowering() {
+    let program = SourceProgram::new(vec![
+        static_value("VALUE", Some("i64"), Expr::var("MISSING")),
+        def("main", vec![], Expr::i64(0)),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::UnsupportedStaticInitializer {
+            static_name: "VALUE".to_string(),
+            expr: "MISSING".to_string(),
+        }]
+    );
+    let diagnostic_text = format!("{:?}", bundle.diagnostics);
+    assert!(!diagnostic_text.contains("Var("));
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert!(!bundle.backend_link.linked_wat.contains("global__VALUE"));
 }
 
 #[test]
@@ -2065,6 +2760,139 @@ fn global_init_lowers_adt_match_into_executable_initializer() {
         .linked_wat
         .contains("global.set $global__MATCHED"));
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "5");
+}
+
+#[test]
+fn global_init_if_let_binder_does_not_leak_to_else_initializer_branch() {
+    let program = SourceProgram::new(vec![
+        static_value(
+            "PICKED",
+            Some("i64"),
+            Expr::if_let(
+                chiba_level1r::ast::Pattern::qualified_ctor(
+                    "Option",
+                    "Some",
+                    vec![chiba_level1r::ast::Pattern::bind("value")],
+                ),
+                Expr::adt_ctor("Option", "None", vec!["None", "Some"], Vec::new()),
+                Expr::var("value"),
+                Expr::var("value"),
+            ),
+        ),
+        def("main", vec![], Expr::i64(0)),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::UnsupportedStaticInitializer {
+            static_name: "PICKED".to_string(),
+            expr: "value".to_string(),
+        }]
+    );
+    let diagnostic_text = format!("{:?}", bundle.diagnostics);
+    assert!(!diagnostic_text.contains("Var("));
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert!(!bundle.backend_link.linked_wat.contains("global__PICKED"));
+}
+
+#[test]
+fn global_init_pattern_binder_does_not_create_static_dependency() {
+    let program = SourceProgram::new(vec![
+        static_value("value", Some("i64"), Expr::i64(1)),
+        static_value(
+            "MATCHED",
+            Some("i64"),
+            Expr::match_expr(
+                Expr::adt_ctor("Option", "Some", vec!["None", "Some"], vec![Expr::i64(6)]),
+                vec![
+                    (
+                        chiba_level1r::ast::Pattern::qualified_ctor(
+                            "Option",
+                            "Some",
+                            vec![chiba_level1r::ast::Pattern::bind("value")],
+                        ),
+                        Expr::var("value"),
+                    ),
+                    (
+                        chiba_level1r::ast::Pattern::qualified_ctor("Option", "None", Vec::new()),
+                        Expr::i64(0),
+                    ),
+                ],
+            ),
+        ),
+        def("main", vec![], Expr::var("MATCHED")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+    let matched = bundle
+        .global_init
+        .statics
+        .iter()
+        .find(|static_value| static_value.name == "MATCHED")
+        .expect("MATCHED static");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_eq!(matched.dependencies, Vec::<String>::new());
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "6");
+}
+
+#[test]
+fn global_init_if_let_binder_does_not_create_static_dependency() {
+    let program = SourceProgram::new(vec![
+        static_value("value", Some("i64"), Expr::i64(1)),
+        static_value(
+            "PICKED",
+            Some("i64"),
+            Expr::if_let(
+                chiba_level1r::ast::Pattern::qualified_ctor(
+                    "Option",
+                    "Some",
+                    vec![chiba_level1r::ast::Pattern::bind("value")],
+                ),
+                Expr::adt_ctor("Option", "Some", vec!["None", "Some"], vec![Expr::i64(7)]),
+                Expr::var("value"),
+                Expr::i64(0),
+            ),
+        ),
+        def("main", vec![], Expr::var("PICKED")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+    let picked = bundle
+        .global_init
+        .statics
+        .iter()
+        .find(|static_value| static_value.name == "PICKED")
+        .expect("PICKED static");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_eq!(picked.dependencies, Vec::<String>::new());
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
+}
+
+#[test]
+fn global_init_lambda_param_does_not_create_static_dependency() {
+    let program = SourceProgram::new(vec![
+        static_value("value", Some("i64"), Expr::i64(1)),
+        static_value(
+            "LAMBDA",
+            Some("i64"),
+            Expr::call(Expr::lambda("value", Expr::var("value")), Expr::i64(9)),
+        ),
+        def("main", vec![], Expr::var("value")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+    let lambda = bundle
+        .global_init
+        .statics
+        .iter()
+        .find(|static_value| static_value.name == "LAMBDA")
+        .expect("LAMBDA static");
+
+    assert_eq!(lambda.dependencies, Vec::<String>::new());
 }
 
 #[test]
@@ -2116,9 +2944,11 @@ fn global_init_rejects_aggregate_static_initializer_instead_of_faking_i32_zero()
         bundle.diagnostics,
         vec![ProgramDiagnostic::UnsupportedStaticInitializer {
             static_name: "BOX".to_string(),
-            expr: "Record([RecordField { name: \"value\", value: Lit(I64(13)) }, RecordField { name: \"ignored\", value: Lit(I64(1)) }])".to_string(),
+            expr: "{value: 13, ignored: 1}".to_string(),
         }]
     );
+    let diagnostic_text = format!("{:?}", bundle.diagnostics);
+    assert!(!diagnostic_text.contains("RecordField"));
     assert!(!bundle.backend_link.linked_wat.contains("global__BOX"));
     assert!(!bundle
         .backend_link
@@ -2265,6 +3095,32 @@ fn global_init_reports_cycles_and_duplicate_static_names() {
                 if cycle == &vec!["A".to_string(), "B".to_string(), "A".to_string()]
         )
     }));
+}
+
+#[test]
+fn global_init_reports_self_referential_static_cycle() {
+    let program = SourceProgram::new(vec![
+        static_value("A", None, Expr::var("A")),
+        def("main", vec![], Expr::i64(0)),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(
+        bundle.global_init.statics[0].dependencies,
+        vec!["A".to_string()]
+    );
+    assert!(bundle.diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic,
+            ProgramDiagnostic::StaticInitCycle { cycle }
+                if cycle == &vec!["A".to_string(), "A".to_string()]
+        )
+    }));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("global.get $global__A"));
 }
 
 #[test]
@@ -2522,6 +3378,37 @@ fn interface_summary_hash_changes_when_constructor_arity_changes() {
 }
 
 #[test]
+fn interface_summary_hash_changes_when_constructor_payload_type_changes() {
+    let i64_payload = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Box",
+            Vec::new(),
+            vec![DataVariant::new("Wrap", vec!["I64".to_string()])],
+        )],
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+    let bool_payload = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Box",
+            Vec::new(),
+            vec![DataVariant::new("Wrap", vec!["Bool".to_string()])],
+        )],
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+
+    let i64_hash = compile_program_bundle(&i64_payload).interface.stable_hash;
+    let bool_hash = compile_program_bundle(&bool_payload).interface.stable_hash;
+
+    assert_ne!(i64_hash, bool_hash);
+}
+
+#[test]
 fn interface_summary_hash_changes_when_type_phantom_marker_changes() {
     let user_marker = SourceProgram::with_surface(
         None,
@@ -2578,9 +3465,9 @@ fn program_summary_contains_program_level_nanopass_events() {
 
     assert!(summary.contains("program:"));
     assert!(summary.contains("namespace=<root>"));
-    assert!(summary.contains("imports=[]"));
+    assert!(summary.contains("imports=<none>"));
     assert!(summary.contains("defs=1"));
-    assert!(summary.contains("entry=Some(\"main\")"));
+    assert!(summary.contains("entry=main"));
     assert!(summary.contains("P1ProjectSurface: SourceProgram -> ProjectSurface"));
     assert!(summary.contains("P2InterfaceSummary: ProjectSurface -> InterfaceSummary"));
     assert!(summary.contains("P3ProgramDiagnostics: ProjectSurface -> ProgramDiagnostics"));
@@ -2591,5 +3478,42 @@ fn program_summary_contains_program_level_nanopass_events() {
         "P7ProgramBackendLink: ProgramDefOutput+EntrySelection+GlobalInitPlan -> BackendLinkedBundle"
     ));
     assert!(summary.contains("P8ProgramBackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
-    assert!(summary.contains("global-init=GlobalInitPlan"));
+    assert!(summary.contains("global-init:"));
+    assert!(summary.contains("statics=0"));
+    assert!(summary.contains("init-order=[]"));
+    assert!(summary.contains("diagnostics=0"));
+    assert!(!summary.contains("global-init=GlobalInitPlan"));
+    assert!(!summary.contains("entry=Some"));
+    assert!(!summary.contains("imports=[]"));
+    assert!(!summary.contains("body:"));
+    assert!(!summary.contains("Lit("));
+}
+
+#[test]
+fn program_summary_renders_global_init_without_source_ast_debug() {
+    let program = SourceProgram::new(vec![
+        static_value(
+            "TWO",
+            Some("i64"),
+            Expr::binary(
+                chiba_level1r::ast::BinaryOp::Add,
+                Expr::i64(1),
+                Expr::i64(1),
+            ),
+        ),
+        static_value("THREE", Some("i64"), Expr::var("TWO")),
+        def("main", vec![], Expr::var("THREE")),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+    let summary = bundle.render_summary();
+
+    assert!(summary.contains("global-init:"));
+    assert!(summary.contains("static root::TWO ty=i64 init=1 + 1"));
+    assert!(summary.contains("static root::THREE ty=i64 init=TWO"));
+    assert!(summary.contains("deps=[root::TWO]"));
+    assert!(summary.contains("init-order=[root::TWO, root::THREE]"));
+    assert!(!summary.contains("Binary {"));
+    assert!(!summary.contains("Lit("));
+    assert!(!summary.contains("Var("));
 }

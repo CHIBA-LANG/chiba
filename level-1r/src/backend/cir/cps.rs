@@ -1,8 +1,8 @@
 use std::fmt;
 
-use crate::ast::{Literal, Pattern};
+use crate::ast::{BinaryOp, Literal, Pattern};
 use crate::control::ContinuationKind;
-use crate::typed::{Type, TypedExpr, TypedExprKind, TypedRecordField};
+use crate::typed::{FieldAccessKind, Type, TypedExpr, TypedExprKind, TypedRecordField};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpsProgram {
@@ -14,6 +14,7 @@ pub enum CpsAtom {
     Var(String),
     Lit(Literal),
     OperatorCallee {
+        kind: OperatorKind,
         protocol: String,
         receiver: Box<CpsAtom>,
     },
@@ -33,6 +34,7 @@ pub enum CpsAtom {
     TupleField {
         tuple: Box<CpsAtom>,
         field: String,
+        field_index: usize,
     },
     RecordField {
         record: Box<CpsAtom>,
@@ -103,6 +105,26 @@ pub enum CpsTerm {
 pub struct CpsMatchArm {
     pub pattern: Pattern,
     pub body: CpsTerm,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OperatorKind {
+    Binary(BinaryOp),
+    Index,
+    IndexSlice,
+}
+
+impl OperatorKind {
+    pub fn protocol_name(self) -> &'static str {
+        match self {
+            OperatorKind::Binary(BinaryOp::Add) => "op_add",
+            OperatorKind::Binary(BinaryOp::Sub) => "op_sub",
+            OperatorKind::Binary(BinaryOp::Mul) => "op_mul",
+            OperatorKind::Binary(BinaryOp::Div) => "op_div",
+            OperatorKind::Index => "op_index",
+            OperatorKind::IndexSlice => "op_index_slice",
+        }
+    }
 }
 
 #[derive(Default)]
@@ -177,30 +199,32 @@ fn transform(
             variants,
             args,
         } => transform_adt_ctor(data, ctor, variants, args, k, controls, ctx),
-        TypedExprKind::Field { receiver, name } => {
-            let is_tuple_field = matches!(receiver.ty, Type::Tuple(_));
-            transform(
-                receiver,
-                Box::new(|value, ctx| {
-                    let atom = if is_tuple_field {
-                        CpsAtom::TupleField {
-                            tuple: Box::new(value),
-                            field: name.clone(),
-                        }
-                    } else if matches!(value, CpsAtom::Record { .. }) {
-                        CpsAtom::RecordField {
-                            record: Box::new(value),
-                            field: name.clone(),
-                        }
-                    } else {
-                        CpsAtom::Var(format!("{value}.{name}"))
-                    };
-                    k(atom, ctx)
-                }),
-                controls,
-                ctx,
-            )
-        }
+        TypedExprKind::Field {
+            receiver,
+            name,
+            access,
+        } => transform(
+            receiver,
+            Box::new(|value, ctx| {
+                let atom = if let FieldAccessKind::TuplePositionalRow { index } = access {
+                    CpsAtom::TupleField {
+                        tuple: Box::new(value),
+                        field: name.clone(),
+                        field_index: *index,
+                    }
+                } else if matches!(value, CpsAtom::Record { .. }) {
+                    CpsAtom::RecordField {
+                        record: Box::new(value),
+                        field: name.clone(),
+                    }
+                } else {
+                    CpsAtom::Var(format!("{value}.{name}"))
+                };
+                k(atom, ctx)
+            }),
+            controls,
+            ctx,
+        ),
         TypedExprKind::MethodCall {
             receiver,
             name,
@@ -226,16 +250,17 @@ fn transform(
                     transform(
                         index,
                         Box::new(|index, ctx| {
-                            let protocol = if matches!(index, CpsAtom::Range { .. }) {
-                                "op_index_slice"
+                            let kind = if matches!(index, CpsAtom::Range { .. }) {
+                                OperatorKind::IndexSlice
                             } else {
-                                "op_index"
+                                OperatorKind::Index
                             };
                             let w = ctx.fresh("w");
                             let kont_body = k(CpsAtom::Var(w.clone()), ctx);
                             CpsTerm::AppFun {
                                 func: CpsAtom::OperatorCallee {
-                                    protocol: protocol.to_string(),
+                                    kind,
+                                    protocol: kind.protocol_name().to_string(),
                                     receiver: Box::new(receiver),
                                 },
                                 args: vec![index],
@@ -279,7 +304,7 @@ fn transform(
             )
         }
         TypedExprKind::Binary { op, lhs, rhs } => {
-            let op_name = format!("operator::{op:?}");
+            let kind = OperatorKind::Binary(*op);
             let lhs_controls = controls.clone();
             let rhs_controls = controls;
             transform(
@@ -293,7 +318,8 @@ fn transform(
                             let kont_body = k(CpsAtom::Var(w.clone()), ctx);
                             CpsTerm::AppFun {
                                 func: CpsAtom::OperatorCallee {
-                                    protocol: op_name.clone(),
+                                    kind,
+                                    protocol: kind.protocol_name().to_string(),
                                     receiver: Box::new(lhs),
                                 },
                                 args: vec![rhs],
@@ -755,7 +781,9 @@ impl fmt::Display for CpsAtom {
             CpsAtom::Var(name) => write!(f, "{name}"),
             CpsAtom::Lit(Literal::I64(value)) => write!(f, "{value}"),
             CpsAtom::Lit(Literal::Bool(value)) => write!(f, "{value}"),
-            CpsAtom::OperatorCallee { protocol, receiver } => {
+            CpsAtom::OperatorCallee {
+                protocol, receiver, ..
+            } => {
                 write!(f, "{protocol}({receiver})")
             }
             CpsAtom::FunLambda {
@@ -778,7 +806,7 @@ impl fmt::Display for CpsAtom {
                 }
                 write!(f, ")")
             }
-            CpsAtom::TupleField { tuple, field } => write!(f, "{tuple}.{field}"),
+            CpsAtom::TupleField { tuple, field, .. } => write!(f, "{tuple}.{field}"),
             CpsAtom::RecordField { record, field } => write!(f, "{record}.{field}"),
             CpsAtom::Range { start, end } => write!(f, "{start}..{end}"),
             CpsAtom::RecordUpdate {

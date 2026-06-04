@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ast::{DataDecl, MethodReceiver, SourceItem, SourceProgram, TypeDecl, Visibility};
+use crate::ast::{
+    DataDecl, ExternDecl, MethodReceiver, SourceItem, SourceProgram, TypeDecl, Visibility,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectSurface {
@@ -23,6 +25,7 @@ pub struct SurfaceDef {
     pub arity: usize,
     pub param_types: Vec<Option<String>>,
     pub return_type: Option<String>,
+    pub extern_decl: Option<ExternDecl>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,6 +66,7 @@ pub struct SurfaceConstructor {
     pub data: String,
     pub name: String,
     pub arity: usize,
+    pub payload_types: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -80,6 +84,7 @@ pub struct InterfaceSummary {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterfaceFunction {
     pub symbol: String,
+    pub owner: String,
     pub source_name: String,
     pub visibility: Visibility,
     pub receiver: Option<MethodReceiver>,
@@ -87,11 +92,14 @@ pub struct InterfaceFunction {
     pub arity: usize,
     pub param_types: Vec<Option<String>>,
     pub return_type: Option<String>,
+    pub extern_decl: Option<ExternDecl>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterfaceStatic {
     pub symbol: String,
+    pub owner: String,
+    pub source_name: String,
     pub visibility: Visibility,
     pub ty: Option<String>,
 }
@@ -99,6 +107,7 @@ pub struct InterfaceStatic {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterfaceType {
     pub symbol: String,
+    pub owner: String,
     pub name: String,
     pub generics: Vec<String>,
     pub alias_target: Option<String>,
@@ -115,6 +124,8 @@ pub struct InterfaceTypeField {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterfaceData {
     pub symbol: String,
+    pub owner: String,
+    pub name: String,
     pub generics: Vec<String>,
     pub variants: Vec<String>,
 }
@@ -123,7 +134,11 @@ pub struct InterfaceData {
 pub struct InterfaceConstructor {
     pub symbol: String,
     pub data_symbol: String,
+    pub owner: String,
+    pub data: String,
+    pub name: String,
     pub arity: usize,
+    pub payload_types: Vec<String>,
 }
 
 pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
@@ -158,6 +173,26 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
                 arity: params.len(),
                 param_types: params.iter().map(|param| param.ty.clone()).collect(),
                 return_type: return_type.clone(),
+                extern_decl: None,
+            }),
+            SourceItem::ExternDef {
+                name,
+                visibility,
+                receiver,
+                generics,
+                params,
+                return_type,
+                extern_decl,
+            } => Some(SurfaceDef {
+                owner: namespace.clone(),
+                name: name.clone(),
+                visibility: *visibility,
+                receiver: receiver.clone(),
+                generics: generics.clone(),
+                arity: params.len(),
+                param_types: params.iter().map(|param| param.ty.clone()).collect(),
+                return_type: return_type.clone(),
+                extern_decl: Some(extern_decl.clone()),
             }),
             SourceItem::StaticValue { .. } => None,
         })
@@ -177,7 +212,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
                 visibility: *visibility,
                 ty: ty.clone(),
             }),
-            SourceItem::Def { .. } => None,
+            SourceItem::Def { .. } | SourceItem::ExternDef { .. } => None,
         })
         .collect();
     let data = program
@@ -246,6 +281,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .iter()
         .map(|def| InterfaceFunction {
             symbol: def_symbol(def),
+            owner: def.owner.clone(),
             source_name: def.name.clone(),
             visibility: def.visibility,
             receiver: def.receiver.clone(),
@@ -253,6 +289,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
             arity: def.arity,
             param_types: def.param_types.clone(),
             return_type: def.return_type.clone(),
+            extern_decl: def.extern_decl.clone(),
         })
         .collect();
     let statics = surface
@@ -260,6 +297,8 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .iter()
         .map(|static_value| InterfaceStatic {
             symbol: owned_symbol(&static_value.owner, &static_value.name),
+            owner: static_value.owner.clone(),
+            source_name: static_value.name.clone(),
             visibility: static_value.visibility,
             ty: static_value.ty.clone(),
         })
@@ -269,6 +308,8 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .iter()
         .map(|data| InterfaceData {
             symbol: owned_symbol(&data.owner, &data.name),
+            owner: data.owner.clone(),
+            name: data.name.clone(),
             generics: data.generics.clone(),
             variants: data.variants.clone(),
         })
@@ -278,6 +319,7 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .iter()
         .map(|ty| InterfaceType {
             symbol: owned_symbol(&ty.owner, &ty.name),
+            owner: ty.owner.clone(),
             name: ty.name.clone(),
             generics: ty.generics.clone(),
             alias_target: ty.alias_target.clone(),
@@ -298,7 +340,11 @@ pub fn build_interface_summary(surface: &ProjectSurface) -> InterfaceSummary {
         .map(|ctor| InterfaceConstructor {
             symbol: format!("{}::{}.{}", ctor.owner, ctor.data, ctor.name),
             data_symbol: owned_symbol(&ctor.owner, &ctor.data),
+            owner: ctor.owner.clone(),
+            data: ctor.data.clone(),
+            name: ctor.name.clone(),
             arity: ctor.arity,
+            payload_types: ctor.payload_types.clone(),
         })
         .collect();
     let stable_hash = stable_summary_hash(surface);
@@ -324,6 +370,7 @@ fn sort_defs(defs: &mut [SurfaceDef]) {
             left.arity,
             &left.param_types,
             &left.return_type,
+            &left.extern_decl,
         )
             .cmp(&(
                 right.owner.as_str(),
@@ -333,6 +380,7 @@ fn sort_defs(defs: &mut [SurfaceDef]) {
                 right.arity,
                 &right.param_types,
                 &right.return_type,
+                &right.extern_decl,
             ))
     });
 }
@@ -399,11 +447,21 @@ fn sort_constructors(constructors: &mut [SurfaceConstructor]) {
 }
 
 pub fn duplicate_data_names(surface: &ProjectSurface) -> Vec<String> {
-    duplicates(surface.data.iter().map(|data| data.name.as_str()))
+    duplicate_owned_names(
+        surface
+            .data
+            .iter()
+            .map(|data| (data.owner.as_str(), data.name.as_str())),
+    )
 }
 
 pub fn duplicate_type_names(surface: &ProjectSurface) -> Vec<String> {
-    duplicates(surface.types.iter().map(|ty| ty.name.as_str()))
+    duplicate_owned_names(
+        surface
+            .types
+            .iter()
+            .map(|ty| (ty.owner.as_str(), ty.name.as_str())),
+    )
 }
 
 pub fn duplicate_type_fields(surface: &ProjectSurface) -> Vec<(String, String)> {
@@ -427,16 +485,26 @@ pub fn duplicate_top_level_names(surface: &ProjectSurface) -> Vec<String> {
     let names = surface
         .types
         .iter()
-        .map(|ty| ty.name.as_str())
-        .chain(surface.data.iter().map(|data| data.name.as_str()))
-        .chain(surface.defs.iter().map(|def| def.name.as_str()))
+        .map(|ty| (ty.owner.as_str(), ty.name.as_str()))
+        .chain(
+            surface
+                .data
+                .iter()
+                .map(|data| (data.owner.as_str(), data.name.as_str())),
+        )
+        .chain(
+            surface
+                .defs
+                .iter()
+                .map(|def| (def.owner.as_str(), def.name.as_str())),
+        )
         .chain(
             surface
                 .statics
                 .iter()
-                .map(|static_value| static_value.name.as_str()),
+                .map(|static_value| (static_value.owner.as_str(), static_value.name.as_str())),
         );
-    duplicates(names)
+    duplicate_owned_names(names)
 }
 
 pub fn duplicate_constructor_names(surface: &ProjectSurface) -> Vec<String> {
@@ -494,6 +562,7 @@ fn surface_constructors(owner: &str, decl: &DataDecl) -> Vec<SurfaceConstructor>
             data: decl.name.clone(),
             name: variant.name.clone(),
             arity: variant.fields.len(),
+            payload_types: variant.fields.clone(),
         })
         .collect()
 }
@@ -520,6 +589,19 @@ fn duplicates<'a>(names: impl Iterator<Item = &'a str>) -> Vec<String> {
         .collect()
 }
 
+fn duplicate_owned_names<'a>(names: impl Iterator<Item = (&'a str, &'a str)>) -> Vec<String> {
+    let mut counts = BTreeMap::<(String, String), usize>::new();
+    for (owner, name) in names {
+        *counts
+            .entry((owner.to_string(), name.to_string()))
+            .or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .filter_map(|((_owner, name), count)| if count > 1 { Some(name) } else { None })
+        .collect()
+}
+
 fn stable_summary_hash(surface: &ProjectSurface) -> String {
     let mut text = String::new();
     text.push_str(&surface.namespace);
@@ -529,6 +611,8 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
     }
     for def in &surface.defs {
         text.push_str("|def:");
+        text.push_str(&def.owner);
+        text.push_str("::");
         if let Some(receiver) = &def.receiver {
             text.push_str(&receiver.display_name());
             text.push('.');
@@ -555,9 +639,17 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
         text.push(')');
         text.push_str("->");
         text.push_str(def.return_type.as_deref().unwrap_or("_"));
+        if let Some(extern_decl) = &def.extern_decl {
+            text.push_str("=extern:");
+            text.push_str(extern_abi_name(extern_decl.abi));
+            text.push(':');
+            text.push_str(&extern_decl.symbol);
+        }
     }
     for static_value in &surface.statics {
         text.push_str("|static:");
+        text.push_str(&static_value.owner);
+        text.push_str("::");
         text.push_str(&static_value.name);
         text.push(':');
         text.push_str(match static_value.visibility {
@@ -569,6 +661,8 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
     }
     for ty in &surface.types {
         text.push_str("|type:");
+        text.push_str(&ty.owner);
+        text.push_str("::");
         text.push_str(&ty.name);
         text.push('[');
         text.push_str(&ty.generics.join(","));
@@ -590,6 +684,8 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
     }
     for data in &surface.data {
         text.push_str("|data:");
+        text.push_str(&data.owner);
+        text.push_str("::");
         text.push_str(&data.name);
         text.push('[');
         text.push_str(&data.generics.join(","));
@@ -600,13 +696,25 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
     }
     for ctor in &surface.constructors {
         text.push_str("|ctor:");
+        text.push_str(&ctor.owner);
+        text.push_str("::");
         text.push_str(&ctor.data);
         text.push('.');
         text.push_str(&ctor.name);
         text.push(':');
         text.push_str(&ctor.arity.to_string());
+        text.push('(');
+        text.push_str(&ctor.payload_types.join(","));
+        text.push(')');
     }
     format!("{:016x}", fnv1a64(text.as_bytes()))
+}
+
+fn extern_abi_name(abi: crate::ast::ExternAbi) -> &'static str {
+    match abi {
+        crate::ast::ExternAbi::Wasi => "wasi",
+        crate::ast::ExternAbi::C => "c",
+    }
 }
 
 fn fnv1a64(bytes: &[u8]) -> u64 {

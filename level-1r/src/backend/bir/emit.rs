@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::control::ContinuationKind;
 use crate::core::{
     CoreMatchArm, CoreOp, CorePattern, CoreProgram, CoreValidation, CoreValue, OperatorIntrinsic,
     OwnershipDecision,
@@ -90,10 +91,16 @@ pub enum BackendOwnershipRuntime {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BackendExternImport {
-    pub abi: String,
+    pub abi: BackendExternAbi,
     pub module: String,
     pub name: String,
     pub signature_hash: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BackendExternAbi {
+    Wasi,
+    C,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -323,6 +330,9 @@ fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
             | CoreOp::RecordUpdate { .. }
             | CoreOp::RecordFieldGet { .. }
             | CoreOp::AdtConstruct { .. }
+            | CoreOp::AdtTupleBridge { .. }
+            | CoreOp::CompilerIntrinsicUse { .. }
+            | CoreOp::TargetSpecificTerm { .. }
             | CoreOp::TailCallResult { .. }
             | CoreOp::TailCall { .. }
             | CoreOp::Prompt { .. }
@@ -471,14 +481,14 @@ fn render_wat(
                     patterns.len()
                 ));
             }
-            CoreOp::TupleConstruct { layout, fields } => {
+            CoreOp::TupleConstruct { layout, fields, .. } => {
                 wat.push_str(&format!(
                     "  ;; tuple layout={} fields={}\n",
                     escape_wat_comment(layout),
                     fields.len()
                 ));
             }
-            CoreOp::TupleFieldGet { layout, field } => {
+            CoreOp::TupleFieldGet { layout, field, .. } => {
                 wat.push_str(&format!(
                     "  ;; tuple-field layout={} field={}\n",
                     escape_wat_comment(layout),
@@ -521,13 +531,45 @@ fn render_wat(
                     args.len()
                 ));
             }
+            CoreOp::AdtTupleBridge {
+                data,
+                ctor,
+                tuple_fields,
+                tuple_to_adt_intrinsic,
+                adt_to_tuple_intrinsic,
+            } => {
+                wat.push_str(&format!(
+                    "  ;; adt-tuple-bridge data={} ctor={} fields={} tuple_to_adt={} adt_to_tuple={}\n",
+                    escape_wat_comment(data),
+                    escape_wat_comment(ctor),
+                    tuple_fields.len(),
+                    escape_wat_comment(tuple_to_adt_intrinsic.debug_name()),
+                    escape_wat_comment(adt_to_tuple_intrinsic.debug_name())
+                ));
+            }
+            CoreOp::CompilerIntrinsicUse {
+                intrinsic,
+                owner_namespace,
+                subject,
+            } => {
+                wat.push_str(&format!(
+                    "  ;; compiler-intrinsic owner={} intrinsic={} subject={}\n",
+                    escape_wat_comment(owner_namespace),
+                    escape_wat_comment(intrinsic.debug_name()),
+                    escape_wat_comment(subject)
+                ));
+            }
             CoreOp::Prompt { kind } => {
-                wat.push_str(&format!("  ;; prompt kind={kind:?}\n"));
+                wat.push_str(&format!(
+                    "  ;; prompt kind={}\n",
+                    render_continuation_kind(*kind)
+                ));
             }
             CoreOp::CaptureContinuation { binder, kind } => {
                 wat.push_str(&format!(
-                    "  ;; capture-cont binder={} kind={kind:?}\n",
-                    escape_wat_comment(binder)
+                    "  ;; capture-cont binder={} kind={}\n",
+                    escape_wat_comment(binder),
+                    render_continuation_kind(*kind)
                 ));
             }
             CoreOp::StaticRowAccess { field, layout } => {
@@ -547,6 +589,7 @@ fn render_wat(
             CoreOp::DirectMethodTarget { .. }
             | CoreOp::DynamicCallableTarget { .. }
             | CoreOp::TailCallResult { .. }
+            | CoreOp::TargetSpecificTerm { .. }
             | CoreOp::LiftedFunction { .. } => {}
             CoreOp::OperatorTarget {
                 protocol,
@@ -559,6 +602,13 @@ fn render_wat(
     }
     wat.push_str(")\n");
     Ok(wat)
+}
+
+fn render_continuation_kind(kind: ContinuationKind) -> &'static str {
+    match kind {
+        ContinuationKind::Cont1 => "cont1",
+        ContinuationKind::ContN => "contn",
+    }
 }
 
 fn render_operator_intrinsic_wat(
@@ -727,8 +777,10 @@ fn render_core_value_i32(
         CoreValue::Var(name) if env.is_param(name) => {
             wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
         }
-        CoreValue::TupleField { tuple, field } => {
-            if let Some(value) = tuple_field_value(tuple, field) {
+        CoreValue::TupleField {
+            tuple, field_index, ..
+        } => {
+            if let Some(value) = tuple_field_value(tuple, *field_index) {
                 render_core_value_i32(wat, value, env)?;
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
@@ -783,7 +835,9 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
             .binding(name)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or_else(|| env.is_param(name)),
-        CoreValue::TupleField { tuple, field } => tuple_field_value(tuple, field)
+        CoreValue::TupleField {
+            tuple, field_index, ..
+        } => tuple_field_value(tuple, *field_index)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or(false),
         CoreValue::RecordField { record, field } => record_field_value(record, field)
@@ -796,16 +850,11 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
     }
 }
 
-fn tuple_field_value<'a>(tuple: &'a CoreValue, field: &str) -> Option<&'a CoreValue> {
+fn tuple_field_value(tuple: &CoreValue, field_index: usize) -> Option<&CoreValue> {
     let CoreValue::Tuple { fields } = tuple else {
         return None;
     };
-    let index = field
-        .strip_prefix('_')?
-        .parse::<usize>()
-        .ok()?
-        .checked_sub(1)?;
-    fields.get(index)
+    fields.get(field_index)
 }
 
 fn record_field_value<'a>(record: &'a CoreValue, field: &str) -> Option<&'a CoreValue> {
@@ -1158,18 +1207,17 @@ fn ownership_decision_name(decision: OwnershipDecision) -> &'static str {
 fn canonical_import(import: &BackendExternImport) -> String {
     format!(
         "{}::{}::{}::{}",
-        canonical_abi(&import.abi),
+        canonical_abi(import.abi),
         import.module,
         import.name,
         import.signature_hash
     )
 }
 
-fn canonical_abi(abi: &str) -> String {
-    if abi.eq_ignore_ascii_case("c") {
-        "c".to_string()
-    } else {
-        abi.to_ascii_lowercase()
+fn canonical_abi(abi: BackendExternAbi) -> &'static str {
+    match abi {
+        BackendExternAbi::Wasi => "wasi",
+        BackendExternAbi::C => "c",
     }
 }
 

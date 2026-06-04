@@ -1,8 +1,9 @@
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
     validate_core, CallableStorageFact, CallableStorageKind, ClosureEnvField, ClosureEnvLayout,
-    ContinuationEnvLayout, CoreDiagnostic, CoreOp, CoreProgram, CoreValue, LayoutFact, LayoutKind,
-    OwnershipDecision, OwnershipFact, OwnershipSubjectKind, TupleLayout,
+    CompilerIntrinsic, ContinuationEnvLayout, CoreDiagnostic, CoreOp, CoreProgram, CoreValue,
+    LayoutFact, LayoutKind, OwnershipDecision, OwnershipFact, OwnershipSubjectKind,
+    TargetSpecificCoreTerm, TupleLayout,
 };
 use chiba_level1r::template::{canonical_open_row, ShapeType};
 use chiba_level1r::typed::{SendColor, UsageColor};
@@ -21,12 +22,9 @@ fn lowered_core_program_validates_when_facts_are_consistent() {
 #[test]
 fn validator_rejects_target_specific_core_terms() {
     let mut output = compile_expr(&Expr::i64(0));
-    output
-        .core
-        .ops
-        .push(CoreOp::ReturnValue(CoreValue::Rendered {
-            debug: "funcref-leak".to_string(),
-        }));
+    output.core.ops.push(CoreOp::TargetSpecificTerm {
+        term: TargetSpecificCoreTerm::Funcref,
+    });
 
     let validation = validate_core(&output.core);
 
@@ -40,7 +38,7 @@ fn validator_rejects_target_specific_core_terms() {
 #[test]
 fn validator_rejects_invalid_layout_hash_and_duplicate_keys() {
     let layout = LayoutFact {
-        key: "continuation::ContN::retry".to_string(),
+        key: "continuation::contn::retry".to_string(),
         hash: 1,
         kind: LayoutKind::ContinuationPackage(continuation_env("retry", ContinuationKind::ContN)),
     };
@@ -60,13 +58,13 @@ fn validator_rejects_invalid_layout_hash_and_duplicate_keys() {
                 key,
                 actual: 1,
                 ..
-            } if key == "continuation::ContN::retry"
+            } if key == "continuation::contn::retry"
         )
     }));
     assert!(validation
         .diagnostics
         .contains(&CoreDiagnostic::DuplicateLayoutKey {
-            key: "continuation::ContN::retry".to_string()
+            key: "continuation::contn::retry".to_string()
         }));
 }
 
@@ -93,11 +91,34 @@ fn validator_rejects_missing_contn_package_layout() {
 }
 
 #[test]
+fn validator_rejects_compiler_intrinsic_with_wrong_owner_namespace() {
+    let program = CoreProgram {
+        ops: vec![CoreOp::CompilerIntrinsicUse {
+            intrinsic: CompilerIntrinsic::TupleToAdt,
+            owner_namespace: "std".to_string(),
+            subject: "Option.Some".to_string(),
+        }],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    assert_eq!(
+        validate_core(&program).diagnostics,
+        vec![CoreDiagnostic::CompilerIntrinsicOwnerMismatch {
+            intrinsic: CompilerIntrinsic::TupleToAdt,
+            owner_namespace: "std".to_string(),
+            expected_owner_namespace: "compiler.intrinsic".to_string(),
+        }]
+    );
+}
+
+#[test]
 fn validator_rejects_cont1_package_and_send_rc_contradiction() {
     let program = CoreProgram {
         ops: vec![],
         layouts: vec![LayoutFact {
-            key: "continuation::Cont1::k".to_string(),
+            key: "continuation::cont1::k".to_string(),
             hash: 0,
             kind: LayoutKind::ContinuationPackage(continuation_env("k", ContinuationKind::Cont1)),
         }],
@@ -351,8 +372,10 @@ fn validator_rejects_static_row_access_missing_or_wrong_layout_ref() {
 fn validator_rejects_tuple_field_access_missing_layout_or_field() {
     let missing = CoreProgram {
         ops: vec![CoreOp::TupleFieldGet {
+            nominal: "Tuple2_I64_Bool".to_string(),
             layout: "tuple::Tuple2_I64_Bool".to_string(),
             field: "_2".to_string(),
+            field_index: 1,
         }],
         layouts: vec![],
         ownership: vec![],
@@ -368,8 +391,10 @@ fn validator_rejects_tuple_field_access_missing_layout_or_field() {
 
     let missing_field = CoreProgram {
         ops: vec![CoreOp::TupleFieldGet {
+            nominal: "Tuple1_I64".to_string(),
             layout: "tuple::Tuple1_I64".to_string(),
             field: "_2".to_string(),
+            field_index: 1,
         }],
         layouts: vec![LayoutFact {
             key: "tuple::Tuple1_I64".to_string(),

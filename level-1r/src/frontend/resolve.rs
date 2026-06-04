@@ -41,13 +41,14 @@ pub struct ConstructorCandidate {
     pub data: String,
     pub ctor: String,
     pub symbol: String,
+    pub owner: String,
     pub arity: usize,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MethodIndex {
     methods: BTreeMap<(String, String), Vec<MethodCandidate>>,
-    qualified: BTreeMap<String, MethodCandidate>,
+    qualified: BTreeMap<String, Vec<MethodCandidate>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -178,45 +179,61 @@ impl NameIndex {
         current_namespace: &str,
     ) -> Self {
         let mut index = Self::default();
+        let mut name_candidates = Vec::new();
         for function in &interface.functions {
             if function.receiver.is_none() {
-                let owner = owner_from_symbol(&function.symbol);
-                if !is_visible_from(function.visibility, &owner, current_namespace) {
+                if !is_visible_from(function.visibility, &function.owner, current_namespace) {
                     continue;
                 }
-                index.add_function_with_arity(
-                    &function.source_name,
-                    &function.symbol,
-                    &owner,
-                    function.visibility,
-                    function.arity,
-                );
+                name_candidates.push(NameCandidate {
+                    name: function.source_name.clone(),
+                    symbol: function.symbol.clone(),
+                    owner: function.owner.clone(),
+                    visibility: function.visibility,
+                    kind: NameCandidateKind::Function,
+                    arity: function.arity,
+                });
             }
         }
         for static_value in &interface.statics {
-            let owner = owner_from_symbol(&static_value.symbol);
-            if !is_visible_from(static_value.visibility, &owner, current_namespace) {
+            if !is_visible_from(
+                static_value.visibility,
+                &static_value.owner,
+                current_namespace,
+            ) {
                 continue;
             }
-            index.add_static(
-                source_name_from_symbol(&static_value.symbol),
-                &static_value.symbol,
-                &owner,
-                static_value.visibility,
-            );
+            name_candidates.push(NameCandidate {
+                name: static_value.source_name.clone(),
+                symbol: static_value.symbol.clone(),
+                owner: static_value.owner.clone(),
+                visibility: static_value.visibility,
+                kind: NameCandidateKind::Static,
+                arity: 0,
+            });
         }
-        for ctor in &interface.constructors {
-            if let Some((data, ctor_name)) = data_ctor_from_symbol(&ctor.symbol) {
-                index.add_constructor(data, ctor_name, &ctor.symbol, ctor.arity);
-            }
+        for candidate in visible_name_candidates(name_candidates, current_namespace) {
+            index
+                .functions
+                .entry(candidate.name.clone())
+                .or_default()
+                .push(candidate);
+        }
+        for ctor in visible_constructors(interface, current_namespace) {
+            index.add_constructor(
+                &ctor.data,
+                &ctor.name,
+                &ctor.symbol,
+                &ctor.owner,
+                ctor.arity,
+            );
         }
         index
     }
 
     pub fn add_function(&mut self, name: impl Into<String>, symbol: impl Into<String>) {
         let symbol = symbol.into();
-        let owner = owner_from_symbol(&symbol);
-        self.add_function_with_arity(name, symbol, owner, Visibility::Public, 0);
+        self.add_function_with_arity(name, symbol, "root", Visibility::Public, 0);
     }
 
     pub fn add_static(
@@ -271,11 +288,13 @@ impl NameIndex {
         data: impl Into<String>,
         ctor: impl Into<String>,
         symbol: impl Into<String>,
+        owner: impl Into<String>,
         arity: usize,
     ) {
         let data = data.into();
         let ctor = ctor.into();
         let symbol = symbol.into();
+        let owner = owner.into();
         self.constructors
             .entry((data.clone(), ctor.clone()))
             .or_default()
@@ -283,6 +302,7 @@ impl NameIndex {
                 data,
                 ctor,
                 symbol,
+                owner,
                 arity,
             });
     }
@@ -299,6 +319,63 @@ impl NameIndex {
     }
 }
 
+fn visible_name_candidates(
+    candidates: Vec<NameCandidate>,
+    current_namespace: &str,
+) -> Vec<NameCandidate> {
+    let mut by_name = BTreeMap::<String, Vec<NameCandidate>>::new();
+    for candidate in candidates {
+        by_name
+            .entry(candidate.name.clone())
+            .or_default()
+            .push(candidate);
+    }
+    by_name
+        .into_values()
+        .flat_map(|candidates| {
+            let local = candidates
+                .iter()
+                .filter(|candidate| candidate.owner == current_namespace)
+                .cloned()
+                .collect::<Vec<_>>();
+            if local.is_empty() {
+                candidates
+            } else {
+                local
+            }
+        })
+        .collect()
+}
+
+fn visible_constructors<'a>(
+    interface: &'a InterfaceSummary,
+    current_namespace: &str,
+) -> Vec<&'a crate::surface::InterfaceConstructor> {
+    let mut by_data_ctor =
+        BTreeMap::<(String, String), Vec<&crate::surface::InterfaceConstructor>>::new();
+    for ctor in &interface.constructors {
+        by_data_ctor
+            .entry((ctor.data.clone(), ctor.name.clone()))
+            .or_default()
+            .push(ctor);
+    }
+    by_data_ctor
+        .into_values()
+        .flat_map(|candidates| {
+            let local = candidates
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.owner == current_namespace)
+                .collect::<Vec<_>>();
+            if local.is_empty() {
+                candidates
+            } else {
+                local
+            }
+        })
+        .collect()
+}
+
 impl MethodIndex {
     pub fn from_interface(interface: &InterfaceSummary) -> Self {
         Self::from_interface_for_namespace(interface, &interface.namespace)
@@ -309,19 +386,15 @@ impl MethodIndex {
         current_namespace: &str,
     ) -> Self {
         let mut index = Self::default();
-        for function in &interface.functions {
+        for function in visible_method_functions(interface, current_namespace) {
             let Some(receiver) = &function.receiver else {
                 continue;
             };
-            let owner = owner_from_symbol(&function.symbol);
-            if !is_visible_from(function.visibility, &owner, current_namespace) {
-                continue;
-            }
             index.add_candidate(MethodCandidate {
                 receiver: receiver.display_name(),
                 name: function.source_name.clone(),
                 symbol: function.symbol.clone(),
-                owner,
+                owner: function.owner.clone(),
                 visibility: function.visibility,
             });
         }
@@ -342,16 +415,25 @@ impl MethodIndex {
     }
 
     pub fn add_candidate(&mut self, candidate: MethodCandidate) {
-        self.qualified.insert(
+        self.add_qualified_candidate(
             format!("{}.{}", candidate.receiver, candidate.name),
-            candidate.clone(),
+            &candidate,
         );
-        self.qualified
-            .insert(candidate.symbol.clone(), candidate.clone());
+        self.add_qualified_candidate(candidate.symbol.clone(), &candidate);
         self.methods
             .entry((candidate.receiver.clone(), candidate.name.clone()))
             .or_default()
             .push(candidate);
+    }
+
+    fn add_qualified_candidate(&mut self, path: String, candidate: &MethodCandidate) {
+        let candidates = self.qualified.entry(path).or_default();
+        if !candidates
+            .iter()
+            .any(|existing| existing.symbol == candidate.symbol)
+        {
+            candidates.push(candidate.clone());
+        }
     }
 
     fn find_method(&self, receiver: &str, name: &str) -> &[MethodCandidate] {
@@ -361,9 +443,44 @@ impl MethodIndex {
             .unwrap_or(&[])
     }
 
-    fn find_qualified(&self, path: &str) -> Option<&MethodCandidate> {
-        self.qualified.get(path)
+    fn find_qualified(&self, path: &str) -> &[MethodCandidate] {
+        self.qualified.get(path).map(Vec::as_slice).unwrap_or(&[])
     }
+}
+
+fn visible_method_functions<'a>(
+    interface: &'a InterfaceSummary,
+    current_namespace: &str,
+) -> Vec<&'a crate::surface::InterfaceFunction> {
+    let mut by_receiver_name =
+        BTreeMap::<(String, String), Vec<&crate::surface::InterfaceFunction>>::new();
+    for function in &interface.functions {
+        let Some(receiver) = &function.receiver else {
+            continue;
+        };
+        if !is_visible_from(function.visibility, &function.owner, current_namespace) {
+            continue;
+        }
+        by_receiver_name
+            .entry((receiver.display_name(), function.source_name.clone()))
+            .or_default()
+            .push(function);
+    }
+    by_receiver_name
+        .into_values()
+        .flat_map(|candidates| {
+            let local = candidates
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.owner == current_namespace)
+                .collect::<Vec<_>>();
+            if local.is_empty() {
+                candidates
+            } else {
+                local
+            }
+        })
+        .collect()
 }
 
 fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
@@ -423,18 +540,14 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
             }
         }
         AlphaExprKind::Index { receiver, index } => {
-            let protocol = if matches!(&index.kind, AlphaExprKind::Range { .. }) {
-                "op_index_slice"
+            let op = if matches!(&index.kind, AlphaExprKind::Range { .. }) {
+                OperatorSurface::IndexSlice
             } else {
-                "op_index"
+                OperatorSurface::Index
             };
             facts.operator_obligations.push(OperatorObligation {
-                op: if protocol == "op_index_slice" {
-                    OperatorSurface::IndexSlice
-                } else {
-                    OperatorSurface::Index
-                },
-                protocol: protocol.to_string(),
+                protocol: operator_surface_protocol(&op),
+                op,
                 receiver: nominal_name(receiver),
             });
             visit(receiver, facts);
@@ -640,17 +753,24 @@ fn resolve_method_call(receiver: &AlphaExpr, name: &str, facts: &mut ResolveFact
     }
 
     let qualified = format!("{}.{}", receiver_path(receiver), name);
-    let qualified_candidate = facts.methods.find_qualified(&qualified).cloned();
-    if let Some(candidate) = qualified_candidate {
-        facts.resolved_calls.push(ResolvedCall::QualifiedCallee {
-            path: qualified,
-            symbol: candidate.symbol.clone(),
-        });
-    } else {
-        facts.diagnostics.push(ResolveDiagnostic::MissingMethod {
+    let candidates = facts.methods.find_qualified(&qualified).to_vec();
+    match candidates.as_slice() {
+        [] => facts.diagnostics.push(ResolveDiagnostic::MissingMethod {
             receiver: None,
             name: name.to_string(),
-        });
+        }),
+        [candidate] => facts.resolved_calls.push(ResolvedCall::QualifiedCallee {
+            path: qualified,
+            symbol: candidate.symbol.clone(),
+        }),
+        many => facts.diagnostics.push(ResolveDiagnostic::AmbiguousMethod {
+            receiver: receiver_path(receiver),
+            name: name.to_string(),
+            candidates: many
+                .iter()
+                .map(|candidate| candidate.symbol.clone())
+                .collect(),
+        }),
     }
 }
 
@@ -677,32 +797,19 @@ fn receiver_path(expr: &AlphaExpr) -> String {
 }
 
 fn operator_protocol(op: &BinaryOp) -> String {
+    operator_surface_protocol(&OperatorSurface::Binary(op.clone()))
+}
+
+fn operator_surface_protocol(op: &OperatorSurface) -> String {
     match op {
-        BinaryOp::Add => "op_add",
-        BinaryOp::Sub => "op_sub",
-        BinaryOp::Mul => "op_mul",
-        BinaryOp::Div => "op_div",
+        OperatorSurface::Binary(BinaryOp::Add) => "op_add",
+        OperatorSurface::Binary(BinaryOp::Sub) => "op_sub",
+        OperatorSurface::Binary(BinaryOp::Mul) => "op_mul",
+        OperatorSurface::Binary(BinaryOp::Div) => "op_div",
+        OperatorSurface::Index => "op_index",
+        OperatorSurface::IndexSlice => "op_index_slice",
     }
     .to_string()
-}
-
-fn data_ctor_from_symbol(symbol: &str) -> Option<(&str, &str)> {
-    let (_, tail) = symbol.rsplit_once("::")?;
-    tail.split_once('.')
-}
-
-fn owner_from_symbol(symbol: &str) -> String {
-    symbol
-        .split_once("::")
-        .map(|(owner, _)| owner.to_string())
-        .unwrap_or_else(|| "root".to_string())
-}
-
-fn source_name_from_symbol(symbol: &str) -> &str {
-    symbol
-        .rsplit_once("::")
-        .map(|(_, name)| name)
-        .unwrap_or(symbol)
 }
 
 fn is_visible_from(visibility: Visibility, owner: &str, current_namespace: &str) -> bool {

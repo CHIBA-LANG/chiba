@@ -28,7 +28,8 @@ def main() = 7",
     assert!(stdout.contains("item-spans:"));
     assert!(stdout.contains("def main @ 2:1..2:15"));
     assert!(stdout.contains("program:"));
-    assert!(stdout.contains("entry=Some(\"main\")"));
+    assert!(stdout.contains("entry=main"));
+    assert!(!stdout.contains("entry=Some"));
     assert!(stdout.contains("P1ProjectSurface: SourceProgram -> ProjectSurface"));
 }
 

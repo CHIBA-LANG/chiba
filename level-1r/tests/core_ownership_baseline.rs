@@ -22,7 +22,8 @@ fn core_layout_hash_is_stable_for_canonical_row_shape() {
         .unwrap();
 
     assert_ne!(layout.hash, 0);
-    assert_eq!(layout.key, format!("row::{expected:?}"));
+    assert_eq!(layout.key, "row::open::name:?");
+    assert!(!layout.key.contains("RowShape"));
 }
 
 #[test]

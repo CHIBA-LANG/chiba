@@ -1,5 +1,5 @@
 use chiba_level1r::ast::Pattern;
-use chiba_level1r::core::{CoreOp, LayoutKind};
+use chiba_level1r::core::{CompilerIntrinsic, CoreOp, LayoutKind};
 use chiba_level1r::pattern::PatternDiagnostic;
 use chiba_level1r::typed::{type_expr, Type, TypedExprKind};
 use chiba_level1r::{compile_expr, Expr};
@@ -50,6 +50,27 @@ fn adt_constructor_reaches_cps_core_and_target_neutral_layout() {
         variants: vec!["None".to_string(), "Some".to_string()],
         args: vec!["1".to_string()],
     }));
+    assert!(output.core.ops.contains(&CoreOp::AdtTupleBridge {
+        data: "Option".to_string(),
+        ctor: "Some".to_string(),
+        tuple_fields: vec![":Some".to_string(), "1".to_string()],
+        tuple_to_adt_intrinsic: CompilerIntrinsic::TupleToAdt,
+        adt_to_tuple_intrinsic: CompilerIntrinsic::AdtToTuple,
+    }));
+    assert_eq!(
+        CompilerIntrinsic::TupleToAdt.owner_namespace(),
+        "compiler.intrinsic"
+    );
+    assert!(output.core.ops.contains(&CoreOp::CompilerIntrinsicUse {
+        intrinsic: CompilerIntrinsic::TupleToAdt,
+        owner_namespace: "compiler.intrinsic".to_string(),
+        subject: "Option.Some".to_string(),
+    }));
+    assert!(output.core.ops.contains(&CoreOp::CompilerIntrinsicUse {
+        intrinsic: CompilerIntrinsic::AdtToTuple,
+        owner_namespace: "compiler.intrinsic".to_string(),
+        subject: "Option.Some".to_string(),
+    }));
     assert!(output.core.layouts.iter().any(|layout| {
         matches!(
             &layout.kind,
@@ -60,6 +81,16 @@ fn adt_constructor_reaches_cps_core_and_target_neutral_layout() {
     }));
     assert_eq!(output.core_validation.diagnostics, vec![]);
     assert!(output.render_visual().contains("Option.Some"));
+    assert!(output.backend.wat.contains(";; adt-tuple-bridge"));
+    assert!(output
+        .backend
+        .wat
+        .contains("compiler.intrinsic.tuple_to_adt"));
+    assert!(output
+        .backend
+        .wat
+        .contains("compiler.intrinsic.adt_to_tuple"));
+    assert!(output.backend.wat.contains(";; compiler-intrinsic"));
 }
 
 #[test]

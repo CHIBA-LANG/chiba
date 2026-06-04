@@ -63,8 +63,8 @@ pub mod xiddata;
 
 pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use ast::{
-    DataDecl, DataVariant, Expr, Literal, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem,
-    SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
+    DataDecl, DataVariant, Expr, ExternAbi, ExternDecl, Literal, MethodReceiver, NamespaceDecl,
+    ParamDecl, SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
 };
 pub use cps::{cps_program, CpsProgram};
 pub use debug::{render_visual_report, VisualReport};
@@ -73,8 +73,9 @@ pub use frontend::{
     SourceSpan,
 };
 pub use pipeline::{
-    compile_expr, compile_program, compile_program_bundle, compile_source_program_bundle,
-    CompileOutput, ProgramCompileOutput, ProgramDefOutput, ProgramDiagnostic, SourceCompileOutput,
+    compile_expr, compile_program, compile_program_bundle, compile_program_with_interface,
+    compile_source_program_bundle, CompileOutput, ProgramCompileOutput, ProgramDefOutput,
+    ProgramDiagnostic, SourceCompileOutput,
 };
 pub use resolve::{resolve_expr, resolve_expr_with_names, MethodIndex, NameIndex, ResolveFacts};
 pub use specialize::{plan_specialization, SpecializationFacts};
@@ -84,7 +85,7 @@ pub use surface::{
     SurfaceTypeField,
 };
 pub use template::{
-    analyze_template, analyze_template_with_source, TemplateFacts, TemplateInstantiation,
-    TemplateParam, TemplateParamSource,
+    analyze_template, analyze_template_with_source, TemplateDiagnostic, TemplateFacts,
+    TemplateInstantiation, TemplateParam, TemplateParamSource,
 };
 pub use template_audit::{audit_checked_templates, TemplateAuditReport};

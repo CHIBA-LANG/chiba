@@ -62,7 +62,7 @@ fn closure_core_usage_tracks_continuation_packages() {
     let package = output
         .closure_core_usage
         .continuation_packages
-        .get("continuation::ContN::retry")
+        .get("continuation::contn::retry")
         .unwrap();
     assert_eq!(package.kind, ContinuationKind::ContN);
     assert_eq!(package.count, UseCount::Many);

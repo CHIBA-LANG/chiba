@@ -71,7 +71,7 @@ fn contn_package_is_kept_as_repeatable_package() {
     let output = compile_expr(&Expr::resetn(Expr::shift("retry", Expr::i64(0))));
 
     assert_eq!(
-        output.closure_simplification.continuation_packages["continuation::ContN::retry"],
+        output.closure_simplification.continuation_packages["continuation::contn::retry"],
         ContinuationPackageDecision::KeepRepeatablePackage
     );
 }
@@ -89,7 +89,7 @@ fn dead_env_field_and_unused_continuation_package_are_marked_removable() {
         },
     );
     usage.continuation_packages.insert(
-        "continuation::ContN::unused".to_string(),
+        "continuation::contn::unused".to_string(),
         ContinuationPackageUsage {
             kind: ContinuationKind::ContN,
             count: UseCount::Zero,
@@ -103,7 +103,7 @@ fn dead_env_field_and_unused_continuation_package_are_marked_removable() {
         EnvFieldDecision::RemoveDeadField
     );
     assert_eq!(
-        decisions.continuation_packages["continuation::ContN::unused"],
+        decisions.continuation_packages["continuation::contn::unused"],
         ContinuationPackageDecision::RemoveUnusedPackage
     );
 }

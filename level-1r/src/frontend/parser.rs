@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::ast::{
-    BinaryOp, DataDecl, DataVariant, Expr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern,
-    SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
+    BinaryOp, DataDecl, DataVariant, Expr, ExternAbi, ExternDecl, MethodReceiver, NamespaceDecl,
+    ParamDecl, Pattern, SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
 };
 use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
 
@@ -223,6 +223,16 @@ fn chiba_lexer_spec() -> LexerSpec {
                 skip: false,
             },
             LexerRule {
+                name: "KwExtern".to_string(),
+                pattern: "extern".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "StringLit".to_string(),
+                pattern: "\"[^\"\\\\]*(\\\\.[^\"\\\\]*)*\"".to_string(),
+                skip: false,
+            },
+            LexerRule {
                 name: "Ident".to_string(),
                 pattern: "\\p{XID_START}\\p{XID_CONTINUE}*".to_string(),
                 skip: false,
@@ -434,6 +444,21 @@ impl FrontendParser {
             None
         };
         self.expect("Eq")?;
+        if self.peek_name() == Some("KwExtern") {
+            let extern_decl = self.parse_extern_decl()?;
+            return Ok(SourceItem::ExternDef {
+                name,
+                visibility,
+                generics: receiver
+                    .as_ref()
+                    .map(|receiver| receiver.generics.clone())
+                    .unwrap_or(generics),
+                receiver,
+                params,
+                return_type,
+                extern_decl,
+            });
+        }
         let body = self.parse_expr_bp(0)?;
         Ok(SourceItem::Def {
             name,
@@ -446,6 +471,35 @@ impl FrontendParser {
             params,
             return_type,
             body,
+        })
+    }
+
+    fn parse_extern_decl(&mut self) -> Result<ExternDecl, FrontendError> {
+        self.expect("KwExtern")?;
+        let abi_token = self.expect("StringLit")?;
+        let symbol = self.expect_string_literal()?;
+        let abi = match string_literal_value(&abi_token.lexeme).as_deref() {
+            Some("C") | Some("c") => ExternAbi::C,
+            Some("wasi") => ExternAbi::Wasi,
+            _ => {
+                return Err(FrontendError::UnexpectedToken {
+                    found: abi_token.name,
+                    lexeme: abi_token.lexeme,
+                    expected: vec!["extern ABI \"C\", \"c\", or \"wasi\"".to_string()],
+                    offset: abi_token.start,
+                })
+            }
+        };
+        Ok(ExternDecl::new(abi, symbol))
+    }
+
+    fn expect_string_literal(&mut self) -> Result<String, FrontendError> {
+        let token = self.expect("StringLit")?;
+        string_literal_value(&token.lexeme).ok_or_else(|| FrontendError::UnexpectedToken {
+            found: token.name,
+            lexeme: token.lexeme,
+            expected: vec!["string literal".to_string()],
+            offset: token.start,
         })
     }
 
@@ -1524,7 +1578,7 @@ fn pipe_default_insert(input: Expr, rhs: Expr) -> Expr {
             args.insert(0, input);
             Expr::call_args(*callee, args)
         }
-        Expr::Field { receiver, name } if is_type_or_namespace_path(&receiver) => {
+        Expr::Field { receiver, name, .. } if is_type_or_namespace_path(&receiver) => {
             Expr::method_call_args(input, name, Vec::new())
         }
         Expr::MethodCall {
@@ -1549,6 +1603,28 @@ fn is_instantiable_callee(expr: &Expr) -> bool {
         expr,
         Expr::Var(_) | Expr::Field { .. } | Expr::MethodCall { .. }
     )
+}
+
+fn string_literal_value(lexeme: &str) -> Option<String> {
+    let inner = lexeme.strip_prefix('"')?.strip_suffix('"')?;
+    let mut value = String::new();
+    let mut chars = inner.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            value.push(ch);
+            continue;
+        }
+        let escaped = chars.next()?;
+        match escaped {
+            '"' => value.push('"'),
+            '\\' => value.push('\\'),
+            'n' => value.push('\n'),
+            't' => value.push('\t'),
+            'r' => value.push('\r'),
+            other => value.push(other),
+        }
+    }
+    Some(value)
 }
 
 fn data_variant_map(data: &[DataDecl]) -> BTreeMap<String, Vec<String>> {
@@ -1579,6 +1655,23 @@ fn enrich_item_with_data_variants(
             return_type,
             body: enrich_expr_with_data_variants(body, variants),
         },
+        SourceItem::ExternDef {
+            name,
+            visibility,
+            receiver,
+            generics,
+            params,
+            return_type,
+            extern_decl,
+        } => SourceItem::ExternDef {
+            name,
+            visibility,
+            receiver,
+            generics,
+            params,
+            return_type,
+            extern_decl,
+        },
         SourceItem::StaticValue {
             name,
             visibility,
@@ -1596,6 +1689,7 @@ fn enrich_item_with_data_variants(
 fn source_item_kind_name(item: &SourceItem) -> (String, String) {
     match item {
         SourceItem::Def { name, .. } => ("def".to_string(), name.clone()),
+        SourceItem::ExternDef { name, .. } => ("extern".to_string(), name.clone()),
         SourceItem::StaticValue { name, .. } => ("static".to_string(), name.clone()),
     }
 }

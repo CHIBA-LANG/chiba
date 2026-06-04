@@ -1,9 +1,11 @@
+use crate::ast::render_source_pattern;
 use crate::closure::{CaptureFact, ClosureFacts, ClosureStorageKind};
 use crate::control::{ContinuationFact, ContinuationKind};
-use crate::cps::{CpsAtom, CpsProgram, CpsTerm};
+use crate::cps::{CpsAtom, CpsProgram, CpsTerm, OperatorKind};
 use crate::lambda_lift::LambdaLiftFacts;
+use crate::resolve::OperatorSurface;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
-use crate::template::{DynRowContract, RowShape};
+use crate::template::{dyn_row_contract_key, row_shape_key, DynRowContract, RowShape};
 use crate::typed::{SendColor, UsageColor};
 use crate::usage::UsageFacts;
 
@@ -69,12 +71,15 @@ pub enum CoreOp {
         patterns: Vec<String>,
     },
     TupleConstruct {
+        nominal: String,
         layout: String,
         fields: Vec<String>,
     },
     TupleFieldGet {
+        nominal: String,
         layout: String,
         field: String,
+        field_index: usize,
     },
     RecordConstruct {
         layout: String,
@@ -95,6 +100,21 @@ pub enum CoreOp {
         variants: Vec<String>,
         args: Vec<String>,
     },
+    AdtTupleBridge {
+        data: String,
+        ctor: String,
+        tuple_fields: Vec<String>,
+        tuple_to_adt_intrinsic: CompilerIntrinsic,
+        adt_to_tuple_intrinsic: CompilerIntrinsic,
+    },
+    CompilerIntrinsicUse {
+        intrinsic: CompilerIntrinsic,
+        owner_namespace: String,
+        subject: String,
+    },
+    TargetSpecificTerm {
+        term: TargetSpecificCoreTerm,
+    },
     LiftedFunction {
         source: String,
         symbol: String,
@@ -109,6 +129,46 @@ pub enum OperatorIntrinsic {
     I64Sub,
     I64Mul,
     I64Div,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompilerIntrinsic {
+    TupleToAdt,
+    AdtToTuple,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TargetSpecificCoreTerm {
+    Wasm,
+    Wat,
+    Binaryen,
+    Funcref,
+    Eqref,
+}
+
+impl TargetSpecificCoreTerm {
+    pub fn debug_name(self) -> &'static str {
+        match self {
+            TargetSpecificCoreTerm::Wasm => "Wasm",
+            TargetSpecificCoreTerm::Wat => "WAT",
+            TargetSpecificCoreTerm::Binaryen => "Binaryen",
+            TargetSpecificCoreTerm::Funcref => "funcref",
+            TargetSpecificCoreTerm::Eqref => "eqref",
+        }
+    }
+}
+
+impl CompilerIntrinsic {
+    pub fn owner_namespace(self) -> &'static str {
+        "compiler.intrinsic"
+    }
+
+    pub fn debug_name(self) -> &'static str {
+        match self {
+            CompilerIntrinsic::TupleToAdt => "compiler.intrinsic.tuple_to_adt",
+            CompilerIntrinsic::AdtToTuple => "compiler.intrinsic.adt_to_tuple",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -142,6 +202,7 @@ pub enum CoreValue {
     TupleField {
         tuple: Box<CoreValue>,
         field: String,
+        field_index: usize,
     },
     Range {
         start: Box<CoreValue>,
@@ -186,7 +247,7 @@ impl CoreValue {
                     .join(", ");
                 format!("({fields})")
             }
-            CoreValue::TupleField { tuple, field } => {
+            CoreValue::TupleField { tuple, field, .. } => {
                 format!("{}.{}", tuple.debug_name(), field)
             }
             CoreValue::Range { start, end } => {
@@ -406,6 +467,11 @@ pub enum CoreDiagnostic {
         source: String,
         expected_layout: String,
     },
+    CompilerIntrinsicOwnerMismatch {
+        intrinsic: CompilerIntrinsic,
+        owner_namespace: String,
+        expected_owner_namespace: String,
+    },
 }
 
 pub fn lower_core(cps: &CpsProgram, continuations: &[ContinuationFact]) -> CoreProgram {
@@ -458,6 +524,7 @@ pub fn validate_core(program: &CoreProgram) -> CoreValidation {
     validate_lifted_functions(program, &mut diagnostics);
     validate_callable_storage(program, &mut diagnostics);
     validate_ownership(program, &mut diagnostics);
+    validate_compiler_intrinsics(program, &mut diagnostics);
     CoreValidation { diagnostics }
 }
 
@@ -538,7 +605,7 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                 scrutinee: render_atom(scrutinee),
                 patterns: arms
                     .iter()
-                    .map(|arm| format!("{:?}", arm.pattern))
+                    .map(|arm| render_source_pattern(&arm.pattern))
                     .collect(),
             });
             for arm in arms {
@@ -567,10 +634,10 @@ fn lower_call_args(func: &CpsAtom, args: &[CpsAtom]) -> Vec<CoreValue> {
 
 fn lower_callable_target(target: &str, atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
     match atom {
-        CpsAtom::OperatorCallee { protocol, .. } => ops.push(CoreOp::OperatorTarget {
+        CpsAtom::OperatorCallee { kind, protocol, .. } => ops.push(CoreOp::OperatorTarget {
             protocol: protocol.clone(),
             target: target.to_string(),
-            intrinsic: operator_intrinsic(protocol),
+            intrinsic: operator_intrinsic(*kind),
         }),
         _ => ops.push(CoreOp::DynamicCallableTarget {
             target: target.to_string(),
@@ -642,38 +709,41 @@ fn lower_specialization_ops(
                 | DischargedObligation::Static { .. }
                 | DischargedObligation::Constructor { .. } => {}
                 DischargedObligation::Operator {
+                    op,
                     protocol,
                     receiver: Some(receiver),
                 } => ops.push(CoreOp::OperatorTarget {
                     protocol: protocol.clone(),
                     target: format!("{receiver}.{protocol}"),
-                    intrinsic: None,
+                    intrinsic: operator_surface_intrinsic(op),
                 }),
                 DischargedObligation::DynAdapter { contract } => {
-                    let layout = layouts
+                    if let Some(layout) = layouts
                         .iter()
                         .find(|layout| {
                             matches!(&layout.kind, LayoutKind::DynRowPackage(candidate) if candidate == contract)
                         })
                         .map(|layout| layout.key.clone())
-                        .unwrap_or_else(|| format!("dyn-row::{contract:?}"));
-                    ops.push(CoreOp::DynRowAdapterAccess {
-                        subject: format!("{:?}", contract.shape),
-                        layout,
-                    });
+                    {
+                        ops.push(CoreOp::DynRowAdapterAccess {
+                            subject: row_shape_key(&contract.shape),
+                            layout,
+                        });
+                    }
                 }
                 DischargedObligation::Field { field, shape } => {
-                    let layout = layouts
+                    if let Some(layout) = layouts
                         .iter()
                         .find(|layout| {
                             matches!(&layout.kind, LayoutKind::RowShape(candidate) if candidate == shape)
                         })
                         .map(|layout| layout.key.clone())
-                        .unwrap_or_else(|| format!("row::{shape:?}"));
-                    ops.push(CoreOp::StaticRowAccess {
-                        field: field.clone(),
-                        layout,
-                    });
+                    {
+                        ops.push(CoreOp::StaticRowAccess {
+                            field: field.clone(),
+                            layout,
+                        });
+                    }
                 }
                 DischargedObligation::Method { target: None, .. }
                 | DischargedObligation::Operator { receiver: None, .. } => {}
@@ -682,17 +752,23 @@ fn lower_specialization_ops(
     }
 }
 
-fn operator_intrinsic(protocol: &str) -> Option<OperatorIntrinsic> {
-    match protocol {
-        "operator::Add" => Some(OperatorIntrinsic::I64Add),
-        "operator::Sub" => Some(OperatorIntrinsic::I64Sub),
-        "operator::Mul" => Some(OperatorIntrinsic::I64Mul),
-        "operator::Div" => Some(OperatorIntrinsic::I64Div),
-        "op_add" => Some(OperatorIntrinsic::I64Add),
-        "op_sub" => Some(OperatorIntrinsic::I64Sub),
-        "op_mul" => Some(OperatorIntrinsic::I64Mul),
-        "op_div" => Some(OperatorIntrinsic::I64Div),
-        _ => None,
+fn operator_intrinsic(kind: OperatorKind) -> Option<OperatorIntrinsic> {
+    match kind {
+        OperatorKind::Binary(crate::ast::BinaryOp::Add) => Some(OperatorIntrinsic::I64Add),
+        OperatorKind::Binary(crate::ast::BinaryOp::Sub) => Some(OperatorIntrinsic::I64Sub),
+        OperatorKind::Binary(crate::ast::BinaryOp::Mul) => Some(OperatorIntrinsic::I64Mul),
+        OperatorKind::Binary(crate::ast::BinaryOp::Div) => Some(OperatorIntrinsic::I64Div),
+        OperatorKind::Index | OperatorKind::IndexSlice => None,
+    }
+}
+
+fn operator_surface_intrinsic(op: &OperatorSurface) -> Option<OperatorIntrinsic> {
+    match op {
+        OperatorSurface::Binary(crate::ast::BinaryOp::Add) => Some(OperatorIntrinsic::I64Add),
+        OperatorSurface::Binary(crate::ast::BinaryOp::Sub) => Some(OperatorIntrinsic::I64Sub),
+        OperatorSurface::Binary(crate::ast::BinaryOp::Mul) => Some(OperatorIntrinsic::I64Mul),
+        OperatorSurface::Binary(crate::ast::BinaryOp::Div) => Some(OperatorIntrinsic::I64Div),
+        OperatorSurface::Index | OperatorSurface::IndexSlice => None,
     }
 }
 
@@ -708,12 +784,10 @@ fn lower_lifted_functions(lambda_lift: &LambdaLiftFacts, ops: &mut Vec<CoreOp>) 
 }
 
 fn validate_target_neutral(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
-    const FORBIDDEN: [&str; 5] = ["Wasm", "WAT", "Binaryen", "funcref", "eqref"];
-    let rendered = format!("{program:#?}");
-    for term in FORBIDDEN {
-        if rendered.contains(term) {
+    for op in &program.ops {
+        if let CoreOp::TargetSpecificTerm { term } = op {
             diagnostics.push(CoreDiagnostic::TargetSpecificTerm {
-                term: term.to_string(),
+                term: term.debug_name().to_string(),
             });
         }
     }
@@ -794,6 +868,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         CoreOp::OperatorTarget { target, .. } => target == func,
         CoreOp::LiftedFunction { symbol, .. } => symbol == func,
         CoreOp::ReturnValue(_)
+        | CoreOp::TargetSpecificTerm { .. }
         | CoreOp::ReturnBranch { .. }
         | CoreOp::ReturnMatch { .. }
         | CoreOp::TupleConstruct { .. }
@@ -802,6 +877,8 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
         | CoreOp::RecordUpdate { .. }
         | CoreOp::RecordFieldGet { .. }
         | CoreOp::AdtConstruct { .. }
+        | CoreOp::AdtTupleBridge { .. }
+        | CoreOp::CompilerIntrinsicUse { .. }
         | CoreOp::TailCallResult { .. }
         | CoreOp::TailCall { .. }
         | CoreOp::Prompt { .. }
@@ -855,7 +932,7 @@ fn validate_static_row_access(program: &CoreProgram, diagnostics: &mut Vec<CoreD
 
 fn validate_tuple_field_access(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
     for op in &program.ops {
-        if let CoreOp::TupleFieldGet { layout, field } = op {
+        if let CoreOp::TupleFieldGet { layout, field, .. } = op {
             match program.layouts.iter().find(|fact| fact.key == *layout) {
                 Some(fact) => match &fact.kind {
                     LayoutKind::TupleStruct(tuple) if tuple.fields.contains(field) => {}
@@ -977,12 +1054,35 @@ fn validate_ownership(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnosti
     }
 }
 
+fn validate_compiler_intrinsics(program: &CoreProgram, diagnostics: &mut Vec<CoreDiagnostic>) {
+    for op in &program.ops {
+        let CoreOp::CompilerIntrinsicUse {
+            intrinsic,
+            owner_namespace,
+            ..
+        } = op
+        else {
+            continue;
+        };
+        let expected = intrinsic.owner_namespace();
+        if owner_namespace != expected {
+            diagnostics.push(CoreDiagnostic::CompilerIntrinsicOwnerMismatch {
+                intrinsic: *intrinsic,
+                owner_namespace: owner_namespace.clone(),
+                expected_owner_namespace: expected.to_string(),
+            });
+        }
+    }
+}
+
 fn render_atom(atom: &CpsAtom) -> String {
     match atom {
         CpsAtom::Var(name) => name.clone(),
         CpsAtom::Lit(crate::ast::Literal::I64(value)) => value.to_string(),
         CpsAtom::Lit(crate::ast::Literal::Bool(value)) => value.to_string(),
-        CpsAtom::OperatorCallee { protocol, receiver } => {
+        CpsAtom::OperatorCallee {
+            protocol, receiver, ..
+        } => {
             format!("{protocol}({receiver})")
         }
         CpsAtom::FunLambda { param, .. } => format!("lambda#{param}"),
@@ -995,7 +1095,7 @@ fn render_atom(atom: &CpsAtom) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
-        CpsAtom::TupleField { tuple, field } => format!("{}.{}", render_atom(tuple), field),
+        CpsAtom::TupleField { tuple, field, .. } => format!("{}.{}", render_atom(tuple), field),
         CpsAtom::Range { start, end } => format!("{}..{}", render_atom(start), render_atom(end)),
         CpsAtom::Record { layout, fields } => format!(
             "{layout}{{{}}}",
@@ -1040,9 +1140,14 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
         CpsAtom::Tuple { fields, .. } => CoreValue::Tuple {
             fields: fields.iter().map(core_value).collect(),
         },
-        CpsAtom::TupleField { tuple, field } => CoreValue::TupleField {
+        CpsAtom::TupleField {
+            tuple,
+            field,
+            field_index,
+        } => CoreValue::TupleField {
             tuple: Box::new(core_value(tuple)),
             field: field.clone(),
+            field_index: *field_index,
         },
         CpsAtom::Range { start, end } => CoreValue::Range {
             start: Box::new(core_value(start)),
@@ -1083,20 +1188,28 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
         CpsAtom::Tuple { nominal, fields } => {
             let layout = format!("tuple::{nominal}");
             ops.push(CoreOp::TupleConstruct {
+                nominal: nominal.clone(),
                 layout,
                 fields: fields.iter().map(render_atom).collect(),
             });
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
-        CpsAtom::TupleField { tuple, field } => {
+        CpsAtom::TupleField {
+            tuple,
+            field,
+            field_index,
+        } => {
             if let CpsAtom::Tuple { nominal, fields } = tuple.as_ref() {
                 ops.push(CoreOp::TupleConstruct {
+                    nominal: nominal.clone(),
                     layout: format!("tuple::{nominal}"),
                     fields: fields.iter().map(render_atom).collect(),
                 });
                 ops.push(CoreOp::TupleFieldGet {
+                    nominal: nominal.clone(),
                     layout: format!("tuple::{nominal}"),
                     field: field.clone(),
+                    field_index: *field_index,
                 });
             }
             ops.push(CoreOp::ReturnValue(core_value(atom)));
@@ -1149,6 +1262,25 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 variants: variants.clone(),
                 args: args.iter().map(render_atom).collect(),
             });
+            ops.push(CoreOp::AdtTupleBridge {
+                data: data.clone(),
+                ctor: ctor.clone(),
+                tuple_fields: std::iter::once(format!(":{ctor}"))
+                    .chain(args.iter().map(render_atom))
+                    .collect(),
+                tuple_to_adt_intrinsic: CompilerIntrinsic::TupleToAdt,
+                adt_to_tuple_intrinsic: CompilerIntrinsic::AdtToTuple,
+            });
+            ops.push(CoreOp::CompilerIntrinsicUse {
+                intrinsic: CompilerIntrinsic::TupleToAdt,
+                owner_namespace: CompilerIntrinsic::TupleToAdt.owner_namespace().to_string(),
+                subject: format!("{data}.{ctor}"),
+            });
+            ops.push(CoreOp::CompilerIntrinsicUse {
+                intrinsic: CompilerIntrinsic::AdtToTuple,
+                owner_namespace: CompilerIntrinsic::AdtToTuple.owner_namespace().to_string(),
+                subject: format!("{data}.{ctor}"),
+            });
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         _ => ops.push(CoreOp::ReturnValue(core_value(atom))),
@@ -1164,7 +1296,7 @@ fn lower_layouts(
     let mut layouts = Vec::new();
     for item in &specialize.work_items {
         for shape in &item.key.normalized_shapes {
-            let key = format!("row::{shape:?}");
+            let key = row_shape_layout_key(shape);
             layouts.push(LayoutFact {
                 hash: stable_hash(&key),
                 key,
@@ -1172,7 +1304,7 @@ fn lower_layouts(
             });
         }
         for contract in &item.key.dyn_contracts {
-            let key = format!("dyn-row::{contract:?}");
+            let key = dyn_row_layout_key(contract);
             layouts.push(LayoutFact {
                 hash: stable_hash(&key),
                 key,
@@ -1181,7 +1313,7 @@ fn lower_layouts(
         }
     }
     for fact in continuations {
-        let key = format!("continuation::{:?}::{}", fact.kind, fact.binder);
+        let key = continuation_layout_key(fact.kind, &fact.binder);
         let env = continuation_env_layout(fact);
         layouts.push(LayoutFact {
             hash: stable_hash(&key),
@@ -1207,6 +1339,28 @@ fn lower_layouts(
         }
     }
     layouts
+}
+
+fn continuation_layout_key(kind: ContinuationKind, binder: &str) -> String {
+    format!("continuation::{}::{binder}", continuation_kind_key(kind))
+}
+
+fn continuation_kind_key(kind: ContinuationKind) -> &'static str {
+    match kind {
+        ContinuationKind::Cont1 => "cont1",
+        ContinuationKind::ContN => "contn",
+    }
+}
+
+fn row_shape_layout_key(shape: &RowShape) -> String {
+    format!("row::{}", row_shape_key(shape).replace('|', "::"))
+}
+
+fn dyn_row_layout_key(contract: &DynRowContract) -> String {
+    format!(
+        "dyn-row::{}",
+        dyn_row_contract_key(contract).replace('|', "::")
+    )
 }
 
 fn collect_adt_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
@@ -1252,15 +1406,18 @@ fn collect_record_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
 
 fn collect_tuple_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
     for op in ops {
-        let (layout, fields_len) = match op {
-            CoreOp::TupleConstruct { layout, fields } => (layout, fields.len()),
+        let (nominal, layout, fields_len) = match op {
+            CoreOp::TupleConstruct {
+                nominal,
+                layout,
+                fields,
+            } => (nominal, layout, fields.len()),
             CoreOp::TupleFieldGet { .. } => continue,
             _ => continue,
         };
         if layouts.iter().any(|fact| fact.key == *layout) {
             continue;
         }
-        let nominal = layout.strip_prefix("tuple::").unwrap_or(layout).to_string();
         let field_names = (1..=fields_len)
             .map(|index| format!("_{index}"))
             .collect::<Vec<_>>();
@@ -1268,7 +1425,7 @@ fn collect_tuple_layouts(layouts: &mut Vec<LayoutFact>, ops: &[CoreOp]) {
             key: layout.clone(),
             hash: stable_hash(layout),
             kind: LayoutKind::TupleStruct(TupleLayout {
-                nominal,
+                nominal: nominal.clone(),
                 fields: field_names,
             }),
         });
@@ -1298,12 +1455,12 @@ fn lower_ownership(
     for item in &specialize.work_items {
         for contract in &item.key.dyn_contracts {
             facts.push(OwnershipFact {
-                subject: format!("dyn::{:?}", contract.shape),
+                subject: format!("dyn::{}", dyn_row_contract_key(contract)),
                 kind: OwnershipSubjectKind::DynRowPackage,
                 decision: OwnershipDecision::DynPackage,
             });
             facts.push(OwnershipFact {
-                subject: format!("dyn-payload::{:?}", contract.shape),
+                subject: format!("dyn-payload::{}", dyn_row_contract_key(contract)),
                 kind: OwnershipSubjectKind::DynRowPayload {
                     send: contract.send,
                 },
@@ -1420,4 +1577,33 @@ fn stable_hash(text: &str) -> u64 {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     hash
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tuple_layout_nominal_is_not_inferred_from_layout_key_shape() {
+        let ops = vec![CoreOp::TupleConstruct {
+            nominal: "SourceTuple".to_string(),
+            layout: "opaque-layout-key".to_string(),
+            fields: vec!["1".to_string()],
+        }];
+        let mut layouts = Vec::new();
+
+        collect_tuple_layouts(&mut layouts, &ops);
+
+        assert_eq!(
+            layouts,
+            vec![LayoutFact {
+                key: "opaque-layout-key".to_string(),
+                hash: stable_hash("opaque-layout-key"),
+                kind: LayoutKind::TupleStruct(TupleLayout {
+                    nominal: "SourceTuple".to_string(),
+                    fields: vec!["_1".to_string()],
+                }),
+            }]
+        );
+    }
 }

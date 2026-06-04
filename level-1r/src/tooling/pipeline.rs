@@ -2,7 +2,8 @@ use crate::alpha::{alpha_expr, AlphaFacts};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
-    Expr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, UseDecl,
+    render_source_expr, Expr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem,
+    SourceProgram, UseDecl,
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_params, link_backend_artifacts, BackendArtifact,
@@ -22,7 +23,7 @@ use crate::cps_usage::{
 };
 use crate::debug::{render_visual_report, visual_report, VisualReport};
 use crate::frontend::{parse_source_program, FrontendError, FrontendOutput, SourceItemSpan};
-use crate::global::{analyze_global_init, GlobalInitDiagnostic, GlobalInitPlan};
+use crate::global::{analyze_global_init, GlobalInitDiagnostic, GlobalInitPlan, GlobalStaticId};
 use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
 use crate::monomorphize::{schedule_monomorphization, MonomorphizationPlan};
 use crate::nanopass::PassReport;
@@ -33,10 +34,10 @@ use crate::std_audit::{audit_std_dependencies, StdAuditReport};
 use crate::surface::{
     build_interface_summary, duplicate_constructor_names, duplicate_data_names,
     duplicate_top_level_names, duplicate_type_fields, duplicate_type_names, project_surface,
-    InterfaceSummary, ProjectSurface,
+    InterfaceConstructor, InterfaceSummary, ProjectSurface,
 };
 use crate::symbol::encode_debug_symbol;
-use crate::template::{analyze_template_with_source, TemplateFacts};
+use crate::template::{analyze_template_with_source, TemplateDiagnostic, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
     source_type_name_to_type, type_expr_with_context, RecordTypeField, Type, TypeContext, TypeEnv,
@@ -157,6 +158,16 @@ pub enum ProgramDiagnostic {
         static_name: String,
         expr: String,
     },
+    ExplicitAutoGenericConflict {
+        def: String,
+        param: String,
+    },
+    ConflictingExplicitInstantiation {
+        def: String,
+        callee: String,
+        previous_type_args: Vec<String>,
+        type_args: Vec<String>,
+    },
     MissingEntry,
     EntryHasParams {
         name: String,
@@ -165,6 +176,7 @@ pub enum ProgramDiagnostic {
 }
 
 pub fn compile_expr(expr: &Expr) -> CompileOutput {
+    let type_aliases = TypeAliasIndex::default();
     compile_expr_with_indexes_and_generics(
         "<expr>",
         expr,
@@ -175,7 +187,8 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &None,
         &None,
         &TypeContext::new(),
-        &BTreeMap::new(),
+        "root",
+        &type_aliases,
     )
 }
 
@@ -189,7 +202,8 @@ fn compile_expr_with_indexes_and_generics(
     return_type: &Option<String>,
     receiver: &Option<MethodReceiver>,
     type_context: &TypeContext,
-    type_aliases: &BTreeMap<String, String>,
+    current_namespace: &str,
+    type_aliases: &TypeAliasIndex,
 ) -> CompileOutput {
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || alpha_expr(expr));
@@ -237,7 +251,16 @@ fn compile_expr_with_indexes_and_generics(
         "L7TypedSignature",
         "DefHeader+MethodReceiver",
         "TypedSignature",
-        || typed_signature(params, return_type, receiver, type_aliases, type_context),
+        || {
+            typed_signature(
+                params,
+                return_type,
+                receiver,
+                current_namespace,
+                type_aliases,
+                type_context,
+            )
+        },
     );
     let typed_env = typed_signature.type_env();
     let typed = passes.record("L7Typed", "SourceExpr+TypedSignature", "TypedExpr", || {
@@ -405,6 +428,13 @@ pub fn compile_program(program: &SourceProgram) -> Vec<CompileOutput> {
         .collect()
 }
 
+pub fn compile_program_with_interface(
+    program: &SourceProgram,
+    interface: &InterfaceSummary,
+) -> Vec<ProgramDefOutput> {
+    compile_program_defs(&normalize_pattern_clause_defs(program), interface)
+}
+
 pub fn compile_source_program_bundle(source: &str) -> Result<SourceCompileOutput, FrontendError> {
     let frontend = parse_source_program(source)?;
     let mut program = compile_program_bundle(&frontend.program);
@@ -486,6 +516,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     );
     let mut all_diagnostics = diagnostics;
     all_diagnostics.extend(global_init.diagnostics.iter().cloned().map(Into::into));
+    all_diagnostics.extend(template_diagnostics(&defs));
     if entry.is_none() {
         all_diagnostics.push(ProgramDiagnostic::MissingEntry);
     }
@@ -602,7 +633,7 @@ fn clause_group_needs_dispatcher(items: &[SourceItem]) -> bool {
             SourceItem::Def { params, .. } => params
                 .iter()
                 .any(|param| is_refutable_clause_pattern(&param.pattern)),
-            SourceItem::StaticValue { .. } => false,
+            SourceItem::StaticValue { .. } | SourceItem::ExternDef { .. } => false,
         })
 }
 
@@ -637,7 +668,7 @@ fn merge_clause_items(clauses: &[SourceItem]) -> SourceItem {
                 SourceItem::Def { params, .. } => {
                     params.get(index).and_then(|param| param.ty.clone())
                 }
-                SourceItem::StaticValue { .. } => None,
+                SourceItem::StaticValue { .. } | SourceItem::ExternDef { .. } => None,
             });
             ParamDecl::new(dispatcher_param_name(index), ty)
         })
@@ -663,7 +694,9 @@ fn merge_clause_items(clauses: &[SourceItem]) -> SourceItem {
                 };
                 (pattern, body.clone())
             }
-            SourceItem::StaticValue { .. } => unreachable!("clause groups only contain def items"),
+            SourceItem::StaticValue { .. } | SourceItem::ExternDef { .. } => {
+                unreachable!("clause groups only contain def items")
+            }
         })
         .collect();
     SourceItem::Def {
@@ -689,10 +722,16 @@ fn compile_program_defs(
     program: &SourceProgram,
     interface: &InterfaceSummary,
 ) -> Vec<ProgramDefOutput> {
-    let names = NameIndex::from_interface(interface);
-    let methods = MethodIndex::from_interface(interface);
+    let current_namespace = program
+        .namespace
+        .as_ref()
+        .map(NamespaceDecl::dotted)
+        .unwrap_or_else(|| "root".to_string());
+    let names = NameIndex::from_interface_for_namespace(interface, &current_namespace);
+    let methods = MethodIndex::from_interface_for_namespace(interface, &current_namespace);
     let type_aliases = type_aliases_from_interface(interface);
-    let type_context = type_context_from_interface(interface, &program.data, &type_aliases);
+    let type_context =
+        type_context_from_interface(interface, &program.data, &current_namespace, &type_aliases);
     program
         .items
         .iter()
@@ -719,6 +758,7 @@ fn compile_program_defs(
                         return_type,
                         receiver,
                         &type_context,
+                        &current_namespace,
                         &type_aliases,
                     );
                     output
@@ -729,7 +769,7 @@ fn compile_program_defs(
                     output
                 },
             }),
-            SourceItem::StaticValue { .. } => None,
+            SourceItem::StaticValue { .. } | SourceItem::ExternDef { .. } => None,
         })
         .collect()
 }
@@ -834,14 +874,20 @@ fn typed_signature(
     params: &[ParamDecl],
     return_type: &Option<String>,
     receiver: &Option<MethodReceiver>,
-    type_aliases: &BTreeMap<String, String>,
+    current_namespace: &str,
+    type_aliases: &TypeAliasIndex,
     type_context: &TypeContext,
 ) -> TypedSignature {
     TypedSignature {
         params: params
             .iter()
             .map(|param| {
-                let ty = resolve_header_type(param.ty.as_deref(), receiver, type_aliases);
+                let ty = resolve_header_type(
+                    param.ty.as_deref(),
+                    receiver,
+                    current_namespace,
+                    type_aliases,
+                );
                 TypedParam {
                     name: param.name.clone(),
                     pattern: param.pattern.clone(),
@@ -853,14 +899,15 @@ fn typed_signature(
             .collect(),
         return_type: return_type
             .as_deref()
-            .map(|ty| resolve_header_type(Some(ty), receiver, type_aliases)),
+            .map(|ty| resolve_header_type(Some(ty), receiver, current_namespace, type_aliases)),
     }
 }
 
 fn resolve_header_type(
     ty: Option<&str>,
     receiver: &Option<MethodReceiver>,
-    type_aliases: &BTreeMap<String, String>,
+    current_namespace: &str,
+    type_aliases: &TypeAliasIndex,
 ) -> String {
     match ty {
         Some("Self") => receiver
@@ -868,8 +915,7 @@ fn resolve_header_type(
             .map(MethodReceiver::display_name)
             .unwrap_or_else(|| "Self".to_string()),
         Some(ty) => type_aliases
-            .get(ty)
-            .cloned()
+            .resolve(current_namespace, ty)
             .unwrap_or_else(|| ty.to_string()),
         None => "Unknown".to_string(),
     }
@@ -885,11 +931,12 @@ fn header_type_to_type(ty: &str) -> Type {
 
 fn type_context_from_interface(
     interface: &InterfaceSummary,
-    data_decls: &[crate::ast::DataDecl],
-    type_aliases: &BTreeMap<String, String>,
+    _data_decls: &[crate::ast::DataDecl],
+    current_namespace: &str,
+    type_aliases: &TypeAliasIndex,
 ) -> TypeContext {
     let mut context = TypeContext::new();
-    for ty in &interface.types {
+    for ty in visible_nominal_types(interface, current_namespace) {
         if ty.alias_target.is_some() {
             continue;
         }
@@ -898,7 +945,11 @@ fn type_context_from_interface(
             .iter()
             .map(|field| RecordTypeField {
                 name: field.name.clone(),
-                ty: header_type_to_type(&field.ty),
+                ty: header_type_to_type(
+                    &type_aliases
+                        .resolve(&ty.owner, &field.ty)
+                        .unwrap_or_else(|| field.ty.clone()),
+                ),
             })
             .collect::<Vec<_>>();
         let display_name = nominal_display_name(&ty.name, &ty.generics);
@@ -907,36 +958,147 @@ fn type_context_from_interface(
             context.insert_generic_nominal_row(&ty.name, ty.generics.clone(), fields);
         }
     }
-    for data in data_decls {
-        for variant in &data.variants {
-            context.insert_data_constructor(
-                data.name.clone(),
+    let data_generics = interface
+        .data
+        .iter()
+        .map(|data| {
+            (
+                (data.owner.clone(), data.name.clone()),
                 data.generics.clone(),
-                variant.name.clone(),
-                variant
-                    .fields
-                    .iter()
-                    .map(|field| header_type_to_type(resolve_type_alias(field, type_aliases)))
-                    .collect(),
-            );
-        }
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    for ctor in visible_constructors(interface, current_namespace) {
+        let generics = data_generics
+            .get(&(ctor.owner.clone(), ctor.data.clone()))
+            .cloned()
+            .unwrap_or_default();
+        context.insert_data_constructor(
+            ctor.data.clone(),
+            generics,
+            ctor.name.clone(),
+            ctor.payload_types
+                .iter()
+                .map(|field| {
+                    header_type_to_type(
+                        &type_aliases
+                            .resolve(&ctor.owner, field)
+                            .unwrap_or_else(|| field.clone()),
+                    )
+                })
+                .collect(),
+        );
     }
     context
 }
 
-fn resolve_type_alias<'a>(ty: &'a str, type_aliases: &'a BTreeMap<String, String>) -> &'a str {
-    type_aliases.get(ty).map(String::as_str).unwrap_or(ty)
-}
-
-fn type_aliases_from_interface(interface: &InterfaceSummary) -> BTreeMap<String, String> {
-    interface
-        .types
-        .iter()
-        .filter_map(|ty| {
-            let target = ty.alias_target.clone()?;
-            Some((ty.name.clone(), target))
+fn visible_constructors<'a>(
+    interface: &'a InterfaceSummary,
+    current_namespace: &str,
+) -> Vec<&'a InterfaceConstructor> {
+    let mut by_data_ctor = BTreeMap::<(String, String), Vec<&InterfaceConstructor>>::new();
+    for ctor in &interface.constructors {
+        by_data_ctor
+            .entry((ctor.data.clone(), ctor.name.clone()))
+            .or_default()
+            .push(ctor);
+    }
+    by_data_ctor
+        .into_values()
+        .filter_map(|candidates| {
+            let local = candidates
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.owner == current_namespace)
+                .collect::<Vec<_>>();
+            match local.as_slice() {
+                [candidate] => Some(*candidate),
+                [] => match candidates.as_slice() {
+                    [candidate] => Some(*candidate),
+                    _ => None,
+                },
+                _ => None,
+            }
         })
         .collect()
+}
+
+fn visible_nominal_types<'a>(
+    interface: &'a InterfaceSummary,
+    current_namespace: &str,
+) -> Vec<&'a crate::surface::InterfaceType> {
+    let mut by_name = BTreeMap::<String, Vec<&crate::surface::InterfaceType>>::new();
+    for ty in &interface.types {
+        by_name
+            .entry(nominal_display_name(&ty.name, &ty.generics))
+            .or_default()
+            .push(ty);
+    }
+    by_name
+        .into_values()
+        .filter_map(|candidates| {
+            let local = candidates
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.owner == current_namespace)
+                .collect::<Vec<_>>();
+            match local.as_slice() {
+                [candidate] => Some(*candidate),
+                [] => match candidates.as_slice() {
+                    [candidate] => Some(*candidate),
+                    _ => None,
+                },
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct TypeAliasIndex {
+    by_name: BTreeMap<String, Vec<TypeAliasCandidate>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct TypeAliasCandidate {
+    owner: String,
+    target: String,
+}
+
+impl TypeAliasIndex {
+    fn resolve(&self, current_namespace: &str, name: &str) -> Option<String> {
+        let candidates = self.by_name.get(name)?;
+        let local = candidates
+            .iter()
+            .filter(|candidate| candidate.owner == current_namespace)
+            .collect::<Vec<_>>();
+        match local.as_slice() {
+            [candidate] => Some(candidate.target.clone()),
+            [] => match candidates.as_slice() {
+                [candidate] => Some(candidate.target.clone()),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
+fn type_aliases_from_interface(interface: &InterfaceSummary) -> TypeAliasIndex {
+    let mut index = TypeAliasIndex::default();
+    for ty in &interface.types {
+        let Some(target) = &ty.alias_target else {
+            continue;
+        };
+        index
+            .by_name
+            .entry(ty.name.clone())
+            .or_default()
+            .push(TypeAliasCandidate {
+                owner: ty.owner.clone(),
+                target: target.clone(),
+            });
+    }
+    index
 }
 
 fn nominal_display_name(name: &str, generics: &[String]) -> String {
@@ -947,11 +1109,16 @@ fn nominal_display_name(name: &str, generics: &[String]) -> String {
     }
 }
 
-fn program_surface_diagnostics(surface: &ProjectSurface) -> Vec<ProgramDiagnostic> {
+pub fn program_surface_diagnostics(surface: &ProjectSurface) -> Vec<ProgramDiagnostic> {
     let mut seen = BTreeSet::new();
     let mut diagnostics = Vec::new();
     for def in &surface.defs {
-        if !seen.insert(def.name.clone()) {
+        let key = (
+            def.owner.clone(),
+            def.receiver.as_ref().map(MethodReceiver::display_name),
+            def.name.clone(),
+        );
+        if !seen.insert(key) {
             diagnostics.push(ProgramDiagnostic::DuplicateDef {
                 name: def.name.clone(),
             });
@@ -1021,6 +1188,35 @@ fn select_program_entry(defs: &[ProgramDefOutput]) -> Option<String> {
     }
 }
 
+fn template_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
+    defs.iter()
+        .flat_map(|def| {
+            def.output
+                .template
+                .diagnostics
+                .iter()
+                .map(|diagnostic| match diagnostic {
+                    TemplateDiagnostic::ExplicitAutoGenericConflict { param } => {
+                        ProgramDiagnostic::ExplicitAutoGenericConflict {
+                            def: def.name.clone(),
+                            param: param.clone(),
+                        }
+                    }
+                    TemplateDiagnostic::ConflictingExplicitInstantiation {
+                        callee,
+                        previous_type_args,
+                        type_args,
+                    } => ProgramDiagnostic::ConflictingExplicitInstantiation {
+                        def: def.name.clone(),
+                        callee: callee.clone(),
+                        previous_type_args: previous_type_args.clone(),
+                        type_args: type_args.clone(),
+                    },
+                })
+        })
+        .collect()
+}
+
 fn program_backend_artifacts(
     defs: &[ProgramDefOutput],
     entry: Option<&str>,
@@ -1031,10 +1227,15 @@ fn program_backend_artifacts(
         global_init
             .statics
             .iter()
-            .map(|static_value| static_value.name.as_str())
-            .collect::<BTreeSet<_>>()
+            .map(|static_value| {
+                (
+                    static_value.name.as_str(),
+                    global_symbol(&static_value.owner, &static_value.name),
+                )
+            })
+            .collect::<BTreeMap<_, _>>()
     } else {
-        BTreeSet::new()
+        BTreeMap::new()
     };
     let mut def_name_counts = BTreeMap::new();
     for def in defs {
@@ -1071,18 +1272,19 @@ fn program_backend_artifacts(
 fn static_return_wat_from_fact(
     artifact: &BackendArtifact,
     symbol: &str,
-    static_names: &BTreeSet<&str>,
+    static_symbols: &BTreeMap<&str, String>,
     is_entry: bool,
 ) -> Option<String> {
     let Some(CoreValue::Var(name)) = artifact.return_value.as_ref() else {
         return None;
     };
-    if !is_entry || !static_names.contains(name.as_str()) {
+    if !is_entry {
         return None;
     }
+    let static_symbol = static_symbols.get(name.as_str())?;
     Some(format!(
         "(module\n  (func ${symbol} (export \"main\") (result i32)\n    global.get ${}\n  )\n)\n",
-        global_symbol(name)
+        static_symbol
     ))
 }
 
@@ -1144,16 +1346,20 @@ fn lower_global_init_into_linked_wat(
 
     let mut wat = String::from("(module\n");
     for static_value in &global_init.statics {
-        let initializer = const_global_initializer(&static_value.body).unwrap_or(0);
+        let initializer = global_storage_initializer(&static_value.body);
         wat.push_str(&format!(
             "  (global ${} (mut i32) (i32.const {}))\n",
-            global_symbol(&static_value.name),
+            global_symbol(&static_value.owner, &static_value.name),
             initializer
         ));
     }
     wat.push_str("  (func $__chiba_init\n");
-    for name in &global_init.init_order {
-        let Some(static_value) = global_init.statics.iter().find(|item| item.name == *name) else {
+    for id in &global_init.init_order_ids {
+        let Some(static_value) = global_init
+            .statics
+            .iter()
+            .find(|item| item.owner == id.owner && item.name == id.name)
+        else {
             continue;
         };
         if const_global_initializer(&static_value.body).is_some() {
@@ -1171,7 +1377,7 @@ fn lower_global_init_into_linked_wat(
         }
         wat.push_str(&format!(
             "    global.set ${}\n",
-            global_symbol(&static_value.name)
+            global_symbol(&static_value.owner, &static_value.name)
         ));
     }
     wat.push_str("  )\n");
@@ -1181,6 +1387,12 @@ fn lower_global_init_into_linked_wat(
     bundle.linked_wat = wat;
     bundle
 }
+
+fn global_storage_initializer(expr: &Expr) -> i32 {
+    const_global_initializer(expr).unwrap_or(RUNTIME_INITIALIZED_GLOBAL_SENTINEL)
+}
+
+const RUNTIME_INITIALIZED_GLOBAL_SENTINEL: i32 = 0;
 
 fn const_global_initializer(expr: &Expr) -> Option<i32> {
     match expr {
@@ -1193,20 +1405,20 @@ fn const_global_initializer(expr: &Expr) -> Option<i32> {
                 crate::ast::BinaryOp::Add => lhs.checked_add(rhs),
                 crate::ast::BinaryOp::Sub => lhs.checked_sub(rhs),
                 crate::ast::BinaryOp::Mul => lhs.checked_mul(rhs),
-                crate::ast::BinaryOp::Div => (rhs != 0).then(|| lhs / rhs),
+                crate::ast::BinaryOp::Div => match rhs {
+                    0 => None,
+                    divisor => Some(lhs / divisor),
+                },
             }
         }
         Expr::If {
             cond,
             then_branch,
             else_branch,
-        } => {
-            if const_global_initializer(cond)? != 0 {
-                const_global_initializer(then_branch)
-            } else {
-                const_global_initializer(else_branch)
-            }
-        }
+        } => match const_global_initializer(cond)? {
+            0 => const_global_initializer(else_branch),
+            _ => const_global_initializer(then_branch),
+        },
         Expr::AdtCtor { ctor, variants, .. } => variants
             .iter()
             .position(|variant| variant == ctor)
@@ -1247,8 +1459,20 @@ fn render_global_init_expr_with_bindings(
                 bindings,
             )?;
         }
-        Expr::Var(name) if global_init.statics.iter().any(|item| item.name == *name) => {
-            wat.push_str(&format!("    global.get ${}\n", global_symbol(name)));
+        Expr::Var(name) => {
+            let Some(static_value) = global_init.statics.iter().find(|item| item.name == *name)
+            else {
+                return Err(
+                    BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
+                        static_name: static_name.to_string(),
+                        expr: render_source_expr(expr),
+                    },
+                );
+            };
+            wat.push_str(&format!(
+                "    global.get ${}\n",
+                global_symbol(&static_value.owner, &static_value.name)
+            ));
         }
         Expr::Binary { op, lhs, rhs } => {
             render_global_init_expr_with_bindings(wat, static_name, lhs, global_init, bindings)?;
@@ -1307,7 +1531,7 @@ fn render_global_init_expr_with_bindings(
         Expr::Match { scrutinee, arms } => {
             render_global_match_expr(wat, static_name, scrutinee, arms, global_init, bindings, 4)?;
         }
-        Expr::Field { receiver, name } => {
+        Expr::Field { receiver, name, .. } => {
             if let Some(value) = global_record_field_expr(receiver, name, bindings) {
                 render_global_init_expr_with_bindings(
                     wat,
@@ -1320,7 +1544,7 @@ fn render_global_init_expr_with_bindings(
                 return Err(
                     BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
                         static_name: static_name.to_string(),
-                        expr: format!("{expr:?}"),
+                        expr: render_source_expr(expr),
                     },
                 );
             }
@@ -1330,7 +1554,7 @@ fn render_global_init_expr_with_bindings(
                 return Err(
                     BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
                         static_name: static_name.to_string(),
-                        expr: format!("{expr:?}"),
+                        expr: render_source_expr(expr),
                     },
                 );
             };
@@ -1340,7 +1564,7 @@ fn render_global_init_expr_with_bindings(
             return Err(
                 BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
                     static_name: static_name.to_string(),
-                    expr: format!("{other:?}"),
+                    expr: render_source_expr(other),
                 },
             );
         }
@@ -1654,8 +1878,16 @@ fn push_global_indent(wat: &mut String, indent: usize) {
     wat.push_str(&" ".repeat(indent));
 }
 
-fn global_symbol(name: &str) -> String {
-    format!("global__{}", encode_debug_symbol(name))
+fn global_symbol(owner: &str, name: &str) -> String {
+    if owner == "root" {
+        format!("global__{}", encode_debug_symbol(name))
+    } else {
+        format!(
+            "global__{}__{}",
+            encode_debug_symbol(owner),
+            encode_debug_symbol(name)
+        )
+    }
 }
 
 impl CompileOutput {
@@ -1676,15 +1908,15 @@ impl ProgramCompileOutput {
                 .unwrap_or_else(|| "<root>".to_string())
         ));
         out.push_str(&format!(
-            "  imports={:?}\n",
-            self.imports.iter().map(UseDecl::dotted).collect::<Vec<_>>()
+            "  imports={}\n",
+            render_imports_summary(self.imports.iter().map(UseDecl::dotted))
         ));
         out.push_str(&format!("  defs={}\n", self.defs.len()));
-        out.push_str(&format!("  global-init={:#?}\n", self.global_init));
+        out.push_str(&render_global_init_summary(&self.global_init));
         out.push_str(&format!("  surface={:#?}\n", self.surface));
         out.push_str(&format!("  interface={:#?}\n", self.interface));
-        out.push_str(&format!("  entry={:?}\n", self.entry));
-        out.push_str(&format!("  diagnostics={:?}\n", self.diagnostics));
+        out.push_str(&format!("  entry={}\n", render_program_entry(&self.entry)));
+        out.push_str(&render_program_diagnostics_summary(&self.diagnostics));
         out.push_str("  passes:\n");
         for event in &self.passes.events {
             out.push_str(&format!(
@@ -1693,6 +1925,142 @@ impl ProgramCompileOutput {
             ));
         }
         out
+    }
+}
+
+fn render_imports_summary(imports: impl Iterator<Item = String>) -> String {
+    let imports = imports.collect::<Vec<_>>();
+    if imports.is_empty() {
+        "<none>".to_string()
+    } else {
+        imports.join(", ")
+    }
+}
+
+fn render_program_entry(entry: &Option<String>) -> &str {
+    entry.as_deref().unwrap_or("<missing>")
+}
+
+fn render_program_diagnostics_summary(diagnostics: &[ProgramDiagnostic]) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("  diagnostics={}\n", diagnostics.len()));
+    for diagnostic in diagnostics {
+        out.push_str(&format!("    {}\n", render_program_diagnostic(diagnostic)));
+    }
+    out
+}
+
+fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
+    match diagnostic {
+        ProgramDiagnostic::DuplicateDef { name } => format!("duplicate def {name}"),
+        ProgramDiagnostic::DuplicateType { name } => format!("duplicate type {name}"),
+        ProgramDiagnostic::DuplicateTypeField { type_name, field } => {
+            format!("duplicate type field {type_name}.{field}")
+        }
+        ProgramDiagnostic::DuplicateData { name } => format!("duplicate data {name}"),
+        ProgramDiagnostic::DuplicateConstructor { name } => {
+            format!("duplicate constructor {name}")
+        }
+        ProgramDiagnostic::DuplicateTopLevelName { name } => {
+            format!("duplicate top-level name {name}")
+        }
+        ProgramDiagnostic::DuplicateStatic { name } => format!("duplicate static {name}"),
+        ProgramDiagnostic::StaticFunctionNameConflict { name } => {
+            format!("static/function name conflict {name}")
+        }
+        ProgramDiagnostic::StaticInitCycle { cycle } => {
+            format!("static init cycle [{}]", cycle.join(" -> "))
+        }
+        ProgramDiagnostic::InvalidStaticAdtConstructor {
+            static_name,
+            data,
+            ctor,
+        } => format!("invalid static ADT constructor {static_name}: {data}.{ctor}"),
+        ProgramDiagnostic::UnsupportedStaticInitializer { static_name, expr } => {
+            format!("unsupported static initializer {static_name}: {expr}")
+        }
+        ProgramDiagnostic::ExplicitAutoGenericConflict { def, param } => {
+            format!("explicit auto-generic conflict {def}[{param}]")
+        }
+        ProgramDiagnostic::ConflictingExplicitInstantiation {
+            def,
+            callee,
+            previous_type_args,
+            type_args,
+        } => format!(
+            "conflicting explicit instantiation {def}: {callee}[{}] vs [{}]",
+            previous_type_args.join(", "),
+            type_args.join(", ")
+        ),
+        ProgramDiagnostic::MissingEntry => "missing entry".to_string(),
+        ProgramDiagnostic::EntryHasParams { name, params } => {
+            format!("entry has params {name}({})", params.join(", "))
+        }
+    }
+}
+
+fn render_global_init_summary(plan: &GlobalInitPlan) -> String {
+    let mut out = String::new();
+    out.push_str("  global-init:\n");
+    out.push_str(&format!("    statics={}\n", plan.statics.len()));
+    for static_value in &plan.statics {
+        out.push_str(&format!(
+            "    static {} ty={} init={}\n",
+            render_global_static_id(&GlobalStaticId::new(
+                static_value.owner.clone(),
+                static_value.name.clone()
+            )),
+            static_value.ty.as_deref().unwrap_or("<inferred>"),
+            render_source_expr(&static_value.body)
+        ));
+        if !static_value.dependency_ids.is_empty() {
+            let deps = static_value
+                .dependency_ids
+                .iter()
+                .map(render_global_static_id)
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!("      deps=[{deps}]\n"));
+        }
+    }
+    let init_order = plan
+        .init_order_ids
+        .iter()
+        .map(render_global_static_id)
+        .collect::<Vec<_>>()
+        .join(", ");
+    out.push_str(&format!("    init-order=[{init_order}]\n"));
+    out.push_str(&format!("    diagnostics={}\n", plan.diagnostics.len()));
+    for diagnostic in &plan.diagnostics {
+        out.push_str(&format!(
+            "      {}\n",
+            render_global_init_diagnostic(diagnostic)
+        ));
+    }
+    out
+}
+
+fn render_global_static_id(id: &GlobalStaticId) -> String {
+    format!("{}::{}", id.owner, id.name)
+}
+
+fn render_global_init_diagnostic(diagnostic: &GlobalInitDiagnostic) -> String {
+    match diagnostic {
+        GlobalInitDiagnostic::DuplicateStatic { name } => format!("duplicate static {name}"),
+        GlobalInitDiagnostic::StaticFunctionNameConflict { name } => {
+            format!("static/function name conflict {name}")
+        }
+        GlobalInitDiagnostic::StaticInitCycle { cycle } => {
+            format!("static init cycle [{}]", cycle.join(" -> "))
+        }
+        GlobalInitDiagnostic::InvalidStaticAdtConstructor {
+            static_name,
+            data,
+            ctor,
+        } => format!("invalid static ADT constructor {static_name}: {data}.{ctor}"),
+        GlobalInitDiagnostic::UnsupportedStaticInitializer { static_name, expr } => {
+            format!("unsupported static initializer {static_name}: {expr}")
+        }
     }
 }
 
@@ -1711,13 +2079,8 @@ impl SourceCompileOutput {
                 .unwrap_or_else(|| "<root>".to_string())
         ));
         out.push_str(&format!(
-            "  imports={:?}\n",
-            self.frontend
-                .program
-                .imports
-                .iter()
-                .map(UseDecl::dotted)
-                .collect::<Vec<_>>()
+            "  imports={}\n",
+            render_imports_summary(self.frontend.program.imports.iter().map(UseDecl::dotted))
         ));
         out.push_str(&format!("  items={}\n", self.frontend.program.items.len()));
         out.push_str("  item-spans:\n");
@@ -1756,12 +2119,15 @@ mod tests {
         };
         let global_init = GlobalInitPlan {
             statics: vec![GlobalStatic {
+                owner: "root".to_string(),
                 name: "VALUE".to_string(),
                 ty: Some("i64".to_string()),
                 body: Expr::call_args(Expr::var("helper"), Vec::new()),
                 dependencies: vec![],
+                dependency_ids: vec![],
             }],
             init_order: vec!["VALUE".to_string()],
+            init_order_ids: vec![crate::global::GlobalStaticId::new("root", "VALUE")],
             diagnostics: vec![],
         };
 
@@ -1772,10 +2138,13 @@ mod tests {
             vec![
                 BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
                     static_name: "VALUE".to_string(),
-                    expr: "Call { callee: Var(\"helper\"), args: [] }".to_string(),
+                    expr: "helper()".to_string(),
                 }
             ]
         );
+        let diagnostic_text = format!("{:?}", lowered.diagnostics);
+        assert!(!diagnostic_text.contains("Call {"));
+        assert!(!diagnostic_text.contains("Var("));
         assert!(!lowered.linked_wat.contains("global__VALUE"));
         assert!(!lowered.linked_wat.contains("unsupported static init"));
         assert!(!lowered.linked_wat.contains("(i32.const 0)"));
@@ -1794,12 +2163,15 @@ mod tests {
         let body = Expr::adt_ctor("Option", "Ghost", vec!["None", "Some"], Vec::new());
         let global_init = GlobalInitPlan {
             statics: vec![GlobalStatic {
+                owner: "root".to_string(),
                 name: "VALUE".to_string(),
                 ty: Some("Option".to_string()),
                 body: body.clone(),
                 dependencies: vec![],
+                dependency_ids: vec![],
             }],
             init_order: vec!["VALUE".to_string()],
+            init_order_ids: vec![crate::global::GlobalStaticId::new("root", "VALUE")],
             diagnostics: vec![],
         };
 
@@ -1810,10 +2182,12 @@ mod tests {
             vec![
                 BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
                     static_name: "VALUE".to_string(),
-                    expr: format!("{body:?}"),
+                    expr: "Option.Ghost()".to_string(),
                 }
             ]
         );
+        let diagnostic_text = format!("{:?}", lowered.diagnostics);
+        assert!(!diagnostic_text.contains("AdtCtor"));
         assert!(!lowered.linked_wat.contains("global__VALUE"));
         assert!(!lowered.linked_wat.contains("(i32.const 0)"));
     }

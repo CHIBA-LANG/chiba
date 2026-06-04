@@ -113,6 +113,51 @@ fn if_let_pattern_binder_scope_is_limited_to_success_branch() {
 }
 
 #[test]
+fn if_let_pattern_can_shadow_param_without_leaking_to_failure_branch() {
+    let facts = alpha_expr(&Expr::lambda(
+        "x",
+        Expr::if_let(
+            Pattern::bind("x"),
+            Expr::var("x"),
+            Expr::var("x"),
+            Expr::var("x"),
+        ),
+    ));
+
+    assert_eq!(facts.diagnostics, vec![]);
+    assert_eq!(facts.binders.len(), 2);
+    let param = facts.binders[0].id;
+    let pattern = facts.binders[1].id;
+    assert_ne!(param, pattern);
+
+    let AlphaExprKind::Lambda { body, .. } = &facts.expr.kind else {
+        panic!("expected lambda, got {:?}", facts.expr.kind);
+    };
+    let AlphaExprKind::IfLet {
+        scrutinee,
+        then_branch,
+        else_branch,
+        ..
+    } = &body.kind
+    else {
+        panic!("expected if-let, got {:?}", body.kind);
+    };
+
+    match &scrutinee.kind {
+        AlphaExprKind::Var(var) => assert_eq!(var.target, Some(param)),
+        other => panic!("expected scrutinee var, got {other:?}"),
+    }
+    match &then_branch.kind {
+        AlphaExprKind::Var(var) => assert_eq!(var.target, Some(pattern)),
+        other => panic!("expected success branch var, got {other:?}"),
+    }
+    match &else_branch.kind {
+        AlphaExprKind::Var(var) => assert_eq!(var.target, Some(param)),
+        other => panic!("expected failure branch var, got {other:?}"),
+    }
+}
+
+#[test]
 fn visual_report_contains_alpha_layer_and_pass_event() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
     let visual = output.render_visual();

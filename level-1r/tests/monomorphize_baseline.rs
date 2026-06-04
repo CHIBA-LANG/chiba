@@ -62,7 +62,9 @@ fn scheduler_artifact_name_is_stable_and_keeps_shape_dyn_abi_dimensions() {
     assert!(artifact.starts_with("mono::render::nominal=User"));
     assert!(artifact.contains("::shape="));
     assert!(artifact.contains("::dyn="));
-    assert!(artifact.ends_with("::abi=Chiba"));
+    assert!(artifact.ends_with("::abi=chiba"));
+    assert!(!artifact.contains("RowShape"));
+    assert!(!artifact.contains("DynRowContract"));
     assert_eq!(plan.jobs[0].definition_note, "definition-site::render");
 }
 
@@ -85,7 +87,9 @@ fn scheduler_artifact_name_keeps_explicit_template_dimensions() {
 
     assert!(artifact.starts_with("mono::id::params="));
     assert!(artifact.contains("::typeargs="));
-    assert!(artifact.ends_with("::abi=Chiba"));
+    assert!(artifact.ends_with("::abi=chiba"));
+    assert!(!artifact.contains("TemplateParam"));
+    assert!(!artifact.contains("TemplateInstantiation"));
 }
 
 #[test]

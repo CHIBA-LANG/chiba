@@ -129,6 +129,18 @@ fn compile_output_contains_specialization_work_item() {
         .normalized_shapes
         .contains(&canonical_open_row(vec![("name", ShapeType::Unknown)])));
     assert!(output.render_visual().contains("specialize:"));
+    assert!(output.visual.specialize.contains("work-items=1"));
+    assert!(output
+        .visual
+        .specialize
+        .contains("key generic=<expr> abi=chiba"));
+    assert!(output
+        .visual
+        .specialize
+        .contains("work-item 0 obligation field name in {r | name: _}"));
+    assert!(!output.visual.specialize.contains("SpecializationFacts {"));
+    assert!(!output.visual.specialize.contains("work_items"));
+    assert!(!output.visual.specialize.contains("DischargedObligation"));
     assert!(output.render_visual().contains("monomorphize:"));
     assert_eq!(output.monomorphize.jobs.len(), 1);
 }

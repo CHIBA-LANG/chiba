@@ -5,8 +5,9 @@ use chiba_level1r::resolve::{
     ResolveDiagnostic, ResolvedCall, ResolvedName,
 };
 use chiba_level1r::{
-    build_interface_summary, compile_expr, project_surface, DataDecl, DataVariant, Expr,
-    MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram, Visibility,
+    build_interface_summary, compile_expr, project_surface, project_surface_many, DataDecl,
+    DataVariant, Expr, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram,
+    Visibility,
 };
 
 #[test]
@@ -139,6 +140,94 @@ fn duplicate_nominal_method_candidates_are_ambiguous_not_order_dependent() {
 }
 
 #[test]
+fn duplicate_qualified_method_candidates_are_ambiguous_not_order_dependent() {
+    let expr = Expr::method_call(Expr::var("Vec2"), "origin", Expr::i64(0));
+    let alpha = alpha_expr(&expr);
+    let mut methods = MethodIndex::default();
+    methods.add_candidate(MethodCandidate {
+        receiver: "Vec2".to_string(),
+        name: "origin".to_string(),
+        symbol: "math.Vec2.origin".to_string(),
+        owner: "math".to_string(),
+        visibility: Visibility::Public,
+    });
+    methods.add_candidate(MethodCandidate {
+        receiver: "Vec2".to_string(),
+        name: "origin".to_string(),
+        symbol: "debug.Vec2.origin".to_string(),
+        owner: "debug".to_string(),
+        visibility: Visibility::Public,
+    });
+
+    let facts = resolve_expr(&alpha.expr, methods);
+
+    assert_eq!(
+        facts.diagnostics,
+        vec![ResolveDiagnostic::AmbiguousMethod {
+            receiver: "Vec2".to_string(),
+            name: "origin".to_string(),
+            candidates: vec![
+                "math.Vec2.origin".to_string(),
+                "debug.Vec2.origin".to_string()
+            ],
+        }]
+    );
+    assert_eq!(facts.resolved_calls, vec![]);
+}
+
+#[test]
+fn current_namespace_method_candidate_wins_over_external_same_receiver_name() {
+    let current = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["current".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::method_def(
+            MethodReceiver::new("Box", Vec::new()),
+            "show",
+            vec![ParamDecl::new("self", Some("Self".to_string()))],
+            None,
+            Expr::var("self"),
+        )],
+    );
+    let imported = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["imported".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::method_def(
+            MethodReceiver::new("Box", Vec::new()),
+            "show",
+            vec![ParamDecl::new("self", Some("Self".to_string()))],
+            None,
+            Expr::var("self"),
+        )],
+    );
+    let interface = build_interface_summary(&project_surface_many(&[imported, current]));
+    let alpha = alpha_expr(&Expr::method_call(
+        Expr::nominal("Box", Expr::var("box")),
+        "show",
+        Expr::i64(0),
+    ));
+
+    let facts = resolve_expr_with_names(
+        &alpha.expr,
+        MethodIndex::from_interface_for_namespace(&interface, "current"),
+        NameIndex::default(),
+    );
+
+    assert_eq!(facts.diagnostics, vec![]);
+    assert_eq!(
+        facts.resolved_calls,
+        vec![ResolvedCall::ReceiverMethod {
+            receiver: "Box".to_string(),
+            name: "show".to_string(),
+            symbol: "current::Box.show".to_string(),
+        }]
+    );
+}
+
+#[test]
 fn interface_summary_resolves_global_function_owner_symbol() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string()])),
@@ -170,6 +259,106 @@ fn interface_summary_resolves_global_function_owner_symbol() {
         vec![ResolvedName::Function {
             name: "helper".to_string(),
             symbol: "parser::helper".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn current_namespace_function_candidate_wins_over_external_same_name() {
+    let current = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["current".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "shared".to_string(),
+            visibility: Visibility::Public,
+            params: Vec::new(),
+            return_type: None,
+            body: Expr::i64(1),
+        }],
+    );
+    let imported = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["imported".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "shared".to_string(),
+            visibility: Visibility::Public,
+            params: Vec::new(),
+            return_type: None,
+            body: Expr::i64(2),
+        }],
+    );
+    let interface = build_interface_summary(&project_surface_many(&[imported, current]));
+    let facts = resolve_expr_with_names(
+        &alpha_expr(&Expr::call_args(Expr::var("shared"), Vec::new())).expr,
+        MethodIndex::default(),
+        NameIndex::from_interface_for_namespace(&interface, "current"),
+    );
+
+    assert_eq!(facts.diagnostics, vec![]);
+    assert_eq!(
+        facts.resolved_names,
+        vec![ResolvedName::Function {
+            name: "shared".to_string(),
+            symbol: "current::shared".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn current_namespace_static_shadows_external_function_call_target() {
+    let current = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["current".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::static_value(
+            "shared",
+            Some("I64".to_string()),
+            Expr::i64(1),
+        )],
+    );
+    let imported = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["imported".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::Def {
+            receiver: None,
+            generics: Vec::new(),
+            name: "shared".to_string(),
+            visibility: Visibility::Public,
+            params: Vec::new(),
+            return_type: None,
+            body: Expr::i64(2),
+        }],
+    );
+    let interface = build_interface_summary(&project_surface_many(&[imported, current]));
+    let call_facts = resolve_expr_with_names(
+        &alpha_expr(&Expr::call_args(Expr::var("shared"), Vec::new())).expr,
+        MethodIndex::default(),
+        NameIndex::from_interface_for_namespace(&interface, "current"),
+    );
+    let var_facts = resolve_expr_with_names(
+        &alpha_expr(&Expr::var("shared")).expr,
+        MethodIndex::default(),
+        NameIndex::from_interface_for_namespace(&interface, "current"),
+    );
+
+    assert_eq!(call_facts.diagnostics, vec![]);
+    assert_eq!(call_facts.resolved_names, vec![]);
+    assert_eq!(
+        var_facts.resolved_names,
+        vec![ResolvedName::Static {
+            name: "shared".to_string(),
+            symbol: "current::shared".to_string(),
         }]
     );
 }
@@ -477,6 +666,208 @@ fn interface_summary_resolves_qualified_constructor_owner_symbol_and_arity() {
 }
 
 #[test]
+fn duplicate_constructor_candidates_are_ambiguous_not_order_dependent() {
+    let left = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["left".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            Vec::new(),
+            vec![DataVariant::new("Some", vec!["I64".to_string()])],
+        )],
+        Vec::new(),
+    );
+    let right = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["right".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            Vec::new(),
+            vec![DataVariant::new("Some", vec!["I64".to_string()])],
+        )],
+        Vec::new(),
+    );
+    let interface = build_interface_summary(&project_surface_many(&[right, left]));
+    let alpha = alpha_expr(&Expr::adt_ctor(
+        "Option",
+        "Some",
+        vec!["Some"],
+        vec![Expr::i64(1)],
+    ));
+
+    let facts = resolve_expr_with_names(
+        &alpha.expr,
+        MethodIndex::default(),
+        NameIndex::from_interface(&interface),
+    );
+
+    assert_eq!(facts.resolved_names, vec![]);
+    assert_eq!(
+        facts.diagnostics,
+        vec![ResolveDiagnostic::AmbiguousConstructor {
+            data: "Option".to_string(),
+            ctor: "Some".to_string(),
+            candidates: vec![
+                "left::Option.Some".to_string(),
+                "right::Option.Some".to_string()
+            ],
+        }]
+    );
+}
+
+#[test]
+fn current_namespace_constructor_candidate_wins_over_external_same_name() {
+    let current = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["current".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            Vec::new(),
+            vec![DataVariant::new("Some", vec!["I64".to_string()])],
+        )],
+        Vec::new(),
+    );
+    let imported = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["imported".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            Vec::new(),
+            vec![DataVariant::new("Some", vec!["Bool".to_string()])],
+        )],
+        Vec::new(),
+    );
+    let interface = build_interface_summary(&project_surface_many(&[imported, current]));
+    let alpha = alpha_expr(&Expr::adt_ctor(
+        "Option",
+        "Some",
+        vec!["Some"],
+        vec![Expr::i64(1)],
+    ));
+
+    let facts = resolve_expr_with_names(
+        &alpha.expr,
+        MethodIndex::default(),
+        NameIndex::from_interface_for_namespace(&interface, "current"),
+    );
+
+    assert_eq!(facts.diagnostics, vec![]);
+    assert_eq!(
+        facts.resolved_names,
+        vec![ResolvedName::Constructor {
+            data: "Option".to_string(),
+            ctor: "Some".to_string(),
+            symbol: "current::Option.Some".to_string(),
+            arity: 1,
+        }]
+    );
+}
+
+#[test]
+fn interface_summary_resolution_uses_structured_identity_not_symbol_shape() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        vec![DataDecl::new(
+            "Option",
+            Vec::new(),
+            vec![DataVariant::new("Some", vec!["I64".to_string()])],
+        )],
+        vec![
+            SourceItem::def("helper", Vec::new(), Vec::new(), None, Expr::i64(1)),
+            SourceItem::static_value("PUBLIC_CONST", Some("I64".to_string()), Expr::i64(2)),
+            SourceItem::method_def(
+                MethodReceiver::new("Box", Vec::new()),
+                "show",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                None,
+                Expr::var("self"),
+            ),
+        ],
+    );
+    let mut interface = build_interface_summary(&project_surface(&program));
+    interface.functions[0].symbol = "$opaque_fn_0".to_string();
+    interface.functions[1].symbol = "$opaque_method_0".to_string();
+    interface.statics[0].symbol = "$opaque_static_0".to_string();
+    interface.constructors[0].symbol = "$opaque_ctor_0".to_string();
+
+    let facts = resolve_expr_with_names(
+        &alpha_expr(&Expr::var("helper")).expr,
+        MethodIndex::from_interface(&interface),
+        NameIndex::from_interface(&interface),
+    );
+    assert_eq!(facts.diagnostics, vec![]);
+    assert_eq!(
+        facts.resolved_names,
+        vec![ResolvedName::Function {
+            name: "helper".to_string(),
+            symbol: "$opaque_fn_0".to_string(),
+        }]
+    );
+
+    let static_facts = resolve_expr_with_names(
+        &alpha_expr(&Expr::var("PUBLIC_CONST")).expr,
+        MethodIndex::from_interface(&interface),
+        NameIndex::from_interface(&interface),
+    );
+    assert_eq!(static_facts.diagnostics, vec![]);
+    assert_eq!(
+        static_facts.resolved_names,
+        vec![ResolvedName::Static {
+            name: "PUBLIC_CONST".to_string(),
+            symbol: "$opaque_static_0".to_string(),
+        }]
+    );
+
+    let ctor_facts = resolve_expr_with_names(
+        &alpha_expr(&Expr::adt_ctor(
+            "Option",
+            "Some",
+            vec!["Some"],
+            vec![Expr::i64(1)],
+        ))
+        .expr,
+        MethodIndex::from_interface(&interface),
+        NameIndex::from_interface(&interface),
+    );
+    assert_eq!(ctor_facts.diagnostics, vec![]);
+    assert_eq!(
+        ctor_facts.resolved_names,
+        vec![ResolvedName::Constructor {
+            data: "Option".to_string(),
+            ctor: "Some".to_string(),
+            symbol: "$opaque_ctor_0".to_string(),
+            arity: 1,
+        }]
+    );
+
+    let method_facts = resolve_expr_with_names(
+        &alpha_expr(&Expr::method_call(
+            Expr::nominal("Box", Expr::var("box")),
+            "show",
+            Expr::i64(0),
+        ))
+        .expr,
+        MethodIndex::from_interface(&interface),
+        NameIndex::from_interface(&interface),
+    );
+    assert_eq!(method_facts.diagnostics, vec![]);
+    assert_eq!(
+        method_facts.resolved_calls,
+        vec![ResolvedCall::ReceiverMethod {
+            receiver: "Box".to_string(),
+            name: "show".to_string(),
+            symbol: "$opaque_method_0".to_string(),
+        }]
+    );
+}
+
+#[test]
 fn interface_summary_does_not_resolve_local_binder_as_global_function() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec!["parser".to_string()])),
@@ -570,5 +961,12 @@ fn visual_report_contains_resolve_layer() {
     let visual = output.render_visual();
 
     assert!(visual.contains("resolve:"));
+    assert!(output.visual.resolve.contains("operators=1"));
+    assert!(output
+        .visual
+        .resolve
+        .contains("operator * protocol=op_mul receiver=<unknown>"));
+    assert!(!output.visual.resolve.contains("ResolveFacts {"));
+    assert!(!output.visual.resolve.contains("operator_obligations"));
     assert!(visual.contains("L2Resolve: AlphaExpr -> ResolveFacts"));
 }

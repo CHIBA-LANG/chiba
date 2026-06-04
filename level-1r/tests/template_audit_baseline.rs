@@ -18,9 +18,10 @@ fn field_obligation_is_checked_discharged_and_monomorphized() {
     assert!(field.instantiation_time_discharge);
     assert!(field.monomorphized);
     assert!(!field.rust_trait_solver_used);
-    assert!(field
-        .specialization_key
-        .contains("Field::SpecializationKey"));
+    assert!(field.specialization_key.starts_with("field::symbol="));
+    assert!(field.specialization_key.contains("::shape=open|name:?"));
+    assert!(!field.specialization_key.contains("SpecializationKey"));
+    assert!(!field.specialization_key.contains("RowShape"));
     assert!(field.explanation.contains("open-row structural obligation"));
     assert!(output.template_audit.diagnostics.is_empty());
 }

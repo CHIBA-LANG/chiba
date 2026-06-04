@@ -1,6 +1,6 @@
 use chiba_level1r::ast::Pattern;
 use chiba_level1r::pattern::PatternDiagnostic;
-use chiba_level1r::typed::Type;
+use chiba_level1r::typed::{type_expr_with_context, Type, TypeContext, TypeEnv};
 use chiba_level1r::{
     compile_expr, compile_program_bundle, compile_source_program_bundle, Expr, Literal, ParamDecl,
     SourceItem, SourceProgram, TemplateParamSource, TypeDecl, TypeField, Visibility,
@@ -136,6 +136,33 @@ fn function_parameter_tuple_pattern_uses_tuple_type_arguments() {
     );
     assert_eq!(first.typed.ty, Type::I64);
     assert_eq!(first.pattern.diagnostics, vec![]);
+}
+
+#[test]
+fn tuple_pattern_does_not_infer_fields_from_nominal_string_shape() {
+    let mut env = TypeEnv::new();
+    env.insert(
+        "pair".to_string(),
+        Type::Nominal("Tuple[i64,bool]".to_string()),
+    );
+
+    let typed = type_expr_with_context(
+        &Expr::if_let(
+            Pattern::tuple(vec![Pattern::bind("head"), Pattern::bind("tail")]),
+            Expr::var("pair"),
+            Expr::var("head"),
+            Expr::i64(0),
+        ),
+        &env,
+        &TypeContext::new(),
+    );
+
+    match typed.kind {
+        chiba_level1r::typed::TypedExprKind::IfLet { then_branch, .. } => {
+            assert_eq!(then_branch.ty, Type::Unknown);
+        }
+        other => panic!("expected if-let typed expr, got {other:?}"),
+    }
 }
 
 #[test]

@@ -1,6 +1,8 @@
 use crate::monomorphize::MonomorphizationPlan;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
-use crate::template::{TemplateFacts, TemplateObligation};
+use crate::template::{
+    dyn_row_contract_key, row_shape_key, TemplateFacts, TemplateObligation, TemplateParamSource,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TemplateAuditReport {
@@ -52,7 +54,7 @@ pub fn audit_checked_templates(
             definition_time_check: true,
             instantiation_time_discharge: true,
             monomorphized: !monomorphize.jobs.is_empty(),
-            specialization_key: format!("shape::{shape:?}"),
+            specialization_key: format!("shape::{}", row_shape_key(shape)),
             rust_trait_solver_used: false,
             explanation: "canonical row shape collected during definition-time checking and reused in specialization key".to_string(),
         });
@@ -79,7 +81,7 @@ pub fn audit_checked_templates(
             definition_time_check: true,
             instantiation_time_discharge: obligation_discharged(source, specialize),
             monomorphized: !monomorphize.jobs.is_empty(),
-            specialization_key: format!("dyn::{contract:?}"),
+            specialization_key: format!("dyn::{}", dyn_row_contract_key(contract)),
             rust_trait_solver_used: false,
             explanation: "dyn adapter obligation is packaged at instantiation, not resolved by runtime impl search".to_string(),
         });
@@ -135,8 +137,68 @@ fn specialization_key_for(
     specialize
         .work_items
         .first()
-        .map(|item| format!("{source:?}::{:?}", item.key))
-        .unwrap_or_else(|| format!("{source:?}::<missing>"))
+        .map(|item| {
+            format!(
+                "{}::symbol={}::params={}::typeargs={}::nominal={}::shape={}::dyn={}::abi={}",
+                obligation_source_key(source),
+                item.key.generic_symbol,
+                item.key
+                    .template_params
+                    .iter()
+                    .map(|param| format!(
+                        "{}:{}",
+                        param.name,
+                        match param.source {
+                            TemplateParamSource::ExplicitHeader => "explicit-header",
+                            TemplateParamSource::SyntheticAutoGeneric => "synthetic-auto-generic",
+                        }
+                    ))
+                    .collect::<Vec<_>>()
+                    .join("|"),
+                item.key
+                    .explicit_instantiations
+                    .iter()
+                    .map(|instantiation| format!(
+                        "{}[{}]",
+                        instantiation.callee,
+                        instantiation.type_args.join(",")
+                    ))
+                    .collect::<Vec<_>>()
+                    .join("|"),
+                item.key.concrete_nominals.join("|"),
+                item.key
+                    .normalized_shapes
+                    .iter()
+                    .map(row_shape_key)
+                    .collect::<Vec<_>>()
+                    .join("|"),
+                item.key
+                    .dyn_contracts
+                    .iter()
+                    .map(dyn_row_contract_key)
+                    .collect::<Vec<_>>()
+                    .join("|"),
+                match item.key.abi_mode {
+                    crate::specialize::AbiMode::Chiba => "chiba",
+                    crate::specialize::AbiMode::Wasi => "wasi",
+                    crate::specialize::AbiMode::Env => "env",
+                }
+            )
+        })
+        .unwrap_or_else(|| format!("{}::<missing>", obligation_source_key(source)))
+}
+
+fn obligation_source_key(source: TemplateObligationSource) -> &'static str {
+    match source {
+        TemplateObligationSource::RowShape => "row-shape",
+        TemplateObligationSource::Field => "field",
+        TemplateObligationSource::Method => "method",
+        TemplateObligationSource::Function => "function",
+        TemplateObligationSource::Static => "static",
+        TemplateObligationSource::Constructor => "constructor",
+        TemplateObligationSource::Operator => "operator",
+        TemplateObligationSource::DynAdapter => "dyn-adapter",
+    }
 }
 
 fn explanation_for(obligation: &TemplateObligation) -> String {

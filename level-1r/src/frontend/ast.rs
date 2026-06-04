@@ -29,6 +29,15 @@ pub enum SourceItem {
         return_type: Option<String>,
         body: Expr,
     },
+    ExternDef {
+        name: String,
+        visibility: Visibility,
+        receiver: Option<MethodReceiver>,
+        generics: Vec<String>,
+        params: Vec<ParamDecl>,
+        return_type: Option<String>,
+        extern_decl: ExternDecl,
+    },
     StaticValue {
         name: String,
         visibility: Visibility,
@@ -81,6 +90,27 @@ pub struct DataDecl {
 pub struct DataVariant {
     pub name: String,
     pub fields: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ExternDecl {
+    pub abi: ExternAbi,
+    pub symbol: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ExternAbi {
+    Wasi,
+    C,
+}
+
+impl ExternDecl {
+    pub fn new(abi: ExternAbi, symbol: impl Into<String>) -> Self {
+        Self {
+            abi,
+            symbol: symbol.into(),
+        }
+    }
 }
 
 impl SourceProgram {
@@ -283,6 +313,24 @@ impl SourceItem {
         }
     }
 
+    pub fn extern_def(
+        name: impl Into<String>,
+        generics: Vec<String>,
+        params: Vec<ParamDecl>,
+        return_type: Option<String>,
+        extern_decl: ExternDecl,
+    ) -> Self {
+        Self::ExternDef {
+            name: name.into(),
+            visibility: Visibility::Public,
+            receiver: None,
+            generics,
+            params,
+            return_type,
+            extern_decl,
+        }
+    }
+
     pub fn with_visibility(self, visibility: Visibility) -> Self {
         match self {
             Self::Def {
@@ -301,6 +349,23 @@ impl SourceItem {
                 params,
                 return_type,
                 body,
+            },
+            Self::ExternDef {
+                name,
+                receiver,
+                generics,
+                params,
+                return_type,
+                extern_decl,
+                ..
+            } => Self::ExternDef {
+                name,
+                visibility,
+                receiver,
+                generics,
+                params,
+                return_type,
+                extern_decl,
             },
             Self::StaticValue { name, ty, body, .. } => Self::StaticValue {
                 name,
@@ -433,12 +498,192 @@ pub enum Literal {
     Bool(bool),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BinaryOp {
     Add,
     Sub,
     Mul,
     Div,
+}
+
+pub fn render_source_expr(expr: &Expr) -> String {
+    match expr {
+        Expr::Var(name) => name.clone(),
+        Expr::Lit(literal) => render_source_literal(literal),
+        Expr::Lambda { param, body } => format!("fn {param} => {}", render_source_expr(body)),
+        Expr::Call { callee, args } => {
+            let args = args
+                .iter()
+                .map(render_source_expr)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}({args})", render_source_expr(callee))
+        }
+        Expr::Instantiate { callee, type_args } => {
+            format!("{}[{}]", render_source_expr(callee), type_args.join(", "))
+        }
+        Expr::Tuple(fields) => {
+            let fields = fields
+                .iter()
+                .map(render_source_expr)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({fields})")
+        }
+        Expr::Record(fields) => {
+            let fields = fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, render_source_expr(&field.value)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{{fields}}}")
+        }
+        Expr::RecordUpdate { base, fields } => {
+            let fields = fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, render_source_expr(&field.value)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{{} | {fields}}}", render_source_expr(base))
+        }
+        Expr::AdtCtor {
+            data, ctor, args, ..
+        } => {
+            let args = args
+                .iter()
+                .map(render_source_expr)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{data}.{ctor}({args})")
+        }
+        Expr::Field { receiver, name } => format!("{}.{}", render_source_expr(receiver), name),
+        Expr::MethodCall {
+            receiver,
+            name,
+            args,
+        } => {
+            let args = args
+                .iter()
+                .map(render_source_expr)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}.{}({args})", render_source_expr(receiver), name)
+        }
+        Expr::Index { receiver, index } => {
+            format!(
+                "{}[{}]",
+                render_source_expr(receiver),
+                render_source_expr(index)
+            )
+        }
+        Expr::Range { start, end } => {
+            format!("{}..{}", render_source_expr(start), render_source_expr(end))
+        }
+        Expr::Binary { op, lhs, rhs } => format!(
+            "{} {} {}",
+            render_source_expr(lhs),
+            render_source_binary_op(*op),
+            render_source_expr(rhs)
+        ),
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => format!(
+            "if {} {{ {} }} else {{ {} }}",
+            render_source_expr(cond),
+            render_source_expr(then_branch),
+            render_source_expr(else_branch)
+        ),
+        Expr::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => format!(
+            "if let {} = {} {{ {} }} else {{ {} }}",
+            render_source_pattern(pattern),
+            render_source_expr(scrutinee),
+            render_source_expr(then_branch),
+            render_source_expr(else_branch)
+        ),
+        Expr::Match { scrutinee, arms } => {
+            let arms = arms
+                .iter()
+                .map(|arm| {
+                    format!(
+                        "{} => {}",
+                        render_source_pattern(&arm.pattern),
+                        render_source_expr(&arm.body)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("match {} {{ {arms} }}", render_source_expr(scrutinee))
+        }
+        Expr::Nominal { name, expr } => format!("{name}({})", render_source_expr(expr)),
+        Expr::Reset { multi, body } => {
+            let name = if *multi { "resetn" } else { "reset" };
+            format!("{name} {{ {} }}", render_source_expr(body))
+        }
+        Expr::Shift { binder, body } => {
+            format!("shift {binder} {{ {} }}", render_source_expr(body))
+        }
+    }
+}
+
+pub fn render_source_pattern(pattern: &Pattern) -> String {
+    match pattern {
+        Pattern::Wildcard => "_".to_string(),
+        Pattern::Bind(name) => name.clone(),
+        Pattern::Tuple(fields) => {
+            let fields = fields
+                .iter()
+                .map(render_source_pattern)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({fields})")
+        }
+        Pattern::Record(fields) => {
+            let fields = fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, render_source_pattern(&field.pattern)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{{fields}}}")
+        }
+        Pattern::Constructor { data, ctor, args } => {
+            let args = args
+                .iter()
+                .map(render_source_pattern)
+                .collect::<Vec<_>>()
+                .join(", ");
+            match data {
+                Some(data) => format!("{data}.{ctor}({args})"),
+                None => format!("{ctor}({args})"),
+            }
+        }
+        Pattern::At { name, pattern } => {
+            format!("{name} @ {}", render_source_pattern(pattern))
+        }
+        Pattern::Lit(literal) => render_source_literal(literal),
+    }
+}
+
+pub fn render_source_literal(literal: &Literal) -> String {
+    match literal {
+        Literal::I64(value) => value.to_string(),
+        Literal::Bool(value) => value.to_string(),
+    }
+}
+
+pub fn render_source_binary_op(op: BinaryOp) -> &'static str {
+    match op {
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        BinaryOp::Mul => "*",
+        BinaryOp::Div => "/",
+    }
 }
 
 impl Expr {

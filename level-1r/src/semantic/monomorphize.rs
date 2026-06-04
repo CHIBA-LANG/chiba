@@ -1,6 +1,10 @@
 use std::collections::BTreeMap;
 
 use crate::specialize::{SpecializationFacts, SpecializationKey};
+use crate::template::{
+    dyn_row_contract_key, row_shape_key, DynRowContract, RowShape, TemplateInstantiation,
+    TemplateParam, TemplateParamSource,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MonomorphizationPlan {
@@ -97,11 +101,13 @@ fn artifact_name(key: &SpecializationKey) -> String {
     let mut text = format!("mono::{}", key.generic_symbol);
     if !key.template_params.is_empty() {
         text.push_str("::params=");
-        text.push_str(&stable_hash(&format!("{:?}", key.template_params)).to_string());
+        text.push_str(&stable_hash(&template_params_key(&key.template_params)).to_string());
     }
     if !key.explicit_instantiations.is_empty() {
         text.push_str("::typeargs=");
-        text.push_str(&stable_hash(&format!("{:?}", key.explicit_instantiations)).to_string());
+        text.push_str(
+            &stable_hash(&template_instantiations_key(&key.explicit_instantiations)).to_string(),
+        );
     }
     if !key.concrete_nominals.is_empty() {
         text.push_str("::nominal=");
@@ -109,19 +115,70 @@ fn artifact_name(key: &SpecializationKey) -> String {
     }
     if !key.normalized_shapes.is_empty() {
         text.push_str("::shape=");
-        text.push_str(&stable_hash(&format!("{:?}", key.normalized_shapes)).to_string());
+        text.push_str(&stable_hash(&row_shapes_key(&key.normalized_shapes)).to_string());
     }
     if !key.dyn_contracts.is_empty() {
         text.push_str("::dyn=");
-        text.push_str(&stable_hash(&format!("{:?}", key.dyn_contracts)).to_string());
+        text.push_str(&stable_hash(&dyn_contracts_key(&key.dyn_contracts)).to_string());
     }
     text.push_str("::abi=");
-    text.push_str(&format!("{:?}", key.abi_mode));
+    text.push_str(match key.abi_mode {
+        crate::specialize::AbiMode::Chiba => "chiba",
+        crate::specialize::AbiMode::Wasi => "wasi",
+        crate::specialize::AbiMode::Env => "env",
+    });
     text
 }
 
 fn definition_note(key: &SpecializationKey) -> String {
     format!("definition-site::{}", key.generic_symbol)
+}
+
+fn template_params_key(params: &[TemplateParam]) -> String {
+    params
+        .iter()
+        .map(|param| {
+            format!(
+                "{}:{}",
+                param.name,
+                match param.source {
+                    TemplateParamSource::ExplicitHeader => "explicit-header",
+                    TemplateParamSource::SyntheticAutoGeneric => "synthetic-auto-generic",
+                }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+fn template_instantiations_key(instantiations: &[TemplateInstantiation]) -> String {
+    instantiations
+        .iter()
+        .map(|instantiation| {
+            format!(
+                "{}[{}]",
+                instantiation.callee,
+                instantiation.type_args.join(",")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+fn row_shapes_key(shapes: &[RowShape]) -> String {
+    shapes
+        .iter()
+        .map(row_shape_key)
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+fn dyn_contracts_key(contracts: &[DynRowContract]) -> String {
+    contracts
+        .iter()
+        .map(dyn_row_contract_key)
+        .collect::<Vec<_>>()
+        .join("|")
 }
 
 fn stable_hash(text: &str) -> u64 {

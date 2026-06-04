@@ -1,8 +1,9 @@
 use chiba_level1r::backend::{
     backend_cache_key, emit_wasm_gc, emit_wasm_gc_with_params, link_backend_artifacts,
-    BackendCacheConfig, BackendDiagnostic, BackendExternImport, BackendLinkDiagnostic,
-    BackendTarget,
+    BackendCacheConfig, BackendDiagnostic, BackendExternAbi, BackendExternImport,
+    BackendLinkDiagnostic, BackendTarget,
 };
+use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
     CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue, OperatorIntrinsic,
 };
@@ -87,6 +88,34 @@ fn backend_records_tailcall_targets_in_serialized_output() {
     assert!(artifact.wat.contains("call $math_Vec2_norm"));
     assert!(!artifact.wat.contains("(func $math_Vec2_norm"));
     assert_eq!(artifact.manifest.entries[0].source_debug_name, "norm");
+}
+
+#[test]
+fn backend_continuation_comments_use_language_kind_not_rust_enum_debug() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::Prompt {
+                kind: ContinuationKind::ContN,
+            },
+            CoreOp::CaptureContinuation {
+                binder: "retry".to_string(),
+                kind: ContinuationKind::ContN,
+            },
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact.wat.contains(";; prompt kind=contn"));
+    assert!(artifact
+        .wat
+        .contains(";; capture-cont binder=retry kind=contn"));
+    assert!(!artifact.wat.contains("kind=ContN"));
+    assert!(!artifact.wat.contains("kind=Cont1"));
 }
 
 #[test]
@@ -311,6 +340,7 @@ fn backend_rejects_missing_tuple_field_return_instead_of_faking_i32_zero() {
                 fields: vec![CoreValue::I64(1)],
             }),
             field: "_2".to_string(),
+            field_index: 1,
         })],
         layouts: vec![],
         ownership: vec![],
@@ -650,20 +680,20 @@ fn backend_cache_key_distinguishes_target_features_and_imports() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
     let mut wasi = BackendCacheConfig::default();
     wasi.imports.push(BackendExternImport {
-        abi: "wasi".to_string(),
+        abi: BackendExternAbi::Wasi,
         module: "wasi_snapshot_preview1".to_string(),
         name: "fd_write".to_string(),
         signature_hash: "i32_i32_i32_i32_to_i32".to_string(),
     });
     let mut env = BackendCacheConfig::default();
     env.imports.push(BackendExternImport {
-        abi: "C".to_string(),
+        abi: BackendExternAbi::C,
         module: "env".to_string(),
         name: "js_log".to_string(),
         signature_hash: "i32_to_unit".to_string(),
     });
     let mut env_lowercase = env.clone();
-    env_lowercase.imports[0].abi = "c".to_string();
+    env_lowercase.imports[0].abi = BackendExternAbi::C;
 
     let wasi_key = backend_cache_key(&output.backend_link, &wasi);
     let env_key = backend_cache_key(&output.backend_link, &env);

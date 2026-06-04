@@ -1,5 +1,6 @@
-use chiba_level1r::core::{CoreOp, LayoutKind};
-use chiba_level1r::typed::{type_expr, Type, TypedExprKind};
+use chiba_level1r::core::{lower_core_with_facts, CoreOp, LayoutKind};
+use chiba_level1r::cps::{CpsAtom, CpsProgram, CpsTerm};
+use chiba_level1r::typed::{type_expr, FieldAccessKind, Type, TypedExprKind};
 use chiba_level1r::{
     compile_expr, compile_program_bundle, Expr, ParamDecl, SourceItem, SourceProgram, Visibility,
 };
@@ -35,6 +36,7 @@ fn tuple_expression_reaches_target_neutral_core_with_tuple_layout() {
     let output = compile_expr(&Expr::tuple(vec![Expr::i64(1), Expr::i64(2)]));
 
     assert!(output.core.ops.contains(&CoreOp::TupleConstruct {
+        nominal: "Tuple2_I64_I64".to_string(),
         layout: "tuple::Tuple2_I64_I64".to_string(),
         fields: vec!["1".to_string(), "2".to_string()],
     }));
@@ -51,18 +53,55 @@ fn tuple_expression_reaches_target_neutral_core_with_tuple_layout() {
 }
 
 #[test]
+fn tuple_layout_nominal_comes_from_core_fact_not_layout_key_shape() {
+    let cps = CpsProgram {
+        term: CpsTerm::Halt(CpsAtom::Tuple {
+            nominal: "SourceTupleName".to_string(),
+            fields: vec![CpsAtom::Lit(chiba_level1r::Literal::I64(1))],
+        }),
+    };
+
+    let core = lower_core_with_facts(
+        &cps,
+        &[],
+        &chiba_level1r::closure::ClosureFacts::default(),
+        &[],
+        &chiba_level1r::lambda_lift::LambdaLiftFacts::default(),
+        &chiba_level1r::specialize::SpecializationFacts::default(),
+        &chiba_level1r::usage::UsageFacts::default(),
+    );
+
+    assert!(core.layouts.iter().any(|layout| {
+        matches!(
+            &layout.kind,
+            LayoutKind::TupleStruct(tuple)
+                if layout.key == "tuple::SourceTupleName" && tuple.nominal == "SourceTupleName"
+        )
+    }));
+}
+
+#[test]
 fn tuple_positional_field_access_has_stable_underscore_names() {
     let expr = Expr::field(Expr::tuple(vec![Expr::i64(1), Expr::bool(true)]), "_2");
     let output = compile_expr(&expr);
 
     assert_eq!(output.typed.ty, Type::Bool);
+    match &output.typed.kind {
+        TypedExprKind::Field { name, access, .. } => {
+            assert_eq!(name, "_2");
+            assert_eq!(*access, FieldAccessKind::TuplePositionalRow { index: 1 });
+        }
+        other => panic!("expected ordinary typed field access, got {other:?}"),
+    }
     assert_eq!(
         output.cps.to_string(),
         "halt Tuple2_I64_Bool(_1=1, _2=true)._2"
     );
     assert!(output.core.ops.contains(&CoreOp::TupleFieldGet {
+        nominal: "Tuple2_I64_Bool".to_string(),
         layout: "tuple::Tuple2_I64_Bool".to_string(),
         field: "_2".to_string(),
+        field_index: 1,
     }));
     assert!(output.core_validation.diagnostics.is_empty());
 }
@@ -82,4 +121,14 @@ fn tuple_header_type_field_access_uses_tuple_type_arguments() {
     let output = compile_program_bundle(&program);
 
     assert_eq!(output.defs[0].output.typed.ty, Type::Bool);
+}
+
+#[test]
+fn nested_nominal_tuple_header_substitution_preserves_positional_row_type() {
+    let source = "type Box[T] = { value: T }
+def main(box: Box[Tuple[i64,bool]]) = box.value._2";
+
+    let output = chiba_level1r::compile_source_program_bundle(source).expect("compile source");
+
+    assert_eq!(output.program.defs[0].output.typed.ty, Type::Bool);
 }

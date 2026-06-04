@@ -44,6 +44,7 @@ pub enum TypedExprKind {
     Field {
         receiver: Box<TypedExpr>,
         name: String,
+        access: FieldAccessKind,
     },
     MethodCall {
         receiver: Box<TypedExpr>,
@@ -102,6 +103,12 @@ pub struct TypedMatchArm {
 pub struct TypedRecordField {
     pub name: String,
     pub value: TypedExpr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FieldAccessKind {
+    RecordOrNominal,
+    TuplePositionalRow { index: usize },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -211,8 +218,10 @@ impl TypeContext {
     }
 
     fn generic_nominal_field_type(&self, nominal: &str, field: &str) -> Option<Type> {
-        let (base, args) = parse_nominal_application(nominal)?;
-        let decl = self.generic_nominal_rows.get(base)?;
+        let ParsedTypeHeader::Nominal { base, args } = parse_type_header(nominal)? else {
+            return None;
+        };
+        let decl = self.generic_nominal_rows.get(&base)?;
         if decl.generics.len() != args.len() {
             return None;
         }
@@ -220,7 +229,7 @@ impl TypeContext {
             .generics
             .iter()
             .cloned()
-            .zip(args.iter().map(|arg| source_type_name_to_type(arg)))
+            .zip(args.iter().map(ParsedTypeHeader::to_type))
             .collect::<BTreeMap<_, _>>();
         field_type(&decl.fields, field).map(|ty| substitute_type_params(&ty, &substitutions))
     }
@@ -323,14 +332,15 @@ impl TypeContext {
     fn pattern_tuple_field_type(&self, ty: &Type, index: usize) -> Type {
         match ty {
             Type::Tuple(fields) => fields.get(index).cloned().unwrap_or(Type::Unknown),
-            Type::Nominal(name) => tuple_intrinsic_field_type(name, index).unwrap_or(Type::Unknown),
             _ => Type::Unknown,
         }
     }
 
     fn substitutions_for_subject(&self, subject: &str) -> Option<BTreeMap<String, Type>> {
-        let (base, args) = parse_nominal_application(subject)?;
-        let generics = self.data_generics.get(base)?;
+        let ParsedTypeHeader::Nominal { base, args } = parse_type_header(subject)? else {
+            return None;
+        };
+        let generics = self.data_generics.get(&base)?;
         if generics.len() != args.len() {
             return None;
         }
@@ -338,7 +348,7 @@ impl TypeContext {
             generics
                 .iter()
                 .cloned()
-                .zip(args.iter().map(|arg| source_type_name_to_type(arg)))
+                .zip(args.iter().map(ParsedTypeHeader::to_type))
                 .collect(),
         )
     }
@@ -466,14 +476,20 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
         }
         Expr::Field { receiver, name } => {
             let receiver = type_expr_with_context(receiver, env, context);
-            let ty = tuple_field_type(&receiver.ty, name)
-                .or_else(|| record_field_type(&receiver.ty, name))
-                .or_else(|| context.nominal_field_type(&receiver.ty, name))
-                .unwrap_or(Type::Unknown);
+            let access = field_access_kind(&receiver.ty, name);
+            let ty = match access {
+                FieldAccessKind::TuplePositionalRow { index } => {
+                    tuple_field_type(&receiver.ty, index)
+                }
+                FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, name)
+                    .or_else(|| context.nominal_field_type(&receiver.ty, name)),
+            }
+            .unwrap_or(Type::Unknown);
             typed(
                 TypedExprKind::Field {
                     receiver: Box::new(receiver),
                     name: name.clone(),
+                    access,
                 },
                 ty,
             )
@@ -679,23 +695,41 @@ fn field_callable_result_type(
     call_result_type(&field_ty, arity)
 }
 
-fn tuple_field_type(receiver: &Type, name: &str) -> Option<Type> {
+fn tuple_field_type(receiver: &Type, index: usize) -> Option<Type> {
     let Type::Tuple(fields) = receiver else {
         return None;
     };
-    let index = name.strip_prefix('_')?.parse::<usize>().ok()?;
-    if index == 0 {
-        return None;
-    }
-    fields.get(index - 1).cloned()
+    fields.get(index).cloned()
 }
 
-fn tuple_intrinsic_field_type(nominal: &str, index: usize) -> Option<Type> {
-    let (base, args) = parse_nominal_application(nominal)?;
-    if base != "Tuple" {
-        return None;
+fn field_access_kind(receiver: &Type, name: &str) -> FieldAccessKind {
+    if let Type::Tuple(fields) = receiver {
+        if let Some(index) = tuple_row_fields(fields)
+            .iter()
+            .find(|field| field.name == name)
+            .map(|field| field.index)
+        {
+            return FieldAccessKind::TuplePositionalRow { index };
+        }
     }
-    args.get(index).map(|arg| source_type_name_to_type(arg))
+    FieldAccessKind::RecordOrNominal
+}
+
+fn tuple_row_fields(fields: &[Type]) -> Vec<TupleRowField> {
+    fields
+        .iter()
+        .enumerate()
+        .map(|(index, _)| TupleRowField {
+            name: format!("_{}", index + 1),
+            index,
+        })
+        .collect()
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct TupleRowField {
+    name: String,
+    index: usize,
 }
 
 fn record_field_type(receiver: &Type, name: &str) -> Option<Type> {
@@ -762,28 +796,188 @@ fn canonical_fields(mut fields: Vec<RecordTypeField>) -> Vec<RecordTypeField> {
     fields
 }
 
-fn parse_nominal_application(nominal: &str) -> Option<(&str, Vec<String>)> {
-    let open = nominal.find('[')?;
-    let close = nominal.strip_suffix(']')?;
-    let base = &nominal[..open];
-    let args = &close[open + 1..];
+fn nominal_type_name(ty: &Type) -> Option<&str> {
+    match ty {
+        Type::Nominal(name) => Some(name),
+        _ => None,
+    }
+}
+
+fn nominal_base_name(name: &str) -> &str {
+    nominal_header_base_range(name)
+        .and_then(|range| name.get(range))
+        .unwrap_or(name)
+}
+
+pub(crate) fn source_type_name_to_type(name: &str) -> Type {
+    parse_type_header(name)
+        .map(|header| header.to_type())
+        .unwrap_or_else(|| Type::Nominal(name.to_string()))
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ParsedTypeHeader {
+    ScalarI64,
+    ScalarBool,
+    Nominal {
+        base: String,
+        args: Vec<ParsedTypeHeader>,
+    },
+    Tuple {
+        args: Vec<ParsedTypeHeader>,
+    },
+    Continuation {
+        multi: bool,
+        input: Box<ParsedTypeHeader>,
+        answer: Box<ParsedTypeHeader>,
+    },
+    Callable {
+        param: Box<ParsedTypeHeader>,
+        result: Box<ParsedTypeHeader>,
+    },
+}
+
+impl ParsedTypeHeader {
+    fn to_type(&self) -> Type {
+        match self {
+            ParsedTypeHeader::ScalarI64 => Type::I64,
+            ParsedTypeHeader::ScalarBool => Type::Bool,
+            ParsedTypeHeader::Nominal { base, args } => {
+                if args.is_empty() {
+                    Type::Nominal(base.clone())
+                } else {
+                    Type::Nominal(render_nominal_type_header(base, args))
+                }
+            }
+            ParsedTypeHeader::Tuple { args } => {
+                Type::Tuple(args.iter().map(ParsedTypeHeader::to_type).collect())
+            }
+            ParsedTypeHeader::Continuation {
+                multi,
+                input,
+                answer,
+            } => Type::Continuation {
+                multi: *multi,
+                input: Box::new(input.to_type()),
+                answer: Box::new(answer.to_type()),
+            },
+            ParsedTypeHeader::Callable { param, result } => {
+                Type::Func(Box::new(param.to_type()), Box::new(result.to_type()))
+            }
+        }
+    }
+}
+
+fn parse_type_header(name: &str) -> Option<ParsedTypeHeader> {
+    let name = name.trim();
+    match name {
+        "I64" | "i64" => return Some(ParsedTypeHeader::ScalarI64),
+        "Bool" | "bool" => return Some(ParsedTypeHeader::ScalarBool),
+        "" => return None,
+        _ => {}
+    }
+
+    if let Some(callable) = parse_callable_type_header(name) {
+        return Some(callable);
+    }
+
+    let Some((base, args)) = parse_application_type_header(name)? else {
+        return Some(ParsedTypeHeader::Nominal {
+            base: name.to_string(),
+            args: Vec::new(),
+        });
+    };
+
+    let parsed_args = args
+        .iter()
+        .map(|arg| parse_type_header(arg))
+        .collect::<Option<Vec<_>>>()?;
+
+    match (base.as_str(), parsed_args.as_slice()) {
+        ("Tuple", _) => Some(ParsedTypeHeader::Tuple { args: parsed_args }),
+        ("Cont1", [input, answer]) => Some(ParsedTypeHeader::Continuation {
+            multi: false,
+            input: Box::new(input.clone()),
+            answer: Box::new(answer.clone()),
+        }),
+        ("ContN", [input, answer]) => Some(ParsedTypeHeader::Continuation {
+            multi: true,
+            input: Box::new(input.clone()),
+            answer: Box::new(answer.clone()),
+        }),
+        ("Cont1" | "ContN", _) => None,
+        _ => Some(ParsedTypeHeader::Nominal {
+            base,
+            args: parsed_args,
+        }),
+    }
+}
+
+fn parse_callable_type_header(name: &str) -> Option<ParsedTypeHeader> {
+    let arrow = top_level_arrow(name)?;
+    let param = parenthesized_type(name[..arrow].trim())?;
+    let result = name[arrow + 2..].trim();
+    if result.is_empty() {
+        return None;
+    }
+    Some(ParsedTypeHeader::Callable {
+        param: Box::new(parse_type_header(param)?),
+        result: Box::new(parse_type_header(result)?),
+    })
+}
+
+fn parse_application_type_header(name: &str) -> Option<Option<(String, Vec<String>)>> {
+    let Some(range) = nominal_header_base_range(name) else {
+        return Some(None);
+    };
+    let base = name.get(range)?.to_string();
+    let args = application_type_arg_slice(name)?;
     let args = if args.trim().is_empty() {
         Vec::new()
     } else {
-        split_nominal_type_args(args)?
+        split_type_header_args(args)?
     };
-    Some((base, args))
+    Some(Some((base, args)))
 }
 
-fn split_nominal_type_args(args: &str) -> Option<Vec<String>> {
+fn nominal_header_base_range(name: &str) -> Option<std::ops::Range<usize>> {
+    let mut square_depth = 0usize;
+    let mut paren_depth = 0usize;
+    for (index, ch) in name.char_indices() {
+        match ch {
+            '[' if paren_depth == 0 => {
+                if square_depth == 0 {
+                    return Some(0..index);
+                }
+                square_depth = square_depth.checked_add(1)?;
+            }
+            ']' if paren_depth == 0 => square_depth = square_depth.checked_sub(1)?,
+            '(' => paren_depth = paren_depth.checked_add(1)?,
+            ')' => paren_depth = paren_depth.checked_sub(1)?,
+            _ => {}
+        }
+    }
+    None
+}
+
+fn application_type_arg_slice(name: &str) -> Option<&str> {
+    let open = nominal_header_base_range(name)?.end;
+    let close = name.strip_suffix(']')?;
+    close.get(open + 1..)
+}
+
+fn split_type_header_args(args: &str) -> Option<Vec<String>> {
     let mut out = Vec::new();
-    let mut depth = 0usize;
+    let mut square_depth = 0usize;
+    let mut paren_depth = 0usize;
     let mut start = 0usize;
     for (index, ch) in args.char_indices() {
         match ch {
-            '[' => depth = depth.checked_add(1)?,
-            ']' => depth = depth.checked_sub(1)?,
-            ',' if depth == 0 => {
+            '[' => square_depth = square_depth.checked_add(1)?,
+            ']' => square_depth = square_depth.checked_sub(1)?,
+            '(' => paren_depth = paren_depth.checked_add(1)?,
+            ')' => paren_depth = paren_depth.checked_sub(1)?,
+            ',' if square_depth == 0 && paren_depth == 0 => {
                 let arg = args[start..index].trim();
                 if arg.is_empty() {
                     return None;
@@ -794,7 +988,7 @@ fn split_nominal_type_args(args: &str) -> Option<Vec<String>> {
             _ => {}
         }
     }
-    if depth != 0 {
+    if square_depth != 0 || paren_depth != 0 {
         return None;
     }
     let arg = args[start..].trim();
@@ -805,57 +999,47 @@ fn split_nominal_type_args(args: &str) -> Option<Vec<String>> {
     Some(out)
 }
 
-fn nominal_type_name(ty: &Type) -> Option<&str> {
-    match ty {
-        Type::Nominal(name) => Some(name),
-        _ => None,
+fn render_nominal_type_header(base: &str, args: &[ParsedTypeHeader]) -> String {
+    let mut rendered = String::from(base);
+    rendered.push('[');
+    for (index, arg) in args.iter().enumerate() {
+        if index > 0 {
+            rendered.push(',');
+        }
+        rendered.push_str(&render_type_header(arg));
     }
+    rendered.push(']');
+    rendered
 }
 
-fn nominal_base_name(name: &str) -> &str {
-    name.find('[').map(|open| &name[..open]).unwrap_or(name)
-}
-
-pub(crate) fn source_type_name_to_type(name: &str) -> Type {
-    match name {
-        "I64" | "i64" => Type::I64,
-        "Bool" | "bool" => Type::Bool,
-        _ => callable_type(name)
-            .or_else(|| continuation_storage_type(name))
-            .or_else(|| tuple_intrinsic_type(name))
-            .unwrap_or_else(|| Type::Nominal(name.to_string())),
+fn render_type_header(header: &ParsedTypeHeader) -> String {
+    match header {
+        ParsedTypeHeader::ScalarI64 => "i64".to_string(),
+        ParsedTypeHeader::ScalarBool => "bool".to_string(),
+        ParsedTypeHeader::Nominal { base, args } => {
+            if args.is_empty() {
+                base.clone()
+            } else {
+                render_nominal_type_header(base, args)
+            }
+        }
+        ParsedTypeHeader::Tuple { args } => render_nominal_type_header("Tuple", args),
+        ParsedTypeHeader::Continuation {
+            multi,
+            input,
+            answer,
+        } => {
+            let base = if *multi { "ContN" } else { "Cont1" };
+            render_nominal_type_header(base, &[input.as_ref().clone(), answer.as_ref().clone()])
+        }
+        ParsedTypeHeader::Callable { param, result } => {
+            format!(
+                "({}) -> {}",
+                render_type_header(param),
+                render_type_header(result)
+            )
+        }
     }
-}
-
-fn callable_type(name: &str) -> Option<Type> {
-    let arrow = top_level_arrow(name)?;
-    let param = name[..arrow].trim();
-    let result = name[arrow + 2..].trim();
-    let param = parenthesized_type(param)?;
-    if result.is_empty() {
-        return None;
-    }
-    Some(Type::Func(
-        Box::new(source_type_name_to_type(param)),
-        Box::new(source_type_name_to_type(result)),
-    ))
-}
-
-fn continuation_storage_type(name: &str) -> Option<Type> {
-    let (base, args) = parse_nominal_application(name)?;
-    let multi = match base {
-        "Cont1" => false,
-        "ContN" => true,
-        _ => return None,
-    };
-    if args.len() != 2 {
-        return None;
-    }
-    Some(Type::Continuation {
-        multi,
-        input: Box::new(source_type_name_to_type(&args[0])),
-        answer: Box::new(source_type_name_to_type(&args[1])),
-    })
 }
 
 fn top_level_arrow(name: &str) -> Option<usize> {
@@ -887,18 +1071,6 @@ fn parenthesized_type(name: &str) -> Option<&str> {
     } else {
         Some(inner)
     }
-}
-
-fn tuple_intrinsic_type(name: &str) -> Option<Type> {
-    let (base, args) = parse_nominal_application(name)?;
-    if base != "Tuple" {
-        return None;
-    }
-    Some(Type::Tuple(
-        args.iter()
-            .map(|arg| source_type_name_to_type(arg))
-            .collect(),
-    ))
 }
 
 fn substitute_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> Type {

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::control::ContinuationKind;
+use crate::resolve::OperatorSurface;
 use crate::template::{
     DynRowContract, RowShape, TemplateFacts, TemplateInstantiation, TemplateObligation,
     TemplateParam,
@@ -71,6 +72,7 @@ pub enum DischargedObligation {
         arity: usize,
     },
     Operator {
+        op: OperatorSurface,
         protocol: String,
         receiver: Option<String>,
     },
@@ -110,12 +112,12 @@ pub fn specialization_key(
     template: &TemplateFacts,
 ) -> SpecializationKey {
     let mut normalized_shapes = template.row_shapes.clone();
-    normalized_shapes.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
+    normalized_shapes.sort();
     normalized_shapes.dedup();
 
     let mut concrete_nominals = Vec::new();
     let mut dyn_contracts = template.dyn_contracts.clone();
-    dyn_contracts.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
+    dyn_contracts.sort();
     dyn_contracts.dedup();
 
     for obligation in &template.obligations {
@@ -195,8 +197,11 @@ pub fn discharge_obligations(template: &TemplateFacts) -> Vec<DischargedObligati
                 arity: *arity,
             },
             TemplateObligation::Operator {
-                protocol, receiver, ..
+                op,
+                protocol,
+                receiver,
             } => DischargedObligation::Operator {
+                op: op.clone(),
                 protocol: protocol.clone(),
                 receiver: receiver.clone(),
             },

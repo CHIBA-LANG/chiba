@@ -1,10 +1,11 @@
 use chiba_level1r::ast::{
-    BinaryOp, Expr, MethodReceiver, ParamDecl, Pattern, SourceItem, TypeDecl, TypeField,
+    BinaryOp, Expr, ExternAbi, MethodReceiver, ParamDecl, Pattern, SourceItem, TypeDecl, TypeField,
 };
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::CoreValue;
 use chiba_level1r::resolve::ResolvedName;
 use chiba_level1r::specialize::DischargedObligation;
+use chiba_level1r::surface::{build_interface_summary, project_surface};
 use chiba_level1r::template::TemplateObligation;
 use chiba_level1r::typed::Type;
 use chiba_level1r::typed::UsageColor;
@@ -178,7 +179,7 @@ def main() = 7",
     assert!(bundle
         .backend_link
         .linked_wat
-        .contains("(func $main__def1 (export \"main\") (result i32)"));
+        .contains("(func $main (export \"main\") (result i32)"));
     assert!(bundle.backend_link.linked_wat.contains("i32.const 1"));
     assert!(bundle.backend_link.linked_wat.contains("i32.const 7"));
 }
@@ -269,10 +270,140 @@ def main() = 7",
     let summary = output.render_summary();
     assert!(summary.contains("source-program:"));
     assert!(summary.contains("namespace=parser.chiba"));
-    assert!(summary.contains("imports=[\"frontend.ast.*\"]"));
+    assert!(summary.contains("imports=frontend.ast.*"));
     assert!(summary.contains("program:"));
     assert!(summary.contains("defs=2"));
-    assert!(summary.contains("entry=Some(\"main\")"));
+    assert!(summary.contains("entry=main"));
+    assert!(!summary.contains("entry=Some"));
+}
+
+#[test]
+fn frontend_parses_extern_def_header_and_interface_summary() {
+    let output = parse_source_program("def fd_write(fd: i64): i64 = extern \"wasi\" \"fd_write\"")
+        .expect("frontend parse");
+
+    assert_eq!(
+        output
+            .tokens
+            .iter()
+            .map(|token| (token.name.as_str(), token.lexeme.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("KwDef", "def"),
+            ("Ident", "fd_write"),
+            ("LParen", "("),
+            ("Ident", "fd"),
+            ("Colon", ":"),
+            ("Ident", "i64"),
+            ("RParen", ")"),
+            ("Colon", ":"),
+            ("Ident", "i64"),
+            ("Eq", "="),
+            ("KwExtern", "extern"),
+            ("StringLit", "\"wasi\""),
+            ("StringLit", "\"fd_write\""),
+        ]
+    );
+    match &output.program.items[0] {
+        SourceItem::ExternDef {
+            name,
+            receiver,
+            generics,
+            params,
+            return_type,
+            extern_decl,
+            ..
+        } => {
+            assert_eq!(name, "fd_write");
+            assert_eq!(receiver, &None);
+            assert_eq!(generics, &Vec::<String>::new());
+            assert_eq!(params, &vec![ParamDecl::new("fd", Some("i64".to_string()))]);
+            assert_eq!(return_type, &Some("i64".to_string()));
+            assert_eq!(extern_decl.abi, ExternAbi::Wasi);
+            assert_eq!(extern_decl.symbol, "fd_write");
+        }
+        other => panic!("expected extern def, got {other:?}"),
+    }
+
+    let surface = project_surface(&output.program);
+    let surface_extern = surface.defs[0]
+        .extern_decl
+        .as_ref()
+        .expect("surface extern");
+    assert_eq!(surface_extern.abi, ExternAbi::Wasi);
+    assert_eq!(surface_extern.symbol, "fd_write");
+
+    let interface = build_interface_summary(&surface);
+    let interface_extern = interface.functions[0]
+        .extern_decl
+        .as_ref()
+        .expect("interface extern");
+    assert_eq!(interface_extern.abi, ExternAbi::Wasi);
+    assert_eq!(interface_extern.symbol, "fd_write");
+}
+
+#[test]
+fn frontend_extern_decl_changes_interface_summary_hash() {
+    let wasi = parse_source_program("def f(): i64 = extern \"wasi\" \"fd_write\"")
+        .expect("frontend parse");
+    let c =
+        parse_source_program("def f(): i64 = extern \"C\" \"fd_write\"").expect("frontend parse");
+    let renamed = parse_source_program("def f(): i64 = extern \"wasi\" \"proc_exit\"")
+        .expect("frontend parse");
+
+    let wasi_hash = build_interface_summary(&project_surface(&wasi.program)).stable_hash;
+    let c_hash = build_interface_summary(&project_surface(&c.program)).stable_hash;
+    let renamed_hash = build_interface_summary(&project_surface(&renamed.program)).stable_hash;
+
+    assert_ne!(wasi_hash, c_hash);
+    assert_ne!(wasi_hash, renamed_hash);
+}
+
+#[test]
+fn frontend_extern_c_abi_is_canonical_across_case() {
+    let upper =
+        parse_source_program("def f(): i64 = extern \"C\" \"js_log\"").expect("frontend parse");
+    let lower =
+        parse_source_program("def f(): i64 = extern \"c\" \"js_log\"").expect("frontend parse");
+
+    let upper_surface = project_surface(&upper.program);
+    let lower_surface = project_surface(&lower.program);
+
+    assert_eq!(
+        upper_surface.defs[0]
+            .extern_decl
+            .as_ref()
+            .map(|decl| decl.abi),
+        Some(ExternAbi::C)
+    );
+    assert_eq!(
+        lower_surface.defs[0]
+            .extern_decl
+            .as_ref()
+            .map(|decl| decl.abi),
+        Some(ExternAbi::C)
+    );
+    assert_eq!(
+        build_interface_summary(&upper_surface).stable_hash,
+        build_interface_summary(&lower_surface).stable_hash
+    );
+}
+
+#[test]
+fn frontend_rejects_unknown_extern_abi_at_header_boundary() {
+    let err = parse_source_program("def f(): i64 = extern \"js\" \"log\"").unwrap_err();
+
+    assert!(matches!(
+        err,
+        FrontendError::UnexpectedToken {
+            found,
+            lexeme,
+            expected,
+            ..
+        } if found == "StringLit"
+            && lexeme == "\"js\""
+            && expected == vec!["extern ABI \"C\", \"c\", or \"wasi\"".to_string()]
+    ));
 }
 
 #[test]
@@ -831,9 +962,21 @@ fn frontend_parses_call_before_infix_and_reaches_cps_shape() {
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
-            chiba_level1r::core::CoreOp::TailCall { func, args }
-                if func.starts_with("operator::Add(")
-                    && args == &vec![CoreValue::I64(1)]
+                chiba_level1r::core::CoreOp::OperatorTarget {
+                    protocol,
+                    target,
+                    intrinsic: Some(chiba_level1r::core::OperatorIntrinsic::I64Add),
+                } if protocol == "op_add"
+                    && !target.contains("operator::Add")
+                    && main.core.ops.iter().any(|call| matches!(
+                        call,
+                    chiba_level1r::core::CoreOp::TailCall { func, args }
+                        if func == target
+                            && args == &vec![
+                                CoreValue::Var("w0".to_string()),
+                                CoreValue::I64(1),
+                            ]
+                ))
         )
     }));
     assert!(bundle.backend_link.linked_wat.contains(";; tailcall"));
@@ -1045,15 +1188,23 @@ fn frontend_indexing_enters_operator_obligation_path() {
             ..
         } if protocol == "op_index"
     )));
-    assert!(main
-        .cps
-        .to_string()
-        .contains("operator::op_index(values)(i,"));
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
-            chiba_level1r::core::CoreOp::TailCall { func, args }
-                if func == "operator::op_index(values)" && args == &vec![CoreValue::Var("i".to_string())]
+            chiba_level1r::core::CoreOp::OperatorTarget {
+                protocol,
+                target,
+                intrinsic: None,
+            } if protocol == "op_index"
+                && main.core.ops.iter().any(|call| matches!(
+                    call,
+                    chiba_level1r::core::CoreOp::TailCall { func, args }
+                        if func == target
+                            && args == &vec![
+                                CoreValue::Var("values".to_string()),
+                                CoreValue::Var("i".to_string()),
+                            ]
+                ))
         )
     }));
 }
@@ -1089,19 +1240,26 @@ fn frontend_slice_indexing_uses_index_slice_operator_path() {
             ..
         } if protocol == "op_index_slice"
     )));
-    assert!(main
-        .cps
-        .to_string()
-        .contains("operator::op_index_slice(values)(start..end,"));
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
-            chiba_level1r::core::CoreOp::TailCall { func, args }
-                if func == "operator::op_index_slice(values)"
-                    && args == &vec![CoreValue::Range {
-                        start: Box::new(CoreValue::Var("start".to_string())),
-                        end: Box::new(CoreValue::Var("end".to_string())),
-                    }]
+            chiba_level1r::core::CoreOp::OperatorTarget {
+                protocol,
+                target,
+                intrinsic: None,
+            } if protocol == "op_index_slice"
+                && main.core.ops.iter().any(|call| matches!(
+                    call,
+                    chiba_level1r::core::CoreOp::TailCall { func, args }
+                        if func == target
+                            && args == &vec![
+                                CoreValue::Var("values".to_string()),
+                                CoreValue::Range {
+                                    start: Box::new(CoreValue::Var("start".to_string())),
+                                    end: Box::new(CoreValue::Var("end".to_string())),
+                                },
+                            ]
+                ))
         )
     }));
 }
@@ -1195,7 +1353,9 @@ fn frontend_parses_match_with_literal_and_wildcard_through_cps_core() {
             op,
             chiba_level1r::core::CoreOp::Match { scrutinee, patterns }
                 if scrutinee == "tag"
-                    && patterns == &vec!["Lit(I64(0))".to_string(), "Wildcard".to_string()]
+                    && patterns == &vec!["0".to_string(), "_".to_string()]
+                    && !patterns.iter().any(|pattern| pattern.contains("Lit(")
+                        || pattern.contains("Wildcard"))
         )
     }));
     assert!(output
@@ -1825,7 +1985,7 @@ fn frontend_parses_tuple_and_stable_underscore_field_access() {
     assert!(main.core.ops.iter().any(|op| {
         matches!(
             op,
-            chiba_level1r::core::CoreOp::TupleFieldGet { layout, field }
+            chiba_level1r::core::CoreOp::TupleFieldGet { layout, field, .. }
                 if layout == "tuple::Tuple2_I64_Bool" && field == "_2"
         )
     }));

@@ -1,6 +1,7 @@
 use chiba_level1r::ast::BinaryOp;
 use chiba_level1r::core::OwnershipDecision;
 use chiba_level1r::typed::UsageColor;
+use chiba_level1r::usage_audit::RustReferenceOwnership;
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -15,7 +16,13 @@ fn repeated_value_has_usage_n_and_rust_rc_reference() {
         .unwrap();
     assert_eq!(entry.usage, UsageColor::Many);
     assert_eq!(entry.ownership, Some(OwnershipDecision::Rc));
+    assert_eq!(
+        entry.rust_reference_ownership,
+        RustReferenceOwnership::SharedRc
+    );
     assert!(entry.usage_signature.contains("x: N Unknown"));
+    assert_eq!(entry.source_signature, "x + x");
+    assert!(!entry.source_signature.contains("Binary"));
     assert!(entry.rust_reference_signature.contains("Rc<Unknown>"));
     assert!(entry.aligned);
     assert_eq!(output.usage_audit.diagnostics, vec![]);
@@ -33,6 +40,10 @@ fn single_value_has_usage_one_and_move_only_rust_reference() {
         .unwrap();
     assert_eq!(entry.usage, UsageColor::One);
     assert_eq!(entry.ownership, Some(OwnershipDecision::StackValue));
+    assert_eq!(
+        entry.rust_reference_ownership,
+        RustReferenceOwnership::MoveOnly
+    );
     assert!(entry.usage_signature.contains("x: 1 Unknown"));
     assert_eq!(entry.rust_reference_signature, "let x: Unknown");
     assert!(entry.aligned);
@@ -51,6 +62,10 @@ fn contn_usage_n_requires_rc_continuation_frame_in_audit() {
         .unwrap();
     assert_eq!(entry.usage, UsageColor::Many);
     assert_eq!(entry.ownership, Some(OwnershipDecision::DynPackage));
+    assert_eq!(
+        entry.rust_reference_ownership,
+        RustReferenceOwnership::SharedRc
+    );
     assert!(entry.usage_signature.contains("retry: N ContN"));
     assert_eq!(entry.rust_reference_signature, "let retry: Rc<ContNFrame>");
     assert!(entry.aligned);
@@ -69,6 +84,10 @@ fn cont1_usage_one_stays_non_rc_in_audit() {
         .unwrap();
     assert_eq!(entry.usage, UsageColor::One);
     assert_eq!(entry.ownership, Some(OwnershipDecision::StackValue));
+    assert_eq!(
+        entry.rust_reference_ownership,
+        RustReferenceOwnership::MoveOnly
+    );
     assert!(entry.usage_signature.contains("k: 1 Cont1"));
     assert_eq!(entry.rust_reference_signature, "let k: Cont1Frame");
     assert!(entry.aligned);
@@ -85,4 +104,5 @@ fn visual_report_contains_four_layer_usage_audit() {
     assert!(visual.contains("typed_signature"));
     assert!(visual.contains("usage_signature"));
     assert!(visual.contains("rust_reference_signature"));
+    assert!(visual.contains("rust_reference_ownership"));
 }

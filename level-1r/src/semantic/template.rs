@@ -1,5 +1,5 @@
 use crate::alpha::{AlphaExpr, AlphaExprKind};
-use crate::ast::{Expr, ParamDecl};
+use crate::ast::{render_source_expr, Expr, ParamDecl};
 use crate::resolve::{
     OperatorObligation, OperatorSurface, ResolveFacts, ResolvedCall, ResolvedName,
 };
@@ -12,6 +12,7 @@ pub struct TemplateFacts {
     pub row_shapes: Vec<RowShape>,
     pub obligations: Vec<TemplateObligation>,
     pub dyn_contracts: Vec<DynRowContract>,
+    pub diagnostics: Vec<TemplateDiagnostic>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -24,6 +25,18 @@ pub struct TemplateParam {
 pub enum TemplateParamSource {
     ExplicitHeader,
     SyntheticAutoGeneric,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TemplateDiagnostic {
+    ExplicitAutoGenericConflict {
+        param: String,
+    },
+    ConflictingExplicitInstantiation {
+        callee: String,
+        previous_type_args: Vec<String>,
+        type_args: Vec<String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -194,6 +207,21 @@ fn source_needs_auto_return_param(source: &Expr, source_params: &[ParamDecl]) ->
 }
 
 fn push_template_param_once(facts: &mut TemplateFacts, param: TemplateParam) {
+    if facts.explicit_params.iter().any(|existing| {
+        existing.name == param.name
+            && existing.source != param.source
+            && !facts
+                .diagnostics
+                .contains(&TemplateDiagnostic::ExplicitAutoGenericConflict {
+                    param: param.name.clone(),
+                })
+    }) {
+        facts
+            .diagnostics
+            .push(TemplateDiagnostic::ExplicitAutoGenericConflict {
+                param: param.name.clone(),
+            });
+    }
     if !facts
         .explicit_params
         .iter()
@@ -214,10 +242,24 @@ fn collect_source_instantiations(expr: &Expr, facts: &mut TemplateFacts) {
             }
         }
         Expr::Instantiate { callee, type_args } => {
-            facts.explicit_instantiations.push(TemplateInstantiation {
+            let instantiation = TemplateInstantiation {
                 callee: source_callee_name(callee),
                 type_args: type_args.clone(),
-            });
+            };
+            if let Some(previous) = facts.explicit_instantiations.iter().find(|previous| {
+                previous.callee == instantiation.callee
+                    && previous.type_args != instantiation.type_args
+            }) {
+                let diagnostic = TemplateDiagnostic::ConflictingExplicitInstantiation {
+                    callee: instantiation.callee.clone(),
+                    previous_type_args: previous.type_args.clone(),
+                    type_args: instantiation.type_args.clone(),
+                };
+                if !facts.diagnostics.contains(&diagnostic) {
+                    facts.diagnostics.push(diagnostic);
+                }
+            }
+            facts.explicit_instantiations.push(instantiation);
             collect_source_instantiations(callee, facts);
         }
         Expr::Tuple(fields) => {
@@ -295,13 +337,13 @@ fn collect_source_instantiations(expr: &Expr, facts: &mut TemplateFacts) {
 fn source_callee_name(expr: &Expr) -> String {
     match expr {
         Expr::Var(name) => name.clone(),
-        Expr::Field { receiver, name } | Expr::MethodCall { receiver, name, .. } => {
+        Expr::Field { receiver, name, .. } | Expr::MethodCall { receiver, name, .. } => {
             format!("{}.{}", source_callee_name(receiver), name)
         }
         Expr::Instantiate { callee, type_args } => {
             format!("{}[{}]", source_callee_name(callee), type_args.join(","))
         }
-        other => format!("{other:?}"),
+        other => render_source_expr(other),
     }
 }
 
@@ -319,6 +361,60 @@ pub fn dyn_row_contract(fields: Vec<(&str, ShapeType)>) -> DynRowContract {
         payload_usage: UsageColor::Many,
         send: SendColor::Obligation,
         adapter: DynAdapterKind::StaticToDynPackage,
+    }
+}
+
+pub fn row_shape_key(shape: &RowShape) -> String {
+    let mut text = match shape.openness {
+        RowOpenness::Open => "open".to_string(),
+        RowOpenness::Closed => "closed".to_string(),
+    };
+    for field in &shape.fields {
+        text.push('|');
+        text.push_str(&field.name);
+        text.push(':');
+        text.push_str(shape_type_key(&field.ty));
+    }
+    text
+}
+
+pub fn dyn_row_contract_key(contract: &DynRowContract) -> String {
+    format!(
+        "{};usage={};send={};adapter={}",
+        row_shape_key(&contract.shape),
+        usage_key(contract.payload_usage),
+        send_key(contract.send),
+        dyn_adapter_key(contract.adapter),
+    )
+}
+
+fn shape_type_key(ty: &ShapeType) -> &str {
+    match ty {
+        ShapeType::Unknown => "?",
+        ShapeType::Named(name) => name,
+    }
+}
+
+fn usage_key(color: UsageColor) -> &'static str {
+    match color {
+        UsageColor::One => "1",
+        UsageColor::Many => "N",
+        UsageColor::Obligation => "obligation",
+    }
+}
+
+fn send_key(color: SendColor) -> &'static str {
+    match color {
+        SendColor::Send => "send",
+        SendColor::NotSend => "!send",
+        SendColor::Obligation => "obligation",
+    }
+}
+
+fn dyn_adapter_key(adapter: DynAdapterKind) -> &'static str {
+    match adapter {
+        DynAdapterKind::StaticToDynPackage => "static-to-dyn-package",
+        DynAdapterKind::DynAdapterAccess => "dyn-adapter-access",
     }
 }
 
@@ -380,7 +476,7 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
                 collect_expr_obligations(arg, facts);
             }
         }
-        AlphaExprKind::Field { receiver, name } => {
+        AlphaExprKind::Field { receiver, name, .. } => {
             let shape = canonical_open_row(vec![(name.as_str(), ShapeType::Unknown)]);
             facts.row_shapes.push(shape.clone());
             facts.obligations.push(TemplateObligation::Field {

@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ast::{render_source_expr, Expr};
 use crate::control::{ContinuationKind, ControlFacts};
 use crate::core::{CoreProgram, OwnershipDecision};
 use crate::typed::{Type, TypedExpr, UsageColor};
@@ -17,9 +17,17 @@ pub struct UsageAuditEntry {
     pub typed_signature: String,
     pub usage_signature: String,
     pub rust_reference_signature: String,
+    pub rust_reference_ownership: RustReferenceOwnership,
     pub usage: UsageColor,
     pub ownership: Option<OwnershipDecision>,
     pub aligned: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RustReferenceOwnership {
+    MoveOnly,
+    SharedRc,
+    Obligation,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,10 +69,10 @@ fn collect_var_entries(
         let ownership = ownership_for(core, &subject);
         let entry = audit_entry(
             subject,
-            format!("{source:?}"),
+            render_source_expr(source),
             format!("{name}: {}", render_type(&ty)),
             format!("{name}: {} {}", render_usage(color), render_type(&ty)),
-            format!("let {name}: {}", render_rust_reference(color, &ty)),
+            rust_reference(color, &ty).with_binding(name),
             color,
             ownership,
         );
@@ -94,11 +102,7 @@ fn collect_continuation_entries(
                 render_usage(fact.usage),
                 render_type(&ty)
             ),
-            format!(
-                "let {}: {}",
-                fact.binder,
-                render_continuation_rust_reference(fact.kind)
-            ),
+            continuation_rust_reference(fact.kind).with_binding(&fact.binder),
             fact.usage,
             ownership,
         );
@@ -111,17 +115,20 @@ fn audit_entry(
     source_signature: String,
     typed_signature: String,
     usage_signature: String,
-    rust_reference_signature: String,
+    rust_reference: RustReference,
     usage: UsageColor,
     ownership: Option<OwnershipDecision>,
 ) -> UsageAuditEntry {
-    let aligned = rust_reference_aligns_with_usage(&rust_reference_signature, usage);
+    let aligned = rust_reference_aligns_with_usage(rust_reference.ownership, usage);
+    let rust_reference_ownership = rust_reference.ownership;
+    let rust_reference_signature = rust_reference.signature();
     UsageAuditEntry {
         subject,
         source_signature,
         typed_signature,
         usage_signature,
         rust_reference_signature,
+        rust_reference_ownership,
         usage,
         ownership,
         aligned,
@@ -129,7 +136,9 @@ fn audit_entry(
 }
 
 fn push_entry(entry: UsageAuditEntry, report: &mut UsageAuditReport) {
-    if entry.rust_reference_signature.contains("Rc<") && entry.usage != UsageColor::Many {
+    if entry.rust_reference_ownership == RustReferenceOwnership::SharedRc
+        && entry.usage != UsageColor::Many
+    {
         report
             .diagnostics
             .push(UsageAuditDiagnostic::RcRequiresManyUsage {
@@ -137,7 +146,9 @@ fn push_entry(entry: UsageAuditEntry, report: &mut UsageAuditReport) {
                 usage: entry.usage,
             });
     }
-    if entry.usage == UsageColor::Many && !entry.rust_reference_signature.contains("Rc<") {
+    if entry.usage == UsageColor::Many
+        && entry.rust_reference_ownership != RustReferenceOwnership::SharedRc
+    {
         report
             .diagnostics
             .push(UsageAuditDiagnostic::ManyUsageNeedsSharedRustReference {
@@ -148,27 +159,61 @@ fn push_entry(entry: UsageAuditEntry, report: &mut UsageAuditReport) {
     report.entries.push(entry);
 }
 
-fn rust_reference_aligns_with_usage(rust_reference: &str, usage: UsageColor) -> bool {
+fn rust_reference_aligns_with_usage(ownership: RustReferenceOwnership, usage: UsageColor) -> bool {
     match usage {
-        UsageColor::One => !rust_reference.contains("Rc<"),
-        UsageColor::Many => rust_reference.contains("Rc<"),
+        UsageColor::One => ownership != RustReferenceOwnership::SharedRc,
+        UsageColor::Many => ownership == RustReferenceOwnership::SharedRc,
         UsageColor::Obligation => true,
     }
 }
 
-fn render_rust_reference(usage: UsageColor, ty: &Type) -> String {
-    let rendered = render_type(ty);
-    match usage {
-        UsageColor::One => rendered,
-        UsageColor::Many => format!("Rc<{rendered}>"),
-        UsageColor::Obligation => format!("MaybeRc<{rendered}>"),
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RustReference {
+    ty: String,
+    ownership: RustReferenceOwnership,
+}
+
+impl RustReference {
+    fn with_binding(self, name: &str) -> Self {
+        Self {
+            ty: format!("let {name}: {}", self.ty),
+            ownership: self.ownership,
+        }
+    }
+
+    fn signature(self) -> String {
+        self.ty
     }
 }
 
-fn render_continuation_rust_reference(kind: ContinuationKind) -> String {
+fn rust_reference(usage: UsageColor, ty: &Type) -> RustReference {
+    let rendered = render_type(ty);
+    match usage {
+        UsageColor::One => RustReference {
+            ty: rendered,
+            ownership: RustReferenceOwnership::MoveOnly,
+        },
+        UsageColor::Many => RustReference {
+            ty: format!("Rc<{rendered}>"),
+            ownership: RustReferenceOwnership::SharedRc,
+        },
+        UsageColor::Obligation => RustReference {
+            ty: format!("MaybeRc<{rendered}>"),
+            ownership: RustReferenceOwnership::Obligation,
+        },
+    }
+}
+
+fn continuation_rust_reference(kind: ContinuationKind) -> RustReference {
     match kind {
-        ContinuationKind::Cont1 => "Cont1Frame".to_string(),
-        ContinuationKind::ContN => "Rc<ContNFrame>".to_string(),
+        ContinuationKind::Cont1 => RustReference {
+            ty: "Cont1Frame".to_string(),
+            ownership: RustReferenceOwnership::MoveOnly,
+        },
+        ContinuationKind::ContN => RustReference {
+            ty: "Rc<ContNFrame>".to_string(),
+            ownership: RustReferenceOwnership::SharedRc,
+        },
     }
 }
 

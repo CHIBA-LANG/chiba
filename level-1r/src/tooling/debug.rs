@@ -1,12 +1,12 @@
 use std::fmt::Write;
 
 use crate::alpha::AlphaFacts;
-use crate::ast::Expr;
+use crate::ast::{render_source_binary_op, render_source_expr, Expr};
 use crate::backend::{BackendArtifact, BackendCacheKey, BackendLinkedBundle};
 use crate::closure::ClosureFacts;
 use crate::closure_core_usage::ClosureCoreUsageFacts;
 use crate::closure_simplify::ClosureSimplificationFacts;
-use crate::control::ControlFacts;
+use crate::control::{ContinuationKind, ControlFacts};
 use crate::core::{CoreProgram, CoreValidation};
 use crate::cps::CpsProgram;
 use crate::cps_usage::{ContinuationSimplificationFacts, CpsUsageFacts};
@@ -14,10 +14,15 @@ use crate::lambda_lift::LambdaLiftFacts;
 use crate::monomorphize::MonomorphizationPlan;
 use crate::nanopass::PassReport;
 use crate::pattern::PatternFacts;
-use crate::resolve::{ResolveFacts, ResolvedName};
-use crate::specialize::{DischargedObligation, SpecializationFacts};
+use crate::resolve::{
+    OperatorSurface, ResolveDiagnostic, ResolveFacts, ResolvedCall, ResolvedName,
+};
+use crate::specialize::{AbiMode, DischargedObligation, SpecializationFacts, SpecializationKey};
 use crate::std_audit::StdAuditReport;
-use crate::template::{TemplateFacts, TemplateObligation};
+use crate::template::{
+    DynAdapterKind, DynRowContract, RowOpenness, RowShape, ShapeType, TemplateDiagnostic,
+    TemplateFacts, TemplateObligation, TemplateParamSource,
+};
 use crate::template_audit::TemplateAuditReport;
 use crate::typed::TypedExpr;
 use crate::usage::UsageFacts;
@@ -155,11 +160,11 @@ pub fn visual_report(
     passes: &PassReport,
 ) -> VisualReport {
     VisualReport {
-        source: format!("{source:?}"),
+        source: render_source_expr(source),
         alpha: format!("{alpha:#?}"),
-        resolve: format!("{resolve:#?}"),
-        template: format!("{template:#?}"),
-        specialize: format!("{specialize:#?}"),
+        resolve: render_resolve_facts(resolve),
+        template: render_template_facts(template),
+        specialize: render_specialization_facts(specialize),
         symbol_lineage: render_symbol_lineage(resolve, template, specialize),
         monomorphize: format!("{monomorphize:#?}"),
         template_audit: format!("{template_audit:#?}"),
@@ -276,6 +281,440 @@ fn render_symbol_lineage(
         out.push_str("<empty>\n");
     }
     out
+}
+
+fn render_resolve_facts(resolve: &ResolveFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "names={}", resolve.resolved_names.len()).unwrap();
+    for name in &resolve.resolved_names {
+        writeln!(out, "name {}", render_resolved_name(name)).unwrap();
+    }
+    writeln!(out, "calls={}", resolve.resolved_calls.len()).unwrap();
+    for call in &resolve.resolved_calls {
+        writeln!(out, "call {}", render_resolved_call(call)).unwrap();
+    }
+    writeln!(out, "operators={}", resolve.operator_obligations.len()).unwrap();
+    for obligation in &resolve.operator_obligations {
+        writeln!(
+            out,
+            "operator {} protocol={} receiver={}",
+            render_operator_surface(&obligation.op),
+            obligation.protocol,
+            obligation.receiver.as_deref().unwrap_or("<unknown>")
+        )
+        .unwrap();
+    }
+    writeln!(out, "diagnostics={}", resolve.diagnostics.len()).unwrap();
+    for diagnostic in &resolve.diagnostics {
+        writeln!(out, "diagnostic {}", render_resolve_diagnostic(diagnostic)).unwrap();
+    }
+    out
+}
+
+fn render_resolved_name(name: &ResolvedName) -> String {
+    match name {
+        ResolvedName::Function { name, symbol } => format!("function {name} -> {symbol}"),
+        ResolvedName::Static { name, symbol } => format!("static {name} -> {symbol}"),
+        ResolvedName::Constructor {
+            data,
+            ctor,
+            symbol,
+            arity,
+        } => format!("constructor {data}.{ctor}/{arity} -> {symbol}"),
+    }
+}
+
+fn render_resolved_call(call: &ResolvedCall) -> String {
+    match call {
+        ResolvedCall::FieldCallable { field } => format!("field-callable {field}"),
+        ResolvedCall::ReceiverMethod {
+            receiver,
+            name,
+            symbol,
+        } => format!("receiver-method {receiver}.{name} -> {symbol}"),
+        ResolvedCall::QualifiedCallee { path, symbol } => {
+            format!("qualified-callee {path} -> {symbol}")
+        }
+    }
+}
+
+fn render_resolve_diagnostic(diagnostic: &ResolveDiagnostic) -> String {
+    match diagnostic {
+        ResolveDiagnostic::AmbiguousMethod {
+            receiver,
+            name,
+            candidates,
+        } => format!(
+            "ambiguous method {receiver}.{name}: [{}]",
+            candidates.join(", ")
+        ),
+        ResolveDiagnostic::MissingMethod { receiver, name } => format!(
+            "missing method {}.{}",
+            receiver.as_deref().unwrap_or("<unknown>"),
+            name
+        ),
+        ResolveDiagnostic::AmbiguousName { name, candidates } => {
+            format!("ambiguous name {name}: [{}]", candidates.join(", "))
+        }
+        ResolveDiagnostic::FunctionArityMismatch {
+            name,
+            symbol,
+            expected,
+            actual,
+        } => format!(
+            "function arity mismatch {name} -> {symbol}: expected {expected} actual {actual}"
+        ),
+        ResolveDiagnostic::AmbiguousConstructor {
+            data,
+            ctor,
+            candidates,
+        } => format!(
+            "ambiguous constructor {data}.{ctor}: [{}]",
+            candidates.join(", ")
+        ),
+        ResolveDiagnostic::MissingConstructor { data, ctor } => {
+            format!("missing constructor {data}.{ctor}")
+        }
+        ResolveDiagnostic::ConstructorArityMismatch {
+            data,
+            ctor,
+            expected,
+            actual,
+        } => {
+            format!("constructor arity mismatch {data}.{ctor}: expected {expected} actual {actual}")
+        }
+    }
+}
+
+fn render_specialization_facts(specialize: &SpecializationFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "work-items={}", specialize.work_items.len()).unwrap();
+    for (index, item) in specialize.work_items.iter().enumerate() {
+        writeln!(
+            out,
+            "work-item {index} {}",
+            render_specialization_key(&item.key)
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "work-item {index} obligations={}",
+            item.obligations.len()
+        )
+        .unwrap();
+        for obligation in &item.obligations {
+            writeln!(
+                out,
+                "work-item {index} obligation {}",
+                render_discharged_obligation(obligation)
+            )
+            .unwrap();
+        }
+    }
+    writeln!(out, "registry-entries={}", specialize.registry.len()).unwrap();
+    out
+}
+
+fn render_specialization_key(key: &SpecializationKey) -> String {
+    let params = key
+        .template_params
+        .iter()
+        .map(|param| {
+            format!(
+                "{}:{}",
+                param.name,
+                render_template_param_source(param.source)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let instantiations = key
+        .explicit_instantiations
+        .iter()
+        .map(|instantiation| {
+            format!(
+                "{}[{}]",
+                instantiation.callee,
+                instantiation.type_args.join(", ")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let shapes = key
+        .normalized_shapes
+        .iter()
+        .map(render_row_shape)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let dyn_contracts = key
+        .dyn_contracts
+        .iter()
+        .map(render_dyn_contract)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let usage = key
+        .capabilities
+        .usage
+        .iter()
+        .copied()
+        .map(render_usage_color)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let send = key
+        .capabilities
+        .send
+        .iter()
+        .copied()
+        .map(render_send_color)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let continuations = key
+        .continuations
+        .iter()
+        .copied()
+        .map(render_continuation_kind)
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "key generic={} abi={} params=[{}] instantiations=[{}] nominals=[{}] shapes=[{}] usage=[{}] send=[{}] continuations=[{}] dyn=[{}]",
+        key.generic_symbol,
+        render_abi_mode(key.abi_mode),
+        params,
+        instantiations,
+        key.concrete_nominals.join(", "),
+        shapes,
+        usage,
+        send,
+        continuations,
+        dyn_contracts
+    )
+}
+
+fn render_discharged_obligation(obligation: &DischargedObligation) -> String {
+    match obligation {
+        DischargedObligation::Field { field, shape } => {
+            format!("field {field} in {}", render_row_shape(shape))
+        }
+        DischargedObligation::Method { name, target } => format!(
+            "method {name} -> {}",
+            target.as_deref().unwrap_or("<pending>")
+        ),
+        DischargedObligation::Function { name, target } => {
+            format!("function {name} -> {target}")
+        }
+        DischargedObligation::Static { name, target } => {
+            format!("static {name} -> {target}")
+        }
+        DischargedObligation::Constructor {
+            data,
+            ctor,
+            target,
+            arity,
+        } => format!("constructor {data}.{ctor}/{arity} -> {target}"),
+        DischargedObligation::Operator {
+            op,
+            protocol,
+            receiver,
+        } => format!(
+            "operator {} protocol={} receiver={}",
+            render_operator_surface(op),
+            protocol,
+            receiver.as_deref().unwrap_or("<unknown>")
+        ),
+        DischargedObligation::DynAdapter { contract } => {
+            format!("dyn-adapter {}", render_dyn_contract(contract))
+        }
+    }
+}
+
+fn render_continuation_kind(kind: ContinuationKind) -> &'static str {
+    match kind {
+        ContinuationKind::Cont1 => "cont1",
+        ContinuationKind::ContN => "contn",
+    }
+}
+
+fn render_abi_mode(mode: AbiMode) -> &'static str {
+    match mode {
+        AbiMode::Chiba => "chiba",
+        AbiMode::Wasi => "wasi",
+        AbiMode::Env => "env",
+    }
+}
+
+fn render_template_facts(template: &TemplateFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "params={}", template.explicit_params.len()).unwrap();
+    for param in &template.explicit_params {
+        writeln!(
+            out,
+            "param {} source={}",
+            param.name,
+            render_template_param_source(param.source)
+        )
+        .unwrap();
+    }
+    writeln!(
+        out,
+        "instantiations={}",
+        template.explicit_instantiations.len()
+    )
+    .unwrap();
+    for instantiation in &template.explicit_instantiations {
+        writeln!(
+            out,
+            "instantiate {}[{}]",
+            instantiation.callee,
+            instantiation.type_args.join(", ")
+        )
+        .unwrap();
+    }
+    writeln!(out, "row-shapes={}", template.row_shapes.len()).unwrap();
+    for shape in &template.row_shapes {
+        writeln!(out, "row-shape {}", render_row_shape(shape)).unwrap();
+    }
+    writeln!(out, "dyn-contracts={}", template.dyn_contracts.len()).unwrap();
+    for contract in &template.dyn_contracts {
+        writeln!(out, "dyn-contract {}", render_dyn_contract(contract)).unwrap();
+    }
+    writeln!(out, "obligations={}", template.obligations.len()).unwrap();
+    for obligation in &template.obligations {
+        writeln!(out, "obligation {}", render_template_obligation(obligation)).unwrap();
+    }
+    writeln!(out, "diagnostics={}", template.diagnostics.len()).unwrap();
+    for diagnostic in &template.diagnostics {
+        writeln!(out, "diagnostic {}", render_template_diagnostic(diagnostic)).unwrap();
+    }
+    out
+}
+
+fn render_template_param_source(source: TemplateParamSource) -> &'static str {
+    match source {
+        TemplateParamSource::ExplicitHeader => "explicit-header",
+        TemplateParamSource::SyntheticAutoGeneric => "synthetic-auto-generic",
+    }
+}
+
+fn render_template_obligation(obligation: &TemplateObligation) -> String {
+    match obligation {
+        TemplateObligation::Field { shape, field } => {
+            format!("field {field} in {}", render_row_shape(shape))
+        }
+        TemplateObligation::Method {
+            receiver,
+            name,
+            resolved,
+        } => format!(
+            "method {}.{} -> {}",
+            receiver.as_deref().unwrap_or("<unknown>"),
+            name,
+            resolved.as_deref().unwrap_or("<pending>")
+        ),
+        TemplateObligation::Function { name, resolved } => {
+            format!("function {name} -> {resolved}")
+        }
+        TemplateObligation::Static { name, resolved } => {
+            format!("static {name} -> {resolved}")
+        }
+        TemplateObligation::Constructor {
+            data,
+            ctor,
+            resolved,
+            arity,
+        } => format!("constructor {data}.{ctor}/{arity} -> {resolved}"),
+        TemplateObligation::Operator {
+            op,
+            protocol,
+            receiver,
+        } => format!(
+            "operator {} protocol={} receiver={}",
+            render_operator_surface(op),
+            protocol,
+            receiver.as_deref().unwrap_or("<unknown>")
+        ),
+        TemplateObligation::DynAdapter { contract } => {
+            format!("dyn-adapter {}", render_dyn_contract(contract))
+        }
+    }
+}
+
+fn render_template_diagnostic(diagnostic: &TemplateDiagnostic) -> String {
+    match diagnostic {
+        TemplateDiagnostic::ExplicitAutoGenericConflict { param } => {
+            format!("explicit-auto-generic-conflict {param}")
+        }
+        TemplateDiagnostic::ConflictingExplicitInstantiation {
+            callee,
+            previous_type_args,
+            type_args,
+        } => format!(
+            "conflicting-explicit-instantiation {callee}[{}] vs [{}]",
+            previous_type_args.join(", "),
+            type_args.join(", ")
+        ),
+    }
+}
+
+fn render_dyn_contract(contract: &DynRowContract) -> String {
+    format!(
+        "{} payload={} send={} adapter={}",
+        render_row_shape(&contract.shape),
+        render_usage_color(contract.payload_usage),
+        render_send_color(contract.send),
+        render_dyn_adapter_kind(contract.adapter)
+    )
+}
+
+fn render_row_shape(shape: &RowShape) -> String {
+    let fields = shape
+        .fields
+        .iter()
+        .map(|field| format!("{}: {}", field.name, render_shape_type(&field.ty)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let marker = match shape.openness {
+        RowOpenness::Open => "r | ",
+        RowOpenness::Closed => "",
+    };
+    format!("{{{marker}{fields}}}")
+}
+
+fn render_shape_type(ty: &ShapeType) -> String {
+    match ty {
+        ShapeType::Unknown => "_".to_string(),
+        ShapeType::Named(name) => name.clone(),
+    }
+}
+
+fn render_operator_surface(op: &OperatorSurface) -> String {
+    match op {
+        OperatorSurface::Binary(op) => render_source_binary_op(*op).to_string(),
+        OperatorSurface::Index => "[]".to_string(),
+        OperatorSurface::IndexSlice => "[..]".to_string(),
+    }
+}
+
+fn render_usage_color(color: crate::typed::UsageColor) -> &'static str {
+    match color {
+        crate::typed::UsageColor::One => "1",
+        crate::typed::UsageColor::Many => "N",
+        crate::typed::UsageColor::Obligation => "obligation",
+    }
+}
+
+fn render_send_color(color: crate::typed::SendColor) -> &'static str {
+    match color {
+        crate::typed::SendColor::Send => "send",
+        crate::typed::SendColor::NotSend => "!send",
+        crate::typed::SendColor::Obligation => "obligation",
+    }
+}
+
+fn render_dyn_adapter_kind(kind: DynAdapterKind) -> &'static str {
+    match kind {
+        DynAdapterKind::StaticToDynPackage => "static-to-dyn-package",
+        DynAdapterKind::DynAdapterAccess => "dyn-adapter-access",
+    }
 }
 
 fn render_pass_report(report: &PassReport) -> String {
