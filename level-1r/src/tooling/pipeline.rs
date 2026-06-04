@@ -22,7 +22,9 @@ use crate::cps_usage::{
     analyze_cps_usage, simplify_continuations, ContinuationSimplificationFacts, CpsUsageDiagnostic,
     CpsUsageFacts,
 };
-use crate::debug::{render_visual_report, visual_report, VisualReport};
+use crate::debug::{
+    render_callable_storage_facts, render_visual_report, visual_report, VisualReport,
+};
 use crate::frontend::{parse_source_program, FrontendError, FrontendOutput, SourceItemSpan};
 use crate::global::{analyze_global_init, GlobalInitDiagnostic, GlobalInitPlan, GlobalStaticId};
 use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
@@ -388,10 +390,7 @@ fn compile_expr_with_indexes_and_generics(
         &closure,
         &lambda_lift,
         &core,
-        &format!(
-            "{core_callable_storage:#?}",
-            core_callable_storage = core.callable_storage
-        ),
+        &render_callable_storage_facts(&core.callable_storage),
         &closure_core_usage,
         &closure_simplification,
         &usage_audit,
@@ -780,7 +779,8 @@ fn compile_program_defs(
                         .core
                         .callable_storage
                         .extend(interface_callable_storage_facts(interface));
-                    output.visual.callable_storage = format!("{:#?}", output.core.callable_storage);
+                    output.visual.callable_storage =
+                        render_callable_storage_facts(&output.core.callable_storage);
                     output
                 },
             }),

@@ -79,7 +79,9 @@ def main() = 0",
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("callable-storage:"));
     assert!(stdout.contains("type::ParserState::retry"));
-    assert!(stdout.contains("ContNPackage"));
+    assert!(stdout.contains("kind=contn-package"));
+    assert!(!stdout.contains("ContNPackage"));
+    assert!(!stdout.contains("CallableStorageFact"));
 }
 
 #[test]

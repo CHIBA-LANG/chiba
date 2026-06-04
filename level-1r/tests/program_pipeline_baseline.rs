@@ -637,6 +637,18 @@ fn interface_type_continuation_field_enters_callable_storage() {
         .output
         .render_visual()
         .contains("type::RetryBox::retry"));
+    assert!(bundle.defs[0]
+        .output
+        .render_visual()
+        .contains("kind=contn-package"));
+    assert!(!bundle.defs[0]
+        .output
+        .render_visual()
+        .contains("ContNPackage"));
+    assert!(!bundle.defs[0]
+        .output
+        .render_visual()
+        .contains("CallableStorageFact"));
 }
 
 #[test]

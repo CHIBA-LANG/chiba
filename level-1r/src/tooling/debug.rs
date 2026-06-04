@@ -16,9 +16,10 @@ use crate::closure_simplify::{
 };
 use crate::control::{ContinuationKind, ControlError, ControlFacts, ReplaySafety};
 use crate::core::{
-    CallableStorageKind, CompilerIntrinsic, CoreCapturedContinuation, CoreDiagnostic, CoreMatchArm,
-    CoreOp, CorePattern, CoreProgram, CoreRecordValueField, CoreValidation, CoreValue, LayoutKind,
-    OperatorIntrinsic, OwnershipDecision, OwnershipSubjectKind, TargetSpecificCoreTerm,
+    CallableStorageFact, CallableStorageKind, CompilerIntrinsic, CoreCapturedContinuation,
+    CoreDiagnostic, CoreMatchArm, CoreOp, CorePattern, CoreProgram, CoreRecordValueField,
+    CoreValidation, CoreValue, LayoutKind, OperatorIntrinsic, OwnershipDecision,
+    OwnershipSubjectKind, TargetSpecificCoreTerm,
 };
 use crate::cps::CpsProgram;
 use crate::cps_usage::{
@@ -248,17 +249,7 @@ fn render_core_program(program: &CoreProgram) -> String {
         .unwrap();
     }
     writeln!(out, "callable-storage={}", program.callable_storage.len()).unwrap();
-    for fact in &program.callable_storage {
-        writeln!(
-            out,
-            "callable {} kind={} usage={} send={}",
-            fact.subject,
-            render_callable_storage_kind(fact.kind),
-            render_usage_color(fact.usage),
-            render_send_color(fact.send)
-        )
-        .unwrap();
-    }
+    render_callable_storage_lines(&mut out, &program.callable_storage);
     out
 }
 
@@ -1474,6 +1465,27 @@ fn render_callable_storage_kind(kind: CallableStorageKind) -> &'static str {
         CallableStorageKind::BoxedCont1 => "boxed-cont1",
         CallableStorageKind::ContNPackage => "contn-package",
         CallableStorageKind::ErasedCallableAdt => "erased-callable-adt",
+    }
+}
+
+pub fn render_callable_storage_facts(facts: &[CallableStorageFact]) -> String {
+    let mut out = String::new();
+    writeln!(out, "entries={}", facts.len()).unwrap();
+    render_callable_storage_lines(&mut out, facts);
+    out
+}
+
+fn render_callable_storage_lines(out: &mut String, facts: &[CallableStorageFact]) {
+    for fact in facts {
+        writeln!(
+            out,
+            "callable {} kind={} usage={} send={}",
+            fact.subject,
+            render_callable_storage_kind(fact.kind),
+            render_usage_color(fact.usage),
+            render_send_color(fact.send)
+        )
+        .unwrap();
     }
 }
 
