@@ -34,3 +34,21 @@ fn method_call_usage_visits_receiver_and_all_arguments() {
     assert_eq!(output.usage.vars.get("key").copied(), Some(UseCount::One));
     assert_eq!(output.usage.vars.get("value").copied(), Some(UseCount::One));
 }
+
+#[test]
+fn usage_visual_dump_renders_counts_structurally() {
+    let output = compile_expr(&Expr::lambda(
+        "x",
+        Expr::call(
+            Expr::var("free"),
+            Expr::call(Expr::var("x"), Expr::var("x")),
+        ),
+    ));
+
+    let visual = output.render_visual();
+    assert!(visual.contains("usage:"));
+    assert!(visual.contains("var free count=1 color=1"));
+    assert!(visual.contains("binder %0 count=many color=N"));
+    assert!(!output.visual.usage.contains("UsageFacts"));
+    assert!(!output.visual.usage.contains("vars:"));
+}

@@ -183,7 +183,7 @@ pub fn visual_report(
         typed: format!("{typed:#?}"),
         pattern: format!("{pattern:#?}"),
         control: render_control_facts(control),
-        usage: format!("{usage:#?}"),
+        usage: render_usage_facts(usage),
         cps: cps.to_string(),
         cps_usage: render_cps_usage_facts(cps_usage),
         continuation_simplification: render_continuation_simplification(
@@ -527,6 +527,31 @@ fn render_cps_usage_facts(facts: &CpsUsageFacts) -> String {
             out,
             "diagnostic {}",
             render_cps_usage_diagnostic(diagnostic)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_usage_facts(facts: &UsageFacts) -> String {
+    let mut out = String::new();
+    writeln!(out, "vars={}", facts.vars.len()).unwrap();
+    for (name, count) in &facts.vars {
+        writeln!(
+            out,
+            "var {name} count={} color={}",
+            render_use_count(*count),
+            render_usage_color(count.color())
+        )
+        .unwrap();
+    }
+    writeln!(out, "binders={}", facts.binders.len()).unwrap();
+    for (binder, count) in &facts.binders {
+        writeln!(
+            out,
+            "binder {binder} count={} color={}",
+            render_use_count(*count),
+            render_usage_color(count.color())
         )
         .unwrap();
     }
