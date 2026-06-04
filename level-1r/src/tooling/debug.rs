@@ -29,7 +29,7 @@ use crate::resolve::{
     OperatorSurface, ResolveDiagnostic, ResolveFacts, ResolvedCall, ResolvedName,
 };
 use crate::specialize::{AbiMode, DischargedObligation, SpecializationFacts, SpecializationKey};
-use crate::std_audit::StdAuditReport;
+use crate::std_audit::{StdAuditDiagnostic, StdAuditReport, StdCapability, StdClassification};
 use crate::template::{
     DynAdapterKind, DynRowContract, RowOpenness, RowShape, ShapeType, TemplateDiagnostic,
     TemplateFacts, TemplateObligation, TemplateParamSource,
@@ -196,7 +196,7 @@ pub fn visual_report(
         closure_core_usage: render_closure_core_usage(closure_core_usage),
         closure_simplification: render_closure_simplification(closure_simplification),
         usage_audit: render_usage_audit(usage_audit),
-        std_audit: format!("{std_audit:#?}"),
+        std_audit: render_std_audit(std_audit),
         core_validation: render_core_validation(core_validation),
         backend: render_backend_artifact(backend),
         backend_link: render_backend_link(backend_link),
@@ -820,6 +820,72 @@ fn render_usage_audit_diagnostic(diagnostic: &UsageAuditDiagnostic) -> String {
         } => format!(
             "many-usage-needs-shared-rust-reference {subject} rust-ref={rust_reference_signature}"
         ),
+    }
+}
+
+fn render_std_audit(report: &StdAuditReport) -> String {
+    let mut out = String::new();
+    writeln!(out, "requirements={}", report.requirements.len()).unwrap();
+    for requirement in &report.requirements {
+        writeln!(
+            out,
+            "requirement {} classification={} rust={} chiba={} reason={}",
+            render_std_capability(requirement.capability),
+            render_std_classification(requirement.classification),
+            requirement.rust_surface,
+            requirement.chiba_surface,
+            requirement.reason
+        )
+        .unwrap();
+    }
+    writeln!(out, "diagnostics={}", report.diagnostics.len()).unwrap();
+    for diagnostic in &report.diagnostics {
+        writeln!(
+            out,
+            "diagnostic {}",
+            render_std_audit_diagnostic(diagnostic)
+        )
+        .unwrap();
+    }
+    out
+}
+
+fn render_std_capability(capability: StdCapability) -> &'static str {
+    match capability {
+        StdCapability::GrowableSequence => "growable-sequence",
+        StdCapability::OrderedMap => "ordered-map",
+        StdCapability::OrderedSet => "ordered-set",
+        StdCapability::StringBuilder => "string-builder",
+        StdCapability::Formatting => "formatting",
+        StdCapability::StableHash => "stable-hash",
+        StdCapability::Utf8Chars => "utf8-chars",
+        StdCapability::RcSharedReference => "rc-shared-reference",
+        StdCapability::TimeMeasurement => "time-measurement",
+        StdCapability::FileRead => "file-read",
+        StdCapability::PathJoin => "path-join",
+    }
+}
+
+fn render_std_classification(classification: StdClassification) -> &'static str {
+    match classification {
+        StdClassification::ChibaStdFirstBatch => "chiba-std-first-batch",
+        StdClassification::RustImplementationConvenience => "rust-implementation-convenience",
+        StdClassification::ChibaUnsafeOrMetalBoundary => "chiba-unsafe-or-metal-boundary",
+        StdClassification::CompilerIntrinsic => "compiler-intrinsic",
+    }
+}
+
+fn render_std_audit_diagnostic(diagnostic: &StdAuditDiagnostic) -> String {
+    match diagnostic {
+        StdAuditDiagnostic::MissingClassification { capability } => {
+            format!(
+                "missing-classification {}",
+                render_std_capability(*capability)
+            )
+        }
+        StdAuditDiagnostic::EmptyChibaSurface { capability } => {
+            format!("empty-chiba-surface {}", render_std_capability(*capability))
+        }
     }
 }
 

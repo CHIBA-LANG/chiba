@@ -70,7 +70,9 @@ fn std_audit_is_visible_in_pipeline_report() {
         .any(|requirement| requirement.capability == StdCapability::GrowableSequence));
     let visual = output.render_visual();
     assert!(visual.contains("std-audit:"));
-    assert!(visual.contains("ChibaStdFirstBatch"));
-    assert!(visual.contains("CompilerIntrinsic"));
-    assert!(visual.contains("ChibaUnsafeOrMetalBoundary"));
+    assert!(visual.contains("requirement growable-sequence classification=chiba-std-first-batch"));
+    assert!(visual.contains("requirement stable-hash classification=compiler-intrinsic"));
+    assert!(visual.contains("requirement file-read classification=chiba-unsafe-or-metal-boundary"));
+    assert!(!output.visual.std_audit.contains("StdAuditReport"));
+    assert!(!output.visual.std_audit.contains("ChibaStdFirstBatch"));
 }
