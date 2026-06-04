@@ -110,7 +110,8 @@ mod tests {
         for ident in ["a+b", "a.b", "a b", "，name", "\u{301}e"] {
             assert!(
                 !is_chiba_identifier(ident),
-                "{ident:?} should not be a single Chiba identifier"
+                "{} should not be a single Chiba identifier",
+                ident.escape_debug()
             );
         }
     }

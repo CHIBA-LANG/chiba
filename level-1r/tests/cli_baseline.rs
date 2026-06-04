@@ -1,11 +1,40 @@
 use std::fs;
-use std::process::Command;
+use std::process::{Command, Output};
 
 fn write_fixture(name: &str, source: &str) -> std::path::PathBuf {
     let path =
         std::env::temp_dir().join(format!("chiba-level1r-{}-{name}.chiba", std::process::id()));
     fs::write(&path, source).expect("write fixture");
     path
+}
+
+fn assert_cli_success(output: &Output) {
+    assert!(
+        output.status.success(),
+        "{}",
+        render_cli_output_context(output)
+    );
+}
+
+fn assert_cli_failure(output: &Output) {
+    assert!(
+        !output.status.success(),
+        "{}",
+        render_cli_output_context(output)
+    );
+}
+
+fn render_cli_output_context(output: &Output) -> String {
+    format!(
+        "status={}\nstdout:\n{}\nstderr:\n{}",
+        output
+            .status
+            .code()
+            .map(|code| code.to_string())
+            .unwrap_or_else(|| "signal".to_string()),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
 }
 
 #[test]
@@ -21,7 +50,7 @@ def main() = 7",
         .output()
         .expect("run cli");
 
-    assert!(output.status.success(), "{output:?}");
+    assert_cli_success(&output);
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("source-program:"));
     assert!(stdout.contains("namespace=cli.demo"));
@@ -49,7 +78,7 @@ _ => 2
         .output()
         .expect("run cli");
 
-    assert!(output.status.success(), "{output:?}");
+    assert_cli_success(&output);
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("== def main =="));
     assert!(stdout.contains("source:"));
@@ -75,7 +104,7 @@ def main() = 0",
         .output()
         .expect("run cli");
 
-    assert!(output.status.success(), "{output:?}");
+    assert_cli_success(&output);
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("callable-storage:"));
     assert!(stdout.contains("type::ParserState::retry"));
@@ -93,7 +122,7 @@ fn cli_summary_reports_control_diagnostics() {
         .output()
         .expect("run cli");
 
-    assert!(output.status.success(), "{output:?}");
+    assert_cli_success(&output);
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("program:"));
     assert!(stdout.contains("diagnostics=1"));
@@ -112,7 +141,7 @@ fn cli_summary_reports_cont1_multi_resume_diagnostic() {
         .output()
         .expect("run cli");
 
-    assert!(output.status.success(), "{output:?}");
+    assert_cli_success(&output);
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("program:"));
     assert!(stdout.contains("diagnostics=1"));
@@ -131,7 +160,7 @@ fn cli_reports_frontend_errors_with_source_location() {
         .output()
         .expect("run cli");
 
-    assert!(!output.status.success(), "{output:?}");
+    assert_cli_failure(&output);
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
     assert!(stderr.contains("frontend error at 1:33"), "{stderr}");
     assert!(
