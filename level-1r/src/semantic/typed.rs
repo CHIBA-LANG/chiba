@@ -271,6 +271,33 @@ impl TypeContext {
         }
     }
 
+    fn instantiated_data_constructor_type(
+        &self,
+        data: &str,
+        ctor: &str,
+        args: &[TypedExpr],
+    ) -> Option<Type> {
+        let generics = self.data_generics.get(data)?;
+        let payloads = self
+            .constructors
+            .get(&(data.to_string(), ctor.to_string()))?;
+        if payloads.len() != args.len() {
+            return None;
+        }
+        let mut substitutions = BTreeMap::new();
+        for (payload, arg) in payloads.iter().zip(args) {
+            collect_payload_substitutions(payload, &arg.ty, generics, &mut substitutions)?;
+        }
+        if substitutions.len() != generics.len() {
+            return None;
+        }
+        Some(Type::Nominal(render_data_instance_type(
+            data,
+            generics,
+            &substitutions,
+        )))
+    }
+
     fn pattern_bindings(
         &self,
         pattern: &Pattern,
@@ -488,6 +515,12 @@ fn type_expr_with_context_and_controls(
                 .iter()
                 .map(|arg| type_expr_with_context_and_controls(arg, env, context, controls))
                 .collect::<Vec<_>>();
+            let ty = context
+                .instantiated_data_constructor_type(data, ctor, &args)
+                .unwrap_or_else(|| Type::Adt {
+                    name: data.clone(),
+                    variants: canonical_variants(variants),
+                });
             typed(
                 TypedExprKind::AdtCtor {
                     data: data.clone(),
@@ -495,10 +528,7 @@ fn type_expr_with_context_and_controls(
                     variants: canonical_variants(variants),
                     args,
                 },
-                Type::Adt {
-                    name: data.clone(),
-                    variants: canonical_variants(variants),
-                },
+                ty,
             )
         }
         Expr::Field { receiver, name } => {
@@ -785,17 +815,17 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 .into_iter()
                 .map(|arg| refine_continuation_types(arg, context))
                 .collect::<Vec<_>>();
+            let ty = context
+                .instantiated_data_constructor_type(&data, &ctor, &args)
+                .unwrap_or(expr.ty);
             typed(
                 TypedExprKind::AdtCtor {
-                    data: data.clone(),
+                    data,
                     ctor,
-                    variants: variants.clone(),
+                    variants,
                     args,
                 },
-                Type::Adt {
-                    name: data,
-                    variants,
-                },
+                ty,
             )
         }
         TypedExprKind::Field {
@@ -919,9 +949,17 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
             let scrutinee = refine_continuation_types(*scrutinee, context);
             let arms = arms
                 .into_iter()
-                .map(|arm| TypedMatchArm {
-                    pattern: arm.pattern,
-                    body: refine_continuation_types(arm.body, context),
+                .map(|arm| {
+                    let mut body = refine_continuation_types(arm.body, context);
+                    let bindings = context
+                        .pattern_bindings_for(&arm.pattern, &scrutinee.ty)
+                        .into_iter()
+                        .collect::<TypeEnv>();
+                    body = refine_pattern_binding_types(body, &bindings, context);
+                    TypedMatchArm {
+                        pattern: arm.pattern,
+                        body,
+                    }
                 })
                 .collect::<Vec<_>>();
             let ty = arms
@@ -983,8 +1021,280 @@ fn typed_resume_input_type(binder: &str, body: &TypedExpr) -> Type {
     collect_typed_resume_inputs(binder, body, &mut inputs);
     inputs
         .into_iter()
-        .reduce(|left, right| if left == right { left } else { Type::Unknown })
+        .reduce(|left, right| common_type(&left, &right))
         .unwrap_or(Type::Unknown)
+}
+
+fn refine_pattern_binding_types(
+    expr: TypedExpr,
+    bindings: &TypeEnv,
+    context: &TypeContext,
+) -> TypedExpr {
+    match expr.kind {
+        TypedExprKind::Var(name) => {
+            let ty = bindings.get(&name).cloned().unwrap_or(expr.ty);
+            typed(TypedExprKind::Var(name), ty)
+        }
+        TypedExprKind::Lit(lit) => typed(TypedExprKind::Lit(lit), expr.ty),
+        TypedExprKind::Lambda {
+            param,
+            param_ty,
+            body,
+        } => {
+            let mut nested = bindings.clone();
+            nested.remove(&param);
+            let body = refine_pattern_binding_types(*body, &nested, context);
+            let ty = Type::Func(Box::new(param_ty.clone()), Box::new(body.ty.clone()));
+            typed(
+                TypedExprKind::Lambda {
+                    param,
+                    param_ty,
+                    body: Box::new(body),
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Call { callee, args } => {
+            let callee = refine_pattern_binding_types(*callee, bindings, context);
+            let args = args
+                .into_iter()
+                .map(|arg| refine_pattern_binding_types(arg, bindings, context))
+                .collect::<Vec<_>>();
+            let ty = call_result_type(&callee.ty, args.len());
+            typed(
+                TypedExprKind::Call {
+                    callee: Box::new(callee),
+                    args,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Tuple { fields, nominal: _ } => {
+            let fields = fields
+                .into_iter()
+                .map(|field| refine_pattern_binding_types(field, bindings, context))
+                .collect::<Vec<_>>();
+            let field_types = fields
+                .iter()
+                .map(|field| field.ty.clone())
+                .collect::<Vec<_>>();
+            typed(
+                TypedExprKind::Tuple {
+                    nominal: tuple_nominal_name(&field_types),
+                    fields,
+                },
+                Type::Tuple(field_types),
+            )
+        }
+        TypedExprKind::Record { fields } => {
+            let fields = fields
+                .into_iter()
+                .map(|field| TypedRecordField {
+                    name: field.name,
+                    value: refine_pattern_binding_types(field.value, bindings, context),
+                })
+                .collect::<Vec<_>>();
+            let ty = Type::Record(record_type_fields(&fields));
+            typed(TypedExprKind::Record { fields }, ty)
+        }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            let base = refine_pattern_binding_types(*base, bindings, context);
+            let fields = fields
+                .into_iter()
+                .map(|field| TypedRecordField {
+                    name: field.name,
+                    value: refine_pattern_binding_types(field.value, bindings, context),
+                })
+                .collect::<Vec<_>>();
+            let ty = record_update_type(&base.ty, &fields);
+            typed(
+                TypedExprKind::RecordUpdate {
+                    base: Box::new(base),
+                    fields,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => {
+            let args = args
+                .into_iter()
+                .map(|arg| refine_pattern_binding_types(arg, bindings, context))
+                .collect::<Vec<_>>();
+            typed(
+                TypedExprKind::AdtCtor {
+                    data: data.clone(),
+                    ctor,
+                    variants: variants.clone(),
+                    args,
+                },
+                Type::Adt {
+                    name: data,
+                    variants,
+                },
+            )
+        }
+        TypedExprKind::Field {
+            receiver,
+            name,
+            access: _,
+        } => {
+            let receiver = refine_pattern_binding_types(*receiver, bindings, context);
+            let access = field_access_kind(&receiver.ty, &name);
+            let ty = match access {
+                FieldAccessKind::TuplePositionalRow { index } => {
+                    tuple_field_type(&receiver.ty, index)
+                }
+                FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
+                    .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
+            }
+            .unwrap_or(Type::Unknown);
+            typed(
+                TypedExprKind::Field {
+                    receiver: Box::new(receiver),
+                    name,
+                    access,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::MethodCall {
+            receiver,
+            name,
+            args,
+        } => {
+            let receiver = refine_pattern_binding_types(*receiver, bindings, context);
+            let args = args
+                .into_iter()
+                .map(|arg| refine_pattern_binding_types(arg, bindings, context))
+                .collect::<Vec<_>>();
+            let ty = field_callable_result_type(&receiver.ty, &name, args.len(), context);
+            typed(
+                TypedExprKind::MethodCall {
+                    receiver: Box::new(receiver),
+                    name,
+                    args,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Index { receiver, index } => typed(
+            TypedExprKind::Index {
+                receiver: Box::new(refine_pattern_binding_types(*receiver, bindings, context)),
+                index: Box::new(refine_pattern_binding_types(*index, bindings, context)),
+            },
+            Type::Unknown,
+        ),
+        TypedExprKind::Range { start, end } => typed(
+            TypedExprKind::Range {
+                start: Box::new(refine_pattern_binding_types(*start, bindings, context)),
+                end: Box::new(refine_pattern_binding_types(*end, bindings, context)),
+            },
+            Type::Nominal("Range".to_string()),
+        ),
+        TypedExprKind::Binary { op, lhs, rhs } => {
+            let lhs = refine_pattern_binding_types(*lhs, bindings, context);
+            let rhs = refine_pattern_binding_types(*rhs, bindings, context);
+            let ty = binary_result_type(&lhs.ty, &rhs.ty);
+            typed(
+                TypedExprKind::Binary {
+                    op,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
+                ty,
+            )
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            let cond = refine_pattern_binding_types(*cond, bindings, context);
+            let then_branch = refine_pattern_binding_types(*then_branch, bindings, context);
+            let else_branch = refine_pattern_binding_types(*else_branch, bindings, context);
+            let ty = common_type(&then_branch.ty, &else_branch.ty);
+            typed(
+                TypedExprKind::If {
+                    cond: Box::new(cond),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                },
+                ty,
+            )
+        }
+        TypedExprKind::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => {
+            let scrutinee = refine_pattern_binding_types(*scrutinee, bindings, context);
+            let then_branch = refine_pattern_binding_types(*then_branch, bindings, context);
+            let else_branch = refine_pattern_binding_types(*else_branch, bindings, context);
+            let ty = common_type(&then_branch.ty, &else_branch.ty);
+            typed(
+                TypedExprKind::IfLet {
+                    pattern,
+                    scrutinee: Box::new(scrutinee),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            let scrutinee = refine_pattern_binding_types(*scrutinee, bindings, context);
+            let arms = arms
+                .into_iter()
+                .map(|arm| TypedMatchArm {
+                    pattern: arm.pattern,
+                    body: refine_pattern_binding_types(arm.body, bindings, context),
+                })
+                .collect::<Vec<_>>();
+            let ty = arms
+                .iter()
+                .map(|arm| arm.body.ty.clone())
+                .reduce(|left, right| common_type(&left, &right))
+                .unwrap_or(Type::Unknown);
+            typed(
+                TypedExprKind::Match {
+                    scrutinee: Box::new(scrutinee),
+                    arms,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Nominal { name, expr } => typed(
+            TypedExprKind::Nominal {
+                name: name.clone(),
+                expr: Box::new(refine_pattern_binding_types(*expr, bindings, context)),
+            },
+            Type::Nominal(name),
+        ),
+        TypedExprKind::Reset { multi, body } => {
+            let body = refine_pattern_binding_types(*body, bindings, context);
+            let ty = body.ty.clone();
+            typed(
+                TypedExprKind::Reset {
+                    multi,
+                    body: Box::new(body),
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Shift { binder, body } => typed(
+            TypedExprKind::Shift {
+                binder,
+                body: Box::new(refine_pattern_binding_types(*body, bindings, context)),
+            },
+            expr.ty,
+        ),
+    }
 }
 
 fn collect_typed_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<Type>) {
@@ -1321,9 +1631,25 @@ fn is_typed_resume_callee(binder: &str, callee: &TypedExpr) -> bool {
 fn common_type(left: &Type, right: &Type) -> Type {
     if left == right {
         left.clone()
+    } else if adt_nominal_instance_matches(left, right) {
+        right.clone()
+    } else if adt_nominal_instance_matches(right, left) {
+        left.clone()
     } else {
         Type::Unknown
     }
+}
+
+fn adt_nominal_instance_matches(adt: &Type, nominal: &Type) -> bool {
+    let Type::Adt { name, .. } = adt else {
+        return false;
+    };
+    let Type::Nominal(nominal) = nominal else {
+        return false;
+    };
+    parse_type_header(nominal).is_some_and(
+        |header| matches!(header, ParsedTypeHeader::Nominal { base, .. } if base == *name),
+    )
 }
 
 fn binary_result_type(lhs: &Type, rhs: &Type) -> Type {
@@ -1784,6 +2110,137 @@ fn substitute_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> 
         Type::Unknown => Type::Unknown,
         Type::I64 => Type::I64,
         Type::Bool => Type::Bool,
+    }
+}
+
+fn collect_payload_substitutions(
+    payload: &Type,
+    actual: &Type,
+    generics: &[String],
+    substitutions: &mut BTreeMap<String, Type>,
+) -> Option<()> {
+    match payload {
+        Type::Nominal(name) if generics.iter().any(|generic| generic == name) => {
+            match substitutions.get(name) {
+                Some(existing) if existing != actual => None,
+                Some(_) => Some(()),
+                None => {
+                    substitutions.insert(name.clone(), actual.clone());
+                    Some(())
+                }
+            }
+        }
+        Type::Tuple(payload_fields) => {
+            let Type::Tuple(actual_fields) = actual else {
+                return Some(());
+            };
+            if payload_fields.len() != actual_fields.len() {
+                return None;
+            }
+            for (payload, actual) in payload_fields.iter().zip(actual_fields) {
+                collect_payload_substitutions(payload, actual, generics, substitutions)?;
+            }
+            Some(())
+        }
+        Type::Record(payload_fields) => {
+            let Type::Record(actual_fields) = actual else {
+                return Some(());
+            };
+            for payload_field in payload_fields {
+                let actual_field = field_type(actual_fields, &payload_field.name)?;
+                collect_payload_substitutions(
+                    &payload_field.ty,
+                    &actual_field,
+                    generics,
+                    substitutions,
+                )?;
+            }
+            Some(())
+        }
+        Type::Func(payload_param, payload_result) => {
+            let Type::Func(actual_param, actual_result) = actual else {
+                return Some(());
+            };
+            collect_payload_substitutions(payload_param, actual_param, generics, substitutions)?;
+            collect_payload_substitutions(payload_result, actual_result, generics, substitutions)
+        }
+        Type::Continuation {
+            input: payload_input,
+            answer: payload_answer,
+            ..
+        } => {
+            let Type::Continuation {
+                input: actual_input,
+                answer: actual_answer,
+                ..
+            } = actual
+            else {
+                return Some(());
+            };
+            collect_payload_substitutions(payload_input, actual_input, generics, substitutions)?;
+            collect_payload_substitutions(payload_answer, actual_answer, generics, substitutions)
+        }
+        Type::Adt { .. } | Type::Unknown | Type::I64 | Type::Bool | Type::Nominal(_) => Some(()),
+    }
+}
+
+fn render_data_instance_type(
+    data: &str,
+    generics: &[String],
+    substitutions: &BTreeMap<String, Type>,
+) -> String {
+    let args = generics
+        .iter()
+        .map(|generic| {
+            substitutions
+                .get(generic)
+                .map(source_type_name_for_type)
+                .unwrap_or_else(|| generic.clone())
+        })
+        .collect::<Vec<_>>();
+    render_source_type_application(data, &args)
+}
+
+fn render_source_type_application(base: &str, args: &[String]) -> String {
+    let mut rendered = String::from(base);
+    rendered.push('[');
+    rendered.push_str(&args.join(","));
+    rendered.push(']');
+    rendered
+}
+
+fn source_type_name_for_type(ty: &Type) -> String {
+    match ty {
+        Type::I64 => "i64".to_string(),
+        Type::Bool => "bool".to_string(),
+        Type::Nominal(name) => name.clone(),
+        Type::Tuple(fields) => {
+            let args = fields
+                .iter()
+                .map(source_type_name_for_type)
+                .collect::<Vec<_>>();
+            render_source_type_application("Tuple", &args)
+        }
+        Type::Continuation {
+            multi,
+            input,
+            answer,
+        } => {
+            let base = if *multi { "ContN" } else { "Cont1" };
+            let args = vec![
+                source_type_name_for_type(input),
+                source_type_name_for_type(answer),
+            ];
+            render_source_type_application(base, &args)
+        }
+        Type::Func(param, result) => {
+            format!(
+                "({}) -> {}",
+                source_type_name_for_type(param),
+                source_type_name_for_type(result)
+            )
+        }
+        Type::Record(_) | Type::Adt { .. } | Type::Unknown => type_stable_name(ty),
     }
 }
 

@@ -192,6 +192,7 @@ fn unsupported_i32_return_value(
     params: &[String],
 ) -> Option<BackendDiagnostic> {
     let mut env = RenderEnv::new(params);
+    let mut continuations = BTreeSet::new();
     for (index, op) in core.ops.iter().enumerate() {
         if let Some(diagnostic) = match op {
             CoreOp::ReturnValue(value)
@@ -208,6 +209,17 @@ fn unsupported_i32_return_value(
                 .into_iter()
                 .find_map(|value| unsupported_i32_value(value, &env)),
             CoreOp::ReturnMatch { scrutinee, arms } => unsupported_i32_match(scrutinee, arms, &env),
+            CoreOp::TailCall { func, args } if continuations.contains(func) => {
+                let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
+                    return Some(BackendDiagnostic::UnsupportedContinuationRuntime {
+                        op: "resume-without-result".to_string(),
+                        kind: continuation_kind_for_binder(core, func),
+                        binder: Some(func.clone()),
+                    });
+                };
+                env = env.with_locals(vec![binder.clone()]);
+                None
+            }
             CoreOp::TailCall { args, .. } => {
                 args.iter().find_map(|arg| unsupported_i32_value(arg, &env))
             }
@@ -215,8 +227,9 @@ fn unsupported_i32_return_value(
                 env = env.with_locals(vec![binder.clone()]);
                 None
             }
-            CoreOp::CaptureContinuation { captured, .. } => {
-                unsupported_i32_captured_continuation(captured, &env)
+            CoreOp::CaptureContinuation { binder, .. } => {
+                continuations.insert(binder.clone());
+                None
             }
             _ => None,
         } {
@@ -259,48 +272,6 @@ fn unsupported_i32_value(value: &CoreValue, env: &RenderEnv) -> Option<BackendDi
             value: value.debug_name(),
         }
     })
-}
-
-fn unsupported_i32_captured_continuation(
-    captured: &CoreCapturedContinuation,
-    env: &RenderEnv,
-) -> Option<BackendDiagnostic> {
-    let mut env = env
-        .with_locals(vec![captured.param.clone()])
-        .with_binding(&captured.param, CoreValue::I64(0));
-    for op in &captured.ops {
-        match op {
-            CoreOp::ReturnValue(value) => {
-                if let Some(diagnostic) = unsupported_i32_value(value, &env) {
-                    return Some(diagnostic);
-                }
-            }
-            CoreOp::ReturnBranch {
-                cond,
-                then_value,
-                else_value,
-            } => {
-                if let Some(diagnostic) = [cond, then_value, else_value]
-                    .into_iter()
-                    .find_map(|value| unsupported_i32_value(value, &env))
-                {
-                    return Some(diagnostic);
-                }
-            }
-            CoreOp::TailCall { args, .. } => {
-                if let Some(diagnostic) =
-                    args.iter().find_map(|arg| unsupported_i32_value(arg, &env))
-                {
-                    return Some(diagnostic);
-                }
-            }
-            CoreOp::TailCallResult { binder } => {
-                env = env.with_locals(vec![binder.clone()]);
-            }
-            _ => {}
-        }
-    }
-    None
 }
 
 fn unsupported_i32_match(
@@ -1089,6 +1060,20 @@ fn continuation_kind_for_captured(
         .unwrap_or(ContinuationKind::Cont1)
 }
 
+fn continuation_kind_for_binder(core: &CoreProgram, binder: &str) -> ContinuationKind {
+    core.ops
+        .iter()
+        .find_map(|op| match op {
+            CoreOp::CaptureContinuation {
+                binder: candidate,
+                kind,
+                ..
+            } if candidate == binder => Some(*kind),
+            _ => None,
+        })
+        .unwrap_or(ContinuationKind::Cont1)
+}
+
 fn render_operator_intrinsic_wat(
     wat: &mut String,
     protocol: &str,
@@ -1245,27 +1230,25 @@ fn render_core_value_i32(
     value: &CoreValue,
     env: &RenderEnv,
 ) -> Result<(), BackendDiagnostic> {
+    let value = resolve_core_value_binding(value, env);
     match value {
         CoreValue::Unit => wat.push_str("    i32.const 0\n"),
         CoreValue::I64(value) => wat.push_str(&format!("    i32.const {}\n", *value as i32)),
         CoreValue::Bool(value) => wat.push_str(&format!("    i32.const {}\n", i32::from(*value))),
-        CoreValue::Var(name) if env.binding(name).is_some() => {
-            render_core_value_i32(wat, env.binding(name).expect("checked binding"), env)?;
-        }
         CoreValue::Var(name) if env.is_param(name) => {
             wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
         }
         CoreValue::TupleField {
             tuple, field_index, ..
         } => {
-            if let Some(value) = tuple_field_value(tuple, *field_index) {
+            if let Some(value) = tuple_field_value(tuple, *field_index, env) {
                 render_core_value_i32(wat, value, env)?;
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
             }
         }
         CoreValue::RecordField { record, field } => {
-            if let Some(value) = record_field_value(record, field) {
+            if let Some(value) = record_field_value(record, field, env) {
                 render_core_value_i32(wat, value, env)?;
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
@@ -1296,6 +1279,7 @@ fn unsupported_i32_render_diagnostic(value: &CoreValue) -> BackendDiagnostic {
 }
 
 fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
+    let value = resolve_core_value_binding(value, env);
     match value {
         CoreValue::Unit | CoreValue::I64(_) | CoreValue::Bool(_) => true,
         CoreValue::Adt {
@@ -1309,16 +1293,13 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
                     .iter()
                     .all(|arg| core_value_is_renderable_i32(arg, env))
         }
-        CoreValue::Var(name) => env
-            .binding(name)
-            .map(|value| core_value_is_renderable_i32(value, env))
-            .unwrap_or_else(|| env.is_param(name)),
+        CoreValue::Var(name) => env.is_param(name),
         CoreValue::TupleField {
             tuple, field_index, ..
-        } => tuple_field_value(tuple, *field_index)
+        } => tuple_field_value(tuple, *field_index, env)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or(false),
-        CoreValue::RecordField { record, field } => record_field_value(record, field)
+        CoreValue::RecordField { record, field } => record_field_value(record, field, env)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or(false),
         CoreValue::Tuple { .. }
@@ -1328,14 +1309,31 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
     }
 }
 
-fn tuple_field_value(tuple: &CoreValue, field_index: usize) -> Option<&CoreValue> {
+fn resolve_core_value_binding<'a>(value: &'a CoreValue, env: &'a RenderEnv) -> &'a CoreValue {
+    match value {
+        CoreValue::Var(name) => env.binding(name).unwrap_or(value),
+        _ => value,
+    }
+}
+
+fn tuple_field_value<'a>(
+    tuple: &'a CoreValue,
+    field_index: usize,
+    env: &'a RenderEnv,
+) -> Option<&'a CoreValue> {
+    let tuple = resolve_core_value_binding(tuple, env);
     let CoreValue::Tuple { fields } = tuple else {
         return None;
     };
     fields.get(field_index)
 }
 
-fn record_field_value<'a>(record: &'a CoreValue, field: &str) -> Option<&'a CoreValue> {
+fn record_field_value<'a>(
+    record: &'a CoreValue,
+    field: &str,
+    env: &'a RenderEnv,
+) -> Option<&'a CoreValue> {
+    let record = resolve_core_value_binding(record, env);
     let CoreValue::Record { fields } = record else {
         return None;
     };
@@ -1452,6 +1450,7 @@ fn constructor_match_env(
     args: &[CorePattern],
     env: &RenderEnv,
 ) -> Option<(usize, RenderEnv)> {
+    let scrutinee = resolve_core_value_binding(scrutinee, env);
     let tag = constructor_tag(scrutinee, pattern_data, ctor)?;
     let CoreValue::Adt { args: payloads, .. } = scrutinee else {
         return None;

@@ -390,6 +390,66 @@ fn program_contn_repeated_resume_replays_captured_match_context() {
 }
 
 #[test]
+fn program_cont1_single_resume_replays_captured_tuple_field_context() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = reset { (shift k { k((4, true)) })._2 }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert_eq!(
+        main.control.continuations[0].input,
+        Type::Tuple(vec![Type::I64, Type::Bool])
+    );
+    assert_eq!(main.control.continuations[0].answer, Type::Bool);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
+#[test]
+fn program_cont1_single_resume_replays_captured_record_field_context() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = reset { (shift k { k({x: 4, y: true}) }).x }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert_eq!(main.control.continuations[0].answer, Type::I64);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "4");
+}
+
+#[test]
+fn program_contn_repeated_resume_replays_captured_adt_match_context() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "data Option[T] = { Some(T), None }
+def main() = resetn { match shift retry { retry(Option.Some(7)) + retry(Option.None) } { Option.Some(value) => value, Option.None => 0 } }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle.backend_link.diagnostics.is_empty());
+    assert_eq!(main.backend.diagnostics, vec![]);
+    assert_eq!(main.control.continuations[0].answer, Type::I64);
+    assert_eq!(
+        main.backend
+            .wat
+            .matches(";; resume-cont binder=retry kind=contn result=")
+            .count(),
+        2
+    );
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
+}
+
+#[test]
 fn interface_type_continuation_field_enters_callable_storage() {
     let program = SourceProgram::with_surface(
         None,

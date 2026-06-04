@@ -220,13 +220,11 @@ fn transform(
                         field: name.clone(),
                         field_index: *index,
                     }
-                } else if matches!(value, CpsAtom::Record { .. }) {
+                } else {
                     CpsAtom::RecordField {
                         record: Box::new(value),
                         field: name.clone(),
                     }
-                } else {
-                    CpsAtom::Var(format!("{value}.{name}"))
                 };
                 k(atom, ctx)
             }),
