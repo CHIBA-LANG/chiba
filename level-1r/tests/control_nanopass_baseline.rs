@@ -86,6 +86,19 @@ fn shift_resume_input_type_is_collected_from_typed_resume_calls() {
 }
 
 #[test]
+fn reset_answer_type_uses_captured_context_after_shift_input_refinement() {
+    let output = compile_expr(&Expr::reset(Expr::binary(
+        BinaryOp::Add,
+        Expr::i64(10),
+        Expr::shift("k", Expr::call(Expr::var("k"), Expr::i64(7))),
+    )));
+
+    assert_eq!(output.typed.ty, Type::I64);
+    assert_eq!(output.control.continuations[0].input, Type::I64);
+    assert_eq!(output.control.continuations[0].answer, Type::I64);
+}
+
+#[test]
 fn nanopass_report_keeps_ordered_debuggable_passes() {
     let output = compile_expr(&Expr::call(Expr::var("f"), Expr::var("x")));
 

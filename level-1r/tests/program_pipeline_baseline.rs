@@ -286,6 +286,20 @@ fn program_contn_repeated_resume_replays_captured_reset_context() {
 }
 
 #[test]
+fn program_reset_shift_answer_type_uses_captured_context() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = reset { 10 + shift k { k(7) } }",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert_eq!(main.typed.ty, Type::I64);
+    assert_eq!(main.control.continuations[0].input, Type::I64);
+    assert_eq!(main.control.continuations[0].answer, Type::I64);
+    assert_eq!(run_wat_text(&output.program.backend_link.linked_wat), "17");
+}
+
+#[test]
 fn interface_type_continuation_field_enters_callable_storage() {
     let program = SourceProgram::with_surface(
         None,

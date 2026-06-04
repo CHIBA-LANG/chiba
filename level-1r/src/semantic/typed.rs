@@ -363,7 +363,8 @@ pub fn type_expr_with_env(expr: &Expr, env: &TypeEnv) -> TypedExpr {
 }
 
 pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext) -> TypedExpr {
-    type_expr_with_context_and_controls(expr, env, context, &mut Vec::new())
+    let typed = type_expr_with_context_and_controls(expr, env, context, &mut Vec::new());
+    refine_continuation_types(typed, context)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -691,6 +692,630 @@ fn type_expr_with_context_and_controls(
             )
         }
     }
+}
+
+fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExpr {
+    match expr.kind {
+        TypedExprKind::Var(name) => typed(TypedExprKind::Var(name), expr.ty),
+        TypedExprKind::Lit(lit) => typed(TypedExprKind::Lit(lit), expr.ty),
+        TypedExprKind::Lambda {
+            param,
+            param_ty,
+            body,
+        } => {
+            let body = refine_continuation_types(*body, context);
+            let ty = Type::Func(Box::new(param_ty.clone()), Box::new(body.ty.clone()));
+            typed(
+                TypedExprKind::Lambda {
+                    param,
+                    param_ty,
+                    body: Box::new(body),
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Call { callee, args } => {
+            let callee = refine_continuation_types(*callee, context);
+            let args = args
+                .into_iter()
+                .map(|arg| refine_continuation_types(arg, context))
+                .collect::<Vec<_>>();
+            let ty = call_result_type(&callee.ty, args.len());
+            typed(
+                TypedExprKind::Call {
+                    callee: Box::new(callee),
+                    args,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Tuple { fields, nominal: _ } => {
+            let fields = fields
+                .into_iter()
+                .map(|field| refine_continuation_types(field, context))
+                .collect::<Vec<_>>();
+            let field_types = fields
+                .iter()
+                .map(|field| field.ty.clone())
+                .collect::<Vec<_>>();
+            typed(
+                TypedExprKind::Tuple {
+                    nominal: tuple_nominal_name(&field_types),
+                    fields,
+                },
+                Type::Tuple(field_types),
+            )
+        }
+        TypedExprKind::Record { fields } => {
+            let fields = fields
+                .into_iter()
+                .map(|field| TypedRecordField {
+                    name: field.name,
+                    value: refine_continuation_types(field.value, context),
+                })
+                .collect::<Vec<_>>();
+            let ty = Type::Record(record_type_fields(&fields));
+            typed(TypedExprKind::Record { fields }, ty)
+        }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            let base = refine_continuation_types(*base, context);
+            let fields = fields
+                .into_iter()
+                .map(|field| TypedRecordField {
+                    name: field.name,
+                    value: refine_continuation_types(field.value, context),
+                })
+                .collect::<Vec<_>>();
+            let ty = record_update_type(&base.ty, &fields);
+            typed(
+                TypedExprKind::RecordUpdate {
+                    base: Box::new(base),
+                    fields,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => {
+            let args = args
+                .into_iter()
+                .map(|arg| refine_continuation_types(arg, context))
+                .collect::<Vec<_>>();
+            typed(
+                TypedExprKind::AdtCtor {
+                    data: data.clone(),
+                    ctor,
+                    variants: variants.clone(),
+                    args,
+                },
+                Type::Adt {
+                    name: data,
+                    variants,
+                },
+            )
+        }
+        TypedExprKind::Field {
+            receiver,
+            name,
+            access: _,
+        } => {
+            let receiver = refine_continuation_types(*receiver, context);
+            let access = field_access_kind(&receiver.ty, &name);
+            let ty = match access {
+                FieldAccessKind::TuplePositionalRow { index } => {
+                    tuple_field_type(&receiver.ty, index)
+                }
+                FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
+                    .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
+            }
+            .unwrap_or(Type::Unknown);
+            typed(
+                TypedExprKind::Field {
+                    receiver: Box::new(receiver),
+                    name,
+                    access,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::MethodCall {
+            receiver,
+            name,
+            args,
+        } => {
+            let receiver = refine_continuation_types(*receiver, context);
+            let args = args
+                .into_iter()
+                .map(|arg| refine_continuation_types(arg, context))
+                .collect::<Vec<_>>();
+            let ty = field_callable_result_type(&receiver.ty, &name, args.len(), context);
+            typed(
+                TypedExprKind::MethodCall {
+                    receiver: Box::new(receiver),
+                    name,
+                    args,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Index { receiver, index } => {
+            let receiver = refine_continuation_types(*receiver, context);
+            let index = refine_continuation_types(*index, context);
+            typed(
+                TypedExprKind::Index {
+                    receiver: Box::new(receiver),
+                    index: Box::new(index),
+                },
+                Type::Unknown,
+            )
+        }
+        TypedExprKind::Range { start, end } => {
+            let start = refine_continuation_types(*start, context);
+            let end = refine_continuation_types(*end, context);
+            typed(
+                TypedExprKind::Range {
+                    start: Box::new(start),
+                    end: Box::new(end),
+                },
+                Type::Nominal("Range".to_string()),
+            )
+        }
+        TypedExprKind::Binary { op, lhs, rhs } => {
+            let lhs = refine_continuation_types(*lhs, context);
+            let rhs = refine_continuation_types(*rhs, context);
+            let ty = binary_result_type(&lhs.ty, &rhs.ty);
+            typed(
+                TypedExprKind::Binary {
+                    op,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
+                ty,
+            )
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            let cond = refine_continuation_types(*cond, context);
+            let then_branch = refine_continuation_types(*then_branch, context);
+            let else_branch = refine_continuation_types(*else_branch, context);
+            let ty = common_type(&then_branch.ty, &else_branch.ty);
+            typed(
+                TypedExprKind::If {
+                    cond: Box::new(cond),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                },
+                ty,
+            )
+        }
+        TypedExprKind::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => {
+            let scrutinee = refine_continuation_types(*scrutinee, context);
+            let then_branch = refine_continuation_types(*then_branch, context);
+            let else_branch = refine_continuation_types(*else_branch, context);
+            let ty = common_type(&then_branch.ty, &else_branch.ty);
+            typed(
+                TypedExprKind::IfLet {
+                    pattern,
+                    scrutinee: Box::new(scrutinee),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            let scrutinee = refine_continuation_types(*scrutinee, context);
+            let arms = arms
+                .into_iter()
+                .map(|arm| TypedMatchArm {
+                    pattern: arm.pattern,
+                    body: refine_continuation_types(arm.body, context),
+                })
+                .collect::<Vec<_>>();
+            let ty = arms
+                .iter()
+                .map(|arm| arm.body.ty.clone())
+                .reduce(|left, right| common_type(&left, &right))
+                .unwrap_or(Type::Unknown);
+            typed(
+                TypedExprKind::Match {
+                    scrutinee: Box::new(scrutinee),
+                    arms,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Nominal { name, expr } => {
+            let expr = refine_continuation_types(*expr, context);
+            typed(
+                TypedExprKind::Nominal {
+                    name: name.clone(),
+                    expr: Box::new(expr),
+                },
+                Type::Nominal(name),
+            )
+        }
+        TypedExprKind::Reset { multi, body } => {
+            let body = refine_continuation_types(*body, context);
+            let ty = body.ty.clone();
+            typed(
+                TypedExprKind::Reset {
+                    multi,
+                    body: Box::new(body),
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Shift { binder, body } => {
+            let body = refine_continuation_types(*body, context);
+            let input = typed_resume_input_type(&binder, &body);
+            let body = rewrite_continuation_callee_input(body, &binder, &input);
+            let ty = if input == Type::Unknown {
+                body.ty.clone()
+            } else {
+                input
+            };
+            typed(
+                TypedExprKind::Shift {
+                    binder,
+                    body: Box::new(body),
+                },
+                ty,
+            )
+        }
+    }
+}
+
+fn typed_resume_input_type(binder: &str, body: &TypedExpr) -> Type {
+    let mut inputs = Vec::new();
+    collect_typed_resume_inputs(binder, body, &mut inputs);
+    inputs
+        .into_iter()
+        .reduce(|left, right| if left == right { left } else { Type::Unknown })
+        .unwrap_or(Type::Unknown)
+}
+
+fn collect_typed_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<Type>) {
+    match &expr.kind {
+        TypedExprKind::Call { callee, args } => {
+            if is_typed_resume_callee(binder, callee) {
+                match args.as_slice() {
+                    [arg] => inputs.push(arg.ty.clone()),
+                    _ => inputs.push(Type::Unknown),
+                }
+            }
+            collect_typed_resume_inputs(binder, callee, inputs);
+            for arg in args {
+                collect_typed_resume_inputs(binder, arg, inputs);
+            }
+        }
+        TypedExprKind::Lambda { body, .. }
+        | TypedExprKind::Nominal { expr: body, .. }
+        | TypedExprKind::Reset { body, .. }
+        | TypedExprKind::Shift { body, .. } => collect_typed_resume_inputs(binder, body, inputs),
+        TypedExprKind::Tuple { fields, .. } => {
+            for field in fields {
+                collect_typed_resume_inputs(binder, field, inputs);
+            }
+        }
+        TypedExprKind::Record { fields } => {
+            for field in fields {
+                collect_typed_resume_inputs(binder, &field.value, inputs);
+            }
+        }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            collect_typed_resume_inputs(binder, base, inputs);
+            for field in fields {
+                collect_typed_resume_inputs(binder, &field.value, inputs);
+            }
+        }
+        TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_typed_resume_inputs(binder, arg, inputs);
+            }
+        }
+        TypedExprKind::Field { receiver, .. } => {
+            collect_typed_resume_inputs(binder, receiver, inputs);
+        }
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            collect_typed_resume_inputs(binder, receiver, inputs);
+            for arg in args {
+                collect_typed_resume_inputs(binder, arg, inputs);
+            }
+        }
+        TypedExprKind::Index { receiver, index } => {
+            collect_typed_resume_inputs(binder, receiver, inputs);
+            collect_typed_resume_inputs(binder, index, inputs);
+        }
+        TypedExprKind::Range { start, end } => {
+            collect_typed_resume_inputs(binder, start, inputs);
+            collect_typed_resume_inputs(binder, end, inputs);
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            collect_typed_resume_inputs(binder, lhs, inputs);
+            collect_typed_resume_inputs(binder, rhs, inputs);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_typed_resume_inputs(binder, cond, inputs);
+            collect_typed_resume_inputs(binder, then_branch, inputs);
+            collect_typed_resume_inputs(binder, else_branch, inputs);
+        }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_typed_resume_inputs(binder, scrutinee, inputs);
+            collect_typed_resume_inputs(binder, then_branch, inputs);
+            collect_typed_resume_inputs(binder, else_branch, inputs);
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            collect_typed_resume_inputs(binder, scrutinee, inputs);
+            for arm in arms {
+                collect_typed_resume_inputs(binder, &arm.body, inputs);
+            }
+        }
+        TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
+    }
+}
+
+fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type) -> TypedExpr {
+    match expr.kind {
+        TypedExprKind::Var(name) if name == binder => {
+            if let Type::Continuation {
+                multi,
+                input: _,
+                answer,
+            } = expr.ty
+            {
+                typed(
+                    TypedExprKind::Var(name),
+                    Type::Continuation {
+                        multi,
+                        input: Box::new(input.clone()),
+                        answer,
+                    },
+                )
+            } else {
+                typed(TypedExprKind::Var(name), expr.ty)
+            }
+        }
+        TypedExprKind::Var(name) => typed(TypedExprKind::Var(name), expr.ty),
+        TypedExprKind::Lit(lit) => typed(TypedExprKind::Lit(lit), expr.ty),
+        TypedExprKind::Lambda {
+            param,
+            param_ty,
+            body,
+        } => typed(
+            TypedExprKind::Lambda {
+                param,
+                param_ty,
+                body: Box::new(rewrite_continuation_callee_input(*body, binder, input)),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Call { callee, args } => typed(
+            TypedExprKind::Call {
+                callee: Box::new(rewrite_continuation_callee_input(*callee, binder, input)),
+                args: args
+                    .into_iter()
+                    .map(|arg| rewrite_continuation_callee_input(arg, binder, input))
+                    .collect(),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Tuple { fields, nominal } => typed(
+            TypedExprKind::Tuple {
+                nominal,
+                fields: fields
+                    .into_iter()
+                    .map(|field| rewrite_continuation_callee_input(field, binder, input))
+                    .collect(),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Record { fields } => typed(
+            TypedExprKind::Record {
+                fields: fields
+                    .into_iter()
+                    .map(|field| TypedRecordField {
+                        name: field.name,
+                        value: rewrite_continuation_callee_input(field.value, binder, input),
+                    })
+                    .collect(),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::RecordUpdate { base, fields } => typed(
+            TypedExprKind::RecordUpdate {
+                base: Box::new(rewrite_continuation_callee_input(*base, binder, input)),
+                fields: fields
+                    .into_iter()
+                    .map(|field| TypedRecordField {
+                        name: field.name,
+                        value: rewrite_continuation_callee_input(field.value, binder, input),
+                    })
+                    .collect(),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => typed(
+            TypedExprKind::AdtCtor {
+                data,
+                ctor,
+                variants,
+                args: args
+                    .into_iter()
+                    .map(|arg| rewrite_continuation_callee_input(arg, binder, input))
+                    .collect(),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Field {
+            receiver,
+            name,
+            access,
+        } => typed(
+            TypedExprKind::Field {
+                receiver: Box::new(rewrite_continuation_callee_input(*receiver, binder, input)),
+                name,
+                access,
+            },
+            expr.ty,
+        ),
+        TypedExprKind::MethodCall {
+            receiver,
+            name,
+            args,
+        } => typed(
+            TypedExprKind::MethodCall {
+                receiver: Box::new(rewrite_continuation_callee_input(*receiver, binder, input)),
+                name,
+                args: args
+                    .into_iter()
+                    .map(|arg| rewrite_continuation_callee_input(arg, binder, input))
+                    .collect(),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Index { receiver, index } => typed(
+            TypedExprKind::Index {
+                receiver: Box::new(rewrite_continuation_callee_input(*receiver, binder, input)),
+                index: Box::new(rewrite_continuation_callee_input(*index, binder, input)),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Range { start, end } => typed(
+            TypedExprKind::Range {
+                start: Box::new(rewrite_continuation_callee_input(*start, binder, input)),
+                end: Box::new(rewrite_continuation_callee_input(*end, binder, input)),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Binary { op, lhs, rhs } => typed(
+            TypedExprKind::Binary {
+                op,
+                lhs: Box::new(rewrite_continuation_callee_input(*lhs, binder, input)),
+                rhs: Box::new(rewrite_continuation_callee_input(*rhs, binder, input)),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => typed(
+            TypedExprKind::If {
+                cond: Box::new(rewrite_continuation_callee_input(*cond, binder, input)),
+                then_branch: Box::new(rewrite_continuation_callee_input(
+                    *then_branch,
+                    binder,
+                    input,
+                )),
+                else_branch: Box::new(rewrite_continuation_callee_input(
+                    *else_branch,
+                    binder,
+                    input,
+                )),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => typed(
+            TypedExprKind::IfLet {
+                pattern,
+                scrutinee: Box::new(rewrite_continuation_callee_input(*scrutinee, binder, input)),
+                then_branch: Box::new(rewrite_continuation_callee_input(
+                    *then_branch,
+                    binder,
+                    input,
+                )),
+                else_branch: Box::new(rewrite_continuation_callee_input(
+                    *else_branch,
+                    binder,
+                    input,
+                )),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Match { scrutinee, arms } => typed(
+            TypedExprKind::Match {
+                scrutinee: Box::new(rewrite_continuation_callee_input(*scrutinee, binder, input)),
+                arms: arms
+                    .into_iter()
+                    .map(|arm| TypedMatchArm {
+                        pattern: arm.pattern,
+                        body: rewrite_continuation_callee_input(arm.body, binder, input),
+                    })
+                    .collect(),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Nominal { name, expr: body } => typed(
+            TypedExprKind::Nominal {
+                name,
+                expr: Box::new(rewrite_continuation_callee_input(*body, binder, input)),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Reset { multi, body } => typed(
+            TypedExprKind::Reset {
+                multi,
+                body: Box::new(rewrite_continuation_callee_input(*body, binder, input)),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::Shift {
+            binder: shift_binder,
+            body,
+        } => typed(
+            TypedExprKind::Shift {
+                binder: shift_binder,
+                body: Box::new(rewrite_continuation_callee_input(*body, binder, input)),
+            },
+            expr.ty,
+        ),
+    }
+}
+
+fn is_typed_resume_callee(binder: &str, callee: &TypedExpr) -> bool {
+    matches!(
+        (&callee.kind, &callee.ty),
+        (
+            TypedExprKind::Var(name),
+            Type::Continuation {
+                input: _,
+                answer: _,
+                ..
+            }
+        ) if name == binder
+    )
 }
 
 fn common_type(left: &Type, right: &Type) -> Type {
