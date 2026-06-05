@@ -1682,6 +1682,47 @@ def main() = add(8, 5)
 }
 
 #[test]
+fn program_extern_c_unsupported_signature_is_backend_diagnostic() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def first(pair: Tuple[i64, i64]): i64 = extern "C" "level1r_first"
+def main() = first((8, 5))
+"#,
+    )
+    .expect("compile unsupported extern signature")
+    .program;
+
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+    assert!(main.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ExternFunctionTarget {
+                target,
+                signature,
+                ..
+            } if target == "first" && signature == "Tuple[i64,i64]_to_i64"
+        )
+    }));
+    assert_eq!(
+        main.output.backend.diagnostics,
+        vec![
+            chiba_level1r::backend::BackendDiagnostic::UnsupportedExternImportSignature {
+                symbol: "first".to_string(),
+                signature: "Tuple[i64,i64]_to_i64".to_string(),
+            }
+        ]
+    );
+    assert!(main.output.backend.wat.is_empty());
+    assert!(bundle.backend_link.diagnostics.contains(
+        &chiba_level1r::backend::BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index: 0 }
+    ));
+}
+
+#[test]
 fn program_extern_target_does_not_ignore_local_shadowing() {
     let bundle = compile_source_program_bundle(
         r#"

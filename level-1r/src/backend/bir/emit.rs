@@ -52,6 +52,10 @@ pub enum BackendDiagnostic {
     UnsupportedI32ReturnValue {
         value: String,
     },
+    UnsupportedExternImportSignature {
+        symbol: String,
+        signature: String,
+    },
     Cont1ResumedMoreThanOnce {
         binder: String,
     },
@@ -159,17 +163,26 @@ pub fn emit_wasm_gc_with_params(
         };
     }
 
-    if let Some(diagnostic) = unsupported_i32_return_value(core, params) {
+    let manifest = manifest_for_core(core);
+    if let Some(diagnostic) = unsupported_extern_import_signature(&manifest) {
         return BackendArtifact {
             target: BackendTarget::WasmGc,
             wat: String::new(),
-            manifest: manifest_for_core(core),
+            manifest,
             diagnostics: vec![diagnostic],
             return_value: first_return_value(core),
         };
     }
 
-    let manifest = manifest_for_core(core);
+    if let Some(diagnostic) = unsupported_i32_return_value(core, params) {
+        return BackendArtifact {
+            target: BackendTarget::WasmGc,
+            wat: String::new(),
+            manifest,
+            diagnostics: vec![diagnostic],
+            return_value: first_return_value(core),
+        };
+    }
     let wat = match render_wat(core, &manifest, params) {
         Ok(wat) => wat,
         Err(diagnostic) => {
@@ -1158,6 +1171,17 @@ fn render_extern_import_wat(wat: &mut String, import: &BackendExternImport) {
         wat.push_str(&format!(" (result {result})"));
     }
     wat.push_str("))\n");
+}
+
+fn unsupported_extern_import_signature(manifest: &BackendManifest) -> Option<BackendDiagnostic> {
+    manifest.imports.iter().find_map(|import| {
+        extern_import_wat_signature(&import.signature_hash)
+            .is_none()
+            .then(|| BackendDiagnostic::UnsupportedExternImportSignature {
+                symbol: import.final_symbol.clone(),
+                signature: import.signature_hash.clone(),
+            })
+    })
 }
 
 fn extern_import_wat_signature(

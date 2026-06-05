@@ -931,6 +931,9 @@ fn render_backend_diagnostic(diagnostic: &BackendDiagnostic) -> String {
         BackendDiagnostic::UnsupportedI32ReturnValue { value } => {
             format!("unsupported i32 return value {value}")
         }
+        BackendDiagnostic::UnsupportedExternImportSignature { symbol, signature } => {
+            format!("unsupported extern import signature {symbol} {signature}")
+        }
         BackendDiagnostic::Cont1ResumedMoreThanOnce { binder } => {
             format!("cont1 resumed more than once {binder}")
         }
