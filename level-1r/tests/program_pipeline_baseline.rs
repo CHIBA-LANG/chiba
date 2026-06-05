@@ -995,6 +995,64 @@ fn program_record_field_return_lowers_to_executable_wat_value() {
 }
 
 #[test]
+fn program_range_field_return_lowers_to_executable_wat_value() {
+    let start = compile_source_program_bundle("def main() = (3..9).start")
+        .expect("compile range start")
+        .program;
+    let end = compile_source_program_bundle("def main() = (3..9).end")
+        .expect("compile range end")
+        .program;
+
+    assert_backend_link_clean_all(&start);
+    assert_backend_link_clean_all(&end);
+    let start_main = start
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("start main");
+    let end_main = end
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("end main");
+
+    assert_eq!(start_main.output.typed.ty, Type::I64);
+    assert_eq!(end_main.output.typed.ty, Type::I64);
+    assert!(start_main.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::RangeFieldGet {
+                field: chiba_level1r::core::RangeField::Start
+            }
+        )
+    }));
+    assert!(end_main.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::RangeFieldGet {
+                field: chiba_level1r::core::RangeField::End
+            }
+        )
+    }));
+    assert!(matches!(
+        start_main.output.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::RangeField {
+            field: chiba_level1r::core::RangeField::Start,
+            ..
+        })
+    ));
+    assert!(matches!(
+        end_main.output.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::RangeField {
+            field: chiba_level1r::core::RangeField::End,
+            ..
+        })
+    ));
+    assert_eq!(run_wat_text(&start.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&end.backend_link.linked_wat), "9");
+}
+
+#[test]
 fn program_record_update_field_return_lowers_to_executable_wat_value() {
     let program = SourceProgram::new(vec![def(
         "main",

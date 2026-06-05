@@ -2,7 +2,9 @@ use std::fmt;
 
 use crate::ast::{BinaryOp, Literal, Pattern};
 use crate::control::ContinuationKind;
-use crate::typed::{FieldAccessKind, Type, TypedExpr, TypedExprKind, TypedRecordField};
+use crate::typed::{
+    FieldAccessKind, RangeBoundary, Type, TypedExpr, TypedExprKind, TypedRecordField,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpsProgram {
@@ -43,6 +45,10 @@ pub enum CpsAtom {
     Range {
         start: Box<CpsAtom>,
         end: Box<CpsAtom>,
+    },
+    RangeField {
+        range: Box<CpsAtom>,
+        boundary: RangeBoundary,
     },
     RecordUpdate {
         base: Box<CpsAtom>,
@@ -214,17 +220,20 @@ fn transform(
         } => transform(
             receiver,
             Box::new(|value, ctx| {
-                let atom = if let FieldAccessKind::TuplePositionalRow { index } = access {
-                    CpsAtom::TupleField {
+                let atom = match access {
+                    FieldAccessKind::TuplePositionalRow { index } => CpsAtom::TupleField {
                         tuple: Box::new(value),
                         field: name.clone(),
                         field_index: *index,
-                    }
-                } else {
-                    CpsAtom::RecordField {
+                    },
+                    FieldAccessKind::RangeBoundary { boundary } => CpsAtom::RangeField {
+                        range: Box::new(value),
+                        boundary: *boundary,
+                    },
+                    FieldAccessKind::RecordOrNominal => CpsAtom::RecordField {
                         record: Box::new(value),
                         field: name.clone(),
-                    }
+                    },
                 };
                 k(atom, ctx)
             }),
@@ -827,6 +836,9 @@ impl fmt::Display for CpsAtom {
             CpsAtom::TupleField { tuple, field, .. } => write!(f, "{tuple}.{field}"),
             CpsAtom::RecordField { record, field } => write!(f, "{record}.{field}"),
             CpsAtom::Range { start, end } => write!(f, "{start}..{end}"),
+            CpsAtom::RangeField { range, boundary } => {
+                write!(f, "{range}.{}", boundary.source_name())
+            }
             CpsAtom::RecordUpdate {
                 base,
                 layout,

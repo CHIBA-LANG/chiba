@@ -437,6 +437,33 @@ fn backend_rejects_range_return_instead_of_faking_i32_zero() {
 }
 
 #[test]
+fn backend_lowers_range_field_return_to_i32_value() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::RangeFieldGet {
+                field: chiba_level1r::core::RangeField::End,
+            },
+            CoreOp::ReturnValue(CoreValue::RangeField {
+                range: Box::new(CoreValue::Range {
+                    start: Box::new(CoreValue::I64(1)),
+                    end: Box::new(CoreValue::I64(3)),
+                }),
+                field: chiba_level1r::core::RangeField::End,
+            }),
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact.wat.contains(";; range-field field=end"));
+    assert!(artifact.wat.contains("i32.const 3"));
+}
+
+#[test]
 fn backend_rejects_missing_record_field_return_instead_of_faking_i32_zero() {
     let core = CoreProgram {
         ops: vec![CoreOp::ReturnValue(CoreValue::RecordField {

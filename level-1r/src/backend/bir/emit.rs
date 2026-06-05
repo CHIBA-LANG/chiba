@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::control::ContinuationKind;
 use crate::core::{
     CoreCapturedContinuation, CoreExternAbi, CoreMatchArm, CoreOp, CorePattern, CoreProgram,
-    CoreValidation, CoreValue, OperatorIntrinsic, OwnershipDecision,
+    CoreValidation, CoreValue, OperatorIntrinsic, OwnershipDecision, RangeField,
 };
 use crate::symbol::encode_debug_symbol;
 
@@ -393,6 +393,7 @@ fn collect_manifest_entries(
         | CoreOp::RecordConstruct { .. }
         | CoreOp::RecordUpdate { .. }
         | CoreOp::RecordFieldGet { .. }
+        | CoreOp::RangeFieldGet { .. }
         | CoreOp::AdtConstruct { .. }
         | CoreOp::AdtTupleBridge { .. }
         | CoreOp::CompilerIntrinsicUse { .. }
@@ -612,6 +613,9 @@ fn render_wat(
                     escape_wat_comment(layout),
                     escape_wat_comment(field)
                 ));
+            }
+            CoreOp::RangeFieldGet { field } => {
+                wat.push_str(&format!("  ;; range-field field={}\n", field.source_name()));
             }
             CoreOp::AdtConstruct {
                 data, ctor, args, ..
@@ -901,6 +905,12 @@ fn render_continuation_wat(
                     "    ;; record-field layout={} field={}\n",
                     escape_wat_comment(layout),
                     escape_wat_comment(field)
+                ));
+            }
+            CoreOp::RangeFieldGet { field } => {
+                wat.push_str(&format!(
+                    "    ;; range-field field={}\n",
+                    field.source_name()
                 ));
             }
             CoreOp::AdtConstruct {
@@ -1370,6 +1380,13 @@ fn render_core_value_i32(
                 return Err(unsupported_i32_render_diagnostic(value));
             }
         }
+        CoreValue::RangeField { range, field } => {
+            if let Some(value) = range_field_value(range, *field, env) {
+                render_core_value_i32(wat, value, env)?;
+            } else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            }
+        }
         CoreValue::Adt { ctor, variants, .. } => {
             if let Some(tag) = variants.iter().position(|variant| variant == ctor) {
                 wat.push_str(&format!("    i32.const {tag}\n"));
@@ -1419,6 +1436,9 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         CoreValue::RecordField { record, field } => record_field_value(record, field, env)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or(false),
+        CoreValue::RangeField { range, field } => range_field_value(range, *field, env)
+            .map(|value| core_value_is_renderable_i32(value, env))
+            .unwrap_or(false),
         CoreValue::Tuple { .. }
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
@@ -1463,6 +1483,21 @@ fn record_field_value<'a>(
             .map(|candidate| &candidate.value)
             .or_else(|| record_field_value(base, field, env)),
         _ => None,
+    }
+}
+
+fn range_field_value<'a>(
+    range: &'a CoreValue,
+    field: RangeField,
+    env: &'a RenderEnv,
+) -> Option<&'a CoreValue> {
+    let range = resolve_core_value_binding(range, env);
+    let CoreValue::Range { start, end } = range else {
+        return None;
+    };
+    match field {
+        RangeField::Start => Some(start),
+        RangeField::End => Some(end),
     }
 }
 

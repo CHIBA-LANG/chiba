@@ -109,6 +109,13 @@ pub struct TypedRecordField {
 pub enum FieldAccessKind {
     RecordOrNominal,
     TuplePositionalRow { index: usize },
+    RangeBoundary { boundary: RangeBoundary },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RangeBoundary {
+    Start,
+    End,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -170,7 +177,21 @@ pub struct NominalRowDecl {
 
 impl TypeContext {
     pub fn new() -> Self {
-        Self::default()
+        let mut context = Self::default();
+        context.insert_nominal_row(
+            "Range",
+            vec![
+                RecordTypeField {
+                    name: "start".to_string(),
+                    ty: Type::I64,
+                },
+                RecordTypeField {
+                    name: "end".to_string(),
+                    ty: Type::I64,
+                },
+            ],
+        );
+        context
     }
 
     pub fn insert_nominal_row(&mut self, nominal: impl Into<String>, fields: Vec<RecordTypeField>) {
@@ -538,6 +559,7 @@ fn type_expr_with_context_and_controls(
                 FieldAccessKind::TuplePositionalRow { index } => {
                     tuple_field_type(&receiver.ty, index)
                 }
+                FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, name)),
             }
@@ -839,6 +861,7 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 FieldAccessKind::TuplePositionalRow { index } => {
                     tuple_field_type(&receiver.ty, index)
                 }
+                FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
             }
@@ -1149,6 +1172,7 @@ fn refine_pattern_binding_types(
                 FieldAccessKind::TuplePositionalRow { index } => {
                     tuple_field_type(&receiver.ty, index)
                 }
+                FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
             }
@@ -1699,6 +1723,11 @@ fn tuple_field_type(receiver: &Type, index: usize) -> Option<Type> {
 }
 
 fn field_access_kind(receiver: &Type, name: &str) -> FieldAccessKind {
+    if matches!(receiver, Type::Nominal(nominal) if nominal == "Range") {
+        if let Some(boundary) = RangeBoundary::from_source_name(name) {
+            return FieldAccessKind::RangeBoundary { boundary };
+        }
+    }
     if let Type::Tuple(fields) = receiver {
         if let Some(index) = tuple_row_fields(fields)
             .iter()
@@ -1709,6 +1738,23 @@ fn field_access_kind(receiver: &Type, name: &str) -> FieldAccessKind {
         }
     }
     FieldAccessKind::RecordOrNominal
+}
+
+impl RangeBoundary {
+    pub fn from_source_name(name: &str) -> Option<Self> {
+        match name {
+            "start" => Some(Self::Start),
+            "end" => Some(Self::End),
+            _ => None,
+        }
+    }
+
+    pub fn source_name(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::End => "end",
+        }
+    }
 }
 
 fn tuple_row_fields(fields: &[Type]) -> Vec<TupleRowField> {

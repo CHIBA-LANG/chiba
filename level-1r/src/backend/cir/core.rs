@@ -6,7 +6,7 @@ use crate::lambda_lift::LambdaLiftFacts;
 use crate::resolve::OperatorSurface;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{dyn_row_contract_key, row_shape_key, DynRowContract, RowShape};
-use crate::typed::{SendColor, UsageColor};
+use crate::typed::{RangeBoundary, SendColor, UsageColor};
 use crate::usage::UsageFacts;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -102,6 +102,9 @@ pub enum CoreOp {
     RecordFieldGet {
         layout: String,
         field: String,
+    },
+    RangeFieldGet {
+        field: RangeField,
     },
     AdtConstruct {
         data: String,
@@ -240,6 +243,10 @@ pub enum CoreValue {
         record: Box<CoreValue>,
         field: String,
     },
+    RangeField {
+        range: Box<CoreValue>,
+        field: RangeField,
+    },
     Adt {
         data: String,
         ctor: String,
@@ -255,6 +262,12 @@ pub enum CoreValue {
 pub struct CoreRecordValueField {
     pub name: String,
     pub value: CoreValue,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RangeField {
+    Start,
+    End,
 }
 
 impl CoreValue {
@@ -297,6 +310,9 @@ impl CoreValue {
             CoreValue::RecordField { record, field } => {
                 format!("{}.{}", record.debug_name(), field)
             }
+            CoreValue::RangeField { range, field } => {
+                format!("{}.{}", range.debug_name(), field.source_name())
+            }
             CoreValue::Adt {
                 data, ctor, args, ..
             } => {
@@ -309,6 +325,22 @@ impl CoreValue {
             }
             CoreValue::Rendered { debug } => debug.clone(),
         }
+    }
+}
+
+impl RangeField {
+    pub fn source_name(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::End => "end",
+        }
+    }
+}
+
+fn range_field_from_boundary(boundary: RangeBoundary) -> RangeField {
+    match boundary {
+        RangeBoundary::Start => RangeField::Start,
+        RangeBoundary::End => RangeField::End,
     }
 }
 
@@ -975,6 +1007,7 @@ fn op_has_tail_target(op: &CoreOp, func: &str) -> bool {
         | CoreOp::RecordConstruct { .. }
         | CoreOp::RecordUpdate { .. }
         | CoreOp::RecordFieldGet { .. }
+        | CoreOp::RangeFieldGet { .. }
         | CoreOp::AdtConstruct { .. }
         | CoreOp::AdtTupleBridge { .. }
         | CoreOp::CompilerIntrinsicUse { .. }
@@ -1195,6 +1228,9 @@ fn render_atom(atom: &CpsAtom) -> String {
         ),
         CpsAtom::TupleField { tuple, field, .. } => format!("{}.{}", render_atom(tuple), field),
         CpsAtom::Range { start, end } => format!("{}..{}", render_atom(start), render_atom(end)),
+        CpsAtom::RangeField { range, boundary } => {
+            format!("{}.{}", render_atom(range), boundary.source_name())
+        }
         CpsAtom::Record { layout, fields } => format!(
             "{layout}{{{}}}",
             fields
@@ -1270,6 +1306,10 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
                 })
                 .collect(),
         },
+        CpsAtom::RangeField { range, boundary } => CoreValue::RangeField {
+            range: Box::new(core_value(range)),
+            field: range_field_from_boundary(*boundary),
+        },
         CpsAtom::RecordField { record, field } => CoreValue::RecordField {
             record: Box::new(core_value(record)),
             field: field.clone(),
@@ -1323,6 +1363,12 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Range { .. } => {
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
+        CpsAtom::RangeField { boundary, .. } => {
+            ops.push(CoreOp::RangeFieldGet {
+                field: range_field_from_boundary(*boundary),
+            });
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Record { layout, fields } => {

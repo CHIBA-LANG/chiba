@@ -371,6 +371,9 @@ fn render_core_op(op: &CoreOp) -> String {
         CoreOp::RecordFieldGet { layout, field } => {
             format!("record-field-get layout={layout} field={field}")
         }
+        CoreOp::RangeFieldGet { field } => {
+            format!("range-field-get field={}", field.source_name())
+        }
         CoreOp::AdtConstruct {
             data,
             ctor,
@@ -499,6 +502,9 @@ fn render_core_value(value: &CoreValue) -> String {
         }
         CoreValue::RecordField { record, field } => {
             format!("{}.{}", render_core_value(record), field)
+        }
+        CoreValue::RangeField { range, field } => {
+            format!("{}.{}", render_core_value(range), field.source_name())
         }
         CoreValue::Adt {
             data,
@@ -868,6 +874,13 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
         }
         crate::core::CoreValue::RecordField { record, field } => {
             format!("record-field {}.{field}", render_core_value_summary(record))
+        }
+        crate::core::CoreValue::RangeField { range, field } => {
+            format!(
+                "range-field {}.{}",
+                render_core_value_summary(range),
+                field.source_name()
+            )
         }
         crate::core::CoreValue::Adt {
             data, ctor, args, ..
@@ -1276,6 +1289,9 @@ fn render_field_access_kind(access: &FieldAccessKind) -> String {
         FieldAccessKind::RecordOrNominal => "record-or-nominal".to_string(),
         FieldAccessKind::TuplePositionalRow { index } => {
             format!("tuple-positional-row index={index}")
+        }
+        FieldAccessKind::RangeBoundary { boundary } => {
+            format!("range-boundary {}", boundary.source_name())
         }
     }
 }
