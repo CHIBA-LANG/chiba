@@ -508,6 +508,11 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
                 visit(field, facts);
             }
         }
+        AlphaExprKind::SliceLiteral(items) => {
+            for item in items {
+                visit(item, facts);
+            }
+        }
         AlphaExprKind::Record(fields) => {
             for field in fields {
                 visit(&field.value, facts);

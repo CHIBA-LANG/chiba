@@ -56,6 +56,11 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
                 collect(field, scope, facts);
             }
         }
+        TypedExprKind::SliceLiteral { items, .. } => {
+            for item in items {
+                collect(item, scope, facts);
+            }
+        }
         TypedExprKind::Record { fields } => {
             for field in fields {
                 collect(&field.value, scope, facts);
@@ -162,6 +167,11 @@ fn collect_alpha(expr: &AlphaExpr, scope: &mut BTreeSet<BinderId>, facts: &mut C
         AlphaExprKind::Tuple(fields) => {
             for field in fields {
                 collect_alpha(field, scope, facts);
+            }
+        }
+        AlphaExprKind::SliceLiteral(items) => {
+            for item in items {
+                collect_alpha(item, scope, facts);
             }
         }
         AlphaExprKind::Record(fields) => {
@@ -283,6 +293,11 @@ fn collect_alpha_free_vars(
                 collect_alpha_free_vars(field, locals, free);
             }
         }
+        AlphaExprKind::SliceLiteral(items) => {
+            for item in items {
+                collect_alpha_free_vars(item, locals, free);
+            }
+        }
         AlphaExprKind::Record(fields) => {
             for field in fields {
                 collect_alpha_free_vars(&field.value, locals, free);
@@ -372,6 +387,11 @@ fn collect_free_vars(expr: &TypedExpr, locals: &mut BTreeSet<String>, free: &mut
         TypedExprKind::Tuple { fields, .. } => {
             for field in fields {
                 collect_free_vars(field, locals, free);
+            }
+        }
+        TypedExprKind::SliceLiteral { items, .. } => {
+            for item in items {
+                collect_free_vars(item, locals, free);
             }
         }
         TypedExprKind::Record { fields } => {

@@ -394,6 +394,7 @@ pub enum Expr {
         type_args: Vec<String>,
     },
     Tuple(Vec<Expr>),
+    SliceLiteral(Vec<Expr>),
     Record(Vec<RecordField>),
     RecordUpdate {
         base: Box<Expr>,
@@ -529,6 +530,14 @@ pub fn render_source_expr(expr: &Expr) -> String {
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("({fields})")
+        }
+        Expr::SliceLiteral(items) => {
+            let items = items
+                .iter()
+                .map(render_source_expr)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{items}]")
         }
         Expr::Record(fields) => {
             let fields = fields
@@ -726,6 +735,10 @@ impl Expr {
 
     pub fn tuple(fields: Vec<Expr>) -> Self {
         Self::Tuple(fields)
+    }
+
+    pub fn slice_literal(items: Vec<Expr>) -> Self {
+        Self::SliceLiteral(items)
     }
 
     pub fn record(fields: Vec<(impl Into<String>, Expr)>) -> Self {

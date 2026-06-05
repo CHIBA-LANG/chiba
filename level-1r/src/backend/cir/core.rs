@@ -6,7 +6,7 @@ use crate::lambda_lift::LambdaLiftFacts;
 use crate::resolve::OperatorSurface;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{dyn_row_contract_key, row_shape_key, DynRowContract, RowShape};
-use crate::typed::{RangeBoundary, SendColor, UsageColor};
+use crate::typed::{RangeBoundary, SendColor, SliceBoundary, UsageColor};
 use crate::usage::UsageFacts;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -105,6 +105,9 @@ pub enum CoreOp {
     },
     RangeFieldGet {
         field: RangeField,
+    },
+    SliceFieldGet {
+        field: SliceField,
     },
     AdtConstruct {
         data: String,
@@ -232,6 +235,9 @@ pub enum CoreValue {
         start: Box<CoreValue>,
         end: Box<CoreValue>,
     },
+    SliceLiteral {
+        items: Vec<CoreValue>,
+    },
     Record {
         fields: Vec<CoreRecordValueField>,
     },
@@ -246,6 +252,10 @@ pub enum CoreValue {
     RangeField {
         range: Box<CoreValue>,
         field: RangeField,
+    },
+    SliceField {
+        slice: Box<CoreValue>,
+        field: SliceField,
     },
     Adt {
         data: String,
@@ -270,6 +280,11 @@ pub enum RangeField {
     End,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SliceField {
+    Len,
+}
+
 impl CoreValue {
     pub fn debug_name(&self) -> String {
         match self {
@@ -290,6 +305,14 @@ impl CoreValue {
             }
             CoreValue::Range { start, end } => {
                 format!("{}..{}", start.debug_name(), end.debug_name())
+            }
+            CoreValue::SliceLiteral { items } => {
+                let items = items
+                    .iter()
+                    .map(CoreValue::debug_name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("[{items}]")
             }
             CoreValue::Record { fields } => {
                 let fields = fields
@@ -312,6 +335,9 @@ impl CoreValue {
             }
             CoreValue::RangeField { range, field } => {
                 format!("{}.{}", range.debug_name(), field.source_name())
+            }
+            CoreValue::SliceField { slice, field } => {
+                format!("{}.{}", slice.debug_name(), field.source_name())
             }
             CoreValue::Adt {
                 data, ctor, args, ..
@@ -341,6 +367,20 @@ fn range_field_from_boundary(boundary: RangeBoundary) -> RangeField {
     match boundary {
         RangeBoundary::Start => RangeField::Start,
         RangeBoundary::End => RangeField::End,
+    }
+}
+
+impl SliceField {
+    pub fn source_name(self) -> &'static str {
+        match self {
+            Self::Len => "len",
+        }
+    }
+}
+
+fn slice_field_from_boundary(boundary: SliceBoundary) -> SliceField {
+    match boundary {
+        SliceBoundary::Len => SliceField::Len,
     }
 }
 
@@ -1008,6 +1048,7 @@ fn op_has_tail_target(op: &CoreOp, func: &str) -> bool {
         | CoreOp::RecordUpdate { .. }
         | CoreOp::RecordFieldGet { .. }
         | CoreOp::RangeFieldGet { .. }
+        | CoreOp::SliceFieldGet { .. }
         | CoreOp::AdtConstruct { .. }
         | CoreOp::AdtTupleBridge { .. }
         | CoreOp::CompilerIntrinsicUse { .. }
@@ -1227,9 +1268,16 @@ fn render_atom(atom: &CpsAtom) -> String {
                 .join(", ")
         ),
         CpsAtom::TupleField { tuple, field, .. } => format!("{}.{}", render_atom(tuple), field),
+        CpsAtom::SliceLiteral { items } => format!(
+            "[{}]",
+            items.iter().map(render_atom).collect::<Vec<_>>().join(", ")
+        ),
         CpsAtom::Range { start, end } => format!("{}..{}", render_atom(start), render_atom(end)),
         CpsAtom::RangeField { range, boundary } => {
             format!("{}.{}", render_atom(range), boundary.source_name())
+        }
+        CpsAtom::SliceField { slice, boundary } => {
+            format!("{}.{}", render_atom(slice), boundary.source_name())
         }
         CpsAtom::Record { layout, fields } => format!(
             "{layout}{{{}}}",
@@ -1274,6 +1322,9 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
         CpsAtom::Tuple { fields, .. } => CoreValue::Tuple {
             fields: fields.iter().map(core_value).collect(),
         },
+        CpsAtom::SliceLiteral { items } => CoreValue::SliceLiteral {
+            items: items.iter().map(core_value).collect(),
+        },
         CpsAtom::TupleField {
             tuple,
             field,
@@ -1309,6 +1360,10 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
         CpsAtom::RangeField { range, boundary } => CoreValue::RangeField {
             range: Box::new(core_value(range)),
             field: range_field_from_boundary(*boundary),
+        },
+        CpsAtom::SliceField { slice, boundary } => CoreValue::SliceField {
+            slice: Box::new(core_value(slice)),
+            field: slice_field_from_boundary(*boundary),
         },
         CpsAtom::RecordField { record, field } => CoreValue::RecordField {
             record: Box::new(core_value(record)),
@@ -1362,12 +1417,21 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             }
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
+        CpsAtom::SliceLiteral { .. } => {
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
         CpsAtom::Range { .. } => {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::RangeField { boundary, .. } => {
             ops.push(CoreOp::RangeFieldGet {
                 field: range_field_from_boundary(*boundary),
+            });
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
+        CpsAtom::SliceField { boundary, .. } => {
+            ops.push(CoreOp::SliceFieldGet {
+                field: slice_field_from_boundary(*boundary),
             });
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }

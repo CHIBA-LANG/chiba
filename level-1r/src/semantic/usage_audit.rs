@@ -269,6 +269,9 @@ fn type_for_var(expr: &TypedExpr, name: &str) -> Option<Type> {
         crate::typed::TypedExprKind::Tuple { fields, .. } => {
             fields.iter().find_map(|field| type_for_var(field, name))
         }
+        crate::typed::TypedExprKind::SliceLiteral { items, .. } => {
+            items.iter().find_map(|item| type_for_var(item, name))
+        }
         crate::typed::TypedExprKind::Record { fields } => fields
             .iter()
             .find_map(|field| type_for_var(&field.value, name)),

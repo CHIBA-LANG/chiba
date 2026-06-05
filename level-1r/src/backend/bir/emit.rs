@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::control::ContinuationKind;
 use crate::core::{
     CoreCapturedContinuation, CoreExternAbi, CoreMatchArm, CoreOp, CorePattern, CoreProgram,
-    CoreValidation, CoreValue, OperatorIntrinsic, OwnershipDecision, RangeField,
+    CoreValidation, CoreValue, OperatorIntrinsic, OwnershipDecision, RangeField, SliceField,
 };
 use crate::symbol::encode_debug_symbol;
 
@@ -394,6 +394,7 @@ fn collect_manifest_entries(
         | CoreOp::RecordUpdate { .. }
         | CoreOp::RecordFieldGet { .. }
         | CoreOp::RangeFieldGet { .. }
+        | CoreOp::SliceFieldGet { .. }
         | CoreOp::AdtConstruct { .. }
         | CoreOp::AdtTupleBridge { .. }
         | CoreOp::CompilerIntrinsicUse { .. }
@@ -616,6 +617,9 @@ fn render_wat(
             }
             CoreOp::RangeFieldGet { field } => {
                 wat.push_str(&format!("  ;; range-field field={}\n", field.source_name()));
+            }
+            CoreOp::SliceFieldGet { field } => {
+                wat.push_str(&format!("  ;; slice-field field={}\n", field.source_name()));
             }
             CoreOp::AdtConstruct {
                 data, ctor, args, ..
@@ -910,6 +914,12 @@ fn render_continuation_wat(
             CoreOp::RangeFieldGet { field } => {
                 wat.push_str(&format!(
                     "    ;; range-field field={}\n",
+                    field.source_name()
+                ));
+            }
+            CoreOp::SliceFieldGet { field } => {
+                wat.push_str(&format!(
+                    "    ;; slice-field field={}\n",
                     field.source_name()
                 ));
             }
@@ -1387,6 +1397,13 @@ fn render_core_value_i32(
                 return Err(unsupported_i32_render_diagnostic(value));
             }
         }
+        CoreValue::SliceField { slice, field } => {
+            if let Some(value) = slice_field_value(slice, *field, env) {
+                render_core_value_i32(wat, &value, env)?;
+            } else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            }
+        }
         CoreValue::Adt { ctor, variants, .. } => {
             if let Some(tag) = variants.iter().position(|variant| variant == ctor) {
                 wat.push_str(&format!("    i32.const {tag}\n"));
@@ -1396,6 +1413,7 @@ fn render_core_value_i32(
         }
         CoreValue::Var(_)
         | CoreValue::Tuple { .. }
+        | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
         | CoreValue::RecordUpdate { .. }
@@ -1439,7 +1457,11 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         CoreValue::RangeField { range, field } => range_field_value(range, *field, env)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or(false),
+        CoreValue::SliceField { slice, field } => slice_field_value(slice, *field, env)
+            .map(|value| core_value_is_renderable_i32(&value, env))
+            .unwrap_or(false),
         CoreValue::Tuple { .. }
+        | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
         | CoreValue::RecordUpdate { .. }
@@ -1498,6 +1520,16 @@ fn range_field_value<'a>(
     match field {
         RangeField::Start => Some(start),
         RangeField::End => Some(end),
+    }
+}
+
+fn slice_field_value(slice: &CoreValue, field: SliceField, env: &RenderEnv) -> Option<CoreValue> {
+    let slice = resolve_core_value_binding(slice, env);
+    let CoreValue::SliceLiteral { items } = slice else {
+        return None;
+    };
+    match field {
+        SliceField::Len => Some(CoreValue::I64(items.len() as i64)),
     }
 }
 

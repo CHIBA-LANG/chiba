@@ -3,7 +3,7 @@ use std::fmt;
 use crate::ast::{BinaryOp, Literal, Pattern};
 use crate::control::ContinuationKind;
 use crate::typed::{
-    FieldAccessKind, RangeBoundary, Type, TypedExpr, TypedExprKind, TypedRecordField,
+    FieldAccessKind, RangeBoundary, SliceBoundary, Type, TypedExpr, TypedExprKind, TypedRecordField,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -33,6 +33,9 @@ pub enum CpsAtom {
         nominal: String,
         fields: Vec<CpsAtom>,
     },
+    SliceLiteral {
+        items: Vec<CpsAtom>,
+    },
     TupleField {
         tuple: Box<CpsAtom>,
         field: String,
@@ -49,6 +52,10 @@ pub enum CpsAtom {
     RangeField {
         range: Box<CpsAtom>,
         boundary: RangeBoundary,
+    },
+    SliceField {
+        slice: Box<CpsAtom>,
+        boundary: SliceBoundary,
     },
     RecordUpdate {
         base: Box<CpsAtom>,
@@ -203,6 +210,9 @@ fn transform(
         TypedExprKind::Tuple { fields, nominal } => {
             transform_tuple(fields, nominal, k, controls, ctx)
         }
+        TypedExprKind::SliceLiteral { items, .. } => {
+            transform_slice_literal(items, k, controls, ctx)
+        }
         TypedExprKind::Record { fields } => transform_record(fields, k, controls, ctx),
         TypedExprKind::RecordUpdate { base, fields } => {
             transform_record_update(base, fields, k, controls, ctx)
@@ -228,6 +238,10 @@ fn transform(
                     },
                     FieldAccessKind::RangeBoundary { boundary } => CpsAtom::RangeField {
                         range: Box::new(value),
+                        boundary: *boundary,
+                    },
+                    FieldAccessKind::SliceBoundary { boundary } => CpsAtom::SliceField {
+                        slice: Box::new(value),
                         boundary: *boundary,
                     },
                     FieldAccessKind::RecordOrNominal => CpsAtom::RecordField {
@@ -556,6 +570,40 @@ fn transform_tuple_fields(
     )
 }
 
+fn transform_slice_literal(
+    items: &[TypedExpr],
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    transform_slice_literal_items(items, 0, Vec::new(), k, controls, ctx)
+}
+
+fn transform_slice_literal_items(
+    items: &[TypedExpr],
+    index: usize,
+    values: Vec<CpsAtom>,
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    if index == items.len() {
+        return k(CpsAtom::SliceLiteral { items: values }, ctx);
+    }
+
+    let item_controls = controls.clone();
+    transform(
+        &items[index],
+        Box::new(move |value, ctx| {
+            let mut values = values;
+            values.push(value);
+            transform_slice_literal_items(items, index + 1, values, k, controls, ctx)
+        }),
+        item_controls,
+        ctx,
+    )
+}
+
 fn transform_record(
     fields: &[TypedRecordField],
     k: MetaKont<'_>,
@@ -834,10 +882,23 @@ impl fmt::Display for CpsAtom {
                 write!(f, ")")
             }
             CpsAtom::TupleField { tuple, field, .. } => write!(f, "{tuple}.{field}"),
+            CpsAtom::SliceLiteral { items } => {
+                write!(f, "[")?;
+                for (index, item) in items.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                write!(f, "]")
+            }
             CpsAtom::RecordField { record, field } => write!(f, "{record}.{field}"),
             CpsAtom::Range { start, end } => write!(f, "{start}..{end}"),
             CpsAtom::RangeField { range, boundary } => {
                 write!(f, "{range}.{}", boundary.source_name())
+            }
+            CpsAtom::SliceField { slice, boundary } => {
+                write!(f, "{slice}.{}", boundary.source_name())
             }
             CpsAtom::RecordUpdate {
                 base,

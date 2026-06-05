@@ -338,6 +338,7 @@ fn validate_static_initializer_expr_scoped(
             bound,
         ),
         Expr::Tuple { .. }
+        | Expr::SliceLiteral(_)
         | Expr::Record { .. }
         | Expr::RecordUpdate { .. }
         | Expr::Range { .. }
@@ -473,6 +474,7 @@ fn collect_expr_vars_scoped(expr: &Expr, refs: &mut BTreeSet<String>, bound: &BT
         }
         Expr::Instantiate { callee, .. } => collect_expr_vars_scoped(callee, refs, bound),
         Expr::Tuple(fields) => collect_exprs(fields, refs, bound),
+        Expr::SliceLiteral(items) => collect_exprs(items, refs, bound),
         Expr::Record(fields) => collect_record_fields(fields, refs, bound),
         Expr::RecordUpdate { base, fields } => {
             collect_expr_vars_scoped(base, refs, bound);

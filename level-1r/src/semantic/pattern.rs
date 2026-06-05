@@ -101,6 +101,11 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts, context: &TypeContext) {
                 visit(field, facts, context);
             }
         }
+        TypedExprKind::SliceLiteral { items, .. } => {
+            for item in items {
+                visit(item, facts, context);
+            }
+        }
         TypedExprKind::Record { fields } => {
             for field in fields {
                 visit(&field.value, facts, context);

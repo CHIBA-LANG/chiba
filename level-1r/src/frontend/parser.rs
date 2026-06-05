@@ -877,7 +877,7 @@ impl FrontendParser {
         let mut fields = Vec::new();
         if self.peek_name() == Some("RBracket") {
             self.pos += 1;
-            return Ok(Expr::call_args(Expr::var("slice"), fields));
+            return Ok(Expr::slice_literal(fields));
         }
         loop {
             fields.push(self.parse_expr_bp(0)?);
@@ -890,7 +890,7 @@ impl FrontendParser {
             }
         }
         self.expect("RBracket")?;
-        Ok(Expr::call_args(Expr::var("slice"), fields))
+        Ok(Expr::slice_literal(fields))
     }
 
     fn is_lambda_start(&self) -> bool {
@@ -1435,6 +1435,10 @@ fn replace_pipe_placeholders(expr: Expr, input: &Expr) -> (Expr, bool) {
             let (fields, used) = replace_pipe_placeholders_in_vec(fields, input);
             (Expr::tuple(fields), used)
         }
+        Expr::SliceLiteral(items) => {
+            let (items, used) = replace_pipe_placeholders_in_vec(items, input);
+            (Expr::slice_literal(items), used)
+        }
         Expr::Record(fields) => {
             let mut used = false;
             let fields = fields
@@ -1739,6 +1743,12 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
             fields
                 .into_iter()
                 .map(|field| enrich_expr_with_data_variants(field, variants))
+                .collect(),
+        ),
+        Expr::SliceLiteral(items) => Expr::slice_literal(
+            items
+                .into_iter()
+                .map(|item| enrich_expr_with_data_variants(item, variants))
                 .collect(),
         ),
         Expr::Record(fields) => Expr::Record(

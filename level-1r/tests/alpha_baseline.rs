@@ -11,6 +11,7 @@ fn alpha_expr_kind_name(kind: &AlphaExprKind) -> &'static str {
         AlphaExprKind::Lambda { .. } => "lambda",
         AlphaExprKind::Call { .. } => "call",
         AlphaExprKind::Tuple(_) => "tuple",
+        AlphaExprKind::SliceLiteral(_) => "slice-literal",
         AlphaExprKind::Record(_) => "record",
         AlphaExprKind::RecordUpdate { .. } => "record-update",
         AlphaExprKind::AdtCtor { .. } => "adt-ctor",

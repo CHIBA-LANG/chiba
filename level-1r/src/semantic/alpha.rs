@@ -30,6 +30,7 @@ pub enum AlphaExprKind {
         args: Vec<AlphaExpr>,
     },
     Tuple(Vec<AlphaExpr>),
+    SliceLiteral(Vec<AlphaExpr>),
     Record(Vec<AlphaRecordField>),
     RecordUpdate {
         base: Box<AlphaExpr>,
@@ -225,6 +226,11 @@ impl AlphaCtx {
             Expr::Instantiate { callee, .. } => self.alpha(callee),
             Expr::Tuple(fields) => AlphaExpr {
                 kind: AlphaExprKind::Tuple(fields.iter().map(|field| self.alpha(field)).collect()),
+            },
+            Expr::SliceLiteral(items) => AlphaExpr {
+                kind: AlphaExprKind::SliceLiteral(
+                    items.iter().map(|item| self.alpha(item)).collect(),
+                ),
             },
             Expr::Record(fields) => AlphaExpr {
                 kind: AlphaExprKind::Record(

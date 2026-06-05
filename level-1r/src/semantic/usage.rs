@@ -63,6 +63,11 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
                 visit(field, facts);
             }
         }
+        TypedExprKind::SliceLiteral { items, .. } => {
+            for item in items {
+                visit(item, facts);
+            }
+        }
         TypedExprKind::Record { fields } => {
             for field in fields {
                 visit(&field.value, facts);
@@ -159,6 +164,11 @@ fn visit_alpha(expr: &AlphaExpr, facts: &mut UsageFacts) {
         AlphaExprKind::Tuple(fields) => {
             for field in fields {
                 visit_alpha(field, facts);
+            }
+        }
+        AlphaExprKind::SliceLiteral(items) => {
+            for item in items {
+                visit_alpha(item, facts);
             }
         }
         AlphaExprKind::Record(fields) => {

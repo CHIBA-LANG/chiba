@@ -30,6 +30,7 @@ fn expr_kind_name(expr: &Expr) -> &'static str {
         Expr::Call { .. } => "call",
         Expr::Instantiate { .. } => "instantiate",
         Expr::Tuple(_) => "tuple",
+        Expr::SliceLiteral(_) => "slice-literal",
         Expr::Record(_) => "record",
         Expr::RecordUpdate { .. } => "record-update",
         Expr::AdtCtor { .. } => "adt-ctor",
@@ -93,6 +94,24 @@ fn frontend_lexes_and_parses_def_source_to_program() {
                     Expr::i64(2),
                     Expr::binary(BinaryOp::Mul, Expr::i64(3), Expr::i64(4)),
                 )
+            );
+        }
+        other => panic!(
+            "expected function def, got {}",
+            source_item_kind_name(other)
+        ),
+    }
+}
+
+#[test]
+fn frontend_parses_slice_literal_as_builtin_ast_not_fake_call() {
+    let output = parse_source_program("def main() = [1, 2, 3]").expect("frontend parse");
+
+    match &output.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::slice_literal(vec![Expr::i64(1), Expr::i64(2), Expr::i64(3)])
             );
         }
         other => panic!(

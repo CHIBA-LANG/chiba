@@ -28,6 +28,10 @@ pub enum TypedExprKind {
         fields: Vec<TypedExpr>,
         nominal: String,
     },
+    SliceLiteral {
+        items: Vec<TypedExpr>,
+        element: Box<Type>,
+    },
     Record {
         fields: Vec<TypedRecordField>,
     },
@@ -110,12 +114,18 @@ pub enum FieldAccessKind {
     RecordOrNominal,
     TuplePositionalRow { index: usize },
     RangeBoundary { boundary: RangeBoundary },
+    SliceBoundary { boundary: SliceBoundary },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RangeBoundary {
     Start,
     End,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SliceBoundary {
+    Len,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -190,6 +200,14 @@ impl TypeContext {
                     ty: Type::I64,
                 },
             ],
+        );
+        context.insert_generic_nominal_row(
+            "Slice",
+            vec!["T".to_string()],
+            vec![RecordTypeField {
+                name: "len".to_string(),
+                ty: Type::I64,
+            }],
         );
         context
     }
@@ -487,6 +505,23 @@ fn type_expr_with_context_and_controls(
                 Type::Tuple(field_types),
             )
         }
+        Expr::SliceLiteral(items) => {
+            let items = items
+                .iter()
+                .map(|item| type_expr_with_context_and_controls(item, env, context, controls))
+                .collect::<Vec<_>>();
+            let element = slice_element_type(&items);
+            typed(
+                TypedExprKind::SliceLiteral {
+                    items,
+                    element: Box::new(element.clone()),
+                },
+                Type::Nominal(render_source_type_application(
+                    "Slice",
+                    &[source_type_name_for_type(&element)],
+                )),
+            )
+        }
         Expr::Record(fields) => {
             let fields = fields
                 .iter()
@@ -560,6 +595,7 @@ fn type_expr_with_context_and_controls(
                     tuple_field_type(&receiver.ty, index)
                 }
                 FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
+                FieldAccessKind::SliceBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, name)),
             }
@@ -798,6 +834,23 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 Type::Tuple(field_types),
             )
         }
+        TypedExprKind::SliceLiteral { items, .. } => {
+            let items = items
+                .into_iter()
+                .map(|item| refine_continuation_types(item, context))
+                .collect::<Vec<_>>();
+            let element = slice_element_type(&items);
+            typed(
+                TypedExprKind::SliceLiteral {
+                    items,
+                    element: Box::new(element.clone()),
+                },
+                Type::Nominal(render_source_type_application(
+                    "Slice",
+                    &[source_type_name_for_type(&element)],
+                )),
+            )
+        }
         TypedExprKind::Record { fields } => {
             let fields = fields
                 .into_iter()
@@ -862,6 +915,7 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                     tuple_field_type(&receiver.ty, index)
                 }
                 FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
+                FieldAccessKind::SliceBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
             }
@@ -1109,6 +1163,23 @@ fn refine_pattern_binding_types(
                 Type::Tuple(field_types),
             )
         }
+        TypedExprKind::SliceLiteral { items, .. } => {
+            let items = items
+                .into_iter()
+                .map(|item| refine_pattern_binding_types(item, bindings, context))
+                .collect::<Vec<_>>();
+            let element = slice_element_type(&items);
+            typed(
+                TypedExprKind::SliceLiteral {
+                    items,
+                    element: Box::new(element.clone()),
+                },
+                Type::Nominal(render_source_type_application(
+                    "Slice",
+                    &[source_type_name_for_type(&element)],
+                )),
+            )
+        }
         TypedExprKind::Record { fields } => {
             let fields = fields
                 .into_iter()
@@ -1173,6 +1244,7 @@ fn refine_pattern_binding_types(
                     tuple_field_type(&receiver.ty, index)
                 }
                 FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
+                FieldAccessKind::SliceBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
             }
@@ -1344,6 +1416,11 @@ fn collect_typed_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<
                 collect_typed_resume_inputs(binder, field, inputs);
             }
         }
+        TypedExprKind::SliceLiteral { items, .. } => {
+            for item in items {
+                collect_typed_resume_inputs(binder, item, inputs);
+            }
+        }
         TypedExprKind::Record { fields } => {
             for field in fields {
                 collect_typed_resume_inputs(binder, &field.value, inputs);
@@ -1462,6 +1539,16 @@ fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type
                     .into_iter()
                     .map(|field| rewrite_continuation_callee_input(field, binder, input))
                     .collect(),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::SliceLiteral { items, element } => typed(
+            TypedExprKind::SliceLiteral {
+                items: items
+                    .into_iter()
+                    .map(|item| rewrite_continuation_callee_input(item, binder, input))
+                    .collect(),
+                element,
             },
             expr.ty,
         ),
@@ -1722,10 +1809,26 @@ fn tuple_field_type(receiver: &Type, index: usize) -> Option<Type> {
     fields.get(index).cloned()
 }
 
+fn slice_element_type(items: &[TypedExpr]) -> Type {
+    let Some((first, rest)) = items.split_first() else {
+        return Type::Unknown;
+    };
+    if rest.iter().all(|item| item.ty == first.ty) {
+        first.ty.clone()
+    } else {
+        Type::Unknown
+    }
+}
+
 fn field_access_kind(receiver: &Type, name: &str) -> FieldAccessKind {
     if matches!(receiver, Type::Nominal(nominal) if nominal == "Range") {
         if let Some(boundary) = RangeBoundary::from_source_name(name) {
             return FieldAccessKind::RangeBoundary { boundary };
+        }
+    }
+    if nominal_base_name_for_type(receiver) == Some("Slice") {
+        if let Some(boundary) = SliceBoundary::from_source_name(name) {
+            return FieldAccessKind::SliceBoundary { boundary };
         }
     }
     if let Type::Tuple(fields) = receiver {
@@ -1755,6 +1858,28 @@ impl RangeBoundary {
             Self::End => "end",
         }
     }
+}
+
+impl SliceBoundary {
+    pub fn from_source_name(name: &str) -> Option<Self> {
+        match name {
+            "len" => Some(Self::Len),
+            _ => None,
+        }
+    }
+
+    pub fn source_name(self) -> &'static str {
+        match self {
+            Self::Len => "len",
+        }
+    }
+}
+
+fn nominal_base_name_for_type(ty: &Type) -> Option<&str> {
+    let Type::Nominal(name) = ty else {
+        return None;
+    };
+    Some(nominal_base_name(name))
 }
 
 fn tuple_row_fields(fields: &[Type]) -> Vec<TupleRowField> {

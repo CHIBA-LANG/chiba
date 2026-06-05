@@ -68,6 +68,11 @@ fn visit(
                 visit(field, stack, facts, replay_context);
             }
         }
+        TypedExprKind::SliceLiteral { items, .. } => {
+            for item in items {
+                visit(item, stack, facts, replay_context);
+            }
+        }
         TypedExprKind::Record { fields } => {
             for field in fields {
                 visit(&field.value, stack, facts, replay_context);
@@ -221,6 +226,11 @@ fn collect_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<Type>)
         TypedExprKind::Tuple { fields, .. } => {
             for field in fields {
                 collect_resume_inputs(binder, field, inputs);
+            }
+        }
+        TypedExprKind::SliceLiteral { items, .. } => {
+            for item in items {
+                collect_resume_inputs(binder, item, inputs);
             }
         }
         TypedExprKind::Record { fields } => {

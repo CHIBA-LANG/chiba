@@ -15,6 +15,7 @@ fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::Lambda { .. } => "lambda",
         TypedExprKind::Call { .. } => "call",
         TypedExprKind::Tuple { .. } => "tuple",
+        TypedExprKind::SliceLiteral { .. } => "slice-literal",
         TypedExprKind::Record { .. } => "record",
         TypedExprKind::RecordUpdate { .. } => "record-update",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",

@@ -6,7 +6,7 @@ use chiba_level1r::backend::{
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
     CoreCapturedContinuation, CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue,
-    OperatorIntrinsic,
+    OperatorIntrinsic, SliceField,
 };
 use chiba_level1r::{compile_expr, Expr};
 
@@ -460,6 +460,32 @@ fn backend_lowers_range_field_return_to_i32_value() {
 
     assert_eq!(artifact.diagnostics, vec![]);
     assert!(artifact.wat.contains(";; range-field field=end"));
+    assert!(artifact.wat.contains("i32.const 3"));
+}
+
+#[test]
+fn backend_lowers_slice_literal_len_return_to_i32_value() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::SliceFieldGet {
+                field: SliceField::Len,
+            },
+            CoreOp::ReturnValue(CoreValue::SliceField {
+                slice: Box::new(CoreValue::SliceLiteral {
+                    items: vec![CoreValue::I64(1), CoreValue::I64(2), CoreValue::I64(3)],
+                }),
+                field: SliceField::Len,
+            }),
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact.wat.contains(";; slice-field field=len"));
     assert!(artifact.wat.contains("i32.const 3"));
 }
 

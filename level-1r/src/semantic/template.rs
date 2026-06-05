@@ -184,6 +184,9 @@ fn source_needs_auto_return_param(source: &Expr, source_params: &[ParamDecl]) ->
         Expr::Tuple(fields) => fields
             .iter()
             .any(|field| source_needs_auto_return_param(field, source_params)),
+        Expr::SliceLiteral(items) => items
+            .iter()
+            .any(|item| source_needs_auto_return_param(item, source_params)),
         Expr::Record(fields) => fields
             .iter()
             .any(|field| source_needs_auto_return_param(&field.value, source_params)),
@@ -265,6 +268,11 @@ fn collect_source_instantiations(expr: &Expr, facts: &mut TemplateFacts) {
         Expr::Tuple(fields) => {
             for field in fields {
                 collect_source_instantiations(field, facts);
+            }
+        }
+        Expr::SliceLiteral(items) => {
+            for item in items {
+                collect_source_instantiations(item, facts);
             }
         }
         Expr::Record(fields) => {
@@ -444,6 +452,11 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
         AlphaExprKind::Tuple(fields) => {
             for field in fields {
                 collect_expr_obligations(field, facts);
+            }
+        }
+        AlphaExprKind::SliceLiteral(items) => {
+            for item in items {
+                collect_expr_obligations(item, facts);
             }
         }
         AlphaExprKind::Record(fields) => {

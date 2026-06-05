@@ -90,6 +90,7 @@ fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::Lambda { .. } => "lambda",
         TypedExprKind::Call { .. } => "call",
         TypedExprKind::Tuple { .. } => "tuple",
+        TypedExprKind::SliceLiteral { .. } => "slice-literal",
         TypedExprKind::Record { .. } => "record",
         TypedExprKind::RecordUpdate { .. } => "record-update",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
@@ -1050,6 +1051,38 @@ fn program_range_field_return_lowers_to_executable_wat_value() {
     ));
     assert_eq!(run_wat_text(&start.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&end.backend_link.linked_wat), "9");
+}
+
+#[test]
+fn program_slice_literal_len_lowers_to_executable_wat_value() {
+    let bundle = compile_source_program_bundle("def main() = [1, 2, 3].len")
+        .expect("compile slice len")
+        .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main");
+
+    assert_eq!(main.output.typed.ty, Type::I64);
+    assert!(main.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::SliceFieldGet {
+                field: chiba_level1r::core::SliceField::Len
+            }
+        )
+    }));
+    assert!(matches!(
+        main.output.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::SliceField {
+            field: chiba_level1r::core::SliceField::Len,
+            ..
+        })
+    ));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
 }
 
 #[test]

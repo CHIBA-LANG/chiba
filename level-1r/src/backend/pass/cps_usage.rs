@@ -141,12 +141,18 @@ fn visit_atom(atom: &CpsAtom, facts: &mut CpsUsageFacts) {
                 visit_atom(field, facts);
             }
         }
+        CpsAtom::SliceLiteral { items } => {
+            for item in items {
+                visit_atom(item, facts);
+            }
+        }
         CpsAtom::TupleField { tuple, .. } => visit_atom(tuple, facts),
         CpsAtom::Range { start, end } => {
             visit_atom(start, facts);
             visit_atom(end, facts);
         }
         CpsAtom::RangeField { range, .. } => visit_atom(range, facts),
+        CpsAtom::SliceField { slice, .. } => visit_atom(slice, facts),
         CpsAtom::Record { fields, .. } => {
             for field in fields {
                 visit_atom(&field.value, facts);
@@ -230,12 +236,18 @@ fn count_atom_refs(atom: &CpsAtom, binder: &str, count: &mut UseCount) {
                 count_atom_refs(field, binder, count);
             }
         }
+        CpsAtom::SliceLiteral { items } => {
+            for item in items {
+                count_atom_refs(item, binder, count);
+            }
+        }
         CpsAtom::TupleField { tuple, .. } => count_atom_refs(tuple, binder, count),
         CpsAtom::Range { start, end } => {
             count_atom_refs(start, binder, count);
             count_atom_refs(end, binder, count);
         }
         CpsAtom::RangeField { range, .. } => count_atom_refs(range, binder, count),
+        CpsAtom::SliceField { slice, .. } => count_atom_refs(slice, binder, count),
         CpsAtom::Record { fields, .. } => {
             for field in fields {
                 count_atom_refs(&field.value, binder, count);

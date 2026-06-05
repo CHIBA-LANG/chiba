@@ -374,6 +374,9 @@ fn render_core_op(op: &CoreOp) -> String {
         CoreOp::RangeFieldGet { field } => {
             format!("range-field-get field={}", field.source_name())
         }
+        CoreOp::SliceFieldGet { field } => {
+            format!("slice-field-get field={}", field.source_name())
+        }
         CoreOp::AdtConstruct {
             data,
             ctor,
@@ -484,6 +487,14 @@ fn render_core_value(value: &CoreValue) -> String {
         CoreValue::Range { start, end } => {
             format!("{}..{}", render_core_value(start), render_core_value(end))
         }
+        CoreValue::SliceLiteral { items } => {
+            let items = items
+                .iter()
+                .map(render_core_value)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{items}]")
+        }
         CoreValue::Record { fields } => {
             let fields = fields
                 .iter()
@@ -505,6 +516,9 @@ fn render_core_value(value: &CoreValue) -> String {
         }
         CoreValue::RangeField { range, field } => {
             format!("{}.{}", render_core_value(range), field.source_name())
+        }
+        CoreValue::SliceField { slice, field } => {
+            format!("{}.{}", render_core_value(slice), field.source_name())
         }
         CoreValue::Adt {
             data,
@@ -668,6 +682,7 @@ fn render_alpha_expr_kind(kind: &AlphaExprKind) -> &'static str {
         AlphaExprKind::Lambda { .. } => "lambda",
         AlphaExprKind::Call { .. } => "call",
         AlphaExprKind::Tuple(_) => "tuple",
+        AlphaExprKind::SliceLiteral(_) => "slice-literal",
         AlphaExprKind::Record(_) => "record",
         AlphaExprKind::RecordUpdate { .. } => "record-update",
         AlphaExprKind::AdtCtor { .. } => "adt-ctor",
@@ -862,6 +877,9 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
             render_core_value_summary(start),
             render_core_value_summary(end)
         ),
+        crate::core::CoreValue::SliceLiteral { items } => {
+            format!("slice/{}", items.len())
+        }
         crate::core::CoreValue::Record { fields } => {
             format!("record/{}", fields.len())
         }
@@ -879,6 +897,13 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
             format!(
                 "range-field {}.{}",
                 render_core_value_summary(range),
+                field.source_name()
+            )
+        }
+        crate::core::CoreValue::SliceField { slice, field } => {
+            format!(
+                "slice-field {}.{}",
+                render_core_value_summary(slice),
                 field.source_name()
             )
         }
@@ -1142,6 +1167,12 @@ fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
                 render_typed_child(&format!("field {index}"), field, depth, out);
             }
         }
+        TypedExprKind::SliceLiteral { items, element } => {
+            writeln!(out, "{indent}  element {}", render_type(element)).unwrap();
+            for (index, item) in items.iter().enumerate() {
+                render_typed_child(&format!("item {index}"), item, depth, out);
+            }
+        }
         TypedExprKind::Record { fields } => {
             for field in fields {
                 render_typed_child(&format!("field {}", field.name), &field.value, depth, out);
@@ -1267,6 +1298,7 @@ fn render_typed_expr_kind(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::Lambda { .. } => "lambda",
         TypedExprKind::Call { .. } => "call",
         TypedExprKind::Tuple { .. } => "tuple",
+        TypedExprKind::SliceLiteral { .. } => "slice-literal",
         TypedExprKind::Record { .. } => "record",
         TypedExprKind::RecordUpdate { .. } => "record-update",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
@@ -1292,6 +1324,9 @@ fn render_field_access_kind(access: &FieldAccessKind) -> String {
         }
         FieldAccessKind::RangeBoundary { boundary } => {
             format!("range-boundary {}", boundary.source_name())
+        }
+        FieldAccessKind::SliceBoundary { boundary } => {
+            format!("slice-boundary {}", boundary.source_name())
         }
     }
 }
