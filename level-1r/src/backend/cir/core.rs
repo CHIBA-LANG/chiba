@@ -6,7 +6,9 @@ use crate::lambda_lift::LambdaLiftFacts;
 use crate::resolve::OperatorSurface;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{dyn_row_contract_key, row_shape_key, DynRowContract, RowShape};
-use crate::typed::{AggregateBoundary, AggregateKind, RangeBoundary, SendColor, UsageColor};
+use crate::typed::{
+    AggregateBoundary, AggregateKind, RangeBoundary, SendColor, TextBoundary, TextKind, UsageColor,
+};
 use crate::usage::UsageFacts;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -258,8 +260,18 @@ pub enum CoreValue {
         value: Box<CoreValue>,
         field: SliceField,
     },
+    TextField {
+        kind: TextKind,
+        value: Box<CoreValue>,
+        field: TextField,
+    },
     AggregateIndex {
         kind: AggregateKind,
+        value: Box<CoreValue>,
+        index: Box<CoreValue>,
+    },
+    TextIndex {
+        kind: TextKind,
         value: Box<CoreValue>,
         index: Box<CoreValue>,
     },
@@ -288,6 +300,11 @@ pub enum RangeField {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SliceField {
+    Len,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextField {
     Len,
 }
 
@@ -349,7 +366,21 @@ impl CoreValue {
             } => {
                 format!("{}.{}", value.debug_name(), field.source_name())
             }
+            CoreValue::TextField {
+                kind: _,
+                value,
+                field,
+            } => {
+                format!("{}.{}", value.debug_name(), field.source_name())
+            }
             CoreValue::AggregateIndex {
+                kind: _,
+                value,
+                index,
+            } => {
+                format!("{}[{}]", value.debug_name(), index.debug_name())
+            }
+            CoreValue::TextIndex {
                 kind: _,
                 value,
                 index,
@@ -398,6 +429,20 @@ impl SliceField {
 fn slice_field_from_boundary(boundary: AggregateBoundary) -> SliceField {
     match boundary {
         AggregateBoundary::Len => SliceField::Len,
+    }
+}
+
+impl TextField {
+    pub fn source_name(self) -> &'static str {
+        match self {
+            Self::Len => "len",
+        }
+    }
+}
+
+fn text_field_from_boundary(boundary: TextBoundary) -> TextField {
+    match boundary {
+        TextBoundary::Len => TextField::Len,
     }
 }
 
@@ -1300,7 +1345,21 @@ fn render_atom(atom: &CpsAtom) -> String {
         } => {
             format!("{}.{}", render_atom(value), boundary.source_name())
         }
+        CpsAtom::TextField {
+            kind: _,
+            value,
+            boundary,
+        } => {
+            format!("{}.{}", render_atom(value), boundary.source_name())
+        }
         CpsAtom::AggregateIndex {
+            kind: _,
+            value,
+            index,
+        } => {
+            format!("{}[{}]", render_atom(value), render_atom(index))
+        }
+        CpsAtom::TextIndex {
             kind: _,
             value,
             index,
@@ -1398,7 +1457,21 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
             value: Box::new(core_value(value)),
             field: slice_field_from_boundary(*boundary),
         },
+        CpsAtom::TextField {
+            kind,
+            value,
+            boundary,
+        } => CoreValue::TextField {
+            kind: *kind,
+            value: Box::new(core_value(value)),
+            field: text_field_from_boundary(*boundary),
+        },
         CpsAtom::AggregateIndex { kind, value, index } => CoreValue::AggregateIndex {
+            kind: *kind,
+            value: Box::new(core_value(value)),
+            index: Box::new(core_value(index)),
+        },
+        CpsAtom::TextIndex { kind, value, index } => CoreValue::TextIndex {
             kind: *kind,
             value: Box::new(core_value(value)),
             index: Box::new(core_value(index)),
@@ -1473,7 +1546,13 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             });
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
+        CpsAtom::TextField { .. } => {
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
         CpsAtom::AggregateIndex { .. } => {
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
+        CpsAtom::TextIndex { .. } => {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Record { layout, fields } => {

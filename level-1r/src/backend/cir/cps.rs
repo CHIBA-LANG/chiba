@@ -3,8 +3,8 @@ use std::fmt;
 use crate::ast::{BinaryOp, Literal, Pattern};
 use crate::control::ContinuationKind;
 use crate::typed::{
-    AggregateBoundary, AggregateKind, FieldAccessKind, IndexAccessKind, RangeBoundary, Type,
-    TypedExpr, TypedExprKind, TypedRecordField,
+    AggregateBoundary, AggregateKind, FieldAccessKind, IndexAccessKind, RangeBoundary,
+    TextBoundary, TextKind, Type, TypedExpr, TypedExprKind, TypedRecordField,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,8 +59,18 @@ pub enum CpsAtom {
         value: Box<CpsAtom>,
         boundary: AggregateBoundary,
     },
+    TextField {
+        kind: TextKind,
+        value: Box<CpsAtom>,
+        boundary: TextBoundary,
+    },
     AggregateIndex {
         kind: AggregateKind,
+        value: Box<CpsAtom>,
+        index: Box<CpsAtom>,
+    },
+    TextIndex {
+        kind: TextKind,
         value: Box<CpsAtom>,
         index: Box<CpsAtom>,
     },
@@ -254,6 +264,11 @@ fn transform(
                             boundary: *boundary,
                         }
                     }
+                    FieldAccessKind::TextBoundary { kind, boundary } => CpsAtom::TextField {
+                        kind: *kind,
+                        value: Box::new(value),
+                        boundary: *boundary,
+                    },
                     FieldAccessKind::RecordOrNominal => CpsAtom::RecordField {
                         record: Box::new(value),
                         field: name.clone(),
@@ -296,6 +311,16 @@ fn transform(
                             if let IndexAccessKind::AggregateElement { kind, .. } = access {
                                 return k(
                                     CpsAtom::AggregateIndex {
+                                        kind: *kind,
+                                        value: Box::new(receiver),
+                                        index: Box::new(index),
+                                    },
+                                    ctx,
+                                );
+                            }
+                            if let IndexAccessKind::TextByte { kind } = access {
+                                return k(
+                                    CpsAtom::TextIndex {
                                         kind: *kind,
                                         value: Box::new(receiver),
                                         index: Box::new(index),
@@ -928,7 +953,19 @@ impl fmt::Display for CpsAtom {
             } => {
                 write!(f, "{value}.{}", boundary.source_name())
             }
+            CpsAtom::TextField {
+                kind: _,
+                value,
+                boundary,
+            } => {
+                write!(f, "{value}.{}", boundary.source_name())
+            }
             CpsAtom::AggregateIndex {
+                kind: _,
+                value,
+                index,
+            } => write!(f, "{value}[{index}]"),
+            CpsAtom::TextIndex {
                 kind: _,
                 value,
                 index,

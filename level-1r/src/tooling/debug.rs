@@ -524,7 +524,21 @@ fn render_core_value(value: &CoreValue) -> String {
         } => {
             format!("{}.{}", render_core_value(value), field.source_name())
         }
+        CoreValue::TextField {
+            kind: _,
+            value,
+            field,
+        } => {
+            format!("{}.{}", render_core_value(value), field.source_name())
+        }
         CoreValue::AggregateIndex {
+            kind: _,
+            value,
+            index,
+        } => {
+            format!("{}[{}]", render_core_value(value), render_core_value(index))
+        }
+        CoreValue::TextIndex {
             kind: _,
             value,
             index,
@@ -922,6 +936,14 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
                 field.source_name()
             )
         }
+        crate::core::CoreValue::TextField { kind, value, field } => {
+            format!(
+                "{}-field {}.{}",
+                kind.source_name(),
+                render_core_value_summary(value),
+                field.source_name()
+            )
+        }
         crate::core::CoreValue::AggregateIndex {
             kind: _,
             value,
@@ -929,6 +951,14 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
         } => {
             format!(
                 "slice-index {}[{}]",
+                render_core_value_summary(value),
+                render_core_value_summary(index)
+            )
+        }
+        crate::core::CoreValue::TextIndex { kind, value, index } => {
+            format!(
+                "{}-index {}[{}]",
+                kind.source_name(),
                 render_core_value_summary(value),
                 render_core_value_summary(index)
             )
@@ -1354,6 +1384,9 @@ fn render_field_access_kind(access: &FieldAccessKind) -> String {
             format!("range-boundary {}", boundary.source_name())
         }
         FieldAccessKind::AggregateBoundary { kind, boundary } => {
+            format!("{}-boundary {}", kind.source_name(), boundary.source_name())
+        }
+        FieldAccessKind::TextBoundary { kind, boundary } => {
             format!("{}-boundary {}", kind.source_name(), boundary.source_name())
         }
     }

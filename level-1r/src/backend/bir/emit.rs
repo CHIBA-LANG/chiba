@@ -4,9 +4,10 @@ use crate::control::ContinuationKind;
 use crate::core::{
     CoreCapturedContinuation, CoreExternAbi, CoreMatchArm, CoreOp, CorePattern, CoreProgram,
     CoreValidation, CoreValue, OperatorIntrinsic, OwnershipDecision, RangeField, SliceField,
+    TextField,
 };
 use crate::symbol::encode_debug_symbol;
-use crate::typed::AggregateKind;
+use crate::typed::{AggregateKind, TextKind};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BackendArtifact {
@@ -471,8 +472,17 @@ fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExt
             imports.push(aggregate_field_import(*kind, *field));
             collect_runtime_value_imports(value, imports);
         }
+        CoreValue::TextField { kind, value, field } => {
+            imports.push(text_field_import(*kind, *field));
+            collect_runtime_value_imports(value, imports);
+        }
         CoreValue::AggregateIndex { kind, value, index } => {
             imports.push(aggregate_index_import(*kind));
+            collect_runtime_value_imports(value, imports);
+            collect_runtime_value_imports(index, imports);
+        }
+        CoreValue::TextIndex { kind, value, index } => {
+            imports.push(text_index_import(*kind));
             collect_runtime_value_imports(value, imports);
             collect_runtime_value_imports(index, imports);
         }
@@ -564,6 +574,38 @@ fn aggregate_index_import(kind: AggregateKind) -> BackendExternImport {
 
 fn aggregate_index_import_symbol(kind: AggregateKind) -> String {
     format!("std_{}_i64_get", kind.runtime_prefix())
+}
+
+fn text_field_import(kind: TextKind, field: TextField) -> BackendExternImport {
+    match field {
+        TextField::Len => BackendExternImport {
+            abi: BackendExternAbi::C,
+            final_symbol: text_field_import_symbol(kind, field),
+            module: "env".to_string(),
+            name: format!("std.{}_i64_len", kind.runtime_prefix()),
+            signature_hash: "externref_to_i64".to_string(),
+        },
+    }
+}
+
+fn text_field_import_symbol(kind: TextKind, field: TextField) -> String {
+    match field {
+        TextField::Len => format!("std_{}_i64_len", kind.runtime_prefix()),
+    }
+}
+
+fn text_index_import(kind: TextKind) -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: text_index_import_symbol(kind),
+        module: "env".to_string(),
+        name: format!("std.{}_i64_byte_at", kind.runtime_prefix()),
+        signature_hash: "externref_i64_to_i64".to_string(),
+    }
+}
+
+fn text_index_import_symbol(kind: TextKind) -> String {
+    format!("std_{}_i64_byte_at", kind.runtime_prefix())
 }
 
 fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipDecision> {
@@ -1568,7 +1610,16 @@ fn infer_param_kinds_from_value(
             mark_externref_operand(value, params, kinds);
             infer_param_kinds_from_value(value, params, kinds);
         }
+        CoreValue::TextField { value, .. } => {
+            mark_externref_operand(value, params, kinds);
+            infer_param_kinds_from_value(value, params, kinds);
+        }
         CoreValue::AggregateIndex { value, index, .. } => {
+            mark_externref_operand(value, params, kinds);
+            infer_param_kinds_from_value(value, params, kinds);
+            infer_param_kinds_from_value(index, params, kinds);
+        }
+        CoreValue::TextIndex { value, index, .. } => {
             mark_externref_operand(value, params, kinds);
             infer_param_kinds_from_value(value, params, kinds);
             infer_param_kinds_from_value(index, params, kinds);
@@ -1714,6 +1765,17 @@ fn render_core_value_i32(
                 return Err(unsupported_i32_render_diagnostic(value));
             }
         }
+        CoreValue::TextField { kind, value, field } => {
+            if core_value_is_renderable_externref(value, env) {
+                render_core_value_externref(wat, value, env)?;
+                wat.push_str(&format!(
+                    "    call ${}\n",
+                    text_field_import_symbol(*kind, *field)
+                ));
+            } else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            }
+        }
         CoreValue::AggregateIndex { kind, value, index } => {
             if let Some(value) = slice_index_value(value, index, env) {
                 render_core_value_i32(wat, value, env)?;
@@ -1726,6 +1788,17 @@ fn render_core_value_i32(
                     "    call ${}\n",
                     aggregate_index_import_symbol(*kind)
                 ));
+            } else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            }
+        }
+        CoreValue::TextIndex { kind, value, index } => {
+            if core_value_is_renderable_externref(value, env)
+                && core_value_is_renderable_i32(index, env)
+            {
+                render_core_value_externref(wat, value, env)?;
+                render_core_value_i32(wat, index, env)?;
+                wat.push_str(&format!("    call ${}\n", text_index_import_symbol(*kind)));
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
             }
@@ -1811,12 +1884,17 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         CoreValue::AggregateField { value, field, .. } => slice_field_value(value, *field, env)
             .map(|value| core_value_is_renderable_i32(&value, env))
             .unwrap_or_else(|| core_value_is_renderable_externref(value, env)),
+        CoreValue::TextField { value, .. } => core_value_is_renderable_externref(value, env),
         CoreValue::AggregateIndex { value, index, .. } => slice_index_value(value, index, env)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or_else(|| {
                 core_value_is_renderable_externref(value, env)
                     && core_value_is_renderable_i32(index, env)
             }),
+        CoreValue::TextIndex { value, index, .. } => {
+            core_value_is_renderable_externref(value, env)
+                && core_value_is_renderable_i32(index, env)
+        }
         CoreValue::Tuple { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }

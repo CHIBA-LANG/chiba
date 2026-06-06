@@ -1307,6 +1307,132 @@ fn source_vec_param_index_lowers_to_executable_runtime_import() {
 }
 
 #[test]
+fn source_str_param_len_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(s: str): i64 = s.len")
+        .expect("compile str param len")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["s".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.str_i64_len\" (func $std_str_i64_len (param externref) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $main (export \"main\") (param $s externref) (result i32)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_str_i64_len"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_str_param_index_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(s: str): i64 = s[1]")
+        .expect("compile str param index")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["s".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(matches!(
+        main.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::TextIndex {
+            kind: chiba_level1r::typed::TextKind::Str,
+            ..
+        })
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.str_i64_byte_at\" (func $std_str_i64_byte_at (param externref) (param i32) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_str_i64_byte_at"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
+fn source_string_param_len_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(s: String): i64 = s.len")
+        .expect("compile string param len")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["s".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.string_i64_len\" (func $std_string_i64_len (param externref) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $main (export \"main\") (param $s externref) (result i32)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_len"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_string_param_index_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(s: String): i64 = s[1]")
+        .expect("compile string param index")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["s".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(matches!(
+        main.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::TextIndex {
+            kind: chiba_level1r::typed::TextKind::String,
+            ..
+        })
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.string_i64_byte_at\" (func $std_string_i64_byte_at (param externref) (param i32) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_byte_at"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
 fn program_record_update_field_return_lowers_to_executable_wat_value() {
     let program = SourceProgram::new(vec![def(
         "main",

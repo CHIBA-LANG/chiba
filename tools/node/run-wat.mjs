@@ -172,14 +172,26 @@ async function makeImports(wat, args) {
       "std.string_len"(text) {
         return BigInt(byteArray(text).length);
       },
+      "std.string_i64_len"(text) {
+        return byteArray(text).length;
+      },
       "std.str_len"(text) {
         return BigInt(byteArray(text).length);
+      },
+      "std.str_i64_len"(text) {
+        return byteArray(text).length;
       },
       "std.string_byte_at"(text, index) {
         return BigInt(byteArray(text)[Number(index)] ?? 0);
       },
+      "std.string_i64_byte_at"(text, index) {
+        return Number(byteArray(text)[Number(index)] ?? 0);
+      },
       "std.str_byte_at"(text, index) {
         return BigInt(byteArray(text)[Number(index)] ?? 0);
+      },
+      "std.str_i64_byte_at"(text, index) {
+        return Number(byteArray(text)[Number(index)] ?? 0);
       },
       "std.string_char_at"(text, index) {
         return BigInt(byteArray(text)[Number(index)] ?? 0);

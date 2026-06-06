@@ -123,12 +123,17 @@ pub enum FieldAccessKind {
         kind: AggregateKind,
         boundary: AggregateBoundary,
     },
+    TextBoundary {
+        kind: TextKind,
+        boundary: TextBoundary,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IndexAccessKind {
     Operator,
     AggregateElement { kind: AggregateKind, element: Type },
+    TextByte { kind: TextKind },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -139,6 +144,12 @@ pub enum AggregateKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextKind {
+    Str,
+    String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RangeBoundary {
     Start,
     End,
@@ -146,6 +157,11 @@ pub enum RangeBoundary {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AggregateBoundary {
+    Len,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextBoundary {
     Len,
 }
 
@@ -617,6 +633,7 @@ fn type_expr_with_context_and_controls(
                 }
                 FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
+                FieldAccessKind::TextBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, name)),
             }
@@ -940,6 +957,7 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 }
                 FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
+                FieldAccessKind::TextBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
             }
@@ -1274,6 +1292,7 @@ fn refine_pattern_binding_types(
                 }
                 FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
+                FieldAccessKind::TextBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
             }
@@ -1318,10 +1337,12 @@ fn refine_pattern_binding_types(
                 IndexAccessKind::AggregateElement { .. } => {
                     index_access_kind(&receiver.ty, &index.ty)
                 }
+                IndexAccessKind::TextByte { .. } => index_access_kind(&receiver.ty, &index.ty),
                 IndexAccessKind::Operator => IndexAccessKind::Operator,
             };
             let ty = match access {
                 IndexAccessKind::AggregateElement { .. } => index_result_type(&access),
+                IndexAccessKind::TextByte { .. } => index_result_type(&access),
                 IndexAccessKind::Operator => expr.ty,
             };
             typed(
@@ -1848,6 +1869,12 @@ fn index_access_kind(receiver: &Type, index: &Type) -> IndexAccessKind {
             kind: AggregateKind::Vec,
             element: element.to_type(),
         },
+        ("str", []) => IndexAccessKind::TextByte {
+            kind: TextKind::Str,
+        },
+        ("String", []) => IndexAccessKind::TextByte {
+            kind: TextKind::String,
+        },
         _ => IndexAccessKind::Operator,
     }
 }
@@ -1855,6 +1882,7 @@ fn index_access_kind(receiver: &Type, index: &Type) -> IndexAccessKind {
 fn index_result_type(access: &IndexAccessKind) -> Type {
     match access {
         IndexAccessKind::AggregateElement { element, .. } => element.clone(),
+        IndexAccessKind::TextByte { .. } => Type::I64,
         IndexAccessKind::Operator => Type::Unknown,
     }
 }
@@ -1920,6 +1948,11 @@ fn field_access_kind(receiver: &Type, name: &str) -> FieldAccessKind {
             return FieldAccessKind::AggregateBoundary { kind, boundary };
         }
     }
+    if let Some(kind) = text_kind_for_type(receiver) {
+        if let Some(boundary) = TextBoundary::from_source_name(name) {
+            return FieldAccessKind::TextBoundary { kind, boundary };
+        }
+    }
     if let Type::Tuple(fields) = receiver {
         if let Some(index) = tuple_row_fields(fields)
             .iter()
@@ -1976,7 +2009,46 @@ fn aggregate_kind_for_type(receiver: &Type) -> Option<AggregateKind> {
     }
 }
 
+impl TextKind {
+    pub fn source_name(self) -> &'static str {
+        match self {
+            Self::Str => "str",
+            Self::String => "String",
+        }
+    }
+
+    pub fn runtime_prefix(self) -> &'static str {
+        match self {
+            Self::Str => "str",
+            Self::String => "string",
+        }
+    }
+}
+
+fn text_kind_for_type(receiver: &Type) -> Option<TextKind> {
+    match nominal_base_name_for_type(receiver)? {
+        "str" => Some(TextKind::Str),
+        "String" => Some(TextKind::String),
+        _ => None,
+    }
+}
+
 impl AggregateBoundary {
+    pub fn from_source_name(name: &str) -> Option<Self> {
+        match name {
+            "len" => Some(Self::Len),
+            _ => None,
+        }
+    }
+
+    pub fn source_name(self) -> &'static str {
+        match self {
+            Self::Len => "len",
+        }
+    }
+}
+
+impl TextBoundary {
     pub fn from_source_name(name: &str) -> Option<Self> {
         match name {
             "len" => Some(Self::Len),
