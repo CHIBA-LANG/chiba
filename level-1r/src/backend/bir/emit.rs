@@ -470,6 +470,11 @@ fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExt
             imports.push(slice_field_import(*field));
             collect_runtime_value_imports(slice, imports);
         }
+        CoreValue::SliceIndex { slice, index } => {
+            imports.push(slice_index_import());
+            collect_runtime_value_imports(slice, imports);
+            collect_runtime_value_imports(index, imports);
+        }
         CoreValue::Tuple { fields } => {
             for field in fields {
                 collect_runtime_value_imports(field, imports);
@@ -544,6 +549,20 @@ fn slice_field_import_symbol(field: SliceField) -> String {
     match field {
         SliceField::Len => "std_slice_i64_len".to_string(),
     }
+}
+
+fn slice_index_import() -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: slice_index_import_symbol(),
+        module: "env".to_string(),
+        name: "std.slice_i64_get".to_string(),
+        signature_hash: "externref_i64_to_i64".to_string(),
+    }
+}
+
+fn slice_index_import_symbol() -> String {
+    "std_slice_i64_get".to_string()
 }
 
 fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipDecision> {
@@ -1548,6 +1567,11 @@ fn infer_param_kinds_from_value(
             mark_externref_operand(slice, params, kinds);
             infer_param_kinds_from_value(slice, params, kinds);
         }
+        CoreValue::SliceIndex { slice, index } => {
+            mark_externref_operand(slice, params, kinds);
+            infer_param_kinds_from_value(slice, params, kinds);
+            infer_param_kinds_from_value(index, params, kinds);
+        }
         CoreValue::Tuple { fields } => {
             for field in fields {
                 infer_param_kinds_from_value(field, params, kinds);
@@ -1689,6 +1713,19 @@ fn render_core_value_i32(
                 return Err(unsupported_i32_render_diagnostic(value));
             }
         }
+        CoreValue::SliceIndex { slice, index } => {
+            if let Some(value) = slice_index_value(slice, index, env) {
+                render_core_value_i32(wat, value, env)?;
+            } else if core_value_is_renderable_externref(slice, env)
+                && core_value_is_renderable_i32(index, env)
+            {
+                render_core_value_externref(wat, slice, env)?;
+                render_core_value_i32(wat, index, env)?;
+                wat.push_str(&format!("    call ${}\n", slice_index_import_symbol()));
+            } else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            }
+        }
         CoreValue::Adt { ctor, variants, .. } => {
             if let Some(tag) = variants.iter().position(|variant| variant == ctor) {
                 wat.push_str(&format!("    i32.const {tag}\n"));
@@ -1770,6 +1807,12 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         CoreValue::SliceField { slice, field } => slice_field_value(slice, *field, env)
             .map(|value| core_value_is_renderable_i32(&value, env))
             .unwrap_or_else(|| core_value_is_renderable_externref(slice, env)),
+        CoreValue::SliceIndex { slice, index } => slice_index_value(slice, index, env)
+            .map(|value| core_value_is_renderable_i32(value, env))
+            .unwrap_or_else(|| {
+                core_value_is_renderable_externref(slice, env)
+                    && core_value_is_renderable_i32(index, env)
+            }),
         CoreValue::Tuple { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
@@ -1856,6 +1899,24 @@ fn slice_field_value(slice: &CoreValue, field: SliceField, env: &RenderEnv) -> O
     match field {
         SliceField::Len => Some(CoreValue::I64(items.len() as i64)),
     }
+}
+
+fn slice_index_value<'a>(
+    slice: &'a CoreValue,
+    index: &'a CoreValue,
+    env: &'a RenderEnv,
+) -> Option<&'a CoreValue> {
+    let slice = resolve_core_value_binding(slice, env);
+    let CoreValue::SliceLiteral { items } = slice else {
+        return None;
+    };
+    let index = resolve_core_value_binding(index, env);
+    let CoreValue::I64(index) = index else {
+        return None;
+    };
+    usize::try_from(*index)
+        .ok()
+        .and_then(|index| items.get(index))
 }
 
 fn render_core_value_i32_indented(

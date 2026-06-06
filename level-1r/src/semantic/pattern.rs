@@ -129,7 +129,9 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts, context: &TypeContext) {
                 visit(arg, facts, context);
             }
         }
-        TypedExprKind::Index { receiver, index } => {
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
             visit(receiver, facts, context);
             visit(index, facts, context);
         }

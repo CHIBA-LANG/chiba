@@ -3,7 +3,8 @@ use std::fmt;
 use crate::ast::{BinaryOp, Literal, Pattern};
 use crate::control::ContinuationKind;
 use crate::typed::{
-    FieldAccessKind, RangeBoundary, SliceBoundary, Type, TypedExpr, TypedExprKind, TypedRecordField,
+    FieldAccessKind, IndexAccessKind, RangeBoundary, SliceBoundary, Type, TypedExpr, TypedExprKind,
+    TypedRecordField,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -56,6 +57,10 @@ pub enum CpsAtom {
     SliceField {
         slice: Box<CpsAtom>,
         boundary: SliceBoundary,
+    },
+    SliceIndex {
+        slice: Box<CpsAtom>,
+        index: Box<CpsAtom>,
     },
     RecordUpdate {
         base: Box<CpsAtom>,
@@ -270,7 +275,11 @@ fn transform(
                 ctx,
             )
         }
-        TypedExprKind::Index { receiver, index } => {
+        TypedExprKind::Index {
+            receiver,
+            index,
+            access,
+        } => {
             let receiver_controls = controls.clone();
             transform(
                 receiver,
@@ -279,6 +288,15 @@ fn transform(
                     transform(
                         index,
                         Box::new(|index, ctx| {
+                            if matches!(access, IndexAccessKind::SliceElement { .. }) {
+                                return k(
+                                    CpsAtom::SliceIndex {
+                                        slice: Box::new(receiver),
+                                        index: Box::new(index),
+                                    },
+                                    ctx,
+                                );
+                            }
                             let kind = if matches!(index, CpsAtom::Range { .. }) {
                                 OperatorKind::IndexSlice
                             } else {
@@ -900,6 +918,7 @@ impl fmt::Display for CpsAtom {
             CpsAtom::SliceField { slice, boundary } => {
                 write!(f, "{slice}.{}", boundary.source_name())
             }
+            CpsAtom::SliceIndex { slice, index } => write!(f, "{slice}[{index}]"),
             CpsAtom::RecordUpdate {
                 base,
                 layout,

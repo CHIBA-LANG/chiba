@@ -142,6 +142,9 @@ async function makeImports(wat, args) {
       "std.slice_i64_len"(slice) {
         return asArray(slice).length;
       },
+      "std.slice_i64_get"(slice, index) {
+        return Number(asArray(slice)[Number(index)] ?? 0);
+      },
       "std.slice_get"(slice, index) {
         return asArray(slice)[Number(index)] ?? null;
       },

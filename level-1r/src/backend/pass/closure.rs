@@ -84,7 +84,9 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
                 collect(arg, scope, facts);
             }
         }
-        TypedExprKind::Index { receiver, index } => {
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
             collect(receiver, scope, facts);
             collect(index, scope, facts);
         }
@@ -417,7 +419,9 @@ fn collect_free_vars(expr: &TypedExpr, locals: &mut BTreeSet<String>, free: &mut
                 collect_free_vars(arg, locals, free);
             }
         }
-        TypedExprKind::Index { receiver, index } => {
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
             collect_free_vars(receiver, locals, free);
             collect_free_vars(index, locals, free);
         }

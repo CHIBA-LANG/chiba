@@ -91,7 +91,9 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
                 visit(arg, facts);
             }
         }
-        TypedExprKind::Index { receiver, index } => {
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
             visit(receiver, facts);
             visit(index, facts);
         }

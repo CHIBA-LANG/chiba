@@ -549,6 +549,32 @@ fn backend_lowers_slice_param_len_to_runtime_import() {
 }
 
 #[test]
+fn backend_lowers_slice_param_index_to_runtime_import() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::SliceIndex {
+            slice: Box::new(CoreValue::Var("s".to_string())),
+            index: Box::new(CoreValue::I64(1)),
+        })],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc_with_params(&core, &CoreValidation::default(), &["s".to_string()]);
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact.wat.contains(
+        "(import \"env\" \"std.slice_i64_get\" (func $std_slice_i64_get (param externref) (param i32) (result i32)))"
+    ));
+    assert!(artifact
+        .wat
+        .contains("(func $main (export \"main\") (param $s externref) (result i32)"));
+    assert!(artifact.wat.contains("local.get $s"));
+    assert!(artifact.wat.contains("i32.const 1"));
+    assert!(artifact.wat.contains("call $std_slice_i64_get"));
+}
+
+#[test]
 fn backend_rejects_missing_record_field_return_instead_of_faking_i32_zero() {
     let core = CoreProgram {
         ops: vec![CoreOp::ReturnValue(CoreValue::RecordField {

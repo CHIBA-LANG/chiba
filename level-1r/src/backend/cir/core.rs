@@ -257,6 +257,10 @@ pub enum CoreValue {
         slice: Box<CoreValue>,
         field: SliceField,
     },
+    SliceIndex {
+        slice: Box<CoreValue>,
+        index: Box<CoreValue>,
+    },
     Adt {
         data: String,
         ctor: String,
@@ -338,6 +342,9 @@ impl CoreValue {
             }
             CoreValue::SliceField { slice, field } => {
                 format!("{}.{}", slice.debug_name(), field.source_name())
+            }
+            CoreValue::SliceIndex { slice, index } => {
+                format!("{}[{}]", slice.debug_name(), index.debug_name())
             }
             CoreValue::Adt {
                 data, ctor, args, ..
@@ -1279,6 +1286,9 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::SliceField { slice, boundary } => {
             format!("{}.{}", render_atom(slice), boundary.source_name())
         }
+        CpsAtom::SliceIndex { slice, index } => {
+            format!("{}[{}]", render_atom(slice), render_atom(index))
+        }
         CpsAtom::Record { layout, fields } => format!(
             "{layout}{{{}}}",
             fields
@@ -1365,6 +1375,10 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
             slice: Box::new(core_value(slice)),
             field: slice_field_from_boundary(*boundary),
         },
+        CpsAtom::SliceIndex { slice, index } => CoreValue::SliceIndex {
+            slice: Box::new(core_value(slice)),
+            index: Box::new(core_value(index)),
+        },
         CpsAtom::RecordField { record, field } => CoreValue::RecordField {
             record: Box::new(core_value(record)),
             field: field.clone(),
@@ -1433,6 +1447,9 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             ops.push(CoreOp::SliceFieldGet {
                 field: slice_field_from_boundary(*boundary),
             });
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
+        CpsAtom::SliceIndex { .. } => {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Record { layout, fields } => {

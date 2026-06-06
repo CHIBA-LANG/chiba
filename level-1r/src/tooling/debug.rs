@@ -520,6 +520,9 @@ fn render_core_value(value: &CoreValue) -> String {
         CoreValue::SliceField { slice, field } => {
             format!("{}.{}", render_core_value(slice), field.source_name())
         }
+        CoreValue::SliceIndex { slice, index } => {
+            format!("{}[{}]", render_core_value(slice), render_core_value(index))
+        }
         CoreValue::Adt {
             data,
             ctor,
@@ -907,6 +910,13 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
                 field.source_name()
             )
         }
+        crate::core::CoreValue::SliceIndex { slice, index } => {
+            format!(
+                "slice-index {}[{}]",
+                render_core_value_summary(slice),
+                render_core_value_summary(index)
+            )
+        }
         crate::core::CoreValue::Adt {
             data, ctor, args, ..
         } => {
@@ -1224,7 +1234,9 @@ fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
                 render_typed_child(&format!("arg {index}"), arg, depth, out);
             }
         }
-        TypedExprKind::Index { receiver, index } => {
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
             render_typed_child("receiver", receiver, depth, out);
             render_typed_child("index", index, depth, out);
         }

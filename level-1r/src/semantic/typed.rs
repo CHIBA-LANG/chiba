@@ -58,6 +58,7 @@ pub enum TypedExprKind {
     Index {
         receiver: Box<TypedExpr>,
         index: Box<TypedExpr>,
+        access: IndexAccessKind,
     },
     Range {
         start: Box<TypedExpr>,
@@ -115,6 +116,12 @@ pub enum FieldAccessKind {
     TuplePositionalRow { index: usize },
     RangeBoundary { boundary: RangeBoundary },
     SliceBoundary { boundary: SliceBoundary },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IndexAccessKind {
+    Operator,
+    SliceElement { element: Type },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -632,12 +639,15 @@ fn type_expr_with_context_and_controls(
         Expr::Index { receiver, index } => {
             let receiver = type_expr_with_context_and_controls(receiver, env, context, controls);
             let index = type_expr_with_context_and_controls(index, env, context, controls);
+            let access = index_access_kind(&receiver.ty, &index.ty);
+            let ty = index_result_type(&access);
             typed(
                 TypedExprKind::Index {
                     receiver: Box::new(receiver),
                     index: Box::new(index),
+                    access,
                 },
-                Type::Unknown,
+                ty,
             )
         }
         Expr::Range { start, end } => {
@@ -949,15 +959,20 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 ty,
             )
         }
-        TypedExprKind::Index { receiver, index } => {
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
             let receiver = refine_continuation_types(*receiver, context);
             let index = refine_continuation_types(*index, context);
+            let access = index_access_kind(&receiver.ty, &index.ty);
+            let ty = index_result_type(&access);
             typed(
                 TypedExprKind::Index {
                     receiver: Box::new(receiver),
                     index: Box::new(index),
+                    access,
                 },
-                Type::Unknown,
+                ty,
             )
         }
         TypedExprKind::Range { start, end } => {
@@ -1278,13 +1293,30 @@ fn refine_pattern_binding_types(
                 ty,
             )
         }
-        TypedExprKind::Index { receiver, index } => typed(
-            TypedExprKind::Index {
-                receiver: Box::new(refine_pattern_binding_types(*receiver, bindings, context)),
-                index: Box::new(refine_pattern_binding_types(*index, bindings, context)),
-            },
-            Type::Unknown,
-        ),
+        TypedExprKind::Index {
+            receiver,
+            index,
+            access,
+        } => {
+            let receiver = refine_pattern_binding_types(*receiver, bindings, context);
+            let index = refine_pattern_binding_types(*index, bindings, context);
+            let access = match access {
+                IndexAccessKind::SliceElement { .. } => index_access_kind(&receiver.ty, &index.ty),
+                IndexAccessKind::Operator => IndexAccessKind::Operator,
+            };
+            let ty = match access {
+                IndexAccessKind::SliceElement { .. } => index_result_type(&access),
+                IndexAccessKind::Operator => expr.ty,
+            };
+            typed(
+                TypedExprKind::Index {
+                    receiver: Box::new(receiver),
+                    index: Box::new(index),
+                    access,
+                },
+                ty,
+            )
+        }
         TypedExprKind::Range { start, end } => typed(
             TypedExprKind::Range {
                 start: Box::new(refine_pattern_binding_types(*start, bindings, context)),
@@ -1446,7 +1478,9 @@ fn collect_typed_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<
                 collect_typed_resume_inputs(binder, arg, inputs);
             }
         }
-        TypedExprKind::Index { receiver, index } => {
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
             collect_typed_resume_inputs(binder, receiver, inputs);
             collect_typed_resume_inputs(binder, index, inputs);
         }
@@ -1621,10 +1655,15 @@ fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type
             },
             expr.ty,
         ),
-        TypedExprKind::Index { receiver, index } => typed(
+        TypedExprKind::Index {
+            receiver,
+            index,
+            access,
+        } => typed(
             TypedExprKind::Index {
                 receiver: Box::new(rewrite_continuation_callee_input(*receiver, binder, input)),
                 index: Box::new(rewrite_continuation_callee_input(*index, binder, input)),
+                access,
             },
             expr.ty,
         ),
@@ -1767,6 +1806,31 @@ fn binary_result_type(lhs: &Type, rhs: &Type) -> Type {
     match (lhs, rhs) {
         (Type::I64, Type::I64) => Type::I64,
         _ => Type::Unknown,
+    }
+}
+
+fn index_access_kind(receiver: &Type, index: &Type) -> IndexAccessKind {
+    if index != &Type::I64 {
+        return IndexAccessKind::Operator;
+    }
+    let Type::Nominal(name) = receiver else {
+        return IndexAccessKind::Operator;
+    };
+    let Some(ParsedTypeHeader::Nominal { base, args }) = parse_type_header(name) else {
+        return IndexAccessKind::Operator;
+    };
+    match (base.as_str(), args.as_slice()) {
+        ("Slice", [element]) => IndexAccessKind::SliceElement {
+            element: element.to_type(),
+        },
+        _ => IndexAccessKind::Operator,
+    }
+}
+
+fn index_result_type(access: &IndexAccessKind) -> Type {
+    match access {
+        IndexAccessKind::SliceElement { element } => element.clone(),
+        IndexAccessKind::Operator => Type::Unknown,
     }
 }
 
