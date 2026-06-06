@@ -3,8 +3,8 @@ use std::fmt;
 use crate::ast::{BinaryOp, Literal, Pattern};
 use crate::control::ContinuationKind;
 use crate::typed::{
-    FieldAccessKind, IndexAccessKind, RangeBoundary, SliceBoundary, Type, TypedExpr, TypedExprKind,
-    TypedRecordField,
+    AggregateBoundary, AggregateKind, FieldAccessKind, IndexAccessKind, RangeBoundary, Type,
+    TypedExpr, TypedExprKind, TypedRecordField,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -54,12 +54,14 @@ pub enum CpsAtom {
         range: Box<CpsAtom>,
         boundary: RangeBoundary,
     },
-    SliceField {
-        slice: Box<CpsAtom>,
-        boundary: SliceBoundary,
+    AggregateField {
+        kind: AggregateKind,
+        value: Box<CpsAtom>,
+        boundary: AggregateBoundary,
     },
-    SliceIndex {
-        slice: Box<CpsAtom>,
+    AggregateIndex {
+        kind: AggregateKind,
+        value: Box<CpsAtom>,
         index: Box<CpsAtom>,
     },
     RecordUpdate {
@@ -245,10 +247,13 @@ fn transform(
                         range: Box::new(value),
                         boundary: *boundary,
                     },
-                    FieldAccessKind::SliceBoundary { boundary } => CpsAtom::SliceField {
-                        slice: Box::new(value),
-                        boundary: *boundary,
-                    },
+                    FieldAccessKind::AggregateBoundary { kind, boundary } => {
+                        CpsAtom::AggregateField {
+                            kind: *kind,
+                            value: Box::new(value),
+                            boundary: *boundary,
+                        }
+                    }
                     FieldAccessKind::RecordOrNominal => CpsAtom::RecordField {
                         record: Box::new(value),
                         field: name.clone(),
@@ -288,10 +293,11 @@ fn transform(
                     transform(
                         index,
                         Box::new(|index, ctx| {
-                            if matches!(access, IndexAccessKind::SliceElement { .. }) {
+                            if let IndexAccessKind::AggregateElement { kind, .. } = access {
                                 return k(
-                                    CpsAtom::SliceIndex {
-                                        slice: Box::new(receiver),
+                                    CpsAtom::AggregateIndex {
+                                        kind: *kind,
+                                        value: Box::new(receiver),
                                         index: Box::new(index),
                                     },
                                     ctx,
@@ -915,10 +921,18 @@ impl fmt::Display for CpsAtom {
             CpsAtom::RangeField { range, boundary } => {
                 write!(f, "{range}.{}", boundary.source_name())
             }
-            CpsAtom::SliceField { slice, boundary } => {
-                write!(f, "{slice}.{}", boundary.source_name())
+            CpsAtom::AggregateField {
+                kind: _,
+                value,
+                boundary,
+            } => {
+                write!(f, "{value}.{}", boundary.source_name())
             }
-            CpsAtom::SliceIndex { slice, index } => write!(f, "{slice}[{index}]"),
+            CpsAtom::AggregateIndex {
+                kind: _,
+                value,
+                index,
+            } => write!(f, "{value}[{index}]"),
             CpsAtom::RecordUpdate {
                 base,
                 layout,

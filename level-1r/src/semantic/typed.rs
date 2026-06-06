@@ -113,15 +113,29 @@ pub struct TypedRecordField {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FieldAccessKind {
     RecordOrNominal,
-    TuplePositionalRow { index: usize },
-    RangeBoundary { boundary: RangeBoundary },
-    SliceBoundary { boundary: SliceBoundary },
+    TuplePositionalRow {
+        index: usize,
+    },
+    RangeBoundary {
+        boundary: RangeBoundary,
+    },
+    AggregateBoundary {
+        kind: AggregateKind,
+        boundary: AggregateBoundary,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IndexAccessKind {
     Operator,
-    SliceElement { element: Type },
+    AggregateElement { kind: AggregateKind, element: Type },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AggregateKind {
+    Slice,
+    Array,
+    Vec,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,7 +145,7 @@ pub enum RangeBoundary {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SliceBoundary {
+pub enum AggregateBoundary {
     Len,
 }
 
@@ -602,7 +616,7 @@ fn type_expr_with_context_and_controls(
                     tuple_field_type(&receiver.ty, index)
                 }
                 FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::SliceBoundary { .. } => Some(Type::I64),
+                FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, name)),
             }
@@ -925,7 +939,7 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                     tuple_field_type(&receiver.ty, index)
                 }
                 FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::SliceBoundary { .. } => Some(Type::I64),
+                FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
             }
@@ -1259,7 +1273,7 @@ fn refine_pattern_binding_types(
                     tuple_field_type(&receiver.ty, index)
                 }
                 FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::SliceBoundary { .. } => Some(Type::I64),
+                FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
                 FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
                     .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
             }
@@ -1301,11 +1315,13 @@ fn refine_pattern_binding_types(
             let receiver = refine_pattern_binding_types(*receiver, bindings, context);
             let index = refine_pattern_binding_types(*index, bindings, context);
             let access = match access {
-                IndexAccessKind::SliceElement { .. } => index_access_kind(&receiver.ty, &index.ty),
+                IndexAccessKind::AggregateElement { .. } => {
+                    index_access_kind(&receiver.ty, &index.ty)
+                }
                 IndexAccessKind::Operator => IndexAccessKind::Operator,
             };
             let ty = match access {
-                IndexAccessKind::SliceElement { .. } => index_result_type(&access),
+                IndexAccessKind::AggregateElement { .. } => index_result_type(&access),
                 IndexAccessKind::Operator => expr.ty,
             };
             typed(
@@ -1820,7 +1836,16 @@ fn index_access_kind(receiver: &Type, index: &Type) -> IndexAccessKind {
         return IndexAccessKind::Operator;
     };
     match (base.as_str(), args.as_slice()) {
-        ("Slice", [element]) => IndexAccessKind::SliceElement {
+        ("Slice", [element]) => IndexAccessKind::AggregateElement {
+            kind: AggregateKind::Slice,
+            element: element.to_type(),
+        },
+        ("Array", [element]) => IndexAccessKind::AggregateElement {
+            kind: AggregateKind::Array,
+            element: element.to_type(),
+        },
+        ("Vec", [element]) => IndexAccessKind::AggregateElement {
+            kind: AggregateKind::Vec,
             element: element.to_type(),
         },
         _ => IndexAccessKind::Operator,
@@ -1829,7 +1854,7 @@ fn index_access_kind(receiver: &Type, index: &Type) -> IndexAccessKind {
 
 fn index_result_type(access: &IndexAccessKind) -> Type {
     match access {
-        IndexAccessKind::SliceElement { element } => element.clone(),
+        IndexAccessKind::AggregateElement { element, .. } => element.clone(),
         IndexAccessKind::Operator => Type::Unknown,
     }
 }
@@ -1890,9 +1915,9 @@ fn field_access_kind(receiver: &Type, name: &str) -> FieldAccessKind {
             return FieldAccessKind::RangeBoundary { boundary };
         }
     }
-    if nominal_base_name_for_type(receiver) == Some("Slice") {
-        if let Some(boundary) = SliceBoundary::from_source_name(name) {
-            return FieldAccessKind::SliceBoundary { boundary };
+    if let Some(kind) = aggregate_kind_for_type(receiver) {
+        if let Some(boundary) = AggregateBoundary::from_source_name(name) {
+            return FieldAccessKind::AggregateBoundary { kind, boundary };
         }
     }
     if let Type::Tuple(fields) = receiver {
@@ -1924,7 +1949,34 @@ impl RangeBoundary {
     }
 }
 
-impl SliceBoundary {
+impl AggregateKind {
+    pub fn source_name(self) -> &'static str {
+        match self {
+            Self::Slice => "slice",
+            Self::Array => "array",
+            Self::Vec => "vec",
+        }
+    }
+
+    pub fn runtime_prefix(self) -> &'static str {
+        match self {
+            Self::Slice => "slice",
+            Self::Array => "array",
+            Self::Vec => "vec",
+        }
+    }
+}
+
+fn aggregate_kind_for_type(receiver: &Type) -> Option<AggregateKind> {
+    match nominal_base_name_for_type(receiver)? {
+        "Slice" => Some(AggregateKind::Slice),
+        "Array" => Some(AggregateKind::Array),
+        "Vec" => Some(AggregateKind::Vec),
+        _ => None,
+    }
+}
+
+impl AggregateBoundary {
     pub fn from_source_name(name: &str) -> Option<Self> {
         match name {
             "len" => Some(Self::Len),

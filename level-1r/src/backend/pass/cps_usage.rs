@@ -152,9 +152,9 @@ fn visit_atom(atom: &CpsAtom, facts: &mut CpsUsageFacts) {
             visit_atom(end, facts);
         }
         CpsAtom::RangeField { range, .. } => visit_atom(range, facts),
-        CpsAtom::SliceField { slice, .. } => visit_atom(slice, facts),
-        CpsAtom::SliceIndex { slice, index } => {
-            visit_atom(slice, facts);
+        CpsAtom::AggregateField { value, .. } => visit_atom(value, facts),
+        CpsAtom::AggregateIndex { value, index, .. } => {
+            visit_atom(value, facts);
             visit_atom(index, facts);
         }
         CpsAtom::Record { fields, .. } => {
@@ -251,9 +251,9 @@ fn count_atom_refs(atom: &CpsAtom, binder: &str, count: &mut UseCount) {
             count_atom_refs(end, binder, count);
         }
         CpsAtom::RangeField { range, .. } => count_atom_refs(range, binder, count),
-        CpsAtom::SliceField { slice, .. } => count_atom_refs(slice, binder, count),
-        CpsAtom::SliceIndex { slice, index } => {
-            count_atom_refs(slice, binder, count);
+        CpsAtom::AggregateField { value, .. } => count_atom_refs(value, binder, count),
+        CpsAtom::AggregateIndex { value, index, .. } => {
+            count_atom_refs(value, binder, count);
             count_atom_refs(index, binder, count);
         }
         CpsAtom::Record { fields, .. } => {

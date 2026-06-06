@@ -116,8 +116,14 @@ async function makeImports(wat, args) {
       "std.vec_len"(vec) {
         return BigInt(asArray(vec).length);
       },
+      "std.vec_i64_len"(vec) {
+        return asArray(vec).length;
+      },
       "std.vec_get"(vec, index) {
         return asArray(vec)[Number(index)] ?? null;
+      },
+      "std.vec_i64_get"(vec, index) {
+        return Number(asArray(vec)[Number(index)] ?? 0);
       },
       "std.vec_push"(vec, item) {
         const array = asArray(vec);
@@ -130,8 +136,14 @@ async function makeImports(wat, args) {
       "std.array_len"(array) {
         return BigInt(asArray(array).length);
       },
+      "std.array_i64_len"(array) {
+        return asArray(array).length;
+      },
       "std.array_get"(array, index) {
         return asArray(array)[Number(index)] ?? null;
+      },
+      "std.array_i64_get"(array, index) {
+        return Number(asArray(array)[Number(index)] ?? 0);
       },
       "std.array_slice"(array, start, len) {
         return asArray(array).slice(Number(start), Number(start) + Number(len));

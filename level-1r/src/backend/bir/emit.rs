@@ -6,6 +6,7 @@ use crate::core::{
     CoreValidation, CoreValue, OperatorIntrinsic, OwnershipDecision, RangeField, SliceField,
 };
 use crate::symbol::encode_debug_symbol;
+use crate::typed::AggregateKind;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BackendArtifact {
@@ -466,13 +467,13 @@ fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExt
         CoreValue::SliceLiteral { items } => {
             imports.push(slice_literal_import(items.len()));
         }
-        CoreValue::SliceField { slice, field } => {
-            imports.push(slice_field_import(*field));
-            collect_runtime_value_imports(slice, imports);
+        CoreValue::AggregateField { kind, value, field } => {
+            imports.push(aggregate_field_import(*kind, *field));
+            collect_runtime_value_imports(value, imports);
         }
-        CoreValue::SliceIndex { slice, index } => {
-            imports.push(slice_index_import());
-            collect_runtime_value_imports(slice, imports);
+        CoreValue::AggregateIndex { kind, value, index } => {
+            imports.push(aggregate_index_import(*kind));
+            collect_runtime_value_imports(value, imports);
             collect_runtime_value_imports(index, imports);
         }
         CoreValue::Tuple { fields } => {
@@ -533,36 +534,36 @@ fn slice_literal_import_signature(arity: usize) -> String {
     format!("{params}_to_externref")
 }
 
-fn slice_field_import(field: SliceField) -> BackendExternImport {
+fn aggregate_field_import(kind: AggregateKind, field: SliceField) -> BackendExternImport {
     match field {
         SliceField::Len => BackendExternImport {
             abi: BackendExternAbi::C,
-            final_symbol: slice_field_import_symbol(field),
+            final_symbol: aggregate_field_import_symbol(kind, field),
             module: "env".to_string(),
-            name: "std.slice_i64_len".to_string(),
+            name: format!("std.{}_i64_len", kind.runtime_prefix()),
             signature_hash: "externref_to_i64".to_string(),
         },
     }
 }
 
-fn slice_field_import_symbol(field: SliceField) -> String {
+fn aggregate_field_import_symbol(kind: AggregateKind, field: SliceField) -> String {
     match field {
-        SliceField::Len => "std_slice_i64_len".to_string(),
+        SliceField::Len => format!("std_{}_i64_len", kind.runtime_prefix()),
     }
 }
 
-fn slice_index_import() -> BackendExternImport {
+fn aggregate_index_import(kind: AggregateKind) -> BackendExternImport {
     BackendExternImport {
         abi: BackendExternAbi::C,
-        final_symbol: slice_index_import_symbol(),
+        final_symbol: aggregate_index_import_symbol(kind),
         module: "env".to_string(),
-        name: "std.slice_i64_get".to_string(),
+        name: format!("std.{}_i64_get", kind.runtime_prefix()),
         signature_hash: "externref_i64_to_i64".to_string(),
     }
 }
 
-fn slice_index_import_symbol() -> String {
-    "std_slice_i64_get".to_string()
+fn aggregate_index_import_symbol(kind: AggregateKind) -> String {
+    format!("std_{}_i64_get", kind.runtime_prefix())
 }
 
 fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipDecision> {
@@ -1563,13 +1564,13 @@ fn infer_param_kinds_from_value(
     kinds: &mut BTreeMap<String, WasmValueKind>,
 ) {
     match value {
-        CoreValue::SliceField { slice, .. } => {
-            mark_externref_operand(slice, params, kinds);
-            infer_param_kinds_from_value(slice, params, kinds);
+        CoreValue::AggregateField { value, .. } => {
+            mark_externref_operand(value, params, kinds);
+            infer_param_kinds_from_value(value, params, kinds);
         }
-        CoreValue::SliceIndex { slice, index } => {
-            mark_externref_operand(slice, params, kinds);
-            infer_param_kinds_from_value(slice, params, kinds);
+        CoreValue::AggregateIndex { value, index, .. } => {
+            mark_externref_operand(value, params, kinds);
+            infer_param_kinds_from_value(value, params, kinds);
             infer_param_kinds_from_value(index, params, kinds);
         }
         CoreValue::Tuple { fields } => {
@@ -1700,28 +1701,31 @@ fn render_core_value_i32(
                 return Err(unsupported_i32_render_diagnostic(value));
             }
         }
-        CoreValue::SliceField { slice, field } => {
-            if let Some(value) = slice_field_value(slice, *field, env) {
+        CoreValue::AggregateField { kind, value, field } => {
+            if let Some(value) = slice_field_value(value, *field, env) {
                 render_core_value_i32(wat, &value, env)?;
-            } else if core_value_is_renderable_externref(slice, env) {
-                render_core_value_externref(wat, slice, env)?;
+            } else if core_value_is_renderable_externref(value, env) {
+                render_core_value_externref(wat, value, env)?;
                 wat.push_str(&format!(
                     "    call ${}\n",
-                    slice_field_import_symbol(*field)
+                    aggregate_field_import_symbol(*kind, *field)
                 ));
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
             }
         }
-        CoreValue::SliceIndex { slice, index } => {
-            if let Some(value) = slice_index_value(slice, index, env) {
+        CoreValue::AggregateIndex { kind, value, index } => {
+            if let Some(value) = slice_index_value(value, index, env) {
                 render_core_value_i32(wat, value, env)?;
-            } else if core_value_is_renderable_externref(slice, env)
+            } else if core_value_is_renderable_externref(value, env)
                 && core_value_is_renderable_i32(index, env)
             {
-                render_core_value_externref(wat, slice, env)?;
+                render_core_value_externref(wat, value, env)?;
                 render_core_value_i32(wat, index, env)?;
-                wat.push_str(&format!("    call ${}\n", slice_index_import_symbol()));
+                wat.push_str(&format!(
+                    "    call ${}\n",
+                    aggregate_index_import_symbol(*kind)
+                ));
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
             }
@@ -1804,13 +1808,13 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         CoreValue::RangeField { range, field } => range_field_value(range, *field, env)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or(false),
-        CoreValue::SliceField { slice, field } => slice_field_value(slice, *field, env)
+        CoreValue::AggregateField { value, field, .. } => slice_field_value(value, *field, env)
             .map(|value| core_value_is_renderable_i32(&value, env))
-            .unwrap_or_else(|| core_value_is_renderable_externref(slice, env)),
-        CoreValue::SliceIndex { slice, index } => slice_index_value(slice, index, env)
+            .unwrap_or_else(|| core_value_is_renderable_externref(value, env)),
+        CoreValue::AggregateIndex { value, index, .. } => slice_index_value(value, index, env)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or_else(|| {
-                core_value_is_renderable_externref(slice, env)
+                core_value_is_renderable_externref(value, env)
                     && core_value_is_renderable_i32(index, env)
             }),
         CoreValue::Tuple { .. }

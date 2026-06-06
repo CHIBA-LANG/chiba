@@ -6,7 +6,7 @@ use crate::lambda_lift::LambdaLiftFacts;
 use crate::resolve::OperatorSurface;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{dyn_row_contract_key, row_shape_key, DynRowContract, RowShape};
-use crate::typed::{RangeBoundary, SendColor, SliceBoundary, UsageColor};
+use crate::typed::{AggregateBoundary, AggregateKind, RangeBoundary, SendColor, UsageColor};
 use crate::usage::UsageFacts;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -253,12 +253,14 @@ pub enum CoreValue {
         range: Box<CoreValue>,
         field: RangeField,
     },
-    SliceField {
-        slice: Box<CoreValue>,
+    AggregateField {
+        kind: AggregateKind,
+        value: Box<CoreValue>,
         field: SliceField,
     },
-    SliceIndex {
-        slice: Box<CoreValue>,
+    AggregateIndex {
+        kind: AggregateKind,
+        value: Box<CoreValue>,
         index: Box<CoreValue>,
     },
     Adt {
@@ -340,11 +342,19 @@ impl CoreValue {
             CoreValue::RangeField { range, field } => {
                 format!("{}.{}", range.debug_name(), field.source_name())
             }
-            CoreValue::SliceField { slice, field } => {
-                format!("{}.{}", slice.debug_name(), field.source_name())
+            CoreValue::AggregateField {
+                kind: _,
+                value,
+                field,
+            } => {
+                format!("{}.{}", value.debug_name(), field.source_name())
             }
-            CoreValue::SliceIndex { slice, index } => {
-                format!("{}[{}]", slice.debug_name(), index.debug_name())
+            CoreValue::AggregateIndex {
+                kind: _,
+                value,
+                index,
+            } => {
+                format!("{}[{}]", value.debug_name(), index.debug_name())
             }
             CoreValue::Adt {
                 data, ctor, args, ..
@@ -385,9 +395,9 @@ impl SliceField {
     }
 }
 
-fn slice_field_from_boundary(boundary: SliceBoundary) -> SliceField {
+fn slice_field_from_boundary(boundary: AggregateBoundary) -> SliceField {
     match boundary {
-        SliceBoundary::Len => SliceField::Len,
+        AggregateBoundary::Len => SliceField::Len,
     }
 }
 
@@ -1283,11 +1293,19 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::RangeField { range, boundary } => {
             format!("{}.{}", render_atom(range), boundary.source_name())
         }
-        CpsAtom::SliceField { slice, boundary } => {
-            format!("{}.{}", render_atom(slice), boundary.source_name())
+        CpsAtom::AggregateField {
+            kind: _,
+            value,
+            boundary,
+        } => {
+            format!("{}.{}", render_atom(value), boundary.source_name())
         }
-        CpsAtom::SliceIndex { slice, index } => {
-            format!("{}[{}]", render_atom(slice), render_atom(index))
+        CpsAtom::AggregateIndex {
+            kind: _,
+            value,
+            index,
+        } => {
+            format!("{}[{}]", render_atom(value), render_atom(index))
         }
         CpsAtom::Record { layout, fields } => format!(
             "{layout}{{{}}}",
@@ -1371,12 +1389,18 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
             range: Box::new(core_value(range)),
             field: range_field_from_boundary(*boundary),
         },
-        CpsAtom::SliceField { slice, boundary } => CoreValue::SliceField {
-            slice: Box::new(core_value(slice)),
+        CpsAtom::AggregateField {
+            kind,
+            value,
+            boundary,
+        } => CoreValue::AggregateField {
+            kind: *kind,
+            value: Box::new(core_value(value)),
             field: slice_field_from_boundary(*boundary),
         },
-        CpsAtom::SliceIndex { slice, index } => CoreValue::SliceIndex {
-            slice: Box::new(core_value(slice)),
+        CpsAtom::AggregateIndex { kind, value, index } => CoreValue::AggregateIndex {
+            kind: *kind,
+            value: Box::new(core_value(value)),
             index: Box::new(core_value(index)),
         },
         CpsAtom::RecordField { record, field } => CoreValue::RecordField {
@@ -1443,13 +1467,13 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             });
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
-        CpsAtom::SliceField { boundary, .. } => {
+        CpsAtom::AggregateField { boundary, .. } => {
             ops.push(CoreOp::SliceFieldGet {
                 field: slice_field_from_boundary(*boundary),
             });
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
-        CpsAtom::SliceIndex { .. } => {
+        CpsAtom::AggregateIndex { .. } => {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Record { layout, fields } => {

@@ -8,6 +8,7 @@ use chiba_level1r::core::{
     CoreCapturedContinuation, CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue,
     OperatorIntrinsic, SliceField,
 };
+use chiba_level1r::typed::AggregateKind;
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -470,8 +471,9 @@ fn backend_lowers_slice_literal_len_return_to_i32_value() {
             CoreOp::SliceFieldGet {
                 field: SliceField::Len,
             },
-            CoreOp::ReturnValue(CoreValue::SliceField {
-                slice: Box::new(CoreValue::SliceLiteral {
+            CoreOp::ReturnValue(CoreValue::AggregateField {
+                kind: AggregateKind::Slice,
+                value: Box::new(CoreValue::SliceLiteral {
                     items: vec![CoreValue::I64(1), CoreValue::I64(2), CoreValue::I64(3)],
                 }),
                 field: SliceField::Len,
@@ -525,8 +527,9 @@ fn backend_lowers_slice_param_len_to_runtime_import() {
             CoreOp::SliceFieldGet {
                 field: SliceField::Len,
             },
-            CoreOp::ReturnValue(CoreValue::SliceField {
-                slice: Box::new(CoreValue::Var("s".to_string())),
+            CoreOp::ReturnValue(CoreValue::AggregateField {
+                kind: AggregateKind::Slice,
+                value: Box::new(CoreValue::Var("s".to_string())),
                 field: SliceField::Len,
             }),
         ],
@@ -551,8 +554,9 @@ fn backend_lowers_slice_param_len_to_runtime_import() {
 #[test]
 fn backend_lowers_slice_param_index_to_runtime_import() {
     let core = CoreProgram {
-        ops: vec![CoreOp::ReturnValue(CoreValue::SliceIndex {
-            slice: Box::new(CoreValue::Var("s".to_string())),
+        ops: vec![CoreOp::ReturnValue(CoreValue::AggregateIndex {
+            kind: AggregateKind::Slice,
+            value: Box::new(CoreValue::Var("s".to_string())),
             index: Box::new(CoreValue::I64(1)),
         })],
         layouts: vec![],

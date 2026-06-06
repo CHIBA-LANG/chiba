@@ -4,7 +4,7 @@ use chiba_level1r::ast::{
 };
 use chiba_level1r::core::CoreOp;
 use chiba_level1r::pattern::PatternDiagnostic;
-use chiba_level1r::typed::{Type, TypedExprKind};
+use chiba_level1r::typed::{AggregateKind, Type, TypedExprKind};
 use chiba_level1r::{
     build_interface_summary, compile_program, compile_program_bundle,
     compile_program_with_interface, compile_source_program_bundle, parse_source_program,
@@ -1077,7 +1077,8 @@ fn program_slice_literal_len_lowers_to_executable_wat_value() {
     }));
     assert!(matches!(
         main.output.backend.return_value,
-        Some(chiba_level1r::core::CoreValue::SliceField {
+        Some(chiba_level1r::core::CoreValue::AggregateField {
+            kind: AggregateKind::Slice,
             field: chiba_level1r::core::SliceField::Len,
             ..
         })
@@ -1159,7 +1160,10 @@ fn source_slice_param_index_lowers_to_executable_runtime_import() {
     assert_eq!(main.typed.ty, Type::I64);
     assert!(matches!(
         main.backend.return_value,
-        Some(chiba_level1r::core::CoreValue::SliceIndex { .. })
+        Some(chiba_level1r::core::CoreValue::AggregateIndex {
+            kind: AggregateKind::Slice,
+            ..
+        })
     ));
     assert!(bundle.backend_link.linked_wat.contains(
         "(import \"env\" \"std.slice_i64_get\" (func $std_slice_i64_get (param externref) (param i32) (result i32)))"
@@ -1172,6 +1176,132 @@ fn source_slice_param_index_lowers_to_executable_runtime_import() {
         .backend_link
         .linked_wat
         .contains("call $std_slice_i64_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
+fn source_array_param_len_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(a: Array[i64]): i64 = a.len")
+        .expect("compile array param len")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["a".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.array_i64_len\" (func $std_array_i64_len (param externref) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $main (export \"main\") (param $a externref) (result i32)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_i64_len"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_array_param_index_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(a: Array[i64]): i64 = a[1]")
+        .expect("compile array param index")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["a".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(matches!(
+        main.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::AggregateIndex {
+            kind: AggregateKind::Array,
+            ..
+        })
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.array_i64_get\" (func $std_array_i64_get (param externref) (param i32) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_i64_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
+fn source_vec_param_len_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(v: Vec[i64]): i64 = v.len")
+        .expect("compile vec param len")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["v".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_i64_len\" (func $std_vec_i64_len (param externref) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $main (export \"main\") (param $v externref) (result i32)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_i64_len"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_vec_param_index_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(v: Vec[i64]): i64 = v[1]")
+        .expect("compile vec param index")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["v".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(matches!(
+        main.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::AggregateIndex {
+            kind: AggregateKind::Vec,
+            ..
+        })
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_i64_get\" (func $std_vec_i64_get (param externref) (param i32) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_i64_get"));
 
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
 }

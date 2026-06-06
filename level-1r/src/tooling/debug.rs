@@ -517,11 +517,19 @@ fn render_core_value(value: &CoreValue) -> String {
         CoreValue::RangeField { range, field } => {
             format!("{}.{}", render_core_value(range), field.source_name())
         }
-        CoreValue::SliceField { slice, field } => {
-            format!("{}.{}", render_core_value(slice), field.source_name())
+        CoreValue::AggregateField {
+            kind: _,
+            value,
+            field,
+        } => {
+            format!("{}.{}", render_core_value(value), field.source_name())
         }
-        CoreValue::SliceIndex { slice, index } => {
-            format!("{}[{}]", render_core_value(slice), render_core_value(index))
+        CoreValue::AggregateIndex {
+            kind: _,
+            value,
+            index,
+        } => {
+            format!("{}[{}]", render_core_value(value), render_core_value(index))
         }
         CoreValue::Adt {
             data,
@@ -903,17 +911,25 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
                 field.source_name()
             )
         }
-        crate::core::CoreValue::SliceField { slice, field } => {
+        crate::core::CoreValue::AggregateField {
+            kind: _,
+            value,
+            field,
+        } => {
             format!(
                 "slice-field {}.{}",
-                render_core_value_summary(slice),
+                render_core_value_summary(value),
                 field.source_name()
             )
         }
-        crate::core::CoreValue::SliceIndex { slice, index } => {
+        crate::core::CoreValue::AggregateIndex {
+            kind: _,
+            value,
+            index,
+        } => {
             format!(
                 "slice-index {}[{}]",
-                render_core_value_summary(slice),
+                render_core_value_summary(value),
                 render_core_value_summary(index)
             )
         }
@@ -1337,8 +1353,8 @@ fn render_field_access_kind(access: &FieldAccessKind) -> String {
         FieldAccessKind::RangeBoundary { boundary } => {
             format!("range-boundary {}", boundary.source_name())
         }
-        FieldAccessKind::SliceBoundary { boundary } => {
-            format!("slice-boundary {}", boundary.source_name())
+        FieldAccessKind::AggregateBoundary { kind, boundary } => {
+            format!("{}-boundary {}", kind.source_name(), boundary.source_name())
         }
     }
 }
