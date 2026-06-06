@@ -490,6 +490,35 @@ fn backend_lowers_slice_literal_len_return_to_i32_value() {
 }
 
 #[test]
+fn backend_lowers_slice_literal_return_to_externref_handle() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::SliceLiteral {
+            items: vec![CoreValue::I64(1), CoreValue::I64(2), CoreValue::I64(3)],
+        })],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact.wat.contains(
+        "(import \"env\" \"std.slice_i64_literal_3\" (func $std_slice_i64_literal_3 (param i32) (param i32) (param i32) (result externref)))"
+    ));
+    assert!(artifact
+        .wat
+        .contains("(func $main (export \"main\") (result externref)"));
+    assert!(artifact.wat.contains("call $std_slice_i64_literal_3"));
+    assert_eq!(
+        artifact.return_value,
+        Some(CoreValue::SliceLiteral {
+            items: vec![CoreValue::I64(1), CoreValue::I64(2), CoreValue::I64(3)]
+        })
+    );
+}
+
+#[test]
 fn backend_rejects_missing_record_field_return_instead_of_faking_i32_zero() {
     let core = CoreProgram {
         ops: vec![CoreOp::ReturnValue(CoreValue::RecordField {

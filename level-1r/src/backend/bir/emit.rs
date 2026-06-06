@@ -174,7 +174,7 @@ pub fn emit_wasm_gc_with_params(
         };
     }
 
-    if let Some(diagnostic) = unsupported_i32_return_value(core, params) {
+    if let Some(diagnostic) = unsupported_runtime_return_value(core, params) {
         return BackendArtifact {
             target: BackendTarget::WasmGc,
             wat: String::new(),
@@ -205,7 +205,7 @@ pub fn emit_wasm_gc_with_params(
     }
 }
 
-fn unsupported_i32_return_value(
+fn unsupported_runtime_return_value(
     core: &CoreProgram,
     params: &[String],
 ) -> Option<BackendDiagnostic> {
@@ -218,7 +218,7 @@ fn unsupported_i32_return_value(
             {
                 None
             }
-            CoreOp::ReturnValue(value) => unsupported_i32_value(value, &env),
+            CoreOp::ReturnValue(value) => unsupported_runtime_value(value, &env),
             CoreOp::ReturnBranch {
                 cond,
                 then_value,
@@ -255,6 +255,16 @@ fn unsupported_i32_return_value(
         }
     }
     None
+}
+
+fn unsupported_runtime_value(value: &CoreValue, env: &RenderEnv) -> Option<BackendDiagnostic> {
+    if core_value_is_renderable_i32(value, env) || core_value_is_renderable_externref(value, env) {
+        None
+    } else {
+        Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: value.debug_name(),
+        })
+    }
 }
 
 fn return_value_is_tailcall_result(
@@ -411,6 +421,22 @@ fn collect_manifest_entries(
 
 fn collect_manifest_imports(op: &CoreOp, imports: &mut Vec<BackendExternImport>) {
     match op {
+        CoreOp::ReturnValue(value) => collect_runtime_value_imports(value, imports),
+        CoreOp::ReturnBranch {
+            cond,
+            then_value,
+            else_value,
+        } => {
+            collect_runtime_value_imports(cond, imports);
+            collect_runtime_value_imports(then_value, imports);
+            collect_runtime_value_imports(else_value, imports);
+        }
+        CoreOp::ReturnMatch { scrutinee, arms } => {
+            collect_runtime_value_imports(scrutinee, imports);
+            for arm in arms {
+                collect_runtime_value_imports(&arm.value, imports);
+            }
+        }
         CoreOp::ExternFunctionTarget {
             target,
             abi,
@@ -431,6 +457,70 @@ fn collect_manifest_imports(op: &CoreOp, imports: &mut Vec<BackendExternImport>)
         }
         _ => {}
     }
+}
+
+fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExternImport>) {
+    match value {
+        CoreValue::SliceLiteral { items } => {
+            imports.push(slice_literal_import(items.len()));
+        }
+        CoreValue::SliceField { slice, .. } => collect_runtime_value_imports(slice, imports),
+        CoreValue::Tuple { fields } => {
+            for field in fields {
+                collect_runtime_value_imports(field, imports);
+            }
+        }
+        CoreValue::TupleField { tuple, .. } => collect_runtime_value_imports(tuple, imports),
+        CoreValue::Range { start, end } => {
+            collect_runtime_value_imports(start, imports);
+            collect_runtime_value_imports(end, imports);
+        }
+        CoreValue::RangeField { range, .. } => collect_runtime_value_imports(range, imports),
+        CoreValue::Record { fields } => {
+            for field in fields {
+                collect_runtime_value_imports(&field.value, imports);
+            }
+        }
+        CoreValue::RecordUpdate { base, fields } => {
+            collect_runtime_value_imports(base, imports);
+            for field in fields {
+                collect_runtime_value_imports(&field.value, imports);
+            }
+        }
+        CoreValue::RecordField { record, .. } => collect_runtime_value_imports(record, imports),
+        CoreValue::Adt { args, .. } => {
+            for arg in args {
+                collect_runtime_value_imports(arg, imports);
+            }
+        }
+        CoreValue::Unit
+        | CoreValue::I64(_)
+        | CoreValue::Bool(_)
+        | CoreValue::Var(_)
+        | CoreValue::Rendered { .. } => {}
+    }
+}
+
+fn slice_literal_import(arity: usize) -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: slice_literal_import_symbol(arity),
+        module: "env".to_string(),
+        name: format!("std.slice_i64_literal_{arity}"),
+        signature_hash: slice_literal_import_signature(arity),
+    }
+}
+
+fn slice_literal_import_symbol(arity: usize) -> String {
+    format!("std_slice_i64_literal_{arity}")
+}
+
+fn slice_literal_import_signature(arity: usize) -> String {
+    let params = std::iter::repeat("i64")
+        .take(arity)
+        .collect::<Vec<_>>()
+        .join("_");
+    format!("{params}_to_externref")
 }
 
 fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipDecision> {
@@ -491,9 +581,7 @@ fn render_wat(
                     "  ;; core-return atom={}\n",
                     escape_wat_comment(&debug_name)
                 ));
-                render_func_header(&mut wat, &symbol, Some(&symbol), &env);
-                render_core_value_i32(&mut wat, value, &env)?;
-                wat.push_str(")\n");
+                render_return_value_wat(&mut wat, &symbol, Some(&symbol), value, &env)?;
                 return_index += 1;
             }
             CoreOp::ReturnBranch {
@@ -1218,6 +1306,7 @@ fn extern_import_wat_signature(
     };
     let result = match result {
         "unit" | "Unit" => None,
+        "externref" => Some("externref"),
         scalar => Some(extern_scalar_wat_type(scalar)?),
     };
     Some((params, result))
@@ -1361,6 +1450,34 @@ fn render_func_header(wat: &mut String, symbol: &str, export: Option<&str>, env:
     }
 }
 
+fn render_externref_func_header(wat: &mut String, symbol: &str, export: Option<&str>) {
+    match export {
+        Some(export) => wat.push_str(&format!(
+            "  (func ${symbol} (export \"{export}\") (result externref)\n"
+        )),
+        None => wat.push_str(&format!("  (func ${symbol} (result externref)\n")),
+    }
+}
+
+fn render_return_value_wat(
+    wat: &mut String,
+    symbol: &str,
+    export: Option<&str>,
+    value: &CoreValue,
+    env: &RenderEnv,
+) -> Result<(), BackendDiagnostic> {
+    if core_value_is_renderable_externref(value, env) {
+        render_externref_func_header(wat, symbol, export);
+        render_core_value_externref(wat, value, env)?;
+        wat.push_str("  )\n");
+    } else {
+        render_func_header(wat, symbol, export, env);
+        render_core_value_i32(wat, value, env)?;
+        wat.push_str(")\n");
+    }
+    Ok(())
+}
+
 fn render_core_value_i32(
     wat: &mut String,
     value: &CoreValue,
@@ -1424,6 +1541,27 @@ fn render_core_value_i32(
     Ok(())
 }
 
+fn render_core_value_externref(
+    wat: &mut String,
+    value: &CoreValue,
+    env: &RenderEnv,
+) -> Result<(), BackendDiagnostic> {
+    let value = resolve_core_value_binding(value, env);
+    match value {
+        CoreValue::SliceLiteral { items } if slice_literal_items_are_i32(items, env) => {
+            for item in items {
+                render_core_value_i32(wat, item, env)?;
+            }
+            wat.push_str(&format!(
+                "    call ${}\n",
+                slice_literal_import_symbol(items.len())
+            ));
+            Ok(())
+        }
+        _ => Err(unsupported_i32_render_diagnostic(value)),
+    }
+}
+
 fn unsupported_i32_render_diagnostic(value: &CoreValue) -> BackendDiagnostic {
     BackendDiagnostic::UnsupportedI32ReturnValue {
         value: value.debug_name(),
@@ -1467,6 +1605,20 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         | CoreValue::RecordUpdate { .. }
         | CoreValue::Rendered { .. } => false,
     }
+}
+
+fn core_value_is_renderable_externref(value: &CoreValue, env: &RenderEnv) -> bool {
+    let value = resolve_core_value_binding(value, env);
+    match value {
+        CoreValue::SliceLiteral { items } => slice_literal_items_are_i32(items, env),
+        _ => false,
+    }
+}
+
+fn slice_literal_items_are_i32(items: &[CoreValue], env: &RenderEnv) -> bool {
+    items
+        .iter()
+        .all(|item| core_value_is_renderable_i32(item, env))
 }
 
 fn resolve_core_value_binding<'a>(value: &'a CoreValue, env: &'a RenderEnv) -> &'a CoreValue {

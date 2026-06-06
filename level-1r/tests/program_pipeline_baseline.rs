@@ -1086,6 +1086,33 @@ fn program_slice_literal_len_lowers_to_executable_wat_value() {
 }
 
 #[test]
+fn program_slice_literal_return_lowers_to_executable_externref_handle() {
+    let bundle = compile_source_program_bundle("def main() = [1, 2, 3]")
+        .expect("compile slice literal")
+        .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main");
+
+    assert_eq!(
+        main.output.typed.ty,
+        Type::Nominal("Slice[i64]".to_string())
+    );
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.slice_i64_literal_3\" (func $std_slice_i64_literal_3 (param i32) (param i32) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $main (export \"main\") (result externref)"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "slice/3");
+}
+
+#[test]
 fn program_record_update_field_return_lowers_to_executable_wat_value() {
     let program = SourceProgram::new(vec![def(
         "main",

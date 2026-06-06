@@ -55,6 +55,14 @@ async function readInput(args) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+function summarizeResult(value) {
+  if (Array.isArray(value)) return `slice/${value.length}`;
+  if (value && Array.isArray(value.items)) return `slice/${value.items.length}`;
+  if (value instanceof Uint8Array) return `bytes/${value.length}`;
+  if (value && value.bytes instanceof Uint8Array) return `bytes/${value.bytes.length}`;
+  return String(value || 0);
+}
+
 async function makeImports(wat, args) {
   function asArray(value) {
     if (Array.isArray(value)) return value;
@@ -182,6 +190,11 @@ async function makeImports(wat, args) {
     {
       get(target, prop) {
         if (prop in target) return target[prop];
+        const sliceLiteral = /^std\.slice_i64_literal_(\d+)$/.exec(String(prop));
+        if (sliceLiteral) {
+          const arity = Number(sliceLiteral[1]);
+          return (...items) => items.slice(0, arity).map(Number);
+        }
         return () => 0n;
       },
     },
@@ -263,7 +276,7 @@ export async function runWatText(raw, args = {}) {
 
   const defaultArgs = Array.from({ length: countExportParams(wat, exportName) }, () => 0n);
   const result = main(...defaultArgs);
-  return String(result || 0);
+  return summarizeResult(result);
 }
 
 export async function runWatPath(path, args = {}) {
