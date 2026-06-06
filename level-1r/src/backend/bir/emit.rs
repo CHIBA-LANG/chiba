@@ -164,6 +164,7 @@ pub fn emit_wasm_gc_with_params(
     }
 
     let manifest = manifest_for_core(core);
+    let param_kinds = infer_param_kinds(core, params);
     if let Some(diagnostic) = unsupported_extern_import_signature(&manifest) {
         return BackendArtifact {
             target: BackendTarget::WasmGc,
@@ -174,7 +175,7 @@ pub fn emit_wasm_gc_with_params(
         };
     }
 
-    if let Some(diagnostic) = unsupported_runtime_return_value(core, params) {
+    if let Some(diagnostic) = unsupported_runtime_return_value(core, params, &param_kinds) {
         return BackendArtifact {
             target: BackendTarget::WasmGc,
             wat: String::new(),
@@ -183,7 +184,7 @@ pub fn emit_wasm_gc_with_params(
             return_value: first_return_value(core),
         };
     }
-    let wat = match render_wat(core, &manifest, params) {
+    let wat = match render_wat(core, &manifest, params, &param_kinds) {
         Ok(wat) => wat,
         Err(diagnostic) => {
             return BackendArtifact {
@@ -208,8 +209,9 @@ pub fn emit_wasm_gc_with_params(
 fn unsupported_runtime_return_value(
     core: &CoreProgram,
     params: &[String],
+    param_kinds: &BTreeMap<String, WasmValueKind>,
 ) -> Option<BackendDiagnostic> {
-    let mut env = RenderEnv::new(params);
+    let mut env = RenderEnv::new(params, param_kinds);
     let mut continuations = BTreeSet::new();
     for (index, op) in core.ops.iter().enumerate() {
         if let Some(diagnostic) = match op {
@@ -464,7 +466,10 @@ fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExt
         CoreValue::SliceLiteral { items } => {
             imports.push(slice_literal_import(items.len()));
         }
-        CoreValue::SliceField { slice, .. } => collect_runtime_value_imports(slice, imports),
+        CoreValue::SliceField { slice, field } => {
+            imports.push(slice_field_import(*field));
+            collect_runtime_value_imports(slice, imports);
+        }
         CoreValue::Tuple { fields } => {
             for field in fields {
                 collect_runtime_value_imports(field, imports);
@@ -523,6 +528,24 @@ fn slice_literal_import_signature(arity: usize) -> String {
     format!("{params}_to_externref")
 }
 
+fn slice_field_import(field: SliceField) -> BackendExternImport {
+    match field {
+        SliceField::Len => BackendExternImport {
+            abi: BackendExternAbi::C,
+            final_symbol: slice_field_import_symbol(field),
+            module: "env".to_string(),
+            name: "std.slice_i64_len".to_string(),
+            signature_hash: "externref_to_i64".to_string(),
+        },
+    }
+}
+
+fn slice_field_import_symbol(field: SliceField) -> String {
+    match field {
+        SliceField::Len => "std_slice_i64_len".to_string(),
+    }
+}
+
 fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipDecision> {
     core.ownership
         .iter()
@@ -534,12 +557,13 @@ fn render_wat(
     core: &CoreProgram,
     manifest: &BackendManifest,
     params: &[String],
+    param_kinds: &BTreeMap<String, WasmValueKind>,
 ) -> Result<String, BackendDiagnostic> {
     if core_contains_continuation_runtime(core) {
         return render_continuation_wat(core, manifest, params);
     }
 
-    let env = RenderEnv::new(params);
+    let env = RenderEnv::new(params, param_kinds);
     let mut wat = String::from("(module\n");
     for import in &manifest.imports {
         render_extern_import_wat(&mut wat, import);
@@ -808,7 +832,8 @@ fn render_continuation_wat(
     params: &[String],
 ) -> Result<String, BackendDiagnostic> {
     let result_binders = collect_tailcall_result_binders(&core.ops);
-    let env = RenderEnv::new(params).with_locals(result_binders.clone());
+    let param_kinds = BTreeMap::new();
+    let env = RenderEnv::new(params, &param_kinds).with_locals(result_binders.clone());
     let mut wat = String::from("(module\n");
     for import in &manifest.imports {
         render_extern_import_wat(&mut wat, import);
@@ -1315,6 +1340,7 @@ fn extern_import_wat_signature(
 fn extern_scalar_wat_type(scalar: &str) -> Option<&'static str> {
     match scalar {
         "i64" | "I64" | "bool" | "Bool" => Some("i32"),
+        "externref" => Some("externref"),
         _ => None,
     }
 }
@@ -1397,14 +1423,16 @@ fn operator_intrinsic_opcode(intrinsic: Option<OperatorIntrinsic>) -> Option<&'s
 struct RenderEnv {
     params: BTreeSet<String>,
     locals: BTreeSet<String>,
+    param_kinds: BTreeMap<String, WasmValueKind>,
     bindings: BTreeMap<String, CoreValue>,
 }
 
 impl RenderEnv {
-    fn new(params: &[String]) -> Self {
+    fn new(params: &[String], param_kinds: &BTreeMap<String, WasmValueKind>) -> Self {
         Self {
             params: params.iter().cloned().collect(),
             locals: BTreeSet::new(),
+            param_kinds: param_kinds.clone(),
             bindings: BTreeMap::new(),
         }
     }
@@ -1432,8 +1460,142 @@ impl RenderEnv {
     fn signature(&self) -> String {
         self.params
             .iter()
-            .map(|param| format!(" (param ${} i32)", encode_debug_symbol(param)))
+            .map(|param| {
+                format!(
+                    " (param ${} {})",
+                    encode_debug_symbol(param),
+                    self.param_kind(param).wat_type()
+                )
+            })
             .collect()
+    }
+
+    fn param_kind(&self, name: &str) -> WasmValueKind {
+        self.param_kinds
+            .get(name)
+            .copied()
+            .unwrap_or(WasmValueKind::I32)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WasmValueKind {
+    I32,
+    ExternRef,
+}
+
+impl WasmValueKind {
+    fn wat_type(self) -> &'static str {
+        match self {
+            Self::I32 => "i32",
+            Self::ExternRef => "externref",
+        }
+    }
+}
+
+fn infer_param_kinds(core: &CoreProgram, params: &[String]) -> BTreeMap<String, WasmValueKind> {
+    let param_names = params.iter().cloned().collect::<BTreeSet<_>>();
+    let mut kinds = BTreeMap::new();
+    for op in &core.ops {
+        infer_param_kinds_from_op(op, &param_names, &mut kinds);
+    }
+    kinds
+}
+
+fn infer_param_kinds_from_op(
+    op: &CoreOp,
+    params: &BTreeSet<String>,
+    kinds: &mut BTreeMap<String, WasmValueKind>,
+) {
+    match op {
+        CoreOp::ReturnValue(value) => infer_param_kinds_from_value(value, params, kinds),
+        CoreOp::ReturnBranch {
+            cond,
+            then_value,
+            else_value,
+        } => {
+            infer_param_kinds_from_value(cond, params, kinds);
+            infer_param_kinds_from_value(then_value, params, kinds);
+            infer_param_kinds_from_value(else_value, params, kinds);
+        }
+        CoreOp::ReturnMatch { scrutinee, arms } => {
+            infer_param_kinds_from_value(scrutinee, params, kinds);
+            for arm in arms {
+                infer_param_kinds_from_value(&arm.value, params, kinds);
+            }
+        }
+        CoreOp::TailCall { args, .. } => {
+            for arg in args {
+                infer_param_kinds_from_value(arg, params, kinds);
+            }
+        }
+        CoreOp::CaptureContinuation { captured, .. } => {
+            for captured_op in &captured.ops {
+                infer_param_kinds_from_op(captured_op, params, kinds);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn infer_param_kinds_from_value(
+    value: &CoreValue,
+    params: &BTreeSet<String>,
+    kinds: &mut BTreeMap<String, WasmValueKind>,
+) {
+    match value {
+        CoreValue::SliceField { slice, .. } => {
+            mark_externref_operand(slice, params, kinds);
+            infer_param_kinds_from_value(slice, params, kinds);
+        }
+        CoreValue::Tuple { fields } => {
+            for field in fields {
+                infer_param_kinds_from_value(field, params, kinds);
+            }
+        }
+        CoreValue::TupleField { tuple, .. } => infer_param_kinds_from_value(tuple, params, kinds),
+        CoreValue::Range { start, end } => {
+            infer_param_kinds_from_value(start, params, kinds);
+            infer_param_kinds_from_value(end, params, kinds);
+        }
+        CoreValue::RangeField { range, .. } => infer_param_kinds_from_value(range, params, kinds),
+        CoreValue::Record { fields } => {
+            for field in fields {
+                infer_param_kinds_from_value(&field.value, params, kinds);
+            }
+        }
+        CoreValue::RecordUpdate { base, fields } => {
+            infer_param_kinds_from_value(base, params, kinds);
+            for field in fields {
+                infer_param_kinds_from_value(&field.value, params, kinds);
+            }
+        }
+        CoreValue::RecordField { record, .. } => {
+            infer_param_kinds_from_value(record, params, kinds)
+        }
+        CoreValue::Adt { args, .. } => {
+            for arg in args {
+                infer_param_kinds_from_value(arg, params, kinds);
+            }
+        }
+        CoreValue::Unit
+        | CoreValue::I64(_)
+        | CoreValue::Bool(_)
+        | CoreValue::Var(_)
+        | CoreValue::SliceLiteral { .. }
+        | CoreValue::Rendered { .. } => {}
+    }
+}
+
+fn mark_externref_operand(
+    value: &CoreValue,
+    params: &BTreeSet<String>,
+    kinds: &mut BTreeMap<String, WasmValueKind>,
+) {
+    if let CoreValue::Var(name) = value {
+        if params.contains(name) {
+            kinds.insert(name.clone(), WasmValueKind::ExternRef);
+        }
     }
 }
 
@@ -1517,6 +1679,12 @@ fn render_core_value_i32(
         CoreValue::SliceField { slice, field } => {
             if let Some(value) = slice_field_value(slice, *field, env) {
                 render_core_value_i32(wat, &value, env)?;
+            } else if core_value_is_renderable_externref(slice, env) {
+                render_core_value_externref(wat, slice, env)?;
+                wat.push_str(&format!(
+                    "    call ${}\n",
+                    slice_field_import_symbol(*field)
+                ));
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
             }
@@ -1548,6 +1716,10 @@ fn render_core_value_externref(
 ) -> Result<(), BackendDiagnostic> {
     let value = resolve_core_value_binding(value, env);
     match value {
+        CoreValue::Var(name) if env.param_kind(name) == WasmValueKind::ExternRef => {
+            wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
+            Ok(())
+        }
         CoreValue::SliceLiteral { items } if slice_literal_items_are_i32(items, env) => {
             for item in items {
                 render_core_value_i32(wat, item, env)?;
@@ -1597,7 +1769,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
             .unwrap_or(false),
         CoreValue::SliceField { slice, field } => slice_field_value(slice, *field, env)
             .map(|value| core_value_is_renderable_i32(&value, env))
-            .unwrap_or(false),
+            .unwrap_or_else(|| core_value_is_renderable_externref(slice, env)),
         CoreValue::Tuple { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
@@ -1610,6 +1782,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
 fn core_value_is_renderable_externref(value: &CoreValue, env: &RenderEnv) -> bool {
     let value = resolve_core_value_binding(value, env);
     match value {
+        CoreValue::Var(name) => env.param_kind(name) == WasmValueKind::ExternRef,
         CoreValue::SliceLiteral { items } => slice_literal_items_are_i32(items, env),
         _ => false,
     }

@@ -1113,6 +1113,35 @@ fn program_slice_literal_return_lowers_to_executable_externref_handle() {
 }
 
 #[test]
+fn source_slice_param_len_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(s: Slice[i64]): i64 = s.len")
+        .expect("compile slice param len")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["s".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.slice_i64_len\" (func $std_slice_i64_len (param externref) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $main (export \"main\") (param $s externref) (result i32)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_len"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn program_record_update_field_return_lowers_to_executable_wat_value() {
     let program = SourceProgram::new(vec![def(
         "main",

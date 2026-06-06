@@ -519,6 +519,36 @@ fn backend_lowers_slice_literal_return_to_externref_handle() {
 }
 
 #[test]
+fn backend_lowers_slice_param_len_to_runtime_import() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::SliceFieldGet {
+                field: SliceField::Len,
+            },
+            CoreOp::ReturnValue(CoreValue::SliceField {
+                slice: Box::new(CoreValue::Var("s".to_string())),
+                field: SliceField::Len,
+            }),
+        ],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc_with_params(&core, &CoreValidation::default(), &["s".to_string()]);
+
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact.wat.contains(
+        "(import \"env\" \"std.slice_i64_len\" (func $std_slice_i64_len (param externref) (result i32)))"
+    ));
+    assert!(artifact
+        .wat
+        .contains("(func $main (export \"main\") (param $s externref) (result i32)"));
+    assert!(artifact.wat.contains("local.get $s"));
+    assert!(artifact.wat.contains("call $std_slice_i64_len"));
+}
+
+#[test]
 fn backend_rejects_missing_record_field_return_instead_of_faking_i32_zero() {
     let core = CoreProgram {
         ops: vec![CoreOp::ReturnValue(CoreValue::RecordField {

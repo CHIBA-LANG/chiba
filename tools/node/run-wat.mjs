@@ -139,6 +139,9 @@ async function makeImports(wat, args) {
       "std.slice_len"(slice) {
         return BigInt(asArray(slice).length);
       },
+      "std.slice_i64_len"(slice) {
+        return asArray(slice).length;
+      },
       "std.slice_get"(slice, index) {
         return asArray(slice)[Number(index)] ?? null;
       },
@@ -220,13 +223,28 @@ async function makeImports(wat, args) {
 }
 
 function countExportParams(wat, exportName) {
+  return exportParamTypes(wat, exportName).length;
+}
+
+function exportParamTypes(wat, exportName) {
   const escaped = exportName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const inlineFuncMatch = wat.match(new RegExp(`\\(func\\s+\\$[^\\s)]+\\s+\\(export\\s+"${escaped}"\\)([^\\n]*)`));
+  if (inlineFuncMatch) return paramTypesFromFuncHeader(inlineFuncMatch[1]);
   const exportMatch = wat.match(new RegExp(`\\(export\\s+"${escaped}"\\s+\\(func\\s+\\$([^\\s)]+)\\)\\)`));
-  if (!exportMatch) return 0;
+  if (!exportMatch) return [];
   const funcName = exportMatch[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const funcMatch = wat.match(new RegExp(`\\(func\\s+\\$${funcName}\\b([^\\n]*)`));
-  if (!funcMatch) return 0;
-  return (funcMatch[1].match(/\(param\b/g) || []).length;
+  if (!funcMatch) return [];
+  return paramTypesFromFuncHeader(funcMatch[1]);
+}
+
+function paramTypesFromFuncHeader(header) {
+  return Array.from(header.matchAll(/\(param(?:\s+\$[^\s)]+)?\s+([^\s)]+)\)/g), (match) => match[1]);
+}
+
+function defaultArgForType(type) {
+  if (type === "externref") return [1, 2, 3];
+  return 0n;
 }
 
 function selectExport(exports, invoke) {
@@ -274,7 +292,7 @@ export async function runWatText(raw, args = {}) {
     throw new Error(`wat module does not export ${exportName}`);
   }
 
-  const defaultArgs = Array.from({ length: countExportParams(wat, exportName) }, () => 0n);
+  const defaultArgs = exportParamTypes(wat, exportName).map(defaultArgForType);
   const result = main(...defaultArgs);
   return summarizeResult(result);
 }
