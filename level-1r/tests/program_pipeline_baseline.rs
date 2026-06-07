@@ -4792,6 +4792,14 @@ def main(): i64 = id([String.from("hé")])[0].bytes_len()
     )
     .expect("compile slice extern return builtin chain")
     .program;
+    let array = compile_source_program_bundle(
+        r#"
+def id(value: Array[String]): Array[String] = extern "C" "level1r_identity_externref"
+def main(a: Array[String]): i64 = id(a)[0].bytes_len()
+"#,
+    )
+    .expect("compile array extern return builtin chain")
+    .program;
     let vec = compile_source_program_bundle(
         r#"
 def id(value: Vec[String]): Vec[String] = extern "C" "level1r_identity_externref"
@@ -4817,8 +4825,20 @@ def main(): i64 = id(3..9).end
     .expect("compile range extern return builtin chain")
     .program;
 
-    for bundle in [&slice, &vec, &cell, &range] {
-        assert_eq!(bundle.diagnostics, vec![]);
+    for (bundle, expected_diagnostics) in [
+        (&slice, vec![]),
+        (
+            &array,
+            vec![ProgramDiagnostic::EntryHasParams {
+                name: "main".to_string(),
+                params: vec!["a".to_string()],
+            }],
+        ),
+        (&vec, vec![]),
+        (&cell, vec![]),
+        (&range, vec![]),
+    ] {
+        assert_eq!(bundle.diagnostics, expected_diagnostics);
         assert_backend_link_clean_all(bundle);
         assert!(bundle.backend_link.linked_wat.contains(
             "(import \"env\" \"level1r_identity_externref\" (func $id (param externref) (result externref)))"
@@ -4828,6 +4848,10 @@ def main(): i64 = id(3..9).end
         .backend_link
         .linked_wat
         .contains("call $std_slice_get"));
+    assert!(array
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_get"));
     assert!(vec
         .backend_link
         .linked_wat
@@ -4842,6 +4866,7 @@ def main(): i64 = id(3..9).end
         .contains("call $std_range_i64_end"));
 
     assert_eq!(run_wat_text(&slice.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&array.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&vec.backend_link.linked_wat), "104");
     assert_eq!(run_wat_text(&cell.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&range.backend_link.linked_wat), "9");
