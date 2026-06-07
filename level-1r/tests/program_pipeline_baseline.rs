@@ -1216,6 +1216,34 @@ fn program_slice_literal_return_lowers_to_executable_externref_handle() {
 }
 
 #[test]
+fn program_bool_slice_literal_lowers_to_executable_values() {
+    let len = compile_source_program_bundle("def main(): i64 = [true, false].len")
+        .expect("compile bool slice literal len")
+        .program;
+    let first = compile_source_program_bundle("def main(): bool = [true, false][0]")
+        .expect("compile bool slice literal first")
+        .program;
+    let returned = compile_source_program_bundle("def main() = [true, false]")
+        .expect("compile bool slice literal return")
+        .program;
+
+    for bundle in [&len, &first, &returned] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle.backend_link.linked_wat.contains(
+            "(import \"env\" \"std.slice_i64_literal_2\" (func $std_slice_i64_literal_2 (param i32) (param i32) (result externref)))"
+        ));
+    }
+    assert_eq!(
+        returned.defs[0].output.typed.ty,
+        Type::Nominal("Slice[bool]".to_string())
+    );
+    assert_eq!(first.defs[0].output.typed.ty, Type::Bool);
+    assert_eq!(run_wat_text(&len.backend_link.linked_wat), "2");
+    assert_eq!(run_wat_text(&first.backend_link.linked_wat), "1");
+    assert_eq!(run_wat_text(&returned.backend_link.linked_wat), "slice/2");
+}
+
+#[test]
 fn source_slice_param_len_lowers_to_executable_runtime_import() {
     let bundle = compile_source_program_bundle("def main(s: Slice[i64]): i64 = s.len")
         .expect("compile slice param len")
