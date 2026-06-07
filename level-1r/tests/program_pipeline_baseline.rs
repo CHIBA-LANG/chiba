@@ -1340,6 +1340,45 @@ fn source_vec_param_index_lowers_to_executable_runtime_import() {
 }
 
 #[test]
+fn source_vec_new_push_freeze_index_lowers_to_executable_runtime_imports() {
+    let bundle = compile_source_program_bundle("def main(): i64 = Vec.new().push(7).freeze()[0]")
+        .expect("compile vec new push freeze index")
+        .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(matches!(
+        main.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::AggregateIndex {
+            kind: AggregateKind::Slice,
+            ..
+        })
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(import \"env\" \"std.vec_new\" (func $std_vec_new (result externref)))"));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_push\" (func $std_vec_push (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_freeze\" (func $std_vec_freeze (param externref) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_vec_new"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_freeze"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
+}
+
+#[test]
 fn source_str_param_len_lowers_to_executable_runtime_import() {
     let bundle = compile_source_program_bundle("def main(s: str): i64 = s.len")
         .expect("compile str param len")

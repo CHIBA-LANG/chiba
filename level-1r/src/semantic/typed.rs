@@ -54,6 +54,7 @@ pub enum TypedExprKind {
         receiver: Box<TypedExpr>,
         name: String,
         args: Vec<TypedExpr>,
+        builtin: Option<BuiltinMethodCall>,
     },
     Index {
         receiver: Box<TypedExpr>,
@@ -163,6 +164,23 @@ pub enum AggregateBoundary {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextBoundary {
     Len,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinMethodCall {
+    VecNew,
+    VecPush,
+    VecFreeze,
+}
+
+impl BuiltinMethodCall {
+    pub fn debug_name(self) -> &'static str {
+        match self {
+            Self::VecNew => "builtin.vec.new",
+            Self::VecPush => "builtin.vec.push",
+            Self::VecFreeze => "builtin.vec.freeze",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -657,12 +675,18 @@ fn type_expr_with_context_and_controls(
                 .iter()
                 .map(|arg| type_expr_with_context_and_controls(arg, env, context, controls))
                 .collect::<Vec<_>>();
-            let ty = field_callable_result_type(&receiver.ty, name, args.len(), context);
+            let builtin = builtin_method_call(&receiver, name, &args);
+            let ty = builtin
+                .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty))
+                .unwrap_or_else(|| {
+                    field_callable_result_type(&receiver.ty, name, args.len(), context)
+                });
             typed(
                 TypedExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     name: name.clone(),
                     args,
+                    builtin,
                 },
                 ty,
             )
@@ -975,18 +999,25 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
             receiver,
             name,
             args,
+            ..
         } => {
             let receiver = refine_continuation_types(*receiver, context);
             let args = args
                 .into_iter()
                 .map(|arg| refine_continuation_types(arg, context))
                 .collect::<Vec<_>>();
-            let ty = field_callable_result_type(&receiver.ty, &name, args.len(), context);
+            let builtin = builtin_method_call(&receiver, &name, &args);
+            let ty = builtin
+                .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty))
+                .unwrap_or_else(|| {
+                    field_callable_result_type(&receiver.ty, &name, args.len(), context)
+                });
             typed(
                 TypedExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     name,
                     args,
+                    builtin,
                 },
                 ty,
             )
@@ -1310,18 +1341,25 @@ fn refine_pattern_binding_types(
             receiver,
             name,
             args,
+            ..
         } => {
             let receiver = refine_pattern_binding_types(*receiver, bindings, context);
             let args = args
                 .into_iter()
                 .map(|arg| refine_pattern_binding_types(arg, bindings, context))
                 .collect::<Vec<_>>();
-            let ty = field_callable_result_type(&receiver.ty, &name, args.len(), context);
+            let builtin = builtin_method_call(&receiver, &name, &args);
+            let ty = builtin
+                .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty))
+                .unwrap_or_else(|| {
+                    field_callable_result_type(&receiver.ty, &name, args.len(), context)
+                });
             typed(
                 TypedExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     name,
                     args,
+                    builtin,
                 },
                 ty,
             )
@@ -1681,17 +1719,24 @@ fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type
             receiver,
             name,
             args,
-        } => typed(
-            TypedExprKind::MethodCall {
-                receiver: Box::new(rewrite_continuation_callee_input(*receiver, binder, input)),
-                name,
-                args: args
-                    .into_iter()
-                    .map(|arg| rewrite_continuation_callee_input(arg, binder, input))
-                    .collect(),
-            },
-            expr.ty,
-        ),
+            ..
+        } => {
+            let receiver = rewrite_continuation_callee_input(*receiver, binder, input);
+            let args = args
+                .into_iter()
+                .map(|arg| rewrite_continuation_callee_input(arg, binder, input))
+                .collect::<Vec<_>>();
+            let builtin = builtin_method_call(&receiver, &name, &args);
+            typed(
+                TypedExprKind::MethodCall {
+                    receiver: Box::new(receiver),
+                    name,
+                    args,
+                    builtin,
+                },
+                expr.ty,
+            )
+        }
         TypedExprKind::Index {
             receiver,
             index,
@@ -1965,6 +2010,37 @@ fn field_access_kind(receiver: &Type, name: &str) -> FieldAccessKind {
     FieldAccessKind::RecordOrNominal
 }
 
+fn builtin_method_call(
+    receiver: &TypedExpr,
+    name: &str,
+    args: &[TypedExpr],
+) -> Option<BuiltinMethodCall> {
+    if matches!(
+        (&receiver.kind, name, args),
+        (TypedExprKind::Var(type_name), "new", []) if type_name == "Vec"
+    ) {
+        return Some(BuiltinMethodCall::VecNew);
+    }
+    if aggregate_kind_for_type(&receiver.ty) != Some(AggregateKind::Vec) {
+        return None;
+    }
+    match (name, args) {
+        ("push", [_]) => Some(BuiltinMethodCall::VecPush),
+        ("freeze", []) => Some(BuiltinMethodCall::VecFreeze),
+        _ => None,
+    }
+}
+
+fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Option<Type> {
+    match builtin {
+        BuiltinMethodCall::VecNew => Some(Type::Nominal("Vec[i64]".to_string())),
+        BuiltinMethodCall::VecPush => Some(receiver.clone()),
+        BuiltinMethodCall::VecFreeze => vec_element_type(receiver).map(|element| {
+            Type::Nominal(format!("Slice[{}]", source_type_name_for_type(&element)))
+        }),
+    }
+}
+
 impl RangeBoundary {
     pub fn from_source_name(name: &str) -> Option<Self> {
         match name {
@@ -2005,6 +2081,19 @@ fn aggregate_kind_for_type(receiver: &Type) -> Option<AggregateKind> {
         "Slice" => Some(AggregateKind::Slice),
         "Array" => Some(AggregateKind::Array),
         "Vec" => Some(AggregateKind::Vec),
+        _ => None,
+    }
+}
+
+fn vec_element_type(receiver: &Type) -> Option<Type> {
+    let Type::Nominal(name) = receiver else {
+        return None;
+    };
+    let ParsedTypeHeader::Nominal { base, args } = parse_type_header(name)? else {
+        return None;
+    };
+    match (base.as_str(), args.as_slice()) {
+        ("Vec", [element]) => Some(element.to_type()),
         _ => None,
     }
 }

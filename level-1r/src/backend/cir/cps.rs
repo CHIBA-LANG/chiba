@@ -3,8 +3,8 @@ use std::fmt;
 use crate::ast::{BinaryOp, Literal, Pattern};
 use crate::control::ContinuationKind;
 use crate::typed::{
-    AggregateBoundary, AggregateKind, FieldAccessKind, IndexAccessKind, RangeBoundary,
-    TextBoundary, TextKind, Type, TypedExpr, TypedExprKind, TypedRecordField,
+    AggregateBoundary, AggregateKind, BuiltinMethodCall, FieldAccessKind, IndexAccessKind,
+    RangeBoundary, TextBoundary, TextKind, Type, TypedExpr, TypedExprKind, TypedRecordField,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,6 +73,10 @@ pub enum CpsAtom {
         kind: TextKind,
         value: Box<CpsAtom>,
         index: Box<CpsAtom>,
+    },
+    VecRuntimeCall {
+        call: BuiltinMethodCall,
+        args: Vec<CpsAtom>,
     },
     RecordUpdate {
         base: Box<CpsAtom>,
@@ -283,11 +287,24 @@ fn transform(
             receiver,
             name,
             args,
+            builtin,
         } => {
             let receiver_controls = controls.clone();
             transform(
                 receiver,
                 Box::new(|receiver, ctx| {
+                    if let Some(builtin) = builtin {
+                        return transform_builtin_method_args(
+                            *builtin,
+                            receiver,
+                            args,
+                            0,
+                            Vec::new(),
+                            k,
+                            controls,
+                            ctx,
+                        );
+                    }
                     let func = CpsAtom::Var(format!("{receiver}.{name}"));
                     transform_call_args(args, 0, Vec::new(), func, k, controls, ctx)
                 }),
@@ -828,6 +845,53 @@ fn transform_call_args(
     )
 }
 
+fn transform_builtin_method_args(
+    call: BuiltinMethodCall,
+    receiver: CpsAtom,
+    args: &[TypedExpr],
+    index: usize,
+    values: Vec<CpsAtom>,
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    if index == args.len() {
+        let mut runtime_args = Vec::with_capacity(values.len() + 1);
+        if !matches!(call, BuiltinMethodCall::VecNew) {
+            runtime_args.push(receiver);
+        }
+        runtime_args.extend(values);
+        return k(
+            CpsAtom::VecRuntimeCall {
+                call,
+                args: runtime_args,
+            },
+            ctx,
+        );
+    }
+
+    let arg_controls = controls.clone();
+    transform(
+        &args[index],
+        Box::new(move |value, ctx| {
+            let mut values = values;
+            values.push(value);
+            transform_builtin_method_args(
+                call,
+                receiver.clone(),
+                args,
+                index + 1,
+                values,
+                k,
+                controls,
+                ctx,
+            )
+        }),
+        arg_controls,
+        ctx,
+    )
+}
+
 fn transform_adt_ctor(
     data: &str,
     ctor: &str,
@@ -970,6 +1034,16 @@ impl fmt::Display for CpsAtom {
                 value,
                 index,
             } => write!(f, "{value}[{index}]"),
+            CpsAtom::VecRuntimeCall { call, args } => {
+                write!(f, "{}(", call.debug_name())?;
+                for (index, arg) in args.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{arg}")?;
+                }
+                write!(f, ")")
+            }
             CpsAtom::RecordUpdate {
                 base,
                 layout,

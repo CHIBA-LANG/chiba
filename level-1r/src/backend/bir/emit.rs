@@ -7,7 +7,7 @@ use crate::core::{
     TextField,
 };
 use crate::symbol::encode_debug_symbol;
-use crate::typed::{AggregateKind, TextKind};
+use crate::typed::{AggregateKind, BuiltinMethodCall, TextKind};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BackendArtifact {
@@ -491,6 +491,12 @@ fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExt
             collect_runtime_value_imports(value, imports);
             collect_runtime_value_imports(index, imports);
         }
+        CoreValue::VecRuntimeCall { call, args } => {
+            imports.push(vec_runtime_import(*call));
+            for arg in args {
+                collect_runtime_value_imports(arg, imports);
+            }
+        }
         CoreValue::Tuple { fields } => {
             for field in fields {
                 collect_runtime_value_imports(field, imports);
@@ -621,6 +627,36 @@ fn text_index_import(kind: TextKind) -> BackendExternImport {
 
 fn text_index_import_symbol(kind: TextKind) -> String {
     format!("std_{}_i64_byte_at", kind.runtime_prefix())
+}
+
+fn vec_runtime_import(call: BuiltinMethodCall) -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: vec_runtime_import_symbol(call),
+        module: "env".to_string(),
+        name: vec_runtime_import_name(call).to_string(),
+        signature_hash: vec_runtime_import_signature(call).to_string(),
+    }
+}
+
+fn vec_runtime_import_symbol(call: BuiltinMethodCall) -> String {
+    vec_runtime_import_name(call).replace('.', "_")
+}
+
+fn vec_runtime_import_name(call: BuiltinMethodCall) -> &'static str {
+    match call {
+        BuiltinMethodCall::VecNew => "std.vec_new",
+        BuiltinMethodCall::VecPush => "std.vec_push",
+        BuiltinMethodCall::VecFreeze => "std.vec_freeze",
+    }
+}
+
+fn vec_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
+    match call {
+        BuiltinMethodCall::VecNew => "_to_externref",
+        BuiltinMethodCall::VecPush => "externref_i64_to_externref",
+        BuiltinMethodCall::VecFreeze => "externref_to_externref",
+    }
 }
 
 fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipDecision> {
@@ -1639,6 +1675,14 @@ fn infer_param_kinds_from_value(
             infer_param_kinds_from_value(value, params, kinds);
             infer_param_kinds_from_value(index, params, kinds);
         }
+        CoreValue::VecRuntimeCall { args, .. } => {
+            if let Some(receiver) = args.first() {
+                mark_externref_operand(receiver, params, kinds);
+            }
+            for arg in args {
+                infer_param_kinds_from_value(arg, params, kinds);
+            }
+        }
         CoreValue::Tuple { fields } => {
             for field in fields {
                 infer_param_kinds_from_value(field, params, kinds);
@@ -1829,6 +1873,7 @@ fn render_core_value_i32(
         | CoreValue::Tuple { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
+        | CoreValue::VecRuntimeCall { .. }
         | CoreValue::Record { .. }
         | CoreValue::RecordUpdate { .. }
         | CoreValue::Rendered { .. } => {
@@ -1868,7 +1913,38 @@ fn render_core_value_externref(
             wat.push_str(&format!("    call ${}\n", range_import_symbol()));
             Ok(())
         }
+        CoreValue::VecRuntimeCall { call, args }
+            if vec_runtime_call_is_renderable(*call, args, env) =>
+        {
+            match call {
+                BuiltinMethodCall::VecNew => {}
+                BuiltinMethodCall::VecPush => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                    render_core_value_i32(wat, &args[1], env)?;
+                }
+                BuiltinMethodCall::VecFreeze => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                }
+            }
+            wat.push_str(&format!("    call ${}\n", vec_runtime_import_symbol(*call)));
+            Ok(())
+        }
         _ => Err(unsupported_i32_render_diagnostic(value)),
+    }
+}
+
+fn vec_runtime_call_is_renderable(
+    call: BuiltinMethodCall,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> bool {
+    match (call, args) {
+        (BuiltinMethodCall::VecNew, []) => true,
+        (BuiltinMethodCall::VecPush, [vec, item]) => {
+            core_value_is_renderable_externref(vec, env) && core_value_is_renderable_i32(item, env)
+        }
+        (BuiltinMethodCall::VecFreeze, [vec]) => core_value_is_renderable_externref(vec, env),
+        _ => false,
     }
 }
 
@@ -1922,6 +1998,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         CoreValue::Tuple { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
+        | CoreValue::VecRuntimeCall { .. }
         | CoreValue::Record { .. }
         | CoreValue::RecordUpdate { .. }
         | CoreValue::Rendered { .. } => false,
@@ -1935,6 +2012,9 @@ fn core_value_is_renderable_externref(value: &CoreValue, env: &RenderEnv) -> boo
         CoreValue::SliceLiteral { items } => slice_literal_items_are_i32(items, env),
         CoreValue::Range { start, end } => {
             core_value_is_renderable_i32(start, env) && core_value_is_renderable_i32(end, env)
+        }
+        CoreValue::VecRuntimeCall { call, args } => {
+            vec_runtime_call_is_renderable(*call, args, env)
         }
         _ => false,
     }

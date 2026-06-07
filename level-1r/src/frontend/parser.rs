@@ -784,6 +784,9 @@ impl FrontendParser {
 
     fn parse_expr_args(&mut self) -> Result<Vec<Expr>, FrontendError> {
         let mut args = Vec::new();
+        if self.peek_name() == Some("RParen") {
+            return Ok(args);
+        }
         loop {
             args.push(self.parse_expr_bp(0)?);
             if self.peek_name() != Some("Comma") {

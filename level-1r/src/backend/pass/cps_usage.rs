@@ -162,6 +162,11 @@ fn visit_atom(atom: &CpsAtom, facts: &mut CpsUsageFacts) {
             visit_atom(value, facts);
             visit_atom(index, facts);
         }
+        CpsAtom::VecRuntimeCall { args, .. } => {
+            for arg in args {
+                visit_atom(arg, facts);
+            }
+        }
         CpsAtom::Record { fields, .. } => {
             for field in fields {
                 visit_atom(&field.value, facts);
@@ -265,6 +270,11 @@ fn count_atom_refs(atom: &CpsAtom, binder: &str, count: &mut UseCount) {
         CpsAtom::TextIndex { value, index, .. } => {
             count_atom_refs(value, binder, count);
             count_atom_refs(index, binder, count);
+        }
+        CpsAtom::VecRuntimeCall { args, .. } => {
+            for arg in args {
+                count_atom_refs(arg, binder, count);
+            }
         }
         CpsAtom::Record { fields, .. } => {
             for field in fields {

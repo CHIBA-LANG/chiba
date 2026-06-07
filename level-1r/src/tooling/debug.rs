@@ -545,6 +545,14 @@ fn render_core_value(value: &CoreValue) -> String {
         } => {
             format!("{}[{}]", render_core_value(value), render_core_value(index))
         }
+        CoreValue::VecRuntimeCall { call, args } => {
+            let args = args
+                .iter()
+                .map(render_core_value)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}({args})", call.debug_name())
+        }
         CoreValue::Adt {
             data,
             ctor,
@@ -963,6 +971,9 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
                 render_core_value_summary(index)
             )
         }
+        crate::core::CoreValue::VecRuntimeCall { call, args } => {
+            format!("{} /{}", call.debug_name(), args.len())
+        }
         crate::core::CoreValue::Adt {
             data, ctor, args, ..
         } => {
@@ -1273,8 +1284,18 @@ fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
             receiver,
             name,
             args,
+            builtin,
         } => {
-            writeln!(out, "{indent}  method {name}").unwrap();
+            if let Some(builtin) = builtin {
+                writeln!(
+                    out,
+                    "{indent}  method {name} builtin={}",
+                    builtin.debug_name()
+                )
+                .unwrap();
+            } else {
+                writeln!(out, "{indent}  method {name}").unwrap();
+            }
             render_typed_child("receiver", receiver, depth, out);
             for (index, arg) in args.iter().enumerate() {
                 render_typed_child(&format!("arg {index}"), arg, depth, out);

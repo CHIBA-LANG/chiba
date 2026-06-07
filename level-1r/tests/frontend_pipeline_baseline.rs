@@ -2369,8 +2369,8 @@ fn frontend_parses_nested_lambda_and_preserves_capture_env() {
 }
 
 #[test]
-fn frontend_rejects_empty_call_argument() {
-    let err = parse_source_program("def main() = f()").unwrap_err();
+fn frontend_rejects_empty_call_argument_slot() {
+    let err = parse_source_program("def main() = f(,)").unwrap_err();
 
     assert!(matches!(
         err,
@@ -2378,7 +2378,7 @@ fn frontend_rejects_empty_call_argument() {
             found,
             expected,
             ..
-        } if found == "RParen" && expected.contains(&"Number".to_string())
+    } if found == "Comma" && expected.contains(&"Number".to_string())
     ));
 }
 

@@ -7,7 +7,8 @@ use crate::resolve::OperatorSurface;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{dyn_row_contract_key, row_shape_key, DynRowContract, RowShape};
 use crate::typed::{
-    AggregateBoundary, AggregateKind, RangeBoundary, SendColor, TextBoundary, TextKind, UsageColor,
+    AggregateBoundary, AggregateKind, BuiltinMethodCall, RangeBoundary, SendColor, TextBoundary,
+    TextKind, UsageColor,
 };
 use crate::usage::UsageFacts;
 
@@ -275,6 +276,10 @@ pub enum CoreValue {
         value: Box<CoreValue>,
         index: Box<CoreValue>,
     },
+    VecRuntimeCall {
+        call: BuiltinMethodCall,
+        args: Vec<CoreValue>,
+    },
     Adt {
         data: String,
         ctor: String,
@@ -386,6 +391,14 @@ impl CoreValue {
                 index,
             } => {
                 format!("{}[{}]", value.debug_name(), index.debug_name())
+            }
+            CoreValue::VecRuntimeCall { call, args } => {
+                let args = args
+                    .iter()
+                    .map(CoreValue::debug_name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}({args})", call.debug_name())
             }
             CoreValue::Adt {
                 data, ctor, args, ..
@@ -1366,6 +1379,13 @@ fn render_atom(atom: &CpsAtom) -> String {
         } => {
             format!("{}[{}]", render_atom(value), render_atom(index))
         }
+        CpsAtom::VecRuntimeCall { call, args } => {
+            format!(
+                "{}({})",
+                call.debug_name(),
+                args.iter().map(render_atom).collect::<Vec<_>>().join(", ")
+            )
+        }
         CpsAtom::Record { layout, fields } => format!(
             "{layout}{{{}}}",
             fields
@@ -1476,6 +1496,10 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
             value: Box::new(core_value(value)),
             index: Box::new(core_value(index)),
         },
+        CpsAtom::VecRuntimeCall { call, args } => CoreValue::VecRuntimeCall {
+            call: *call,
+            args: args.iter().map(core_value).collect(),
+        },
         CpsAtom::RecordField { record, field } => CoreValue::RecordField {
             record: Box::new(core_value(record)),
             field: field.clone(),
@@ -1532,6 +1556,9 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Range { .. } => {
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
+        CpsAtom::VecRuntimeCall { .. } => {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::RangeField { boundary, .. } => {
