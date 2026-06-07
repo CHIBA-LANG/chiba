@@ -56,6 +56,10 @@ pub fn simplify_continuations(usage: &CpsUsageFacts) -> ContinuationSimplificati
 fn visit_term(term: &CpsTerm, facts: &mut CpsUsageFacts) {
     match term {
         CpsTerm::Halt(atom) => visit_atom(atom, facts),
+        CpsTerm::LetRuntime { value, body, .. } => {
+            visit_atom(value, facts);
+            visit_term(body, facts);
+        }
         CpsTerm::AppFun { func, args, kont } => {
             visit_atom(func, facts);
             for arg in args {
@@ -204,6 +208,10 @@ fn count_binder_uses(term: &CpsTerm, binder: &str) -> UseCount {
 fn count_term_refs(term: &CpsTerm, binder: &str, count: &mut UseCount) {
     match term {
         CpsTerm::Halt(atom) => count_atom_refs(atom, binder, count),
+        CpsTerm::LetRuntime { value, body, .. } => {
+            count_atom_refs(value, binder, count);
+            count_term_refs(body, binder, count);
+        }
         CpsTerm::AppFun { func, args, kont } => {
             count_atom_refs(func, binder, count);
             for arg in args {

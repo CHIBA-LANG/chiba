@@ -114,6 +114,11 @@ pub struct CpsRecordField {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CpsTerm {
     Halt(CpsAtom),
+    LetRuntime {
+        binder: String,
+        value: CpsAtom,
+        body: Box<CpsTerm>,
+    },
     AppFun {
         func: CpsAtom,
         args: Vec<CpsAtom>,
@@ -927,13 +932,20 @@ fn transform_builtin_method_args(
             runtime_args.push(receiver);
         }
         runtime_args.extend(values);
-        return k(
-            CpsAtom::BuiltinRuntimeCall {
-                call,
-                args: runtime_args,
-            },
-            ctx,
-        );
+        let value = CpsAtom::BuiltinRuntimeCall {
+            call,
+            args: runtime_args,
+        };
+        if !controls.is_empty() && builtin_runtime_call_needs_materialization(call) {
+            let binder = ctx.fresh("rt");
+            let body = k(CpsAtom::Var(binder.clone()), ctx);
+            return CpsTerm::LetRuntime {
+                binder,
+                value,
+                body: Box::new(body),
+            };
+        }
+        return k(value, ctx);
     }
 
     let arg_controls = controls.clone();
@@ -955,6 +967,21 @@ fn transform_builtin_method_args(
         }),
         arg_controls,
         ctx,
+    )
+}
+
+fn builtin_runtime_call_needs_materialization(call: BuiltinMethodCall) -> bool {
+    matches!(
+        call,
+        BuiltinMethodCall::VecNew
+            | BuiltinMethodCall::VecPush
+            | BuiltinMethodCall::StringNew
+            | BuiltinMethodCall::StringFrom
+            | BuiltinMethodCall::StringPushRune
+            | BuiltinMethodCall::RefNew
+            | BuiltinMethodCall::RefSet
+            | BuiltinMethodCall::UnsafeRefNew
+            | BuiltinMethodCall::UnsafeRefSet
     )
 }
 
@@ -1168,6 +1195,11 @@ impl fmt::Display for CpsTerm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CpsTerm::Halt(value) => write!(f, "halt {value}"),
+            CpsTerm::LetRuntime {
+                binder,
+                value,
+                body,
+            } => write!(f, "let-runtime {binder} = {value}; {body}"),
             CpsTerm::AppCont { kont, value } => write!(f, "{kont}({value})"),
             CpsTerm::AppFun { func, args, kont } => {
                 for (index, arg) in args.iter().enumerate() {

@@ -256,6 +256,9 @@ fn render_core_program(program: &CoreProgram) -> String {
 fn render_core_op(op: &CoreOp) -> String {
     match op {
         CoreOp::ReturnValue(value) => format!("return {}", render_core_value(value)),
+        CoreOp::RuntimeLet { binder, value } => {
+            format!("runtime-let {binder} = {}", render_core_value(value))
+        }
         CoreOp::ReturnBranch {
             cond,
             then_value,

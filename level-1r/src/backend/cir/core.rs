@@ -23,6 +23,10 @@ pub struct CoreProgram {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoreOp {
     ReturnValue(CoreValue),
+    RuntimeLet {
+        binder: String,
+        value: CoreValue,
+    },
     ReturnBranch {
         cond: CoreValue,
         then_value: CoreValue,
@@ -758,6 +762,17 @@ impl CoreValidation {
 fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<CoreOp>) {
     match term {
         CpsTerm::Halt(atom) => lower_atom_value(atom, ops),
+        CpsTerm::LetRuntime {
+            binder,
+            value,
+            body,
+        } => {
+            ops.push(CoreOp::RuntimeLet {
+                binder: binder.clone(),
+                value: core_value(value),
+            });
+            lower_term(body, continuations, ops);
+        }
         CpsTerm::AppCont { value, .. } => lower_atom_value(value, ops),
         CpsTerm::AppFun { func, args, kont } => {
             let target = render_atom(func);
@@ -1151,6 +1166,7 @@ fn op_has_tail_target(op: &CoreOp, func: &str) -> bool {
             captured.ops.iter().any(|op| op_has_tail_target(op, func))
         }
         CoreOp::ReturnValue(_)
+        | CoreOp::RuntimeLet { .. }
         | CoreOp::TargetSpecificTerm { .. }
         | CoreOp::ReturnBranch { .. }
         | CoreOp::ReturnMatch { .. }

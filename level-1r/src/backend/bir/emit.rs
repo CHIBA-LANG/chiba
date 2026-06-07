@@ -260,6 +260,14 @@ fn unsupported_runtime_return_value(
                 None
             }
             CoreOp::ReturnValue(value) => unsupported_runtime_value(value, &env),
+            CoreOp::RuntimeLet { binder, value } => {
+                if let Some(diagnostic) = unsupported_runtime_value(value, &env) {
+                    Some(diagnostic)
+                } else {
+                    env = env.with_local_kind(binder, runtime_local_value_kind(value, &env));
+                    None
+                }
+            }
             CoreOp::ReturnBranch {
                 cond,
                 then_value,
@@ -480,6 +488,7 @@ fn collect_manifest_entries(
             }
         }
         CoreOp::ReturnValue(_)
+        | CoreOp::RuntimeLet { .. }
         | CoreOp::ReturnBranch { .. }
         | CoreOp::ReturnMatch { .. }
         | CoreOp::DynamicCallableTarget { .. }
@@ -508,6 +517,7 @@ fn collect_manifest_entries(
 fn collect_manifest_imports(op: &CoreOp, env: &RenderEnv, imports: &mut Vec<BackendExternImport>) {
     match op {
         CoreOp::ReturnValue(value) => collect_runtime_value_imports(value, env, imports),
+        CoreOp::RuntimeLet { value, .. } => collect_runtime_value_imports(value, env, imports),
         CoreOp::ReturnBranch {
             cond,
             then_value,
@@ -1227,6 +1237,13 @@ fn render_wat(
         match op {
             CoreOp::ReturnValue(value)
                 if return_value_is_tailcall_result(core, index, value, &env) => {}
+            CoreOp::RuntimeLet { binder, value } => {
+                wat.push_str(&format!(
+                    "  ;; runtime-let {} = {}\n",
+                    escape_wat_comment(binder),
+                    escape_wat_comment(&value.debug_name())
+                ));
+            }
             CoreOp::ReturnValue(value) => {
                 let symbol = if return_index == 0 {
                     "main".to_string()
@@ -1472,9 +1489,12 @@ fn render_continuation_wat(
     param_kinds: &BTreeMap<String, WasmValueKind>,
     param_abi: &BackendParamAbi,
 ) -> Result<String, BackendDiagnostic> {
-    let result_binders = collect_tailcall_result_binders(&core.ops);
+    let runtime_local_kinds = collect_runtime_local_kinds(
+        &core.ops,
+        &RenderEnv::from_param_abi(params, param_kinds, param_abi),
+    );
     let env = RenderEnv::from_param_abi(params, param_kinds, param_abi)
-        .with_locals(result_binders.clone());
+        .with_local_kinds(runtime_local_kinds.clone());
     let mut wat = String::from("(module\n");
     for import in &manifest.imports {
         render_extern_import_wat(&mut wat, import);
@@ -1499,10 +1519,11 @@ fn render_continuation_wat(
 
     wat.push_str("  ;; continuation-runtime subset=prompt-capture-i32\n");
     render_func_header(&mut wat, "main", Some("main"), &env);
-    for binder in &result_binders {
+    for (binder, kind) in &runtime_local_kinds {
         wat.push_str(&format!(
-            "    (local ${} i32)\n",
-            encode_debug_symbol(binder)
+            "    (local ${} {})\n",
+            encode_debug_symbol(binder),
+            kind.wat_type()
         ));
     }
 
@@ -1528,6 +1549,14 @@ fn render_continuation_wat(
                     escape_wat_comment(binder),
                     render_continuation_kind(*kind)
                 ));
+            }
+            CoreOp::RuntimeLet { binder, value } => {
+                wat.push_str(&format!(
+                    "    ;; runtime-let {} = {}\n",
+                    escape_wat_comment(binder),
+                    escape_wat_comment(&value.debug_name())
+                ));
+                render_runtime_let_value(&mut wat, binder, value, &env)?;
             }
             CoreOp::TailCall { func, args } if continuations.contains_key(func) => {
                 let (kind, captured) = continuations
@@ -1760,6 +1789,86 @@ fn collect_tailcall_result_binders(ops: &[CoreOp]) -> Vec<String> {
     binders
 }
 
+fn collect_runtime_local_binders(ops: &[CoreOp]) -> Vec<String> {
+    let mut binders = collect_tailcall_result_binders(ops);
+    for op in ops {
+        match op {
+            CoreOp::RuntimeLet { binder, .. } => binders.push(binder.clone()),
+            CoreOp::CaptureContinuation { captured, .. } => {
+                binders.extend(collect_runtime_local_binders(&captured.ops));
+            }
+            _ => {}
+        }
+    }
+    binders.sort();
+    binders.dedup();
+    binders
+}
+
+fn collect_runtime_local_kinds(
+    ops: &[CoreOp],
+    base_env: &RenderEnv,
+) -> BTreeMap<String, WasmValueKind> {
+    let mut kinds = BTreeMap::new();
+    let mut env = base_env.clone();
+    collect_runtime_local_kinds_into(ops, &mut env, &mut kinds);
+    kinds
+}
+
+fn collect_runtime_local_kinds_into(
+    ops: &[CoreOp],
+    env: &mut RenderEnv,
+    kinds: &mut BTreeMap<String, WasmValueKind>,
+) {
+    for op in ops {
+        match op {
+            CoreOp::RuntimeLet { binder, value } => {
+                let kind = runtime_local_value_kind(value, env);
+                kinds.insert(binder.clone(), kind);
+                *env = env.with_local_kind(binder, kind);
+            }
+            CoreOp::TailCallResult { binder } => {
+                kinds.insert(binder.clone(), WasmValueKind::I32);
+                *env = env.with_local_kind(binder, WasmValueKind::I32);
+            }
+            CoreOp::CaptureContinuation { captured, .. } => {
+                collect_runtime_local_kinds_into(&captured.ops, env, kinds);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn runtime_local_value_kind(value: &CoreValue, env: &RenderEnv) -> WasmValueKind {
+    if let CoreValue::BuiltinRuntimeCall { call, .. } = value {
+        match call {
+            BuiltinMethodCall::VecNew
+            | BuiltinMethodCall::VecPush
+            | BuiltinMethodCall::VecFreeze
+            | BuiltinMethodCall::StringNew
+            | BuiltinMethodCall::StringFrom
+            | BuiltinMethodCall::StringConcat
+            | BuiltinMethodCall::StringAsStr
+            | BuiltinMethodCall::StringToCStr
+            | BuiltinMethodCall::StringPushRune
+            | BuiltinMethodCall::RefNew
+            | BuiltinMethodCall::RefSet
+            | BuiltinMethodCall::UnsafeRefNew
+            | BuiltinMethodCall::UnsafeRefSet => return WasmValueKind::ExternRef,
+            BuiltinMethodCall::TextLen { .. }
+            | BuiltinMethodCall::TextRuneLen { .. }
+            | BuiltinMethodCall::TextCharAt { .. }
+            | BuiltinMethodCall::RefGet
+            | BuiltinMethodCall::UnsafeRefGet => return WasmValueKind::I32,
+        }
+    }
+    if core_value_is_renderable_externref(value, env) {
+        WasmValueKind::ExternRef
+    } else {
+        WasmValueKind::I32
+    }
+}
+
 fn collect_operator_targets(ops: &[CoreOp]) -> Vec<&CoreOp> {
     let mut targets = Vec::new();
     for op in ops {
@@ -1781,6 +1890,21 @@ fn render_continuation_kind(kind: ContinuationKind) -> &'static str {
     }
 }
 
+fn render_runtime_let_value(
+    wat: &mut String,
+    binder: &str,
+    value: &CoreValue,
+    env: &RenderEnv,
+) -> Result<(), BackendDiagnostic> {
+    if core_value_is_renderable_externref(value, env) {
+        render_core_value_externref(wat, value, env)?;
+    } else {
+        render_core_value_i32(wat, value, env)?;
+    }
+    wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
+    Ok(())
+}
+
 fn render_captured_continuation_i32(
     wat: &mut String,
     captured: &CoreCapturedContinuation,
@@ -1788,14 +1912,7 @@ fn render_captured_continuation_i32(
     env: &RenderEnv,
     core: &CoreProgram,
 ) -> Result<(), BackendDiagnostic> {
-    let captured_locals = captured
-        .ops
-        .iter()
-        .filter_map(|op| match op {
-            CoreOp::TailCallResult { binder } => Some(binder.clone()),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
+    let captured_locals = collect_runtime_local_binders(&captured.ops);
     let mut env = env
         .with_params_as_locals(
             std::iter::once(captured.param.clone())
@@ -1806,6 +1923,14 @@ fn render_captured_continuation_i32(
 
     for (index, op) in captured.ops.iter().enumerate() {
         match op {
+            CoreOp::RuntimeLet { binder, value } => {
+                wat.push_str(&format!(
+                    "    ;; captured-runtime-let {} = {}\n",
+                    escape_wat_comment(binder),
+                    escape_wat_comment(&value.debug_name())
+                ));
+                render_runtime_let_value(wat, binder, value, &env)?;
+            }
             CoreOp::TailCall { func, args } => {
                 let Some(CoreOp::TailCallResult { binder }) = captured.ops.get(index + 1) else {
                     return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
@@ -2304,6 +2429,12 @@ impl RenderEnv {
         next
     }
 
+    fn with_local_kinds(&self, kinds: BTreeMap<String, WasmValueKind>) -> Self {
+        let mut next = self.clone();
+        next.locals.extend(kinds);
+        next
+    }
+
     fn with_local_ref_cell_lane(&self, name: &str, lane: CoreRefCellLane) -> Self {
         let mut next = self.clone();
         next.local_ref_cell_lanes.insert(name.to_string(), lane);
@@ -2402,6 +2533,7 @@ fn infer_param_kinds_from_op(
 ) {
     match op {
         CoreOp::ReturnValue(value) => infer_param_kinds_from_value(value, params, kinds),
+        CoreOp::RuntimeLet { value, .. } => infer_param_kinds_from_value(value, params, kinds),
         CoreOp::ReturnBranch {
             cond,
             then_value,

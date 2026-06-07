@@ -851,6 +851,29 @@ def main() = resetn { match shift retry { retry(Option.Some(7)) + retry(Option.N
 
 #[test]
 fn program_continuation_replays_captured_local_global_and_param_values() {
+    let cont1_local = chiba_level1r::compile_source_program_bundle(
+        r#"
+def main(): i64 = reset { (shift k { k({local: 9, value: 1}) }).local + 1 }
+"#,
+    )
+    .expect("compile cont1 local capture")
+    .program;
+    let cont1_global = chiba_level1r::compile_source_program_bundle(
+        r#"
+def OFFSET: i64 = 9
+def main(): i64 = reset { OFFSET + shift k { k(1) } }
+"#,
+    )
+    .expect("compile cont1 global capture")
+    .program;
+    let cont1_param = chiba_level1r::compile_source_program_bundle(
+        r#"
+def with_param(offset: i64): i64 = reset { offset + shift k { k(1) } }
+def main(): i64 = with_param(9)
+"#,
+    )
+    .expect("compile cont1 param capture")
+    .program;
     let local = chiba_level1r::compile_source_program_bundle(
         r#"
 def main(): i64 = resetn { (shift retry { retry({local: 9, value: 1}) + retry({local: 9, value: 2}) }).local }
@@ -875,7 +898,14 @@ def main(): i64 = with_param(9)
     .expect("compile param capture")
     .program;
 
-    for bundle in [&local, &global, &param] {
+    for bundle in [
+        &cont1_local,
+        &cont1_global,
+        &cont1_param,
+        &local,
+        &global,
+        &param,
+    ] {
         assert_eq!(bundle.diagnostics, vec![]);
         assert_backend_link_clean_all(bundle);
         let main = bundle
@@ -886,6 +916,9 @@ def main(): i64 = with_param(9)
         assert_eq!(main.output.typed.ty, Type::I64);
     }
 
+    assert_eq!(run_wat_text(&cont1_local.backend_link.linked_wat), "10");
+    assert_eq!(run_wat_text(&cont1_global.backend_link.linked_wat), "10");
+    assert_eq!(run_wat_text(&cont1_param.backend_link.linked_wat), "10");
     assert_eq!(run_wat_text(&local.backend_link.linked_wat), "18");
     assert_eq!(run_wat_text(&global.backend_link.linked_wat), "21");
     assert_eq!(run_wat_text(&param.backend_link.linked_wat), "21");
@@ -918,6 +951,63 @@ def main(): i64 = reset { UnsafeRef.new(1).set(shift k { k(7) }).get() }
     }
     assert_eq!(run_wat_text(&ref_cell.backend_link.linked_wat), "7");
     assert_eq!(run_wat_text(&unsafe_cell.backend_link.linked_wat), "7");
+}
+
+#[test]
+fn program_continuation_captures_ref_and_unsafe_ref_cells_by_shared_reference() {
+    let cont1_ref_param = chiba_level1r::compile_source_program_bundle(
+        r#"
+def with_cell(cell: Ref[i64]): i64 = reset { shift k { cell.set(9).get() + k(1) } + cell.get() }
+def main(): i64 = with_cell(Ref.new(1))
+"#,
+    )
+    .expect("compile cont1 ref param shared capture")
+    .program;
+    let cont1_unsafe_global = chiba_level1r::compile_source_program_bundle(
+        r#"
+def CELL: UnsafeRef[i64] = UnsafeRef.new(1)
+def main(): i64 = reset { shift k { CELL.set(9).get() + k(1) } + CELL.get() }
+"#,
+    )
+    .expect("compile cont1 unsafe global shared capture")
+    .program;
+    let contn_ref_param = chiba_level1r::compile_source_program_bundle(
+        r#"
+def with_cell(cell: Ref[i64]): i64 = resetn { shift retry { cell.set(9).get() + retry(1) + retry(2) } + cell.get() }
+def main(): i64 = with_cell(Ref.new(1))
+"#,
+    )
+    .expect("compile contn ref param shared capture")
+    .program;
+    let contn_unsafe_global = chiba_level1r::compile_source_program_bundle(
+        r#"
+def CELL: UnsafeRef[i64] = UnsafeRef.new(1)
+def main(): i64 = resetn { shift retry { CELL.set(9).get() + retry(1) + retry(2) } + CELL.get() }
+"#,
+    )
+    .expect("compile contn unsafe global shared capture")
+    .program;
+
+    for bundle in [
+        &cont1_ref_param,
+        &cont1_unsafe_global,
+        &contn_ref_param,
+        &contn_unsafe_global,
+    ] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+    }
+
+    assert_eq!(run_wat_text(&cont1_ref_param.backend_link.linked_wat), "19");
+    assert_eq!(
+        run_wat_text(&cont1_unsafe_global.backend_link.linked_wat),
+        "19"
+    );
+    assert_eq!(run_wat_text(&contn_ref_param.backend_link.linked_wat), "30");
+    assert_eq!(
+        run_wat_text(&contn_unsafe_global.backend_link.linked_wat),
+        "30"
+    );
 }
 
 #[test]
@@ -2875,6 +2965,34 @@ fn source_ref_new_set_get_lowers_to_executable_runtime_imports() {
     assert!(bundle.backend_link.linked_wat.contains("call $std_ref_get"));
 
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "4");
+}
+
+#[test]
+fn source_ref_param_is_shared_cell_not_recomputed_initializer() {
+    let ref_cell = compile_source_program_bundle(
+        r#"
+def with_cell(cell: Ref[i64]): i64 = cell.set(9).get() + cell.get()
+def main(): i64 = with_cell(Ref.new(1))
+"#,
+    )
+    .expect("compile ref param shared cell")
+    .program;
+    let unsafe_cell = compile_source_program_bundle(
+        r#"
+def with_cell(cell: UnsafeRef[i64]): i64 = cell.set(9).get() + cell.get()
+def main(): i64 = with_cell(UnsafeRef.new(1))
+"#,
+    )
+    .expect("compile unsafe ref param shared cell")
+    .program;
+
+    for bundle in [&ref_cell, &unsafe_cell] {
+        assert_backend_link_clean_all(bundle);
+        assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+    }
+
+    assert_eq!(run_wat_text(&ref_cell.backend_link.linked_wat), "18");
+    assert_eq!(run_wat_text(&unsafe_cell.backend_link.linked_wat), "18");
 }
 
 #[test]

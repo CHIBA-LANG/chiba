@@ -7,6 +7,7 @@ use chiba_level1r::{compile_expr, Expr};
 fn cps_term_kind_name(term: &CpsTerm) -> &'static str {
     match term {
         CpsTerm::Halt(_) => "halt",
+        CpsTerm::LetRuntime { .. } => "let-runtime",
         CpsTerm::AppFun { .. } => "app-fun",
         CpsTerm::AppCont { .. } => "app-cont",
         CpsTerm::Prompt { .. } => "prompt",
