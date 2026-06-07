@@ -713,6 +713,7 @@ fn builtin_runtime_import_name(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::VecFreeze => "std.vec_freeze",
         BuiltinMethodCall::StringNew => "std.string_new",
         BuiltinMethodCall::StringFrom => "std.str_to_string",
+        BuiltinMethodCall::StringConcat => "std.string_concat",
         BuiltinMethodCall::StringPushRune => "std.string_push_rune",
         BuiltinMethodCall::TextLen {
             kind: TextKind::Str,
@@ -742,6 +743,7 @@ fn builtin_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::VecFreeze => "externref_to_externref",
         BuiltinMethodCall::StringNew => "_to_externref",
         BuiltinMethodCall::StringFrom => "externref_to_externref",
+        BuiltinMethodCall::StringConcat => "externref_externref_to_externref",
         BuiltinMethodCall::StringPushRune => "externref_i64_to_externref",
         BuiltinMethodCall::TextLen { .. } => "externref_to_i64",
         BuiltinMethodCall::TextCharAt { .. } => "externref_i64_to_i64",
@@ -1993,6 +1995,7 @@ fn render_core_value_i32(
                 | BuiltinMethodCall::VecFreeze
                 | BuiltinMethodCall::StringNew
                 | BuiltinMethodCall::StringFrom
+                | BuiltinMethodCall::StringConcat
                 | BuiltinMethodCall::StringPushRune
                 | BuiltinMethodCall::RefNew
                 | BuiltinMethodCall::RefSet
@@ -2121,6 +2124,10 @@ fn render_core_value_externref(
                 BuiltinMethodCall::StringFrom => {
                     render_core_value_externref(wat, &args[0], env)?;
                 }
+                BuiltinMethodCall::StringConcat => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                    render_core_value_externref(wat, &args[1], env)?;
+                }
                 BuiltinMethodCall::StringPushRune => {
                     render_core_value_externref(wat, &args[0], env)?;
                     render_core_value_i32(wat, &args[1], env)?;
@@ -2175,6 +2182,10 @@ fn builtin_runtime_call_is_renderable_externref(
         (BuiltinMethodCall::VecFreeze, [vec]) => core_value_is_renderable_externref(vec, env),
         (BuiltinMethodCall::StringNew, []) => true,
         (BuiltinMethodCall::StringFrom, [text]) => core_value_is_renderable_externref(text, env),
+        (BuiltinMethodCall::StringConcat, [left, right]) => {
+            core_value_is_renderable_externref(left, env)
+                && core_value_is_renderable_externref(right, env)
+        }
         (BuiltinMethodCall::StringPushRune, [text, rune]) => {
             core_value_is_renderable_externref(text, env) && core_value_is_renderable_i32(rune, env)
         }

@@ -476,6 +476,25 @@ fn program_contn_capture_under_pure_builtin_method_is_replay_safe() {
 }
 
 #[test]
+fn program_contn_capture_under_string_concat_is_replay_safe() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main(): i64 = resetn { \"a\".concat(shift retry { retry(\"b\") + retry(\"c\") }).bytes_len() }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_eq!(main.control.errors, vec![]);
+    assert_eq!(
+        main.control.continuations[0].replay_safety,
+        chiba_level1r::control::ReplaySafety::Safe
+    );
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "4");
+}
+
+#[test]
 fn program_contn_capture_under_unsafe_ref_builtin_is_replay_unsafe() {
     let output = chiba_level1r::compile_source_program_bundle(
         "def main() = resetn { UnsafeRef.new(shift retry { retry(1) }) }",
@@ -1914,6 +1933,37 @@ fn source_string_from_lowers_to_executable_owned_text_runtime_import() {
         .contains("call $std_string_i64_len"));
 
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
+fn source_string_concat_lowers_to_executable_runtime_import() {
+    let len = compile_source_program_bundle("def main(): i64 = \"a\".concat(\"é\").bytes_len()")
+        .expect("compile string concat len")
+        .program;
+    let byte = compile_source_program_bundle("def main(): i64 = \"a\".concat(\"é\")[1]")
+        .expect("compile string concat byte")
+        .program;
+    let rune = compile_source_program_bundle("def main(): rune = \"a\".concat(\"é\").char_at(1)")
+        .expect("compile string concat char_at")
+        .program;
+
+    for bundle in [&len, &byte, &rune] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle.backend_link.linked_wat.contains(
+            "(import \"env\" \"std.string_concat\" (func $std_string_concat (param externref) (param externref) (result externref)))"
+        ));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_string_concat"));
+    }
+    assert_eq!(len.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(byte.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(rune.defs[0].output.typed.ty, Type::Rune);
+    assert_eq!(run_wat_text(&len.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&byte.backend_link.linked_wat), "195");
+    assert_eq!(run_wat_text(&rune.backend_link.linked_wat), "233");
 }
 
 #[test]

@@ -180,6 +180,7 @@ pub enum BuiltinMethodCall {
     VecFreeze,
     StringNew,
     StringFrom,
+    StringConcat,
     StringPushRune,
     TextLen { kind: TextKind },
     TextCharAt { kind: TextKind },
@@ -199,6 +200,7 @@ impl BuiltinMethodCall {
             Self::VecFreeze => "builtin.vec.freeze",
             Self::StringNew => "builtin.string.new",
             Self::StringFrom => "builtin.string.from",
+            Self::StringConcat => "builtin.string.concat",
             Self::StringPushRune => "builtin.string.push_rune",
             Self::TextLen { kind } => match kind {
                 TextKind::Str => "builtin.str.len",
@@ -2200,6 +2202,10 @@ fn builtin_method_call(
         return Some(BuiltinMethodCall::UnsafeRefNew);
     }
     if let Some(kind) = text_kind_for_type(&receiver.ty) {
+        if matches!((kind, name, args), (TextKind::String, "concat", [arg]) if text_kind_for_type(&arg.ty).is_some())
+        {
+            return Some(BuiltinMethodCall::StringConcat);
+        }
         if matches!((kind, name, args), (TextKind::String, "push_rune", [_])) {
             return Some(BuiltinMethodCall::StringPushRune);
         }
@@ -2243,6 +2249,7 @@ fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Op
         }),
         BuiltinMethodCall::StringNew => Some(Type::Nominal("String".to_string())),
         BuiltinMethodCall::StringFrom => Some(Type::Nominal("String".to_string())),
+        BuiltinMethodCall::StringConcat => Some(Type::Nominal("String".to_string())),
         BuiltinMethodCall::StringPushRune => Some(receiver.clone()),
         BuiltinMethodCall::TextLen { .. } => Some(Type::I64),
         BuiltinMethodCall::TextCharAt { .. } => Some(Type::Rune),
