@@ -797,12 +797,16 @@ fn backend_extern_signature_hash(
 }
 
 fn backend_extern_type_name(source: Option<&str>) -> String {
-    match source {
-        Some("cstr") => "externref".to_string(),
-        Some("i64") => "i64".to_string(),
-        Some("bool") => "bool".to_string(),
-        Some("Unit") | Some("unit") | None => "unit".to_string(),
-        Some(source) => source.to_string(),
+    match source.map(source_type_name_to_type) {
+        Some(ty) if backend_value_kind_for_type(&ty) == Some(BackendValueKind::ExternRef) => {
+            "externref".to_string()
+        }
+        _ => match source {
+            Some("i64") => "i64".to_string(),
+            Some("bool") => "bool".to_string(),
+            Some("Unit") | Some("unit") | None => "unit".to_string(),
+            Some(source) => source.to_string(),
+        },
     }
 }
 

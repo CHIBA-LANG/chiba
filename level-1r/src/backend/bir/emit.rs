@@ -1222,8 +1222,13 @@ fn render_wat(
                         .join(", ")
                 ));
                 if tailcall_args_are_renderable(core, func, args, &env) {
-                    let symbol = format!("chiba_tailcall_{tailcall_index}");
-                    render_func_header(&mut wat, &symbol, None, &env);
+                    let symbol = if tailcall_index == 0 {
+                        "main".to_string()
+                    } else {
+                        format!("chiba_tailcall_{tailcall_index}")
+                    };
+                    let export = (tailcall_index == 0).then_some(symbol.as_str());
+                    render_tailcall_func_header(&mut wat, core, func, &symbol, export, &env);
                     render_tailcall_args(&mut wat, core, func, args, &env)?;
                     wat.push_str(&format!("    call ${}\n", final_symbol(func)));
                     wat.push_str("  )\n");
@@ -2332,6 +2337,20 @@ fn render_return_value_wat(
         wat.push_str(")\n");
     }
     Ok(())
+}
+
+fn render_tailcall_func_header(
+    wat: &mut String,
+    core: &CoreProgram,
+    func: &str,
+    symbol: &str,
+    export: Option<&str>,
+    env: &RenderEnv,
+) {
+    match extern_signature_for_target(core, func).and_then(|(_, result)| result) {
+        Some(WasmValueKind::ExternRef) => render_externref_func_header(wat, symbol, export, env),
+        Some(WasmValueKind::I32) | None => render_func_header(wat, symbol, export, env),
+    }
 }
 
 fn render_core_value_i32(

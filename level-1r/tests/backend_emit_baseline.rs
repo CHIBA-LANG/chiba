@@ -271,7 +271,8 @@ fn backend_skips_tailcall_result_temp_instead_of_faking_return_zero() {
     assert!(artifact.wat.contains(";; tailcall helper args=[7]"));
     assert!(artifact.wat.contains("call $helper"));
     assert!(!artifact.wat.contains("core-return atom=w0"));
-    assert!(!artifact.wat.contains("(func $main"));
+    assert!(artifact.wat.contains("(func $main (export \"main\")"));
+    assert!(!artifact.wat.contains("i32.const 0"));
 }
 
 #[test]

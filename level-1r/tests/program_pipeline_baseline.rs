@@ -4525,6 +4525,86 @@ def main(): i64 = c_len(c"hé")
 }
 
 #[test]
+fn program_extern_c_builtin_handle_args_lower_to_executable_externref_import_wat() {
+    let slice = compile_source_program_bundle(
+        r#"
+def handle_len(value: Slice[i64]): i64 = extern "C" "level1r_externref_len"
+def main(): i64 = handle_len([1, 2, 3])
+"#,
+    )
+    .expect("compile slice extern arg")
+    .program;
+    let string = compile_source_program_bundle(
+        r#"
+def handle_len(value: String): i64 = extern "C" "level1r_externref_len"
+def main(): i64 = handle_len(String.from("hé"))
+"#,
+    )
+    .expect("compile string extern arg")
+    .program;
+    let range = compile_source_program_bundle(
+        r#"
+def range_end(value: Range): i64 = extern "C" "level1r_range_end"
+def main(): i64 = range_end(3..9)
+"#,
+    )
+    .expect("compile range extern arg")
+    .program;
+    let cell = compile_source_program_bundle(
+        r#"
+def cell_len(value: Ref[String]): i64 = extern "C" "level1r_ref_cell_len"
+def main(): i64 = cell_len(Ref.new(String.from("hé")))
+"#,
+    )
+    .expect("compile ref extern arg")
+    .program;
+
+    for (bundle, symbol) in [
+        (&slice, "handle_len"),
+        (&string, "handle_len"),
+        (&range, "range_end"),
+        (&cell, "cell_len"),
+    ] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains(&format!("(func ${symbol} (param externref) (result i32))")));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("signature=externref_to_i64"));
+    }
+    assert_eq!(run_wat_text(&slice.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&string.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&range.backend_link.linked_wat), "9");
+    assert_eq!(run_wat_text(&cell.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn program_extern_c_builtin_handle_return_lowers_to_executable_externref_import_wat() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def id(value: String): String = extern "C" "level1r_identity_externref"
+def main(): String = id(String.from("hé"))
+"#,
+    )
+    .expect("compile string extern return")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"level1r_identity_externref\" (func $id (param externref) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        ";; extern-import c symbol=id module=env name=level1r_identity_externref signature=externref_to_externref"
+    ));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "bytes/3");
+}
+
+#[test]
 fn program_extern_c_unsupported_signature_is_backend_diagnostic() {
     let bundle = compile_source_program_bundle(
         r#"

@@ -135,6 +135,23 @@ async function makeImports(wat, args) {
         const nul = bytes.indexOf(0);
         return nul >= 0 ? nul : bytes.length;
       },
+      level1r_externref_len(value) {
+        if (Array.isArray(value) || (value && Array.isArray(value.items))) {
+          return asArray(value).length;
+        }
+        return byteArray(value).length;
+      },
+      level1r_range_end(range) {
+        return range && typeof range.end !== "undefined" ? Number(range.end) : 0;
+      },
+      level1r_ref_cell_len(ref) {
+        return ref && typeof ref === "object" && "cell" in ref
+          ? Number(byteArray(ref.cell).length)
+          : 0;
+      },
+      level1r_identity_externref(value) {
+        return value;
+      },
       share_state() {
         return 0n;
       },
