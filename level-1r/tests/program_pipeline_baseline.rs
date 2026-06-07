@@ -1776,6 +1776,161 @@ fn source_vec_param_index_lowers_to_executable_runtime_import() {
 }
 
 #[test]
+fn source_vec_param_bool_index_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(v: Vec[bool]): bool = v[0]")
+        .expect("compile bool vec param index")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["v".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::Bool);
+    assert!(matches!(
+        main.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::AggregateIndex {
+            kind: AggregateKind::Vec,
+            ..
+        })
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_i64_get\" (func $std_vec_i64_get (param externref) (param i32) (result i32)))"
+    ));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
+#[test]
+fn source_vec_param_range_slice_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(v: Vec[i64]): i64 = v[0..2][1]")
+        .expect("compile vec param range slice")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["v".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_i64_slice\" (func $std_vec_i64_slice (param externref) (param i32) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_i64_slice"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
+fn source_vec_param_bool_range_slice_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(v: Vec[bool]): bool = v[0..2][0]")
+        .expect("compile bool vec param range slice")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["v".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::Bool);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_i64_slice\" (func $std_vec_i64_slice (param externref) (param i32) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_i64_slice"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
+#[test]
+fn source_vec_param_string_index_lowers_to_executable_externref_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(v: Vec[String]): i64 = v[0].bytes_len()")
+        .expect("compile string vec param index")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["v".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_get\" (func $std_vec_get (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_vec_get"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_i64_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_vec_param_string_range_slice_lowers_to_executable_externref_runtime_import() {
+    let bundle =
+        compile_source_program_bundle("def main(v: Vec[String]): rune = v[0..2][0].char_at(0)")
+            .expect("compile string vec param range slice")
+            .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["v".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::Rune);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_i64_slice\" (func $std_vec_i64_slice (param externref) (param i32) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.slice_get\" (func $std_slice_get (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_i64_slice"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "104");
+}
+
+#[test]
 fn source_vec_new_push_freeze_index_lowers_to_executable_runtime_imports() {
     let bundle = compile_source_program_bundle("def main(): i64 = Vec.new().push(7).freeze()[0]")
         .expect("compile vec new push freeze index")
