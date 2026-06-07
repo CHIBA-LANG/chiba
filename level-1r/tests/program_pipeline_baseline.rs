@@ -1911,6 +1911,33 @@ fn source_string_literal_range_slice_keeps_utf8_byte_semantics() {
 }
 
 #[test]
+fn source_raw_string_literal_keeps_escape_and_interpolation_text() {
+    let len = compile_source_program_bundle("def main(): i64 = r\"\\n${x}\".bytes_len()")
+        .expect("compile raw string literal len")
+        .program;
+    let quote = compile_source_program_bundle("def main(): i64 = r#\"say \"hi\"\"#[4]")
+        .expect("compile raw hash string literal quote byte")
+        .program;
+
+    for bundle in [&len, &quote] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean(bundle, 0);
+        assert!(
+            bundle
+                .backend_link
+                .linked_wat
+                .contains("call $std_string_i64_byte_at")
+                || bundle
+                    .backend_link
+                    .linked_wat
+                    .contains("call $std_string_i64_len")
+        );
+    }
+    assert_eq!(run_wat_text(&len.backend_link.linked_wat), "6");
+    assert_eq!(run_wat_text(&quote.backend_link.linked_wat), "34");
+}
+
+#[test]
 fn source_string_from_lowers_to_executable_owned_text_runtime_import() {
     let bundle = compile_source_program_bundle("def main(): i64 = String.from(\"é\").bytes_len()")
         .expect("compile string from bytes_len")

@@ -254,6 +254,16 @@ fn chiba_lexer_spec() -> LexerSpec {
                 skip: false,
             },
             LexerRule {
+                name: "RawHashStringLit".to_string(),
+                pattern: "r#\"[^#]*\"#".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "RawStringLit".to_string(),
+                pattern: "r\"[^\"]*\"".to_string(),
+                skip: false,
+            },
+            LexerRule {
                 name: "StringLit".to_string(),
                 pattern: "\"[^\"\\\\]*(\\\\.[^\"\\\\]*)*\"".to_string(),
                 skip: false,
@@ -854,6 +864,14 @@ impl FrontendParser {
             Some("StringLit") => {
                 let token = self.expect("StringLit")?;
                 parse_string_literal_expr(&token.lexeme)
+            }
+            Some("RawStringLit") => {
+                let token = self.expect("RawStringLit")?;
+                Ok(Expr::string(raw_string_literal_value(&token.lexeme)))
+            }
+            Some("RawHashStringLit") => {
+                let token = self.expect("RawHashStringLit")?;
+                Ok(Expr::string(raw_string_literal_value(&token.lexeme)))
             }
             Some("CStrLit") => {
                 let token = self.expect("CStrLit")?;
@@ -1871,6 +1889,20 @@ fn string_literal_value(lexeme: &str) -> Option<String> {
         }
     }
     Some(value)
+}
+
+fn raw_string_literal_value(lexeme: &str) -> String {
+    if let Some(inner) = lexeme
+        .strip_prefix("r#\"")
+        .and_then(|text| text.strip_suffix("\"#"))
+    {
+        return inner.to_string();
+    }
+    lexeme
+        .strip_prefix("r\"")
+        .and_then(|text| text.strip_suffix('"'))
+        .unwrap_or(lexeme)
+        .to_string()
 }
 
 fn rune_literal_value(lexeme: &str) -> Option<u32> {

@@ -167,6 +167,32 @@ fn frontend_desugars_string_interpolation_to_string_concat_ast() {
 }
 
 #[test]
+fn frontend_parses_raw_string_literals_without_escape_or_interpolation() {
+    let output =
+        parse_source_program("def main() = r#\"say \"${name}\\n\"\"#").expect("frontend parse");
+
+    assert!(output.tokens.iter().any(
+        |token| token.name == "RawHashStringLit" && token.lexeme == "r#\"say \"${name}\\n\"\"#"
+    ));
+    assert!(!output
+        .tokens
+        .windows(2)
+        .any(|window| window[0].name == "Ident"
+            && window[0].lexeme == "r"
+            && window[1].name == "StringLit"));
+
+    match &output.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(body, &Expr::string("say \"${name}\\n\""));
+        }
+        other => panic!(
+            "expected function def, got {}",
+            source_item_kind_name(other)
+        ),
+    }
+}
+
+#[test]
 fn frontend_parses_method_style_def_with_generic_receiver_and_self_type() {
     let output = parse_source_program("def Box[T].update(self: Self, value: T): Self = self")
         .expect("frontend parse");
