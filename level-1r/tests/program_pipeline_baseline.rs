@@ -1379,6 +1379,42 @@ fn source_vec_new_push_freeze_index_lowers_to_executable_runtime_imports() {
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
 }
 
+fn assert_invalid_assignment_target(source: &str, target_type: &str) {
+    let bundle = compile_source_program_bundle(source)
+        .expect("compile invalid assignment target")
+        .program;
+
+    assert!(
+        bundle
+            .diagnostics
+            .contains(&ProgramDiagnostic::InvalidAssignmentTarget {
+                def: "main".to_string(),
+                target_type: target_type.to_string(),
+            }),
+        "{}",
+        bundle.render_summary()
+    );
+    assert_eq!(bundle.defs[0].output.typed.ty, Type::Unknown);
+}
+
+#[test]
+fn source_assignment_to_immutable_builtin_values_is_program_diagnostic() {
+    assert_invalid_assignment_target("def main(s: Slice[i64]): i64 = s := 1", "Slice[i64]");
+    assert_invalid_assignment_target("def main(a: Array[i64]): i64 = a := 1", "Array[i64]");
+    assert_invalid_assignment_target("def main(v: Vec[i64]): i64 = v := 1", "Vec[i64]");
+    assert_invalid_assignment_target("def main(s: str): i64 = s := 1", "str");
+    assert_invalid_assignment_target("def main(s: String): i64 = s := 1", "String");
+}
+
+#[test]
+fn source_assignment_to_builtin_index_results_is_program_diagnostic() {
+    assert_invalid_assignment_target("def main(s: Slice[i64]): i64 = s[0] := 9", "i64");
+    assert_invalid_assignment_target("def main(a: Array[i64]): i64 = a[0] := 9", "i64");
+    assert_invalid_assignment_target("def main(v: Vec[i64]): i64 = v[0] := 9", "i64");
+    assert_invalid_assignment_target("def main(s: str): i64 = s[0] := 9", "i64");
+    assert_invalid_assignment_target("def main(s: String): i64 = s[0] := 9", "i64");
+}
+
 #[test]
 fn source_ref_new_set_get_lowers_to_executable_runtime_imports() {
     let bundle = compile_source_program_bundle("def main(): i64 = Ref.new(1).set(4).get()")
