@@ -3905,8 +3905,57 @@ def main(): i64 = id(String.from("hé")).bytes_len()
     )
     .expect("compile chiba handle param return builtin chain")
     .program;
+    let slice = compile_source_program_bundle(
+        r#"
+def make(): Slice[String] = [String.from("hé")]
+def main(): i64 = make()[0].bytes_len()
+"#,
+    )
+    .expect("compile chiba slice return builtin chain")
+    .program;
+    let vec = compile_source_program_bundle(
+        r#"
+def id(value: Vec[String]): Vec[String] = value
+def main(): rune = id(Vec.new().push(String.from("x"))).push(String.from("hé")).freeze()[1].char_at(0)
+"#,
+    )
+    .expect("compile chiba vec return builtin chain")
+    .program;
+    let array = compile_source_program_bundle(
+        r#"
+def id(value: Array[String]): Array[String] = value
+def main(): i64 = id([String.from("hé")])[0].bytes_len()
+"#,
+    )
+    .expect("compile chiba array return builtin chain")
+    .program;
+    let unsafe_cell = compile_source_program_bundle(
+        r#"
+def make(): UnsafeRef[String] = UnsafeRef.new(String.from("hé"))
+def main(): i64 = make().get().bytes_len()
+"#,
+    )
+    .expect("compile chiba unsafe ref return builtin chain")
+    .program;
+    let range = compile_source_program_bundle(
+        r#"
+def id(value: Range): Range = value
+def main(): i64 = id(3..9).end
+"#,
+    )
+    .expect("compile chiba range return builtin chain")
+    .program;
 
-    for bundle in [&string, &cell, &identity] {
+    for bundle in [
+        &string,
+        &cell,
+        &identity,
+        &slice,
+        &vec,
+        &array,
+        &unsafe_cell,
+        &range,
+    ] {
         assert_eq!(bundle.diagnostics, vec![]);
         assert_backend_link_clean_all(bundle);
         assert!(bundle
@@ -3926,10 +3975,35 @@ def main(): i64 = id(String.from("hé")).bytes_len()
         .backend_link
         .linked_wat
         .contains("call $std_string_i64_len"));
+    assert!(slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert!(vec
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push_externref"));
+    assert!(array
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_get"));
+    assert!(unsafe_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_get_externref"));
+    assert!(range
+        .backend_link
+        .linked_wat
+        .contains("call $std_range_i64_end"));
 
     assert_eq!(run_wat_text(&string.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&cell.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&identity.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&slice.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&vec.backend_link.linked_wat), "104");
+    assert_eq!(run_wat_text(&array.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&unsafe_cell.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&range.backend_link.linked_wat), "9");
 }
 
 #[test]
