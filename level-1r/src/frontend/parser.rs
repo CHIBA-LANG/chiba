@@ -249,6 +249,11 @@ fn chiba_lexer_spec() -> LexerSpec {
                 skip: false,
             },
             LexerRule {
+                name: "CStrLit".to_string(),
+                pattern: "c\"[^\"\\\\]*(\\\\.[^\"\\\\]*)*\"".to_string(),
+                skip: false,
+            },
+            LexerRule {
                 name: "StringLit".to_string(),
                 pattern: "\"[^\"\\\\]*(\\\\.[^\"\\\\]*)*\"".to_string(),
                 skip: false,
@@ -850,6 +855,10 @@ impl FrontendParser {
                 let token = self.expect("StringLit")?;
                 Ok(Expr::string(unquote_string_literal(&token.lexeme)))
             }
+            Some("CStrLit") => {
+                let token = self.expect("CStrLit")?;
+                Ok(Expr::cstr(unquote_string_literal(&token.lexeme[1..])))
+            }
             Some("RuneLit") => {
                 let token = self.expect("RuneLit")?;
                 rune_literal_value(&token.lexeme)
@@ -898,6 +907,7 @@ impl FrontendParser {
                         "True".to_string(),
                         "False".to_string(),
                         "RuneLit".to_string(),
+                        "CStrLit".to_string(),
                         "KwIf".to_string(),
                         "KwMatch".to_string(),
                         "KwReset".to_string(),

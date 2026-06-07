@@ -503,6 +503,7 @@ pub enum Literal {
     Rune(u32),
     Bool(bool),
     String(String),
+    CStr(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -698,6 +699,7 @@ pub fn render_source_literal(literal: &Literal) -> String {
         Literal::Rune(value) => format!("'{}'", char::from_u32(*value).unwrap_or('\u{fffd}')),
         Literal::Bool(value) => value.to_string(),
         Literal::String(value) => format!("{value:?}"),
+        Literal::CStr(value) => format!("c{value:?}"),
     }
 }
 
@@ -729,6 +731,10 @@ impl Expr {
 
     pub fn string(value: impl Into<String>) -> Self {
         Self::Lit(Literal::String(value.into()))
+    }
+
+    pub fn cstr(value: impl Into<String>) -> Self {
+        Self::Lit(Literal::CStr(value.into()))
     }
 
     pub fn lambda(param: impl Into<String>, body: Expr) -> Self {

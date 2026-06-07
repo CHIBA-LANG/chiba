@@ -1037,6 +1037,7 @@ impl fmt::Display for CpsAtom {
             CpsAtom::Lit(Literal::Rune(value)) => write!(f, "{value}rune"),
             CpsAtom::Lit(Literal::Bool(value)) => write!(f, "{value}"),
             CpsAtom::Lit(Literal::String(value)) => write!(f, "{value:?}"),
+            CpsAtom::Lit(Literal::CStr(value)) => write!(f, "c{value:?}"),
             CpsAtom::OperatorCallee {
                 protocol, receiver, ..
             } => {
@@ -1269,6 +1270,7 @@ fn display_pattern(pattern: &Pattern) -> String {
         Pattern::Lit(Literal::Rune(value)) => format!("'{value}'"),
         Pattern::Lit(Literal::Bool(value)) => value.to_string(),
         Pattern::Lit(Literal::String(value)) => format!("{value:?}"),
+        Pattern::Lit(Literal::CStr(value)) => format!("c{value:?}"),
     }
 }
 

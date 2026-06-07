@@ -560,6 +560,10 @@ fn type_expr_with_context_and_controls(
             TypedExprKind::Lit(Literal::String(value.clone())),
             Type::Nominal("String".to_string()),
         ),
+        Expr::Lit(Literal::CStr(value)) => typed(
+            TypedExprKind::Lit(Literal::CStr(value.clone())),
+            Type::Nominal("cstr".to_string()),
+        ),
         Expr::Lambda { param, body } => {
             let param_ty = Type::Unknown;
             let mut env = env.clone();

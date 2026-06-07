@@ -2015,6 +2015,33 @@ fn source_string_to_cstr_lowers_to_executable_abi_text_runtime_import() {
 }
 
 #[test]
+fn source_cstr_literal_lowers_to_executable_abi_text_runtime_import() {
+    let len = compile_source_program_bundle("def main(): i64 = c\"hé\".bytes_len()")
+        .expect("compile cstr literal len")
+        .program;
+    let nul = compile_source_program_bundle("def main(): i64 = c\"hé\"[3]")
+        .expect("compile cstr literal nul byte")
+        .program;
+
+    for bundle in [&len, &nul] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle.backend_link.linked_wat.contains(
+            "(import \"env\" \"std.cstr_literal_3\" (func $std_cstr_literal_3 (param i32) (param i32) (param i32) (result externref)))"
+        ));
+    }
+    assert!(len.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.cstr_i64_len\" (func $std_cstr_i64_len (param externref) (result i32)))"
+    ));
+    assert!(nul.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.cstr_i64_byte_at\" (func $std_cstr_i64_byte_at (param externref) (param i32) (result i32)))"
+    ));
+
+    assert_eq!(run_wat_text(&len.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&nul.backend_link.linked_wat), "0");
+}
+
+#[test]
 fn source_string_char_at_returns_rune() {
     let bundle = compile_source_program_bundle("def main(): rune = \"é\".char_at(0)")
         .expect("compile string char_at")
@@ -2844,6 +2871,29 @@ def main(): i64 = c_len(String.from("hé").to_cstr())
     ));
     assert!(bundle.backend_link.linked_wat.contains(
         ";; extern-import c symbol=c_len module=env name=level1r_cstr_len signature=externref_to_i64"
+    ));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn program_extern_c_cstr_literal_arg_lowers_to_executable_externref_import_wat() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def c_len(value: cstr): i64 = extern "C" "level1r_cstr_len"
+def main(): i64 = c_len(c"hé")
+"#,
+    )
+    .expect("compile cstr literal extern call")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"level1r_cstr_len\" (func $c_len (param externref) (result i32)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.cstr_literal_3\" (func $std_cstr_literal_3 (param i32) (param i32) (param i32) (result externref)))"
     ));
 
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");

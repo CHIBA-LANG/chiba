@@ -316,10 +316,17 @@ async function makeImports(wat, args) {
           const arity = Number(sliceLiteral[1]);
           return (...items) => items.slice(0, arity).map(Number);
         }
-        const textLiteral = /^std\.(string|str)_literal_(\d+)$/.exec(String(prop));
+        const textLiteral = /^std\.(string|str|cstr)_literal_(\d+)$/.exec(String(prop));
         if (textLiteral) {
           const arity = Number(textLiteral[2]);
-          return (...bytes) => Uint8Array.from(bytes.slice(0, arity).map(Number));
+          return (...bytes) => {
+            const textBytes = Uint8Array.from(bytes.slice(0, arity).map(Number));
+            if (textLiteral[1] !== "cstr") return textBytes;
+            const out = new Uint8Array(textBytes.length + 1);
+            out.set(textBytes, 0);
+            out[textBytes.length] = 0;
+            return { cstr: out };
+          };
         }
         return () => 0n;
       },

@@ -123,6 +123,32 @@ fn frontend_parses_slice_literal_as_builtin_ast_not_fake_call() {
 }
 
 #[test]
+fn frontend_parses_cstr_literal_as_builtin_literal_not_ident_prefix() {
+    let output = parse_source_program("def main(): cstr = c\"hé\"").expect("frontend parse");
+
+    assert!(output
+        .tokens
+        .iter()
+        .any(|token| token.name == "CStrLit" && token.lexeme == "c\"hé\""));
+    assert!(!output
+        .tokens
+        .windows(2)
+        .any(|window| window[0].name == "Ident"
+            && window[0].lexeme == "c"
+            && window[1].name == "StringLit"));
+
+    match &output.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(body, &Expr::cstr("hé"));
+        }
+        other => panic!(
+            "expected function def, got {}",
+            source_item_kind_name(other)
+        ),
+    }
+}
+
+#[test]
 fn frontend_parses_method_style_def_with_generic_receiver_and_self_type() {
     let output = parse_source_program("def Box[T].update(self: Self, value: T): Self = self")
         .expect("frontend parse");

@@ -2329,7 +2329,7 @@ fn global_pattern_bindings(
                 bindings: bindings.clone(),
             })
         }
-        Pattern::Lit(crate::ast::Literal::String(_)) => None,
+        Pattern::Lit(crate::ast::Literal::String(_) | crate::ast::Literal::CStr(_)) => None,
         Pattern::Constructor { data, ctor, args } => {
             let Expr::AdtCtor {
                 data: value_data,

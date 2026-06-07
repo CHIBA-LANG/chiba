@@ -1358,6 +1358,7 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::Lit(crate::ast::Literal::Rune(value)) => format!("{value}rune"),
         CpsAtom::Lit(crate::ast::Literal::Bool(value)) => value.to_string(),
         CpsAtom::Lit(crate::ast::Literal::String(value)) => format!("{value:?}"),
+        CpsAtom::Lit(crate::ast::Literal::CStr(value)) => format!("c{value:?}"),
         CpsAtom::OperatorCallee {
             protocol, receiver, ..
         } => {
@@ -1469,6 +1470,10 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
         CpsAtom::Lit(crate::ast::Literal::Bool(value)) => CoreValue::Bool(*value),
         CpsAtom::Lit(crate::ast::Literal::String(value)) => CoreValue::TextLiteral {
             kind: TextKind::String,
+            value: value.clone(),
+        },
+        CpsAtom::Lit(crate::ast::Literal::CStr(value)) => CoreValue::TextLiteral {
+            kind: TextKind::CStr,
             value: value.clone(),
         },
         CpsAtom::Var(name) if name == "Unit" || name == "unit" => CoreValue::Unit,
