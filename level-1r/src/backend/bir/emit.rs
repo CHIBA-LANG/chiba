@@ -297,27 +297,32 @@ fn unsupported_runtime_return_value(
                 .into_iter()
                 .find_map(|value| unsupported_i32_value(value, &env)),
             CoreOp::ReturnMatch { scrutinee, arms } => unsupported_i32_match(scrutinee, arms, &env),
-            CoreOp::TailCall { func, args } if continuations.contains(func) => {
+            CoreOp::TailCall { func, args }
+                if continuations.contains(effective_tailcall(core, func, args, &env).0) =>
+            {
+                let (runtime_func, _) = effective_tailcall(core, func, args, &env);
                 let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
                     return Some(BackendDiagnostic::UnsupportedContinuationRuntime {
                         op: "resume-without-result".to_string(),
-                        kind: continuation_kind_for_binder(core, func),
-                        binder: Some(func.clone()),
+                        kind: continuation_kind_for_binder(core, runtime_func),
+                        binder: Some(runtime_func.to_string()),
                     });
                 };
                 env = env.with_local_kind(
                     binder,
-                    tailcall_result_kind(core, func, &env).unwrap_or(WasmValueKind::I32),
+                    tailcall_result_kind(core, runtime_func, &env).unwrap_or(WasmValueKind::I32),
                 );
                 None
             }
             CoreOp::TailCall { func, args } => {
-                let diagnostic = unsupported_tailcall_args(core, func, args, &env);
+                let (runtime_func, runtime_args) = effective_tailcall(core, func, args, &env);
+                let diagnostic = unsupported_tailcall_args(core, runtime_func, &runtime_args, &env);
                 if diagnostic.is_none() {
                     if let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) {
                         env = env.with_local_kind(
                             binder,
-                            tailcall_result_kind(core, func, &env).unwrap_or(WasmValueKind::I32),
+                            tailcall_result_kind(core, runtime_func, &env)
+                                .unwrap_or(WasmValueKind::I32),
                         );
                     }
                 }
@@ -1649,9 +1654,9 @@ fn render_continuation_wat(
                 render_runtime_let_value(&mut wat, binder, value, &env)?;
             }
             CoreOp::TailCall { func, args }
-                if continuations.contains_key(tailcall_runtime_target(core, func)) =>
+                if continuations.contains_key(effective_tailcall(core, func, args, &env).0) =>
             {
-                let runtime_func = tailcall_runtime_target(core, func);
+                let (runtime_func, runtime_args) = effective_tailcall(core, func, args, &env);
                 let (kind, captured) = continuations
                     .get(runtime_func)
                     .expect("checked continuation binder")
@@ -1670,7 +1675,7 @@ fn render_continuation_wat(
                         binder: Some(runtime_func.to_string()),
                     });
                 };
-                let [arg] = args.as_slice() else {
+                let [arg] = runtime_args.as_slice() else {
                     return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
                         op: "resume-arity".to_string(),
                         kind,
@@ -2031,6 +2036,7 @@ fn render_captured_continuation_i32(
                 render_runtime_let_value(wat, binder, value, &env)?;
             }
             CoreOp::TailCall { func, args } => {
+                let (runtime_func, runtime_args) = effective_tailcall(core, func, args, &env);
                 let Some(CoreOp::TailCallResult { binder }) = captured.ops.get(index + 1) else {
                     return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
                         op: "captured-tailcall-without-result".to_string(),
@@ -2040,17 +2046,16 @@ fn render_captured_continuation_i32(
                 };
                 wat.push_str(&format!(
                     "    ;; captured-tailcall {} args=[{}]\n",
-                    final_symbol(func),
-                    args.iter()
+                    final_symbol(runtime_func),
+                    runtime_args
+                        .iter()
                         .map(CoreValue::debug_name)
                         .map(|arg| escape_wat_comment(&arg))
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                for arg in args {
-                    render_core_value_i32(wat, arg, &env)?;
-                }
-                wat.push_str(&format!("    call ${}\n", final_symbol(func)));
+                render_tailcall_args(wat, core, runtime_func, &runtime_args, &env)?;
+                wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
                 wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
                 env = env.with_locals(vec![binder.clone()]);
             }

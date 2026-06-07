@@ -1127,6 +1127,132 @@ def main(): i64 = reset { 10 + shift k { ({f: k}).f(1) + ({f: k}).f(2) } }
 }
 
 #[test]
+fn program_continuation_storage_field_call_replays_captured_local_global_and_param_values() {
+    let cont1_local = chiba_level1r::compile_source_program_bundle(
+        r#"
+def main(): i64 = reset { (shift k { ({f: k}).f({local: 9, value: 1}) }).local + 1 }
+"#,
+    )
+    .expect("compile cont1 storage local capture")
+    .program;
+    let cont1_global = chiba_level1r::compile_source_program_bundle(
+        r#"
+def OFFSET: i64 = 9
+def main(): i64 = reset { OFFSET + shift k { ({f: k}).f(1) } }
+"#,
+    )
+    .expect("compile cont1 storage global capture")
+    .program;
+    let cont1_param = chiba_level1r::compile_source_program_bundle(
+        r#"
+def with_param(offset: i64): i64 = reset { offset + shift k { ({f: k}).f(1) } }
+def main(): i64 = with_param(9)
+"#,
+    )
+    .expect("compile cont1 storage param capture")
+    .program;
+    let contn_local = chiba_level1r::compile_source_program_bundle(
+        r#"
+def main(): i64 = resetn { (shift retry { ({f: retry}).f({local: 9, value: 1}) + ({f: retry}).f({local: 9, value: 2}) }).local }
+"#,
+    )
+    .expect("compile contn storage local capture")
+    .program;
+    let contn_global = chiba_level1r::compile_source_program_bundle(
+        r#"
+def OFFSET: i64 = 9
+def main(): i64 = resetn { OFFSET + shift retry { ({f: retry}).f(1) + ({f: retry}).f(2) } }
+"#,
+    )
+    .expect("compile contn storage global capture")
+    .program;
+    let contn_param = chiba_level1r::compile_source_program_bundle(
+        r#"
+def with_param(offset: i64): i64 = resetn { offset + shift retry { ({f: retry}).f(1) + ({f: retry}).f(2) } }
+def main(): i64 = with_param(9)
+"#,
+    )
+    .expect("compile contn storage param capture")
+    .program;
+
+    for bundle in [
+        &cont1_local,
+        &cont1_global,
+        &cont1_param,
+        &contn_local,
+        &contn_global,
+        &contn_param,
+    ] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+    }
+
+    assert_eq!(run_wat_text(&cont1_local.backend_link.linked_wat), "10");
+    assert_eq!(run_wat_text(&cont1_global.backend_link.linked_wat), "10");
+    assert_eq!(run_wat_text(&cont1_param.backend_link.linked_wat), "10");
+    assert_eq!(run_wat_text(&contn_local.backend_link.linked_wat), "18");
+    assert_eq!(run_wat_text(&contn_global.backend_link.linked_wat), "21");
+    assert_eq!(run_wat_text(&contn_param.backend_link.linked_wat), "21");
+}
+
+#[test]
+fn program_continuation_storage_field_call_captures_ref_cells_by_shared_reference() {
+    let cont1_ref_param = chiba_level1r::compile_source_program_bundle(
+        r#"
+def with_cell(cell: Ref[i64]): i64 = reset { shift k { cell.set(9).get() + ({f: k}).f(1) } + cell.get() }
+def main(): i64 = with_cell(Ref.new(1))
+"#,
+    )
+    .expect("compile cont1 storage ref param shared capture")
+    .program;
+    let cont1_unsafe_global = chiba_level1r::compile_source_program_bundle(
+        r#"
+def CELL: UnsafeRef[i64] = UnsafeRef.new(1)
+def main(): i64 = reset { shift k { CELL.set(9).get() + ({f: k}).f(1) } + CELL.get() }
+"#,
+    )
+    .expect("compile cont1 storage unsafe global shared capture")
+    .program;
+    let contn_ref_param = chiba_level1r::compile_source_program_bundle(
+        r#"
+def with_cell(cell: Ref[i64]): i64 = resetn { shift retry { cell.set(9).get() + ({f: retry}).f(1) + ({f: retry}).f(2) } + cell.get() }
+def main(): i64 = with_cell(Ref.new(1))
+"#,
+    )
+    .expect("compile contn storage ref param shared capture")
+    .program;
+    let contn_unsafe_global = chiba_level1r::compile_source_program_bundle(
+        r#"
+def CELL: UnsafeRef[i64] = UnsafeRef.new(1)
+def main(): i64 = resetn { shift retry { CELL.set(9).get() + ({f: retry}).f(1) + ({f: retry}).f(2) } + CELL.get() }
+"#,
+    )
+    .expect("compile contn storage unsafe global shared capture")
+    .program;
+
+    for bundle in [
+        &cont1_ref_param,
+        &cont1_unsafe_global,
+        &contn_ref_param,
+        &contn_unsafe_global,
+    ] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+    }
+
+    assert_eq!(run_wat_text(&cont1_ref_param.backend_link.linked_wat), "19");
+    assert_eq!(
+        run_wat_text(&cont1_unsafe_global.backend_link.linked_wat),
+        "19"
+    );
+    assert_eq!(run_wat_text(&contn_ref_param.backend_link.linked_wat), "30");
+    assert_eq!(
+        run_wat_text(&contn_unsafe_global.backend_link.linked_wat),
+        "30"
+    );
+}
+
+#[test]
 fn program_reset_shift_answer_type_uses_captured_context() {
     let output = chiba_level1r::compile_source_program_bundle(
         "def main() = reset { 10 + shift k { k(7) } }",
