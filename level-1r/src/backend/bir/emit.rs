@@ -90,6 +90,14 @@ pub enum BackendLinkDiagnostic {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BackendParamAbi {
     pub params: BTreeMap<String, BackendValueKind>,
+    pub functions: BTreeMap<String, BackendCallableAbi>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BackendCallableAbi {
+    pub params: Vec<BackendValueKind>,
+    pub result: Option<BackendValueKind>,
+    pub result_ref_cell_lane: Option<CoreRefCellLane>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -186,7 +194,7 @@ pub fn emit_wasm_gc_with_param_abi(
     }
 
     let param_kinds = infer_param_kinds(core, params, param_abi);
-    let manifest = manifest_for_core(core, params, &param_kinds);
+    let manifest = manifest_for_core(core, params, &param_kinds, param_abi);
     if let Some(diagnostic) = unsupported_extern_import_signature(&manifest) {
         return BackendArtifact {
             target: BackendTarget::WasmGc,
@@ -197,7 +205,9 @@ pub fn emit_wasm_gc_with_param_abi(
         };
     }
 
-    if let Some(diagnostic) = unsupported_runtime_return_value(core, params, &param_kinds) {
+    if let Some(diagnostic) =
+        unsupported_runtime_return_value(core, params, &param_kinds, param_abi)
+    {
         return BackendArtifact {
             target: BackendTarget::WasmGc,
             wat: String::new(),
@@ -206,7 +216,7 @@ pub fn emit_wasm_gc_with_param_abi(
             return_value: first_return_value(core),
         };
     }
-    let wat = match render_wat(core, &manifest, params, &param_kinds) {
+    let wat = match render_wat(core, &manifest, params, &param_kinds, param_abi) {
         Ok(wat) => wat,
         Err(diagnostic) => {
             return BackendArtifact {
@@ -232,8 +242,12 @@ fn unsupported_runtime_return_value(
     core: &CoreProgram,
     params: &[String],
     param_kinds: &BTreeMap<String, WasmValueKind>,
+    param_abi: &BackendParamAbi,
 ) -> Option<BackendDiagnostic> {
-    let mut env = env_with_tailcall_result_facts(core, &RenderEnv::new(params, param_kinds));
+    let mut env = env_with_tailcall_result_facts(
+        core,
+        &RenderEnv::new(params, param_kinds).with_function_abis(param_abi.functions.clone()),
+    );
     let mut continuations = BTreeSet::new();
     for (index, op) in core.ops.iter().enumerate() {
         if let Some(diagnostic) = match op {
@@ -261,7 +275,7 @@ fn unsupported_runtime_return_value(
                 };
                 env = env.with_local_kind(
                     binder,
-                    tailcall_result_kind(core, func).unwrap_or(WasmValueKind::I32),
+                    tailcall_result_kind(core, func, &env).unwrap_or(WasmValueKind::I32),
                 );
                 None
             }
@@ -271,7 +285,7 @@ fn unsupported_runtime_return_value(
                     if let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) {
                         env = env.with_local_kind(
                             binder,
-                            tailcall_result_kind(core, func).unwrap_or(WasmValueKind::I32),
+                            tailcall_result_kind(core, func, &env).unwrap_or(WasmValueKind::I32),
                         );
                     }
                 }
@@ -343,7 +357,7 @@ fn unsupported_tailcall_args(
     args: &[CoreValue],
     env: &RenderEnv,
 ) -> Option<BackendDiagnostic> {
-    let Some((params, _)) = extern_signature_for_target(core, func) else {
+    let Some((params, _)) = callable_signature_for_target(core, func, env) else {
         return args.iter().find_map(|arg| unsupported_i32_value(arg, env));
     };
     if params.len() != args.len() {
@@ -413,8 +427,12 @@ fn manifest_for_core(
     core: &CoreProgram,
     params: &[String],
     param_kinds: &BTreeMap<String, WasmValueKind>,
+    param_abi: &BackendParamAbi,
 ) -> BackendManifest {
-    let env = env_with_tailcall_result_facts(core, &RenderEnv::new(params, param_kinds));
+    let env = env_with_tailcall_result_facts(
+        core,
+        &RenderEnv::new(params, param_kinds).with_function_abis(param_abi.functions.clone()),
+    );
     let mut entries = Vec::new();
     for op in &core.ops {
         collect_manifest_entries(op, core, &mut entries);
@@ -1147,12 +1165,14 @@ fn render_wat(
     manifest: &BackendManifest,
     params: &[String],
     param_kinds: &BTreeMap<String, WasmValueKind>,
+    param_abi: &BackendParamAbi,
 ) -> Result<String, BackendDiagnostic> {
     if core_contains_continuation_runtime(core) {
         return render_continuation_wat(core, manifest, params);
     }
 
-    let mut env = RenderEnv::new(params, param_kinds);
+    let mut env =
+        RenderEnv::new(params, param_kinds).with_function_abis(param_abi.functions.clone());
     let mut wat = String::from("(module\n");
     for import in &manifest.imports {
         render_extern_import_wat(&mut wat, import);
@@ -1265,7 +1285,7 @@ fn render_wat(
                 if let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) {
                     env = env.with_local_kind(
                         binder,
-                        tailcall_result_kind(core, func).unwrap_or(WasmValueKind::I32),
+                        tailcall_result_kind(core, func, &env).unwrap_or(WasmValueKind::I32),
                     );
                 }
             }
@@ -1967,6 +1987,25 @@ fn extern_signature_for_target<'a>(
     })
 }
 
+fn callable_signature_for_target(
+    core: &CoreProgram,
+    target: &str,
+    env: &RenderEnv,
+) -> Option<(Vec<WasmValueKind>, Option<WasmValueKind>)> {
+    extern_signature_for_target(core, target).or_else(|| {
+        env.function_abis.get(target).map(|abi| {
+            (
+                abi.params
+                    .iter()
+                    .copied()
+                    .map(WasmValueKind::from)
+                    .collect(),
+                abi.result.map(WasmValueKind::from),
+            )
+        })
+    })
+}
+
 fn wasm_value_kind_from_wat(wat: &str) -> Option<WasmValueKind> {
     match wat {
         "i32" => Some(WasmValueKind::I32),
@@ -2047,7 +2086,7 @@ fn tailcall_chain_returns_result_binder(core: &CoreProgram, binder: &str) -> boo
         .any(|op| matches!(op, CoreOp::ReturnValue(CoreValue::Var(name)) if name == binder))
 }
 
-fn tailcall_result_kinds(core: &CoreProgram) -> BTreeMap<String, WasmValueKind> {
+fn tailcall_result_kinds(core: &CoreProgram, env: &RenderEnv) -> BTreeMap<String, WasmValueKind> {
     let mut kinds = BTreeMap::new();
     for (index, op) in core.ops.iter().enumerate() {
         let CoreOp::TailCall { func, .. } = op else {
@@ -2056,14 +2095,17 @@ fn tailcall_result_kinds(core: &CoreProgram) -> BTreeMap<String, WasmValueKind> 
         let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
             continue;
         };
-        if let Some(kind) = tailcall_result_kind(core, func) {
+        if let Some(kind) = tailcall_result_kind(core, func, env) {
             kinds.insert(binder.clone(), kind);
         }
     }
     kinds
 }
 
-fn tailcall_result_ref_cell_lanes(core: &CoreProgram) -> BTreeMap<String, CoreRefCellLane> {
+fn tailcall_result_ref_cell_lanes(
+    core: &CoreProgram,
+    env: &RenderEnv,
+) -> BTreeMap<String, CoreRefCellLane> {
     let mut lanes = BTreeMap::new();
     for (index, op) in core.ops.iter().enumerate() {
         let CoreOp::TailCall { func, .. } = op else {
@@ -2072,7 +2114,7 @@ fn tailcall_result_ref_cell_lanes(core: &CoreProgram) -> BTreeMap<String, CoreRe
         let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
             continue;
         };
-        if let Some(lane) = tailcall_result_ref_cell_lane(core, func) {
+        if let Some(lane) = tailcall_result_ref_cell_lane(core, func, env) {
             lanes.insert(binder.clone(), lane);
         }
     }
@@ -2084,10 +2126,10 @@ fn env_with_tailcall_result_facts(core: &CoreProgram, env: &RenderEnv) -> Render
     for binder in tailcall_result_binders(core) {
         next = next.with_locals(vec![binder]);
     }
-    for (binder, kind) in tailcall_result_kinds(core) {
+    for (binder, kind) in tailcall_result_kinds(core, env) {
         next = next.with_local_kind(&binder, kind);
     }
-    for (binder, lane) in tailcall_result_ref_cell_lanes(core) {
+    for (binder, lane) in tailcall_result_ref_cell_lanes(core, env) {
         next = next.with_local_ref_cell_lane(&binder, lane);
     }
     next
@@ -2122,6 +2164,7 @@ struct RenderEnv {
     locals: BTreeMap<String, WasmValueKind>,
     local_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     param_kinds: BTreeMap<String, WasmValueKind>,
+    function_abis: BTreeMap<String, BackendCallableAbi>,
     bindings: BTreeMap<String, CoreValue>,
 }
 
@@ -2132,8 +2175,15 @@ impl RenderEnv {
             locals: BTreeMap::new(),
             local_ref_cell_lanes: BTreeMap::new(),
             param_kinds: param_kinds.clone(),
+            function_abis: BTreeMap::new(),
             bindings: BTreeMap::new(),
         }
+    }
+
+    fn with_function_abis(&self, function_abis: BTreeMap<String, BackendCallableAbi>) -> Self {
+        let mut next = self.clone();
+        next.function_abis = function_abis;
+        next
     }
 
     fn is_param(&self, name: &str) -> bool {
@@ -2387,7 +2437,7 @@ fn tailcall_args_are_renderable(
     args: &[CoreValue],
     env: &RenderEnv,
 ) -> bool {
-    let Some((params, _)) = extern_signature_for_target(core, func) else {
+    let Some((params, _)) = callable_signature_for_target(core, func, env) else {
         return args
             .iter()
             .all(|arg| core_value_is_renderable_i32(arg, env));
@@ -2406,7 +2456,7 @@ fn render_tailcall_args(
     args: &[CoreValue],
     env: &RenderEnv,
 ) -> Result<(), BackendDiagnostic> {
-    let Some((params, _)) = extern_signature_for_target(core, func) else {
+    let Some((params, _)) = callable_signature_for_target(core, func, env) else {
         for arg in args {
             render_core_value_i32(wat, arg, env)?;
         }
@@ -2471,28 +2521,39 @@ fn render_tailcall_func_header(
     export: Option<&str>,
     env: &RenderEnv,
 ) {
-    match extern_signature_for_target(core, func).and_then(|(_, result)| result) {
+    match callable_signature_for_target(core, func, env).and_then(|(_, result)| result) {
         Some(WasmValueKind::ExternRef) => render_externref_func_header(wat, symbol, export, env),
         Some(WasmValueKind::I32) | None => render_func_header(wat, symbol, export, env),
     }
 }
 
-fn tailcall_result_kind(core: &CoreProgram, func: &str) -> Option<WasmValueKind> {
-    extern_signature_for_target(core, func).and_then(|(_, result)| result)
+fn tailcall_result_kind(core: &CoreProgram, func: &str, env: &RenderEnv) -> Option<WasmValueKind> {
+    callable_signature_for_target(core, func, env).and_then(|(_, result)| result)
 }
 
-fn tailcall_result_ref_cell_lane(core: &CoreProgram, func: &str) -> Option<CoreRefCellLane> {
-    core.ops.iter().find_map(|op| {
-        let CoreOp::ExternFunctionTarget {
-            target,
-            result_ref_cell_lane,
-            ..
-        } = op
-        else {
-            return None;
-        };
-        (target == func).then_some(*result_ref_cell_lane).flatten()
-    })
+fn tailcall_result_ref_cell_lane(
+    core: &CoreProgram,
+    func: &str,
+    env: &RenderEnv,
+) -> Option<CoreRefCellLane> {
+    core.ops
+        .iter()
+        .find_map(|op| {
+            let CoreOp::ExternFunctionTarget {
+                target,
+                result_ref_cell_lane,
+                ..
+            } = op
+            else {
+                return None;
+            };
+            (target == func).then_some(*result_ref_cell_lane).flatten()
+        })
+        .or_else(|| {
+            env.function_abis
+                .get(func)
+                .and_then(|abi| abi.result_ref_cell_lane)
+        })
 }
 
 fn render_core_value_i32(

@@ -3880,6 +3880,59 @@ fn program_literal_arg_tailcall_lowers_to_executable_direct_call_wat() {
 }
 
 #[test]
+fn program_builtin_handle_return_from_chiba_function_feeds_builtin_chain_wat() {
+    let string = compile_source_program_bundle(
+        r#"
+def make(): String = String.from("hé")
+def main(): i64 = make().bytes_len()
+"#,
+    )
+    .expect("compile chiba string return builtin chain")
+    .program;
+    let cell = compile_source_program_bundle(
+        r#"
+def make(): Ref[String] = Ref.new(String.from("hé"))
+def main(): i64 = make().get().bytes_len()
+"#,
+    )
+    .expect("compile chiba ref return builtin chain")
+    .program;
+    let identity = compile_source_program_bundle(
+        r#"
+def id(value: String): String = value
+def main(): i64 = id(String.from("hé")).bytes_len()
+"#,
+    )
+    .expect("compile chiba handle param return builtin chain")
+    .program;
+
+    for bundle in [&string, &cell, &identity] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains(";; tailcall-result-chain"));
+    }
+    assert!(string
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_len"));
+    assert!(cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_get_externref"));
+    assert!(identity
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_len"));
+
+    assert_eq!(run_wat_text(&string.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&cell.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&identity.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn source_pipe_default_call_lowers_to_executable_direct_call_wat() {
     let output = chiba_level1r::compile_source_program_bundle(
         "def id(x: i64): i64 = x

@@ -7,9 +7,9 @@ use crate::ast::{
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_param_abi, link_backend_artifacts, sort_dedup_imports,
-    BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendDiagnostic, BackendExternAbi,
-    BackendExternImport, BackendLinkDiagnostic, BackendLinkedBundle, BackendParamAbi,
-    BackendValueKind,
+    BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendCallableAbi, BackendDiagnostic,
+    BackendExternAbi, BackendExternImport, BackendLinkDiagnostic, BackendLinkedBundle,
+    BackendParamAbi, BackendValueKind,
 };
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -373,7 +373,7 @@ fn compile_expr_with_indexes_and_generics(
                 .iter()
                 .map(|param| param.name.clone())
                 .collect::<Vec<_>>();
-            let param_abi = backend_param_abi(&typed_signature);
+            let param_abi = backend_param_abi(&typed_signature, extern_functions);
             emit_wasm_gc_with_param_abi(&core, &core_validation, &param_names, &param_abi)
         },
     );
@@ -1195,7 +1195,10 @@ fn interface_callable_storage_facts(interface: &InterfaceSummary) -> Vec<Callabl
         .collect()
 }
 
-fn backend_param_abi(signature: &TypedSignature) -> BackendParamAbi {
+fn backend_param_abi(
+    signature: &TypedSignature,
+    functions: &[crate::surface::InterfaceFunction],
+) -> BackendParamAbi {
     BackendParamAbi {
         params: signature
             .params
@@ -1205,7 +1208,43 @@ fn backend_param_abi(signature: &TypedSignature) -> BackendParamAbi {
                     .map(|kind| (param.name.clone(), kind))
             })
             .collect(),
+        functions: backend_callable_abis_for_interface(functions),
     }
+}
+
+fn backend_callable_abis_for_interface(
+    functions: &[crate::surface::InterfaceFunction],
+) -> BTreeMap<String, BackendCallableAbi> {
+    functions
+        .iter()
+        .map(|function| {
+            let params = function
+                .param_types
+                .iter()
+                .map(|param| {
+                    param
+                        .as_deref()
+                        .map(source_type_name_to_type)
+                        .and_then(|ty| backend_value_kind_for_type(&ty))
+                        .unwrap_or(BackendValueKind::I32)
+                })
+                .collect();
+            let result_type = function
+                .return_type
+                .as_deref()
+                .map(source_type_name_to_type);
+            let result = result_type.as_ref().and_then(backend_value_kind_for_type);
+            let result_ref_cell_lane = result_type.as_ref().and_then(core_ref_cell_lane_for_type);
+            (
+                function.source_name.clone(),
+                BackendCallableAbi {
+                    params,
+                    result,
+                    result_ref_cell_lane,
+                },
+            )
+        })
+        .collect()
 }
 
 fn backend_value_kind_for_type(ty: &Type) -> Option<BackendValueKind> {
