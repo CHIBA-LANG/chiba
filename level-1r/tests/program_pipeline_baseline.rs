@@ -4605,6 +4605,29 @@ def main(): String = id(String.from("hé"))
 }
 
 #[test]
+fn program_extern_c_builtin_handle_result_can_feed_builtin_method_wat() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def id(value: String): String = extern "C" "level1r_identity_externref"
+def main(): i64 = id(String.from("hé")).bytes_len()
+"#,
+    )
+    .expect("compile string extern return method chain")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"level1r_identity_externref\" (func $id (param externref) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_len"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn program_extern_c_unsupported_signature_is_backend_diagnostic() {
     let bundle = compile_source_program_bundle(
         r#"

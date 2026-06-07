@@ -259,10 +259,24 @@ fn unsupported_runtime_return_value(
                         binder: Some(func.clone()),
                     });
                 };
-                env = env.with_locals(vec![binder.clone()]);
+                env = env.with_local_kind(
+                    binder,
+                    tailcall_result_kind(core, func).unwrap_or(WasmValueKind::I32),
+                );
                 None
             }
-            CoreOp::TailCall { func, args } => unsupported_tailcall_args(core, func, args, &env),
+            CoreOp::TailCall { func, args } => {
+                let diagnostic = unsupported_tailcall_args(core, func, args, &env);
+                if diagnostic.is_none() {
+                    if let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) {
+                        env = env.with_local_kind(
+                            binder,
+                            tailcall_result_kind(core, func).unwrap_or(WasmValueKind::I32),
+                        );
+                    }
+                }
+                diagnostic
+            }
             CoreOp::TailCallResult { binder } => {
                 env = env.with_locals(vec![binder.clone()]);
                 None
@@ -1124,7 +1138,7 @@ fn render_wat(
         return render_continuation_wat(core, manifest, params);
     }
 
-    let env = RenderEnv::new(params, param_kinds);
+    let mut env = RenderEnv::new(params, param_kinds);
     let mut wat = String::from("(module\n");
     for import in &manifest.imports {
         render_extern_import_wat(&mut wat, import);
@@ -1233,6 +1247,12 @@ fn render_wat(
                     wat.push_str(&format!("    call ${}\n", final_symbol(func)));
                     wat.push_str("  )\n");
                     tailcall_index += 1;
+                }
+                if let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) {
+                    env = env.with_local_kind(
+                        binder,
+                        tailcall_result_kind(core, func).unwrap_or(WasmValueKind::I32),
+                    );
                 }
             }
             CoreOp::Branch { cond } => {
@@ -1956,16 +1976,23 @@ fn render_tailcall_result_chain(
             result_binders.push(binder.clone());
         }
     }
-    if result_binders.len() <= 1 {
+    if result_binders.is_empty()
+        || (result_binders.len() == 1
+            && tailcall_chain_returns_result_binder(core, &result_binders[0]))
+    {
         return Ok(false);
     }
-    let chain_env = env.with_locals(result_binders.clone());
+    let mut chain_env = env.with_locals(result_binders.clone());
+    for (binder, kind) in tailcall_result_kinds(core) {
+        chain_env = chain_env.with_local_kind(&binder, kind);
+    }
     wat.push_str("  ;; tailcall-result-chain\n");
-    render_func_header(wat, "chiba_tailcall_0", None, &chain_env);
+    render_func_header(wat, "main", Some("main"), &chain_env);
     for binder in &result_binders {
         wat.push_str(&format!(
-            "    (local ${} i32)\n",
-            encode_debug_symbol(binder)
+            "    (local ${} {})\n",
+            encode_debug_symbol(binder),
+            chain_env.param_kind(binder).wat_type()
         ));
     }
 
@@ -2003,6 +2030,28 @@ fn render_tailcall_result_chain(
     Ok(true)
 }
 
+fn tailcall_chain_returns_result_binder(core: &CoreProgram, binder: &str) -> bool {
+    core.ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::ReturnValue(CoreValue::Var(name)) if name == binder))
+}
+
+fn tailcall_result_kinds(core: &CoreProgram) -> BTreeMap<String, WasmValueKind> {
+    let mut kinds = BTreeMap::new();
+    for (index, op) in core.ops.iter().enumerate() {
+        let CoreOp::TailCall { func, .. } = op else {
+            continue;
+        };
+        let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
+            continue;
+        };
+        if let Some(kind) = tailcall_result_kind(core, func) {
+            kinds.insert(binder.clone(), kind);
+        }
+    }
+    kinds
+}
+
 fn operator_intrinsic_opcode(intrinsic: Option<OperatorIntrinsic>) -> Option<&'static str> {
     match intrinsic {
         Some(OperatorIntrinsic::I64Add) => Some("i32.add"),
@@ -2016,7 +2065,7 @@ fn operator_intrinsic_opcode(intrinsic: Option<OperatorIntrinsic>) -> Option<&'s
 #[derive(Clone)]
 struct RenderEnv {
     params: BTreeSet<String>,
-    locals: BTreeSet<String>,
+    locals: BTreeMap<String, WasmValueKind>,
     param_kinds: BTreeMap<String, WasmValueKind>,
     bindings: BTreeMap<String, CoreValue>,
 }
@@ -2025,14 +2074,14 @@ impl RenderEnv {
     fn new(params: &[String], param_kinds: &BTreeMap<String, WasmValueKind>) -> Self {
         Self {
             params: params.iter().cloned().collect(),
-            locals: BTreeSet::new(),
+            locals: BTreeMap::new(),
             param_kinds: param_kinds.clone(),
             bindings: BTreeMap::new(),
         }
     }
 
     fn is_param(&self, name: &str) -> bool {
-        self.params.contains(name) || self.locals.contains(name)
+        self.params.contains(name) || self.locals.contains_key(name)
     }
 
     fn binding(&self, name: &str) -> Option<&CoreValue> {
@@ -2047,7 +2096,15 @@ impl RenderEnv {
 
     fn with_locals(&self, names: Vec<String>) -> Self {
         let mut next = self.clone();
-        next.locals.extend(names);
+        for name in names {
+            next.locals.entry(name).or_insert(WasmValueKind::I32);
+        }
+        next
+    }
+
+    fn with_local_kind(&self, name: &str, kind: WasmValueKind) -> Self {
+        let mut next = self.clone();
+        next.locals.insert(name.to_string(), kind);
         next
     }
 
@@ -2065,9 +2122,10 @@ impl RenderEnv {
     }
 
     fn param_kind(&self, name: &str) -> WasmValueKind {
-        self.param_kinds
+        self.locals
             .get(name)
             .copied()
+            .or_else(|| self.param_kinds.get(name).copied())
             .unwrap_or(WasmValueKind::I32)
     }
 }
@@ -2351,6 +2409,10 @@ fn render_tailcall_func_header(
         Some(WasmValueKind::ExternRef) => render_externref_func_header(wat, symbol, export, env),
         Some(WasmValueKind::I32) | None => render_func_header(wat, symbol, export, env),
     }
+}
+
+fn tailcall_result_kind(core: &CoreProgram, func: &str) -> Option<WasmValueKind> {
+    extern_signature_for_target(core, func).and_then(|(_, result)| result)
 }
 
 fn render_core_value_i32(

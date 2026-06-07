@@ -213,6 +213,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         "root",
         &type_aliases,
         &[],
+        &TypeEnv::new(),
     )
 }
 
@@ -229,6 +230,7 @@ fn compile_expr_with_indexes_and_generics(
     current_namespace: &str,
     type_aliases: &TypeAliasIndex,
     extern_functions: &[crate::surface::InterfaceFunction],
+    function_env: &TypeEnv,
 ) -> CompileOutput {
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || {
@@ -289,7 +291,7 @@ fn compile_expr_with_indexes_and_generics(
             )
         },
     );
-    let typed_env = typed_signature.type_env();
+    let typed_env = typed_signature.type_env(function_env);
     let typed = passes.record("L7Typed", "SourceExpr+TypedSignature", "TypedExpr", || {
         type_expr_with_context(expr, &typed_env, type_context)
     });
@@ -978,6 +980,8 @@ fn compile_program_defs(
     let type_aliases = type_aliases_from_interface(interface);
     let type_context =
         type_context_from_interface(interface, &program.data, &current_namespace, &type_aliases);
+    let function_env =
+        function_type_env_from_interface(interface, &current_namespace, &type_aliases);
     program
         .items
         .iter()
@@ -1007,6 +1011,7 @@ fn compile_program_defs(
                         &current_namespace,
                         &type_aliases,
                         &interface.functions,
+                        &function_env,
                     );
                     output
                         .core
@@ -1036,12 +1041,67 @@ impl TypedSignature {
         }
     }
 
-    pub fn type_env(&self) -> TypeEnv {
-        self.params
+    pub fn type_env(&self, function_env: &TypeEnv) -> TypeEnv {
+        function_env
             .iter()
-            .flat_map(|param| param.binding_types.clone())
+            .map(|(name, ty)| (name.clone(), ty.clone()))
+            .chain(
+                self.params
+                    .iter()
+                    .flat_map(|param| param.binding_types.clone()),
+            )
             .collect()
     }
+}
+
+fn function_type_env_from_interface(
+    interface: &InterfaceSummary,
+    current_namespace: &str,
+    type_aliases: &TypeAliasIndex,
+) -> TypeEnv {
+    interface
+        .functions
+        .iter()
+        .filter(|function| function.receiver.is_none())
+        .filter(|function| function.owner == current_namespace)
+        .map(|function| {
+            (
+                function.source_name.clone(),
+                function_type_from_interface(function, current_namespace, type_aliases),
+            )
+        })
+        .collect()
+}
+
+fn function_type_from_interface(
+    function: &crate::surface::InterfaceFunction,
+    current_namespace: &str,
+    type_aliases: &TypeAliasIndex,
+) -> Type {
+    let result = function
+        .return_type
+        .as_deref()
+        .map(|ty| resolve_header_type(Some(ty), &None, current_namespace, type_aliases))
+        .map(|ty| source_type_name_to_type(&ty))
+        .unwrap_or(Type::Unknown);
+    function
+        .param_types
+        .iter()
+        .rev()
+        .fold(result, |result, param| {
+            Type::Func(
+                Box::new(
+                    param
+                        .as_deref()
+                        .map(|ty| {
+                            resolve_header_type(Some(ty), &None, current_namespace, type_aliases)
+                        })
+                        .map(|ty| source_type_name_to_type(&ty))
+                        .unwrap_or(Type::Unknown),
+                ),
+                Box::new(result),
+            )
+        })
 }
 
 fn explicit_callable_storage_facts(
