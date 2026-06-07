@@ -91,6 +91,7 @@ pub enum BackendLinkDiagnostic {
 pub struct BackendParamAbi {
     pub params: BTreeMap<String, BackendValueKind>,
     pub functions: BTreeMap<String, BackendCallableAbi>,
+    pub callable_params: BTreeMap<String, BackendCallableAbi>,
     pub statics: BTreeMap<String, BackendValueKind>,
     pub static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     pub aggregate_element_lanes: BTreeMap<String, BackendValueKind>,
@@ -109,6 +110,10 @@ pub struct BackendCallableAbi {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BackendCallableArgExpansion {
     Direct(BackendValueKind),
+    Callable {
+        params: Vec<BackendValueKind>,
+        result: Option<BackendValueKind>,
+    },
     DynRowFields(Vec<BackendDynRowParamFieldAbi>),
 }
 
@@ -270,7 +275,7 @@ fn unsupported_runtime_return_value(
 ) -> Option<BackendDiagnostic> {
     let mut env = env_with_tailcall_result_facts(
         core,
-        &RenderEnv::from_param_abi(params, param_kinds, param_abi),
+        &RenderEnv::from_param_abi(params, param_kinds, param_abi).with_lifted_function_abis(core),
     );
     let mut continuations = BTreeSet::new();
     for (index, op) in core.ops.iter().enumerate() {
@@ -400,6 +405,9 @@ fn unsupported_tailcall_args(
     args: &[CoreValue],
     env: &RenderEnv,
 ) -> Option<BackendDiagnostic> {
+    if let Some(callable) = env.callable_param(func) {
+        return unsupported_callable_param_tailcall_args(func, callable, args, env);
+    }
     if let Some(expansions) = callable_arg_expansions_for_target(func, env) {
         if expansions.len() != args.len() {
             return Some(BackendDiagnostic::UnsupportedI32ReturnValue {
@@ -430,6 +438,28 @@ fn unsupported_tailcall_args(
     })
 }
 
+fn unsupported_callable_param_tailcall_args(
+    func: &str,
+    callable: &BackendCallableAbi,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> Option<BackendDiagnostic> {
+    if callable.params.len() != args.len() {
+        return Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: format!("{} /{}", final_symbol(func), args.len()),
+        });
+    }
+    callable.params.iter().zip(args).find_map(|(kind, arg)| {
+        let renderable = match WasmValueKind::from(*kind) {
+            WasmValueKind::I32 => core_value_is_renderable_i32(arg, env),
+            WasmValueKind::ExternRef => core_value_is_renderable_externref(arg, env),
+        };
+        (!renderable).then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: arg.debug_name(),
+        })
+    })
+}
+
 fn unsupported_expanded_tailcall_arg(
     expansion: &BackendCallableArgExpansion,
     arg: &CoreValue,
@@ -443,6 +473,13 @@ fn unsupported_expanded_tailcall_arg(
             };
             (!renderable).then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
                 value: arg.debug_name(),
+            })
+        }
+        BackendCallableArgExpansion::Callable { params, result } => {
+            (!callable_selector_for_value(arg, params, *result, env).is_some()).then(|| {
+                BackendDiagnostic::UnsupportedI32ReturnValue {
+                    value: arg.debug_name(),
+                }
             })
         }
         BackendCallableArgExpansion::DynRowFields(fields) => fields.iter().find_map(|field| {
@@ -517,7 +554,7 @@ fn manifest_for_core(
 ) -> BackendManifest {
     let env = env_with_tailcall_result_facts(
         core,
-        &RenderEnv::from_param_abi(params, param_kinds, param_abi),
+        &RenderEnv::from_param_abi(params, param_kinds, param_abi).with_lifted_function_abis(core),
     );
     let mut entries = Vec::new();
     for op in &core.ops {
@@ -738,6 +775,7 @@ fn collect_runtime_value_imports(
         | CoreValue::I64(_)
         | CoreValue::Bool(_)
         | CoreValue::Var(_)
+        | CoreValue::LiftedFunction { .. }
         | CoreValue::Rendered { .. } => {}
     }
 }
@@ -1289,7 +1327,8 @@ fn render_wat(
         return render_continuation_wat(core, manifest, params, param_kinds, param_abi);
     }
 
-    let mut env = RenderEnv::from_param_abi(params, param_kinds, param_abi);
+    let mut env =
+        RenderEnv::from_param_abi(params, param_kinds, param_abi).with_lifted_function_abis(core);
     let mut wat = String::from("(module\n");
     for import in &manifest.imports {
         render_extern_import_wat(&mut wat, import);
@@ -1410,8 +1449,18 @@ fn render_wat(
                         export,
                         &env,
                     );
-                    render_tailcall_args(&mut wat, core, runtime_func, &runtime_args, &env)?;
-                    wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
+                    if let Some(callable) = env.callable_param(runtime_func) {
+                        render_callable_param_call(
+                            &mut wat,
+                            runtime_func,
+                            callable,
+                            &runtime_args,
+                            &env,
+                        )?;
+                    } else {
+                        render_tailcall_args(&mut wat, core, runtime_func, &runtime_args, &env)?;
+                        wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
+                    }
                     wat.push_str("  )\n");
                     tailcall_index += 1;
                 }
@@ -1553,8 +1602,18 @@ fn render_wat(
             | CoreOp::CallableAlias { .. }
             | CoreOp::ExternFunctionTarget { .. }
             | CoreOp::TailCallResult { .. }
-            | CoreOp::TargetSpecificTerm { .. }
-            | CoreOp::LiftedFunction { .. } => {}
+            | CoreOp::TargetSpecificTerm { .. } => {}
+            CoreOp::LiftedFunction {
+                symbol,
+                param,
+                body,
+                direct,
+                ..
+            } => {
+                if *direct {
+                    render_lifted_function_wat(&mut wat, symbol, param.as_deref(), body, &env)?;
+                }
+            }
             CoreOp::OperatorTarget {
                 protocol,
                 target,
@@ -1584,12 +1643,10 @@ fn render_continuation_wat(
     param_kinds: &BTreeMap<String, WasmValueKind>,
     param_abi: &BackendParamAbi,
 ) -> Result<String, BackendDiagnostic> {
-    let runtime_local_kinds = collect_runtime_local_kinds(
-        &core.ops,
-        &RenderEnv::from_param_abi(params, param_kinds, param_abi),
-    );
-    let env = RenderEnv::from_param_abi(params, param_kinds, param_abi)
-        .with_local_kinds(runtime_local_kinds.clone());
+    let base_env =
+        RenderEnv::from_param_abi(params, param_kinds, param_abi).with_lifted_function_abis(core);
+    let runtime_local_kinds = collect_runtime_local_kinds(&core.ops, &base_env);
+    let env = base_env.with_local_kinds(runtime_local_kinds.clone());
     let mut wat = String::from("(module\n");
     for import in &manifest.imports {
         render_extern_import_wat(&mut wat, import);
@@ -1706,8 +1763,18 @@ fn render_continuation_wat(
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                render_tailcall_args(&mut wat, core, runtime_func, &runtime_args, &env)?;
-                wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
+                if let Some(callable) = env.callable_param(runtime_func) {
+                    render_callable_param_call(
+                        &mut wat,
+                        runtime_func,
+                        callable,
+                        &runtime_args,
+                        &env,
+                    )?;
+                } else {
+                    render_tailcall_args(&mut wat, core, runtime_func, &runtime_args, &env)?;
+                    wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
+                }
                 wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
             }
             CoreOp::ReturnValue(value) => {
@@ -2248,18 +2315,22 @@ fn callable_signature_for_target(
     target: &str,
     env: &RenderEnv,
 ) -> Option<(Vec<WasmValueKind>, Option<WasmValueKind>)> {
-    extern_signature_for_target(core, target).or_else(|| {
-        env.function_abis.get(target).map(|abi| {
-            (
-                abi.params
-                    .iter()
-                    .copied()
-                    .map(WasmValueKind::from)
-                    .collect(),
-                abi.result.map(WasmValueKind::from),
-            )
-        })
-    })
+    extern_signature_for_target(core, target)
+        .or_else(|| env.callable_params.get(target).map(callable_wasm_signature))
+        .or_else(|| env.function_abis.get(target).map(callable_wasm_signature))
+}
+
+fn callable_wasm_signature(
+    abi: &BackendCallableAbi,
+) -> (Vec<WasmValueKind>, Option<WasmValueKind>) {
+    (
+        abi.params
+            .iter()
+            .copied()
+            .map(WasmValueKind::from)
+            .collect(),
+        abi.result.map(WasmValueKind::from),
+    )
 }
 
 fn callable_arg_expansions_for_target<'a>(
@@ -2269,6 +2340,43 @@ fn callable_arg_expansions_for_target<'a>(
     env.function_abis
         .get(target)
         .map(|abi| abi.arg_expansions.as_slice())
+}
+
+fn callable_signature_matches(
+    abi: &BackendCallableAbi,
+    params: &[BackendValueKind],
+    result: Option<BackendValueKind>,
+) -> bool {
+    abi.params == params && abi.result == result
+}
+
+fn callable_candidates(
+    params: &[BackendValueKind],
+    result: Option<BackendValueKind>,
+    env: &RenderEnv,
+) -> Vec<String> {
+    env.function_abis
+        .iter()
+        .filter(|(_, abi)| callable_signature_matches(abi, params, result))
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
+fn callable_selector_for_value(
+    value: &CoreValue,
+    params: &[BackendValueKind],
+    result: Option<BackendValueKind>,
+    env: &RenderEnv,
+) -> Option<i32> {
+    let name = match value {
+        CoreValue::Var(name) => name.as_str(),
+        CoreValue::LiftedFunction { symbol, .. } => symbol.as_str(),
+        _ => return None,
+    };
+    callable_candidates(params, result, env)
+        .iter()
+        .position(|candidate| candidate == name)
+        .map(|index| index as i32 + 1)
 }
 
 fn wasm_value_kind_from_wat(wat: &str) -> Option<WasmValueKind> {
@@ -2434,6 +2542,7 @@ struct RenderEnv {
     local_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     param_kinds: BTreeMap<String, WasmValueKind>,
     function_abis: BTreeMap<String, BackendCallableAbi>,
+    callable_params: BTreeMap<String, BackendCallableAbi>,
     static_kinds: BTreeMap<String, WasmValueKind>,
     static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     aggregate_element_lanes: BTreeMap<String, WasmValueKind>,
@@ -2450,6 +2559,7 @@ impl RenderEnv {
             local_ref_cell_lanes: BTreeMap::new(),
             param_kinds: param_kinds.clone(),
             function_abis: BTreeMap::new(),
+            callable_params: BTreeMap::new(),
             static_kinds: BTreeMap::new(),
             static_ref_cell_lanes: BTreeMap::new(),
             aggregate_element_lanes: BTreeMap::new(),
@@ -2466,6 +2576,7 @@ impl RenderEnv {
     ) -> Self {
         Self::new(params, param_kinds)
             .with_function_abis(param_abi.functions.clone())
+            .with_callable_params(param_abi.callable_params.clone())
             .with_static_kinds(param_abi.statics.clone())
             .with_static_ref_cell_lanes(param_abi.static_ref_cell_lanes.clone())
             .with_aggregate_element_lanes(param_abi.aggregate_element_lanes.clone())
@@ -2476,6 +2587,43 @@ impl RenderEnv {
     fn with_function_abis(&self, function_abis: BTreeMap<String, BackendCallableAbi>) -> Self {
         let mut next = self.clone();
         next.function_abis = function_abis;
+        next
+    }
+
+    fn with_lifted_function_abis(&self, core: &CoreProgram) -> Self {
+        let mut next = self.clone();
+        for op in &core.ops {
+            let CoreOp::LiftedFunction {
+                symbol,
+                direct,
+                param,
+                body,
+                ..
+            } = op
+            else {
+                continue;
+            };
+            if !direct || param.is_none() || body.is_empty() {
+                continue;
+            }
+            next.function_abis.insert(
+                symbol.clone(),
+                BackendCallableAbi {
+                    params: vec![BackendValueKind::I32],
+                    arg_expansions: vec![BackendCallableArgExpansion::Direct(
+                        BackendValueKind::I32,
+                    )],
+                    result: Some(BackendValueKind::I32),
+                    result_ref_cell_lane: None,
+                },
+            );
+        }
+        next
+    }
+
+    fn with_callable_params(&self, callable_params: BTreeMap<String, BackendCallableAbi>) -> Self {
+        let mut next = self.clone();
+        next.callable_params = callable_params;
         next
     }
 
@@ -2624,6 +2772,10 @@ impl RenderEnv {
 
     fn aggregate_element_lane(&self, name: &str) -> Option<WasmValueKind> {
         self.aggregate_element_lanes.get(name).copied()
+    }
+
+    fn callable_param(&self, name: &str) -> Option<&BackendCallableAbi> {
+        self.callable_params.get(name)
     }
 
     fn signature(&self) -> String {
@@ -2830,6 +2982,7 @@ fn infer_param_kinds_from_value(
         | CoreValue::Var(_)
         | CoreValue::TextLiteral { .. }
         | CoreValue::SliceLiteral { .. }
+        | CoreValue::LiftedFunction { .. }
         | CoreValue::Rendered { .. } => {}
     }
 }
@@ -2865,6 +3018,9 @@ fn tailcall_args_are_renderable(
     args: &[CoreValue],
     env: &RenderEnv,
 ) -> bool {
+    if let Some(callable) = env.callable_param(func) {
+        return unsupported_callable_param_tailcall_args(func, callable, args, env).is_none();
+    }
     if let Some(expansions) = callable_arg_expansions_for_target(func, env) {
         return expansions.len() == args.len()
             && expansions
@@ -2875,6 +3031,9 @@ fn tailcall_args_are_renderable(
                         WasmValueKind::I32 => core_value_is_renderable_i32(arg, env),
                         WasmValueKind::ExternRef => core_value_is_renderable_externref(arg, env),
                     },
+                    BackendCallableArgExpansion::Callable { params, result } => {
+                        callable_selector_for_value(arg, params, *result, env).is_some()
+                    }
                     BackendCallableArgExpansion::DynRowFields(fields) => {
                         fields.iter().all(|field| {
                             dyn_row_data_field_value(arg, &field.field, env)
@@ -2965,6 +3124,13 @@ fn render_tailcall_args(
                     WasmValueKind::I32 => render_core_value_i32(wat, arg, env)?,
                     WasmValueKind::ExternRef => render_core_value_externref(wat, arg, env)?,
                 },
+                BackendCallableArgExpansion::Callable { params, result } => {
+                    let selector = callable_selector_for_value(arg, params, *result, env)
+                        .ok_or_else(|| BackendDiagnostic::UnsupportedI32ReturnValue {
+                            value: arg.debug_name(),
+                        })?;
+                    wat.push_str(&format!("    i32.const {selector}\n"));
+                }
                 BackendCallableArgExpansion::DynRowFields(fields) => {
                     for field in fields {
                         let value =
@@ -3002,6 +3168,124 @@ fn render_tailcall_args(
             WasmValueKind::ExternRef => render_core_value_externref(wat, arg, env)?,
         }
     }
+    Ok(())
+}
+
+fn render_callable_param_call(
+    wat: &mut String,
+    func: &str,
+    callable: &BackendCallableAbi,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> Result<(), BackendDiagnostic> {
+    let candidates = callable_candidates(&callable.params, callable.result, env);
+    if candidates.is_empty() {
+        return Err(BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: func.to_string(),
+        });
+    }
+    render_core_value_i32(wat, &CoreValue::Var(func.to_string()), env)?;
+    for (index, candidate) in candidates.iter().enumerate() {
+        if index == 0 {
+            wat.push_str(&format!("    i32.const {}\n", index + 1));
+            wat.push_str("    i32.eq\n");
+            wat.push_str("    if (result i32)\n");
+        } else {
+            wat.push_str("    else\n");
+            render_core_value_i32(wat, &CoreValue::Var(func.to_string()), env)?;
+            wat.push_str(&format!("    i32.const {}\n", index + 1));
+            wat.push_str("    i32.eq\n");
+            wat.push_str("    if (result i32)\n");
+        }
+        for (kind, arg) in callable.params.iter().zip(args) {
+            match WasmValueKind::from(*kind) {
+                WasmValueKind::I32 => render_core_value_i32(wat, arg, env)?,
+                WasmValueKind::ExternRef => render_core_value_externref(wat, arg, env)?,
+            }
+        }
+        wat.push_str(&format!("      call ${}\n", final_symbol(candidate)));
+    }
+    wat.push_str("    else\n");
+    wat.push_str("      i32.const 0\n");
+    for _ in candidates.iter().skip(1) {
+        wat.push_str("    end\n");
+    }
+    wat.push_str("    end\n");
+    Ok(())
+}
+
+fn render_lifted_function_wat(
+    wat: &mut String,
+    symbol: &str,
+    param: Option<&str>,
+    body: &[CoreOp],
+    env: &RenderEnv,
+) -> Result<(), BackendDiagnostic> {
+    let Some(param) = param else {
+        return Ok(());
+    };
+    let body_core = CoreProgram {
+        ops: body.to_vec(),
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+    let local_env = env
+        .with_params_as_locals(vec![param.to_string()])
+        .with_local_kind(param, WasmValueKind::I32);
+    let local_env = env_with_tailcall_result_facts(&body_core, &local_env);
+    for op in body {
+        if let CoreOp::OperatorTarget {
+            protocol,
+            target,
+            intrinsic,
+        } = op
+        {
+            render_operator_intrinsic_wat(wat, protocol, target, *intrinsic);
+        }
+    }
+    wat.push_str(&format!(
+        "  (func ${} (param ${} i32) (result i32)\n",
+        final_symbol(symbol),
+        encode_debug_symbol(param)
+    ));
+    for binder in tailcall_result_binders(&body_core) {
+        wat.push_str(&format!(
+            "    (local ${} {})\n",
+            encode_debug_symbol(&binder),
+            local_env.param_kind(&binder).wat_type()
+        ));
+    }
+    for (index, op) in body.iter().enumerate() {
+        match op {
+            CoreOp::ReturnValue(value) => {
+                render_core_value_i32(wat, value, &local_env)?;
+                wat.push_str("  )\n");
+                return Ok(());
+            }
+            CoreOp::TailCall { func, args } => {
+                let (runtime_func, runtime_args) =
+                    effective_tailcall(&body_core, func, args, &local_env);
+                render_tailcall_args(wat, &body_core, runtime_func, &runtime_args, &local_env)?;
+                wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
+                if let Some(CoreOp::TailCallResult { binder }) = body.get(index + 1) {
+                    wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
+                    continue;
+                }
+            }
+            CoreOp::TailCallResult { .. }
+            | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::CallableAlias { .. }
+            | CoreOp::OperatorTarget { .. } => {}
+            _ => {
+                return Err(BackendDiagnostic::UnsupportedI32ReturnValue {
+                    value: format!("lifted {}", final_symbol(symbol)),
+                });
+            }
+        }
+    }
+    wat.push_str("    i32.const 0\n");
+    wat.push_str("  )\n");
     Ok(())
 }
 
@@ -3269,6 +3553,7 @@ fn render_core_value_i32(
         | CoreValue::BuiltinRuntimeCall { .. }
         | CoreValue::Record { .. }
         | CoreValue::RecordUpdate { .. }
+        | CoreValue::LiftedFunction { .. }
         | CoreValue::Rendered { .. } => {
             return Err(unsupported_i32_render_diagnostic(value));
         }
@@ -3650,6 +3935,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
         | CoreValue::RecordUpdate { .. }
+        | CoreValue::LiftedFunction { .. }
         | CoreValue::Rendered { .. } => false,
     }
 }

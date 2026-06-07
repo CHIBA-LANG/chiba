@@ -153,6 +153,8 @@ pub enum CoreOp {
         symbol: String,
         env_params: Vec<String>,
         direct: bool,
+        param: Option<String>,
+        body: Vec<CoreOp>,
     },
 }
 
@@ -329,6 +331,10 @@ pub enum CoreValue {
         variants: Vec<String>,
         args: Vec<CoreValue>,
     },
+    LiftedFunction {
+        source: String,
+        symbol: String,
+    },
     Rendered {
         debug: String,
     },
@@ -496,6 +502,7 @@ impl CoreValue {
                     .join(", ");
                 format!("{data}.{ctor}({args})")
             }
+            CoreValue::LiftedFunction { symbol, .. } => symbol.clone(),
             CoreValue::Rendered { debug } => debug.clone(),
         }
     }
@@ -766,13 +773,13 @@ pub fn lower_core_with_facts(
     usage: &UsageFacts,
 ) -> CoreProgram {
     let mut ops = Vec::new();
-    lower_term(&cps.term, continuations, &mut ops);
+    lower_term(&cps.term, continuations, lambda_lift, &mut ops);
     let layouts = lower_layouts(&ops, continuations, closures, specialize);
     let ownership = lower_ownership(continuations, specialize, usage);
     let callable_storage =
         lower_callable_storage(continuations, closures, explicit_callable_storage);
     lower_specialization_ops(specialize, &layouts, &mut ops);
-    lower_lifted_functions(lambda_lift, &mut ops);
+    lower_lifted_functions(cps, continuations, lambda_lift, &mut ops);
     CoreProgram {
         ops,
         layouts,
@@ -804,7 +811,12 @@ impl CoreValidation {
     }
 }
 
-fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<CoreOp>) {
+fn lower_term(
+    term: &CpsTerm,
+    continuations: &[ContinuationFact],
+    lambda_lift: &LambdaLiftFacts,
+    ops: &mut Vec<CoreOp>,
+) {
     match term {
         CpsTerm::Halt(atom) => lower_atom_value(atom, ops),
         CpsTerm::LetRuntime {
@@ -816,23 +828,23 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                 binder: binder.clone(),
                 value: core_value(value),
             });
-            lower_term(body, continuations, ops);
+            lower_term(body, continuations, lambda_lift, ops);
         }
         CpsTerm::AppCont { value, .. } => lower_atom_value(value, ops),
         CpsTerm::AppFun { func, args, kont } => {
             if let Some(inlined) = inline_fun_lambda_call(func, args, kont) {
-                lower_term(&inlined, continuations, ops);
+                lower_term(&inlined, continuations, lambda_lift, ops);
                 return;
             }
             if let Some(value) = static_cps_callable_value(func) {
                 if let Some(inlined) = inline_fun_lambda_call(value, args, kont) {
-                    lower_term(&inlined, continuations, ops);
+                    lower_term(&inlined, continuations, lambda_lift, ops);
                     return;
                 }
             }
             let target = render_atom(func);
             lower_callable_target(&target, func, ops);
-            let args = lower_call_args(func, args);
+            let args = lower_call_args(func, args, lambda_lift);
             ops.push(CoreOp::TailCall { func: target, args });
             lower_tailcall_result(kont, ops);
             lower_continuation_atom(kont, continuations, ops);
@@ -845,7 +857,7 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                     ContinuationKind::Cont1
                 },
             });
-            lower_term(body, continuations, ops);
+            lower_term(body, continuations, lambda_lift, ops);
         }
         CpsTerm::Capture {
             binder,
@@ -864,7 +876,7 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                 kind,
                 captured,
             });
-            lower_term(body, continuations, ops);
+            lower_term(body, continuations, lambda_lift, ops);
         }
         CpsTerm::Branch {
             cond,
@@ -886,8 +898,8 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             ops.push(CoreOp::Branch {
                 cond: render_atom(cond),
             });
-            lower_term(then_term, continuations, ops);
-            lower_term(else_term, continuations, ops);
+            lower_term(then_term, continuations, lambda_lift, ops);
+            lower_term(else_term, continuations, lambda_lift, ops);
         }
         CpsTerm::Match {
             scrutinee, arms, ..
@@ -907,7 +919,7 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                     .collect(),
             });
             for arm in arms {
-                lower_term(&arm.body, continuations, ops);
+                lower_term(&arm.body, continuations, lambda_lift, ops);
             }
         }
     }
@@ -1195,7 +1207,7 @@ fn lower_captured_continuation(
 ) -> CoreCapturedContinuation {
     if let CpsAtom::ContLambda { param, body } = captured {
         let mut ops = Vec::new();
-        lower_term(body, continuations, &mut ops);
+        lower_term(body, continuations, &LambdaLiftFacts::default(), &mut ops);
         CoreCapturedContinuation {
             param: param.clone(),
             ops,
@@ -1217,7 +1229,11 @@ fn lower_tailcall_result(kont: &CpsAtom, ops: &mut Vec<CoreOp>) {
     }
 }
 
-fn lower_call_args(func: &CpsAtom, args: &[CpsAtom]) -> Vec<CoreValue> {
+fn lower_call_args(
+    func: &CpsAtom,
+    args: &[CpsAtom],
+    lambda_lift: &LambdaLiftFacts,
+) -> Vec<CoreValue> {
     match func {
         CpsAtom::OperatorCallee { receiver, .. } => std::iter::once(core_value(receiver))
             .chain(args.iter().map(core_value))
@@ -1228,10 +1244,30 @@ fn lower_call_args(func: &CpsAtom, args: &[CpsAtom]) -> Vec<CoreValue> {
                     .chain(args.iter().map(core_value))
                     .collect();
             }
-            args.iter().map(core_value).collect()
+            args.iter()
+                .map(|arg| core_callable_arg_value(arg, lambda_lift))
+                .collect()
         }
-        _ => args.iter().map(core_value).collect(),
+        _ => args
+            .iter()
+            .map(|arg| core_callable_arg_value(arg, lambda_lift))
+            .collect(),
     }
+}
+
+fn core_callable_arg_value(atom: &CpsAtom, lambda_lift: &LambdaLiftFacts) -> CoreValue {
+    let CpsAtom::FunLambda { param, .. } = atom else {
+        return core_value(atom);
+    };
+    lambda_lift
+        .functions
+        .iter()
+        .find(|function| function.source == format!("closure::{param}"))
+        .map(|function| CoreValue::LiftedFunction {
+            source: function.source.clone(),
+            symbol: function.symbol.clone(),
+        })
+        .unwrap_or_else(|| core_value(atom))
 }
 
 fn lower_callable_target(target: &str, atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
@@ -1351,7 +1387,7 @@ fn lower_continuation_atom(
     ops: &mut Vec<CoreOp>,
 ) {
     if let CpsAtom::ContLambda { body, .. } = atom {
-        lower_term(body, continuations, ops);
+        lower_term(body, continuations, &LambdaLiftFacts::default(), ops);
     }
 }
 
@@ -1437,14 +1473,233 @@ fn operator_surface_intrinsic(op: &OperatorSurface) -> Option<OperatorIntrinsic>
     }
 }
 
-fn lower_lifted_functions(lambda_lift: &LambdaLiftFacts, ops: &mut Vec<CoreOp>) {
+fn lower_lifted_functions(
+    cps: &CpsProgram,
+    continuations: &[ContinuationFact],
+    lambda_lift: &LambdaLiftFacts,
+    ops: &mut Vec<CoreOp>,
+) {
     for function in &lambda_lift.functions {
+        let (param, body) = if function.direct {
+            lowered_direct_lifted_body(cps, function, continuations, lambda_lift)
+        } else {
+            (None, Vec::new())
+        };
         ops.push(CoreOp::LiftedFunction {
             source: function.source.clone(),
             symbol: function.symbol.clone(),
             env_params: function.env_params.clone(),
             direct: function.direct,
+            param,
+            body,
         });
+    }
+}
+
+fn lowered_direct_lifted_body(
+    cps: &CpsProgram,
+    function: &crate::lambda_lift::LiftedFunctionFact,
+    continuations: &[ContinuationFact],
+    lambda_lift: &LambdaLiftFacts,
+) -> (Option<String>, Vec<CoreOp>) {
+    let Some(lambda) = find_cps_fun_lambda(&cps.term, function) else {
+        return (None, Vec::new());
+    };
+    let CpsAtom::FunLambda {
+        param,
+        k_param,
+        body,
+    } = lambda
+    else {
+        unreachable!("find_cps_fun_lambda only returns function lambdas");
+    };
+    let return_body = return_from_cps_cont(body, k_param);
+    let mut ops = Vec::new();
+    lower_term(&return_body, continuations, lambda_lift, &mut ops);
+    (Some(param.clone()), ops)
+}
+
+fn find_cps_fun_lambda<'a>(
+    term: &'a CpsTerm,
+    function: &crate::lambda_lift::LiftedFunctionFact,
+) -> Option<&'a CpsAtom> {
+    match term {
+        CpsTerm::Halt(atom) | CpsTerm::AppCont { value: atom, .. } => {
+            find_cps_fun_lambda_atom(atom, function)
+        }
+        CpsTerm::LetRuntime { value, body, .. } => find_cps_fun_lambda_atom(value, function)
+            .or_else(|| find_cps_fun_lambda(body, function)),
+        CpsTerm::AppFun { func, args, kont } => find_cps_fun_lambda_atom(func, function)
+            .or_else(|| {
+                args.iter()
+                    .find_map(|arg| find_cps_fun_lambda_atom(arg, function))
+            })
+            .or_else(|| find_cps_fun_lambda_atom(kont, function)),
+        CpsTerm::Prompt { body, .. } => find_cps_fun_lambda(body, function),
+        CpsTerm::Capture { captured, body, .. } => find_cps_fun_lambda_atom(captured, function)
+            .or_else(|| find_cps_fun_lambda(body, function)),
+        CpsTerm::Branch {
+            cond,
+            then_term,
+            else_term,
+            join,
+        } => find_cps_fun_lambda_atom(cond, function)
+            .or_else(|| find_cps_fun_lambda(then_term, function))
+            .or_else(|| find_cps_fun_lambda(else_term, function))
+            .or_else(|| find_cps_fun_lambda_atom(join, function)),
+        CpsTerm::Match {
+            scrutinee,
+            arms,
+            join,
+        } => find_cps_fun_lambda_atom(scrutinee, function)
+            .or_else(|| {
+                arms.iter()
+                    .find_map(|arm| find_cps_fun_lambda(&arm.body, function))
+            })
+            .or_else(|| find_cps_fun_lambda_atom(join, function)),
+    }
+}
+
+fn find_cps_fun_lambda_atom<'a>(
+    atom: &'a CpsAtom,
+    function: &crate::lambda_lift::LiftedFunctionFact,
+) -> Option<&'a CpsAtom> {
+    match atom {
+        CpsAtom::FunLambda { param, body, .. } => {
+            if function.source == format!("closure::{param}") {
+                Some(atom)
+            } else {
+                find_cps_fun_lambda(body, function)
+            }
+        }
+        CpsAtom::ContLambda { body, .. } => find_cps_fun_lambda(body, function),
+        CpsAtom::OperatorCallee { receiver, .. }
+        | CpsAtom::TupleField {
+            tuple: receiver, ..
+        }
+        | CpsAtom::RecordField {
+            record: receiver, ..
+        }
+        | CpsAtom::DynRowPackage {
+            payload: receiver, ..
+        }
+        | CpsAtom::DynRowField {
+            package: receiver, ..
+        }
+        | CpsAtom::RangeField {
+            range: receiver, ..
+        }
+        | CpsAtom::AggregateField {
+            value: receiver, ..
+        }
+        | CpsAtom::TextField {
+            value: receiver, ..
+        } => find_cps_fun_lambda_atom(receiver, function),
+        CpsAtom::Tuple { fields, .. } | CpsAtom::SliceLiteral { items: fields } => fields
+            .iter()
+            .find_map(|field| find_cps_fun_lambda_atom(field, function)),
+        CpsAtom::Range { start, end } => find_cps_fun_lambda_atom(start, function)
+            .or_else(|| find_cps_fun_lambda_atom(end, function)),
+        CpsAtom::AggregateIndex { value, index, .. } | CpsAtom::TextIndex { value, index, .. } => {
+            find_cps_fun_lambda_atom(value, function)
+                .or_else(|| find_cps_fun_lambda_atom(index, function))
+        }
+        CpsAtom::AggregateSlice { value, range, .. } | CpsAtom::TextSlice { value, range, .. } => {
+            find_cps_fun_lambda_atom(value, function)
+                .or_else(|| find_cps_fun_lambda_atom(range, function))
+        }
+        CpsAtom::BuiltinRuntimeCall { args, .. } | CpsAtom::AdtCtor { args, .. } => args
+            .iter()
+            .find_map(|arg| find_cps_fun_lambda_atom(arg, function)),
+        CpsAtom::RecordUpdate { base, fields, .. } => find_cps_fun_lambda_atom(base, function)
+            .or_else(|| {
+                fields
+                    .iter()
+                    .find_map(|field| find_cps_fun_lambda_atom(&field.value, function))
+            }),
+        CpsAtom::Record { fields, .. } => fields
+            .iter()
+            .find_map(|field| find_cps_fun_lambda_atom(&field.value, function)),
+        CpsAtom::Var(_) | CpsAtom::Lit(_) => None,
+    }
+}
+
+fn return_from_cps_cont(term: &CpsTerm, k_param: &str) -> CpsTerm {
+    match term {
+        CpsTerm::AppCont {
+            kont: CpsAtom::Var(kont),
+            value,
+        } if kont == k_param => CpsTerm::Halt(value.clone()),
+        CpsTerm::Halt(atom) => CpsTerm::Halt(atom.clone()),
+        CpsTerm::LetRuntime {
+            binder,
+            value,
+            body,
+        } => CpsTerm::LetRuntime {
+            binder: binder.clone(),
+            value: value.clone(),
+            body: Box::new(return_from_cps_cont(body, k_param)),
+        },
+        CpsTerm::AppFun { func, args, kont } => CpsTerm::AppFun {
+            func: func.clone(),
+            args: args.clone(),
+            kont: return_from_cps_cont_atom(kont, k_param),
+        },
+        CpsTerm::AppCont { kont, value } => CpsTerm::AppCont {
+            kont: kont.clone(),
+            value: value.clone(),
+        },
+        CpsTerm::Prompt { multi, body } => CpsTerm::Prompt {
+            multi: *multi,
+            body: Box::new(return_from_cps_cont(body, k_param)),
+        },
+        CpsTerm::Capture {
+            multi,
+            binder,
+            captured,
+            body,
+        } => CpsTerm::Capture {
+            multi: *multi,
+            binder: binder.clone(),
+            captured: captured.clone(),
+            body: Box::new(return_from_cps_cont(body, k_param)),
+        },
+        CpsTerm::Branch {
+            cond,
+            then_term,
+            else_term,
+            join,
+        } => CpsTerm::Branch {
+            cond: cond.clone(),
+            then_term: Box::new(return_from_cps_cont(then_term, k_param)),
+            else_term: Box::new(return_from_cps_cont(else_term, k_param)),
+            join: join.clone(),
+        },
+        CpsTerm::Match {
+            scrutinee,
+            arms,
+            join,
+        } => CpsTerm::Match {
+            scrutinee: scrutinee.clone(),
+            arms: arms
+                .iter()
+                .map(|arm| crate::cps::CpsMatchArm {
+                    pattern: arm.pattern.clone(),
+                    body: return_from_cps_cont(&arm.body, k_param),
+                })
+                .collect(),
+            join: join.clone(),
+        },
+    }
+}
+
+fn return_from_cps_cont_atom(atom: &CpsAtom, k_param: &str) -> CpsAtom {
+    match atom {
+        CpsAtom::ContLambda { param, body } => CpsAtom::ContLambda {
+            param: param.clone(),
+            body: Box::new(return_from_cps_cont(body, k_param)),
+        },
+        _ => atom.clone(),
     }
 }
 
@@ -1682,6 +1937,7 @@ fn validate_lifted_functions(program: &CoreProgram, diagnostics: &mut Vec<CoreDi
             symbol,
             env_params,
             direct,
+            ..
         } = op
         {
             if symbols.contains(symbol) {

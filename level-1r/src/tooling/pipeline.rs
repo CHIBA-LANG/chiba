@@ -234,7 +234,7 @@ fn compile_expr_with_indexes_and_generics(
     type_context: &TypeContext,
     current_namespace: &str,
     type_aliases: &TypeAliasIndex,
-    extern_functions: &[crate::surface::InterfaceFunction],
+    interface_functions: &[crate::surface::InterfaceFunction],
     interface_statics: &[crate::surface::InterfaceStatic],
     function_env: &TypeEnv,
 ) -> CompileOutput {
@@ -343,7 +343,7 @@ fn compile_expr_with_indexes_and_generics(
             &specialize,
             &usage,
         );
-        attach_extern_function_targets(&mut core, &resolve, extern_functions);
+        attach_extern_function_targets(&mut core, &resolve, interface_functions);
         core
     });
     let closure_core_usage = passes.record(
@@ -380,7 +380,7 @@ fn compile_expr_with_indexes_and_generics(
                 .map(|param| param.name.clone())
                 .collect::<Vec<_>>();
             let param_abi =
-                backend_param_abi(&typed_signature, extern_functions, interface_statics);
+                backend_param_abi(&typed_signature, interface_functions, interface_statics);
             emit_wasm_gc_with_param_abi(&core, &core_validation, &param_names, &param_abi)
         },
     );
@@ -546,6 +546,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         "ProgramDefOutput",
         || compile_program_defs(&normalized_program, &checked_interface),
     );
+    refresh_program_backends_with_lifted_callables(&mut defs, &checked_interface);
     let entry = passes.record(
         "P6ProgramEntry",
         "ProgramDefOutput",
@@ -1045,6 +1046,72 @@ fn compile_program_defs(
         .collect()
 }
 
+fn refresh_program_backends_with_lifted_callables(
+    defs: &mut [ProgramDefOutput],
+    interface: &InterfaceSummary,
+) {
+    let lifted = program_lifted_callable_abis(defs);
+    if lifted.is_empty() {
+        return;
+    }
+    for def in defs {
+        let param_abi = backend_param_abi_with_extra_functions(
+            &def.output.typed_signature,
+            &interface.functions,
+            &interface.statics,
+            lifted.clone(),
+        );
+        let backend = emit_wasm_gc_with_param_abi(
+            &def.output.core,
+            &def.output.core_validation,
+            &def.params,
+            &param_abi,
+        );
+        let backend_link = link_backend_artifacts(vec![backend.clone()]);
+        let backend_cache_key = backend_cache_key(&backend_link, &BackendCacheConfig::default());
+        def.output.backend = backend;
+        def.output.backend_link = backend_link;
+        def.output.backend_cache_key = backend_cache_key;
+        def.output.visual.backend = crate::debug::render_backend_artifact(&def.output.backend);
+        def.output.visual.backend_link =
+            crate::debug::render_backend_link(&def.output.backend_link);
+        def.output.visual.backend_cache_key =
+            crate::debug::render_backend_cache_key(&def.output.backend_cache_key);
+    }
+}
+
+fn program_lifted_callable_abis(defs: &[ProgramDefOutput]) -> BTreeMap<String, BackendCallableAbi> {
+    defs.iter()
+        .flat_map(|def| def.output.core.ops.iter())
+        .filter_map(|op| {
+            let CoreOp::LiftedFunction {
+                symbol,
+                direct,
+                param,
+                body,
+                ..
+            } = op
+            else {
+                return None;
+            };
+            if !direct || param.is_none() || body.is_empty() {
+                return None;
+            }
+            Some((
+                symbol.clone(),
+                BackendCallableAbi {
+                    params: vec![BackendValueKind::I32],
+                    arg_expansions: vec![BackendCallableArgExpansion::Direct(
+                        BackendValueKind::I32,
+                    )],
+                    result: Some(BackendValueKind::I32),
+                    result_ref_cell_lane: None,
+                },
+            ))
+        })
+        .collect()
+}
+
 fn interface_without_invalid_static_initializers(
     interface: &InterfaceSummary,
     global_init: &GlobalInitPlan,
@@ -1257,19 +1324,33 @@ fn backend_param_abi(
     functions: &[crate::surface::InterfaceFunction],
     statics: &[crate::surface::InterfaceStatic],
 ) -> BackendParamAbi {
+    backend_param_abi_with_extra_functions(signature, functions, statics, BTreeMap::new())
+}
+
+fn backend_param_abi_with_extra_functions(
+    signature: &TypedSignature,
+    functions: &[crate::surface::InterfaceFunction],
+    statics: &[crate::surface::InterfaceStatic],
+    extra_functions: BTreeMap<String, BackendCallableAbi>,
+) -> BackendParamAbi {
+    let mut function_abis = backend_callable_abis_for_interface(functions);
+    function_abis.extend(extra_functions);
     BackendParamAbi {
         params: signature
             .params
             .iter()
             .filter_map(|param| {
-                backend_value_kind_for_type(&source_type_name_to_type(&param.ty))
-                    .or_else(|| {
-                        backend_storage_value_kind_for_type(&source_type_name_to_type(&param.ty))
-                    })
-                    .map(|kind| (param.name.clone(), kind))
+                let ty = source_type_name_to_type(&param.ty);
+                match ty {
+                    Type::Func(_, _) => Some(BackendValueKind::I32),
+                    ty => backend_value_kind_for_type(&ty)
+                        .or_else(|| backend_storage_value_kind_for_type(&ty)),
+                }
+                .map(|kind| (param.name.clone(), kind))
             })
             .collect(),
-        functions: backend_callable_abis_for_interface(functions),
+        callable_params: backend_callable_params_for_signature(signature),
+        functions: function_abis,
         statics: backend_static_abis_for_interface(statics),
         static_ref_cell_lanes: backend_static_ref_cell_lanes_for_interface(statics),
         dyn_row_param_fields: backend_dyn_row_param_fields_for_signature(signature),
@@ -1281,6 +1362,33 @@ fn backend_param_abi(
             ))
             .collect(),
     }
+}
+
+fn backend_callable_params_for_signature(
+    signature: &TypedSignature,
+) -> BTreeMap<String, BackendCallableAbi> {
+    signature
+        .params
+        .iter()
+        .filter_map(|param| {
+            let Type::Func(input, result) = source_type_name_to_type(&param.ty) else {
+                return None;
+            };
+            let input_kind = backend_value_kind_for_type(&input)
+                .or_else(|| backend_storage_value_kind_for_type(&input))?;
+            let result_kind = backend_value_kind_for_type(&result)
+                .or_else(|| backend_storage_value_kind_for_type(&result));
+            Some((
+                param.name.clone(),
+                BackendCallableAbi {
+                    params: vec![input_kind],
+                    arg_expansions: vec![BackendCallableArgExpansion::Direct(input_kind)],
+                    result: result_kind,
+                    result_ref_cell_lane: None,
+                },
+            ))
+        })
+        .collect()
 }
 
 fn backend_dyn_row_param_fields_for_signature(
@@ -1409,6 +1517,14 @@ fn backend_callable_abis_for_interface(
                         Some(Type::DynRow(fields)) => BackendCallableArgExpansion::DynRowFields(
                             backend_dyn_row_field_abis(&fields),
                         ),
+                        Some(Type::Func(input, result)) => BackendCallableArgExpansion::Callable {
+                            params: backend_value_kind_for_type(&input)
+                                .or_else(|| backend_storage_value_kind_for_type(&input))
+                                .into_iter()
+                                .collect(),
+                            result: backend_value_kind_for_type(&result)
+                                .or_else(|| backend_storage_value_kind_for_type(&result)),
+                        },
                         Some(ty) => BackendCallableArgExpansion::Direct(
                             backend_value_kind_for_type(&ty)
                                 .or_else(|| backend_storage_value_kind_for_type(&ty))
@@ -1422,6 +1538,7 @@ fn backend_callable_abis_for_interface(
                 .iter()
                 .flat_map(|expansion| match expansion {
                     BackendCallableArgExpansion::Direct(kind) => vec![*kind],
+                    BackendCallableArgExpansion::Callable { .. } => vec![BackendValueKind::I32],
                     BackendCallableArgExpansion::DynRowFields(fields) => {
                         fields.iter().map(|field| field.kind).collect()
                     }
@@ -1431,7 +1548,9 @@ fn backend_callable_abis_for_interface(
                 .return_type
                 .as_deref()
                 .map(source_type_name_to_type);
-            let result = result_type.as_ref().and_then(backend_value_kind_for_type);
+            let result = result_type.as_ref().and_then(|ty| {
+                backend_value_kind_for_type(ty).or_else(|| backend_storage_value_kind_for_type(ty))
+            });
             let result_ref_cell_lane = result_type.as_ref().and_then(core_ref_cell_lane_for_type);
             (
                 function.source_name.clone(),

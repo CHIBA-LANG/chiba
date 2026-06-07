@@ -442,6 +442,7 @@ fn render_core_op(op: &CoreOp) -> String {
             symbol,
             env_params,
             direct,
+            ..
         } => format!(
             "lifted-function source={source} symbol={symbol} env=[{}] direct={direct}",
             env_params.join(", ")
@@ -618,6 +619,9 @@ fn render_core_value(value: &CoreValue) -> String {
                 variants.join(", "),
                 args
             )
+        }
+        CoreValue::LiftedFunction { source, symbol } => {
+            format!("lifted-function {source} -> {symbol}")
         }
         CoreValue::Rendered { debug } => format!("rendered({debug})"),
     }
@@ -894,7 +898,7 @@ fn render_compiler_intrinsic(intrinsic: CompilerIntrinsic) -> &'static str {
     }
 }
 
-fn render_backend_artifact(artifact: &BackendArtifact) -> String {
+pub(crate) fn render_backend_artifact(artifact: &BackendArtifact) -> String {
     let mut out = String::new();
     writeln!(out, "target={}", render_backend_target(artifact.target)).unwrap();
     writeln!(out, "wat-lines={}", artifact.wat.lines().count()).unwrap();
@@ -916,7 +920,7 @@ fn render_backend_artifact(artifact: &BackendArtifact) -> String {
     out
 }
 
-fn render_backend_link(bundle: &BackendLinkedBundle) -> String {
+pub(crate) fn render_backend_link(bundle: &BackendLinkedBundle) -> String {
     let mut out = String::new();
     writeln!(out, "target={}", render_backend_target(bundle.target)).unwrap();
     writeln!(
@@ -938,7 +942,7 @@ fn render_backend_link(bundle: &BackendLinkedBundle) -> String {
     out
 }
 
-fn render_backend_cache_key(key: &BackendCacheKey) -> String {
+pub(crate) fn render_backend_cache_key(key: &BackendCacheKey) -> String {
     let mut out = String::new();
     writeln!(out, "target={}", render_backend_target(key.target)).unwrap();
     writeln!(out, "digest={}", key.digest).unwrap();
@@ -1072,6 +1076,9 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
             data, ctor, args, ..
         } => {
             format!("adt {data}.{ctor}/{}", args.len())
+        }
+        crate::core::CoreValue::LiftedFunction { source, symbol } => {
+            format!("lifted-function {source} -> {symbol}")
         }
         crate::core::CoreValue::Rendered { debug } => format!("rendered {debug}"),
     }

@@ -688,6 +688,39 @@ fn program_callable_storage_field_calls_capturing_closure() {
 }
 
 #[test]
+fn program_callable_param_calls_stored_function_value() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def inc(x: i64): i64 = x + 1
+def apply(f: (i64) -> i64, x: i64): i64 = f(x)
+def main(): i64 = apply(inc, 8)
+"#,
+    )
+    .expect("compile callable param function");
+    let bundle = output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
+#[test]
+fn program_callable_param_calls_stored_no_capture_closure() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def apply(f: (i64) -> i64, x: i64): i64 = f(x)
+def main(): i64 = apply((n: i64): i64 => n + 1, 8)
+"#,
+    )
+    .expect("compile callable param closure");
+    let bundle = output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
+#[test]
 fn program_dyn_row_param_builds_static_to_dyn_package_contract() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"

@@ -515,17 +515,30 @@ fn lifted_functions_enter_core_with_target_neutral_symbols() {
         Expr::lambda("y", Expr::call(Expr::var("x"), Expr::var("y"))),
     ));
 
-    assert!(output.core.ops.contains(&CoreOp::LiftedFunction {
-        source: "closure::x".to_string(),
-        symbol: "lift::0000::closure__x".to_string(),
-        env_params: vec![],
-        direct: true,
+    assert!(output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::LiftedFunction {
+                source,
+                symbol,
+                env_params,
+                direct: true,
+                param: Some(param),
+                body,
+            } if source == "closure::x"
+                && symbol == "lift::0000::closure__x"
+                && env_params.is_empty()
+                && param == "x"
+                && !body.is_empty()
+        )
     }));
     assert!(output.core.ops.contains(&CoreOp::LiftedFunction {
         source: "closure::y".to_string(),
         symbol: "lift::0001::closure__y".to_string(),
         env_params: vec!["x".to_string()],
         direct: false,
+        param: None,
+        body: vec![],
     }));
     assert_eq!(output.core_validation.diagnostics, vec![]);
 }
@@ -539,12 +552,16 @@ fn validator_rejects_duplicate_lifted_symbol_and_missing_env_layout() {
                 symbol: "lift::0001::closure__y".to_string(),
                 env_params: vec!["x".to_string()],
                 direct: false,
+                param: None,
+                body: vec![],
             },
             CoreOp::LiftedFunction {
                 source: "closure::z".to_string(),
                 symbol: "lift::0001::closure__y".to_string(),
                 env_params: vec![],
                 direct: true,
+                param: None,
+                body: vec![],
             },
         ],
         layouts: vec![],
