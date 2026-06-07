@@ -639,6 +639,49 @@ def main(): i64 = ({f: inc}).f(8)
 }
 
 #[test]
+fn program_dyn_row_param_builds_static_to_dyn_package_contract() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def use_dyn(v: dyn {x: i64, y: (Unit) -> i64}): i64 = 0
+def main(): i64 = 0
+"#,
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let use_dyn = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "use_dyn")
+        .expect("use_dyn def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_eq!(
+        use_dyn.output.typed_signature.params[0].ty,
+        "dyn {x: i64, y: (Unit) -> i64}"
+    );
+    assert!(matches!(
+        use_dyn.output.typed_signature.params[0].binding_types[0].1,
+        Type::DynRow(_)
+    ));
+    assert!(use_dyn
+        .output
+        .visual
+        .template
+        .contains("dyn-contract {r | x: i64, y: (Unit) -> i64}"));
+    assert!(use_dyn.output.core.layouts.iter().any(|layout| {
+        matches!(
+            &layout.kind,
+            chiba_level1r::core::LayoutKind::DynRowPackage(contract)
+                if contract.shape.fields.iter().any(|field| field.name == "x")
+                    && contract.shape.fields.iter().any(|field| field.name == "y")
+        )
+    }));
+    assert!(use_dyn.output.core.ops.iter().any(|op| {
+        matches!(op, CoreOp::DynRowAdapterAccess { subject, .. } if subject.contains("x:i64") && subject.contains("y:(Unit) -> i64"))
+    }));
+}
+
+#[test]
 fn program_contn_storage_field_call_can_resume_multiple_times() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"

@@ -247,6 +247,14 @@ fn render_type(ty: &Type) -> String {
                 .join(", ");
             format!("{{{fields}}}")
         }
+        Type::DynRow(fields) => {
+            let fields = fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, render_type(&field.ty)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("dyn {{{fields}}}")
+        }
         Type::Adt { name, .. } | Type::Nominal(name) => name.clone(),
         Type::Func(arg, ret) => format!("({}) -> {}", render_type(arg), render_type(ret)),
         Type::Continuation {

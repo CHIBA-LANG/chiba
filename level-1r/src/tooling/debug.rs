@@ -1584,6 +1584,7 @@ fn render_type(ty: &Type) -> String {
             format!("Tuple[{fields}]")
         }
         Type::Record(fields) => render_record_type(fields),
+        Type::DynRow(fields) => format!("dyn {}", render_record_type(fields)),
         Type::Adt { name, .. } | Type::Nominal(name) => name.clone(),
         Type::Func(param, result) => {
             format!("({}) -> {}", render_type(param), render_type(result))

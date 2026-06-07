@@ -1359,6 +1359,27 @@ impl FrontendParser {
             && self
                 .tokens
                 .get(self.pos)
+                .is_some_and(|token| token.lexeme == "dyn")
+        {
+            self.expect("Ident")?;
+            self.expect("LBrace")?;
+            let mut fields = Vec::new();
+            while self.peek_name() != Some("RBrace") {
+                let field = self.expect_lexeme("Ident")?;
+                self.expect("Colon")?;
+                let ty = self.parse_type_name()?;
+                fields.push(format!("{field}: {ty}"));
+                if self.peek_name() == Some("Comma") {
+                    self.pos += 1;
+                }
+            }
+            self.expect("RBrace")?;
+            return Ok(format!("dyn {{{}}}", fields.join(", ")));
+        }
+        if self.peek_name() == Some("Ident")
+            && self
+                .tokens
+                .get(self.pos)
                 .is_some_and(|token| token.lexeme == "cont1" || token.lexeme == "contN")
         {
             let kind = self.expect_lexeme("Ident")?;

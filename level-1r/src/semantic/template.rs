@@ -3,7 +3,7 @@ use crate::ast::{render_source_expr, Expr, ParamDecl};
 use crate::resolve::{
     OperatorObligation, OperatorSurface, ResolveFacts, ResolvedCall, ResolvedName,
 };
-use crate::typed::{SendColor, UsageColor};
+use crate::typed::{source_type_name_to_type, RecordTypeField, SendColor, Type, UsageColor};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TemplateFacts {
@@ -142,8 +142,80 @@ pub fn analyze_template_with_source(
         })
         .collect();
     collect_auto_template_params(source, source_params, return_type, &mut facts);
+    collect_source_dyn_row_contracts(source_params, return_type, &mut facts);
     collect_source_instantiations(source, &mut facts);
     facts
+}
+
+fn collect_source_dyn_row_contracts(
+    source_params: &[ParamDecl],
+    return_type: &Option<String>,
+    facts: &mut TemplateFacts,
+) {
+    for ty in source_params
+        .iter()
+        .filter_map(|param| param.ty.as_deref())
+        .chain(return_type.as_deref())
+    {
+        collect_dyn_row_contract_from_type(&source_type_name_to_type(ty), facts);
+    }
+}
+
+fn collect_dyn_row_contract_from_type(ty: &Type, facts: &mut TemplateFacts) {
+    match ty {
+        Type::DynRow(fields) => {
+            let contract = dyn_row_contract_from_record_fields(fields);
+            push_dyn_contract_once(facts, contract.clone());
+            push_obligation_once(facts, TemplateObligation::DynAdapter { contract });
+        }
+        Type::Func(param, result) => {
+            collect_dyn_row_contract_from_type(param, facts);
+            collect_dyn_row_contract_from_type(result, facts);
+        }
+        Type::Tuple(fields) => {
+            for field in fields {
+                collect_dyn_row_contract_from_type(field, facts);
+            }
+        }
+        Type::Record(fields) => {
+            for field in fields {
+                collect_dyn_row_contract_from_type(&field.ty, facts);
+            }
+        }
+        Type::Continuation { input, answer, .. } => {
+            collect_dyn_row_contract_from_type(input, facts);
+            collect_dyn_row_contract_from_type(answer, facts);
+        }
+        Type::Unknown | Type::I64 | Type::Rune | Type::Bool | Type::Adt { .. } | Type::Nominal(_) => {}
+    }
+}
+
+fn dyn_row_contract_from_record_fields(fields: &[RecordTypeField]) -> DynRowContract {
+    dyn_row_contract(
+        fields
+            .iter()
+            .map(|field| (field.name.as_str(), shape_type_for_type(&field.ty)))
+            .collect(),
+    )
+}
+
+fn shape_type_for_type(ty: &Type) -> ShapeType {
+    match ty {
+        Type::Unknown => ShapeType::Unknown,
+        _ => ShapeType::Named(crate::typed::source_type_name_for_type(ty)),
+    }
+}
+
+fn push_dyn_contract_once(facts: &mut TemplateFacts, contract: DynRowContract) {
+    if !facts.dyn_contracts.contains(&contract) {
+        facts.dyn_contracts.push(contract);
+    }
+}
+
+fn push_obligation_once(facts: &mut TemplateFacts, obligation: TemplateObligation) {
+    if !facts.obligations.contains(&obligation) {
+        facts.obligations.push(obligation);
+    }
 }
 
 fn collect_auto_template_params(

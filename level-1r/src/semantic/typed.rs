@@ -241,6 +241,7 @@ pub enum Type {
     Bool,
     Tuple(Vec<Type>),
     Record(Vec<RecordTypeField>),
+    DynRow(Vec<RecordTypeField>),
     Adt {
         name: String,
         variants: Vec<String>,
@@ -258,6 +259,12 @@ pub enum Type {
 pub struct RecordTypeField {
     pub name: String,
     pub ty: Type,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ParsedTypeFieldHeader {
+    name: String,
+    ty: ParsedTypeHeader,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -2596,6 +2603,9 @@ enum ParsedTypeHeader {
     Tuple {
         args: Vec<ParsedTypeHeader>,
     },
+    DynRow {
+        fields: Vec<ParsedTypeFieldHeader>,
+    },
     Continuation {
         multi: bool,
         input: Box<ParsedTypeHeader>,
@@ -2624,6 +2634,15 @@ impl ParsedTypeHeader {
             ParsedTypeHeader::Tuple { args } => {
                 Type::Tuple(args.iter().map(ParsedTypeHeader::to_type).collect())
             }
+            ParsedTypeHeader::DynRow { fields } => Type::DynRow(canonical_fields(
+                fields
+                    .iter()
+                    .map(|field| RecordTypeField {
+                        name: field.name.clone(),
+                        ty: field.ty.to_type(),
+                    })
+                    .collect(),
+            )),
             ParsedTypeHeader::Continuation {
                 multi,
                 input,
@@ -2653,6 +2672,10 @@ fn parse_type_header(name: &str) -> Option<ParsedTypeHeader> {
 
     if let Some(callable) = parse_callable_type_header(name) {
         return Some(callable);
+    }
+
+    if let Some(fields) = parse_dyn_row_type_header(name) {
+        return Some(ParsedTypeHeader::DynRow { fields });
     }
 
     let Some((base, args)) = parse_application_type_header(name)? else {
@@ -2685,6 +2708,50 @@ fn parse_type_header(name: &str) -> Option<ParsedTypeHeader> {
             args: parsed_args,
         }),
     }
+}
+
+fn parse_dyn_row_type_header(name: &str) -> Option<Vec<ParsedTypeFieldHeader>> {
+    let body = name.strip_prefix("dyn")?.trim_start();
+    let body = body.strip_prefix('{')?.strip_suffix('}')?.trim();
+    if body.is_empty() {
+        return Some(Vec::new());
+    }
+    split_type_header_args(body)?
+        .into_iter()
+        .map(|field| {
+            let colon = top_level_colon(&field)?;
+            let name = field[..colon].trim();
+            let ty = field[colon + 1..].trim();
+            if name.is_empty() || ty.is_empty() {
+                return None;
+            }
+            Some(ParsedTypeFieldHeader {
+                name: name.to_string(),
+                ty: parse_type_header(ty)?,
+            })
+        })
+        .collect()
+}
+
+fn top_level_colon(text: &str) -> Option<usize> {
+    let mut square_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut brace_depth = 0usize;
+    for (index, ch) in text.char_indices() {
+        match ch {
+            '[' => square_depth = square_depth.checked_add(1)?,
+            ']' => square_depth = square_depth.checked_sub(1)?,
+            '(' => paren_depth = paren_depth.checked_add(1)?,
+            ')' => paren_depth = paren_depth.checked_sub(1)?,
+            '{' => brace_depth = brace_depth.checked_add(1)?,
+            '}' => brace_depth = brace_depth.checked_sub(1)?,
+            ':' if square_depth == 0 && paren_depth == 0 && brace_depth == 0 => {
+                return Some(index);
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn parse_callable_type_header(name: &str) -> Option<ParsedTypeHeader> {
@@ -2744,6 +2811,7 @@ fn split_type_header_args(args: &str) -> Option<Vec<String>> {
     let mut out = Vec::new();
     let mut square_depth = 0usize;
     let mut paren_depth = 0usize;
+    let mut brace_depth = 0usize;
     let mut start = 0usize;
     for (index, ch) in args.char_indices() {
         match ch {
@@ -2751,7 +2819,9 @@ fn split_type_header_args(args: &str) -> Option<Vec<String>> {
             ']' => square_depth = square_depth.checked_sub(1)?,
             '(' => paren_depth = paren_depth.checked_add(1)?,
             ')' => paren_depth = paren_depth.checked_sub(1)?,
-            ',' if square_depth == 0 && paren_depth == 0 => {
+            '{' => brace_depth = brace_depth.checked_add(1)?,
+            '}' => brace_depth = brace_depth.checked_sub(1)?,
+            ',' if square_depth == 0 && paren_depth == 0 && brace_depth == 0 => {
                 let arg = args[start..index].trim();
                 if arg.is_empty() {
                     return None;
@@ -2762,7 +2832,7 @@ fn split_type_header_args(args: &str) -> Option<Vec<String>> {
             _ => {}
         }
     }
-    if square_depth != 0 || paren_depth != 0 {
+    if square_depth != 0 || paren_depth != 0 || brace_depth != 0 {
         return None;
     }
     let arg = args[start..].trim();
@@ -2800,6 +2870,14 @@ fn render_type_header(header: &ParsedTypeHeader) -> String {
             }
         }
         ParsedTypeHeader::Tuple { args } => render_nominal_type_header("Tuple", args),
+        ParsedTypeHeader::DynRow { fields } => {
+            let fields = fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, render_type_header(&field.ty)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("dyn {{{fields}}}")
+        }
         ParsedTypeHeader::Continuation {
             multi,
             input,
@@ -2862,6 +2940,15 @@ fn substitute_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> 
                 .collect(),
         ),
         Type::Record(fields) => Type::Record(
+            fields
+                .iter()
+                .map(|field| RecordTypeField {
+                    name: field.name.clone(),
+                    ty: substitute_type_params(&field.ty, substitutions),
+                })
+                .collect(),
+        ),
+        Type::DynRow(fields) => Type::DynRow(
             fields
                 .iter()
                 .map(|field| RecordTypeField {
@@ -2938,6 +3025,21 @@ fn collect_payload_substitutions(
             }
             Some(())
         }
+        Type::DynRow(payload_fields) => {
+            let Type::DynRow(actual_fields) = actual else {
+                return Some(());
+            };
+            for payload_field in payload_fields {
+                let actual_field = field_type(actual_fields, &payload_field.name)?;
+                collect_payload_substitutions(
+                    &payload_field.ty,
+                    &actual_field,
+                    generics,
+                    substitutions,
+                )?;
+            }
+            Some(())
+        }
         Type::Func(payload_param, payload_result) => {
             let Type::Func(actual_param, actual_result) = actual else {
                 return Some(());
@@ -2995,7 +3097,7 @@ fn render_source_type_application(base: &str, args: &[String]) -> String {
     rendered
 }
 
-fn source_type_name_for_type(ty: &Type) -> String {
+pub(crate) fn source_type_name_for_type(ty: &Type) -> String {
     match ty {
         Type::I64 => "i64".to_string(),
         Type::Rune => "rune".to_string(),
@@ -3028,6 +3130,14 @@ fn source_type_name_for_type(ty: &Type) -> String {
             )
         }
         Type::Record(_) | Type::Adt { .. } | Type::Unknown => type_stable_name(ty),
+        Type::DynRow(fields) => {
+            let fields = fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, source_type_name_for_type(&field.ty)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("dyn {{{fields}}}")
+        }
     }
 }
 
@@ -3066,6 +3176,16 @@ fn type_stable_name(ty: &Type) -> String {
         }
         Type::Record(fields) => {
             let mut name = "Record".to_string();
+            for field in fields {
+                name.push('_');
+                name.push_str(&sanitize_type_name(&field.name));
+                name.push('_');
+                name.push_str(&type_stable_name(&field.ty));
+            }
+            name
+        }
+        Type::DynRow(fields) => {
+            let mut name = "DynRow".to_string();
             for field in fields {
                 name.push('_');
                 name.push_str(&sanitize_type_name(&field.name));

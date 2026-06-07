@@ -1372,6 +1372,7 @@ fn backend_value_kind_for_type(ty: &Type) -> Option<BackendValueKind> {
         Type::Nominal(_) if backend_nominal_is_externref(ty) => Some(BackendValueKind::ExternRef),
         Type::Tuple(_)
         | Type::Record(_)
+        | Type::DynRow(_)
         | Type::Adt { .. }
         | Type::Nominal(_)
         | Type::Func(_, _)
@@ -1396,6 +1397,7 @@ fn core_ref_cell_lane_for_type(ty: &Type) -> Option<crate::core::CoreRefCellLane
                     inner,
                     Type::Tuple(_)
                         | Type::Record(_)
+                        | Type::DynRow(_)
                         | Type::Adt { .. }
                         | Type::Func(_, _)
                         | Type::Continuation { .. }
@@ -1966,6 +1968,14 @@ fn program_type_name(ty: &Type) -> String {
         ),
         Type::Record(fields) => format!(
             "{{{}}}",
+            fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, program_type_name(&field.ty)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Type::DynRow(fields) => format!(
+            "dyn {{{}}}",
             fields
                 .iter()
                 .map(|field| format!("{}: {}", field.name, program_type_name(&field.ty)))
