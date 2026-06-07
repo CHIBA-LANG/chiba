@@ -1,4 +1,4 @@
-use crate::typed::{common_type, Type, TypedExpr, TypedExprKind, UsageColor};
+use crate::typed::{common_type, BuiltinMethodCall, Type, TypedExpr, TypedExprKind, UsageColor};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ControlFacts {
@@ -90,8 +90,13 @@ fn visit(
             }
         }
         TypedExprKind::Field { receiver, .. } => visit(receiver, stack, facts, replay_context),
-        TypedExprKind::MethodCall { receiver, args, .. } => {
-            let child_context = replay_context.join(ReplaySafety::Unsafe);
+        TypedExprKind::MethodCall {
+            receiver,
+            args,
+            builtin,
+            ..
+        } => {
+            let child_context = replay_context.join(method_replay_safety(*builtin));
             visit(receiver, stack, facts, child_context);
             for arg in args {
                 visit(arg, stack, facts, child_context);
@@ -203,6 +208,26 @@ fn replay_safety_for(kind: ContinuationKind, context: ReplaySafety) -> ReplaySaf
     match kind {
         ContinuationKind::Cont1 => ReplaySafety::Safe,
         ContinuationKind::ContN => context,
+    }
+}
+
+fn method_replay_safety(builtin: Option<BuiltinMethodCall>) -> ReplaySafety {
+    match builtin {
+        Some(
+            BuiltinMethodCall::TextCharAt { .. }
+            | BuiltinMethodCall::VecFreeze
+            | BuiltinMethodCall::RefGet,
+        ) => ReplaySafety::Safe,
+        Some(
+            BuiltinMethodCall::VecNew
+            | BuiltinMethodCall::VecPush
+            | BuiltinMethodCall::RefNew
+            | BuiltinMethodCall::RefSet
+            | BuiltinMethodCall::UnsafeRefNew
+            | BuiltinMethodCall::UnsafeRefGet
+            | BuiltinMethodCall::UnsafeRefSet,
+        )
+        | None => ReplaySafety::Unsafe,
     }
 }
 

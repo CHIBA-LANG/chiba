@@ -457,6 +457,55 @@ def main() = resetn { f(shift retry { retry(1) }) }",
 }
 
 #[test]
+fn program_contn_capture_under_pure_builtin_method_is_replay_safe() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main(): rune = resetn { \"abc\".char_at(shift retry { retry(1) + retry(2) }) }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_eq!(main.control.errors, vec![]);
+    assert_eq!(
+        main.control.continuations[0].replay_safety,
+        chiba_level1r::control::ReplaySafety::Safe
+    );
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "197");
+}
+
+#[test]
+fn program_contn_capture_under_unsafe_ref_builtin_is_replay_unsafe() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main() = resetn { UnsafeRef.new(shift retry { retry(1) }) }",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::UnsafeMultiResumeCapture {
+            def: "main".to_string(),
+            binder: "retry".to_string()
+        }]
+    );
+    assert_eq!(
+        main.control.errors,
+        vec![
+            chiba_level1r::control::ControlError::UnsafeMultiResumeCapture {
+                binder: "retry".to_string()
+            }
+        ]
+    );
+    assert_eq!(
+        main.control.continuations[0].replay_safety,
+        chiba_level1r::control::ReplaySafety::Unsafe
+    );
+}
+
+#[test]
 fn program_shift_outside_reset_reaches_program_diagnostics() {
     let output = chiba_level1r::compile_source_program_bundle("def main() = shift k { k(1) }")
         .expect("compile source");
