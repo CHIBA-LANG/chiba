@@ -530,6 +530,18 @@ fn render_core_value(value: &CoreValue) -> String {
         CoreValue::RecordField { record, field } => {
             format!("{}.{}", render_core_value(record), field)
         }
+        CoreValue::DynRowPackage { payload, fields } => format!(
+            "dyn {{payload={}, fields=[{}]}}",
+            render_core_value(payload),
+            fields
+                .iter()
+                .map(|field| field.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        CoreValue::DynRowField { package, field } => {
+            format!("{}.{}", render_core_value(package), field)
+        }
         CoreValue::RangeField { range, field } => {
             format!("{}.{}", render_core_value(range), field.source_name())
         }
@@ -960,6 +972,19 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
         crate::core::CoreValue::RecordField { record, field } => {
             format!("record-field {}.{field}", render_core_value_summary(record))
         }
+        crate::core::CoreValue::DynRowPackage { payload, fields } => {
+            format!(
+                "dyn-row-package {} /{}",
+                render_core_value_summary(payload),
+                fields.len()
+            )
+        }
+        crate::core::CoreValue::DynRowField { package, field } => {
+            format!(
+                "dyn-row-field {}.{field}",
+                render_core_value_summary(package)
+            )
+        }
         crate::core::CoreValue::RangeField { range, field } => {
             format!(
                 "range-field {}.{}",
@@ -1311,6 +1336,23 @@ fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
                 render_typed_child(&format!("update {}", field.name), &field.value, depth, out);
             }
         }
+        TypedExprKind::DynRowPackage { payload, fields } => {
+            writeln!(
+                out,
+                "{indent}  dyn fields=[{}]",
+                fields
+                    .iter()
+                    .map(|field| field.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+            .unwrap();
+            render_typed_child("payload", payload, depth, out);
+        }
+        TypedExprKind::DynRowField { package, name } => {
+            writeln!(out, "{indent}  dyn-field {name}").unwrap();
+            render_typed_child("package", package, depth, out);
+        }
         TypedExprKind::AdtCtor {
             data,
             ctor,
@@ -1453,6 +1495,8 @@ fn render_typed_expr_kind(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::SliceLiteral { .. } => "slice-literal",
         TypedExprKind::Record { .. } => "record",
         TypedExprKind::RecordUpdate { .. } => "record-update",
+        TypedExprKind::DynRowPackage { .. } => "dyn-row-package",
+        TypedExprKind::DynRowField { .. } => "dyn-row-field",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",

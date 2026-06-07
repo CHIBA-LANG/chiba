@@ -79,6 +79,8 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
                 visit(&field.value, facts);
             }
         }
+        TypedExprKind::DynRowPackage { payload, .. } => visit(payload, facts),
+        TypedExprKind::DynRowField { package, .. } => visit(package, facts),
         TypedExprKind::AdtCtor { args, .. } => {
             for arg in args {
                 visit(arg, facts);

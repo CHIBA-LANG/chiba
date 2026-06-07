@@ -272,6 +272,14 @@ pub enum CoreValue {
         record: Box<CoreValue>,
         field: String,
     },
+    DynRowPackage {
+        payload: Box<CoreValue>,
+        fields: Vec<CoreDynRowField>,
+    },
+    DynRowField {
+        package: Box<CoreValue>,
+        field: String,
+    },
     RangeField {
         range: Box<CoreValue>,
         field: RangeField,
@@ -325,6 +333,22 @@ pub enum CoreValue {
 pub struct CoreRecordValueField {
     pub name: String,
     pub value: CoreValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CoreDynRowField {
+    pub name: String,
+    pub source: CoreDynRowFieldSource,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CoreDynRowFieldSource {
+    Field,
+    ReceiverMethod {
+        symbol: String,
+        param_ty: Type,
+        result_ty: Type,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -391,6 +415,17 @@ impl CoreValue {
             }
             CoreValue::RecordField { record, field } => {
                 format!("{}.{}", record.debug_name(), field)
+            }
+            CoreValue::DynRowPackage { payload, fields } => {
+                let fields = fields
+                    .iter()
+                    .map(|field| field.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("dyn{{payload={}, fields=[{fields}]}}", payload.debug_name())
+            }
+            CoreValue::DynRowField { package, field } => {
+                format!("{}.{}", package.debug_name(), field)
             }
             CoreValue::RangeField { range, field } => {
                 format!("{}.{}", range.debug_name(), field.source_name())
@@ -1491,6 +1526,18 @@ fn render_atom(atom: &CpsAtom) -> String {
                 .join(", ")
         ),
         CpsAtom::RecordField { record, field } => format!("{}.{}", render_atom(record), field),
+        CpsAtom::DynRowPackage { payload, fields } => format!(
+            "dyn{{payload={}, fields=[{}]}}",
+            render_atom(payload),
+            fields
+                .iter()
+                .map(|field| field.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        CpsAtom::DynRowField { package, field } => {
+            format!("{}.{}", render_atom(package), field)
+        }
         CpsAtom::RecordUpdate {
             base,
             layout,
@@ -1619,6 +1666,31 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
             record: Box::new(core_value(record)),
             field: field.clone(),
         },
+        CpsAtom::DynRowPackage { payload, fields } => CoreValue::DynRowPackage {
+            payload: Box::new(core_value(payload)),
+            fields: fields
+                .iter()
+                .map(|field| CoreDynRowField {
+                    name: field.name.clone(),
+                    source: match &field.source {
+                        crate::cps::CpsDynRowFieldSource::Field => CoreDynRowFieldSource::Field,
+                        crate::cps::CpsDynRowFieldSource::ReceiverMethod {
+                            symbol,
+                            param_ty,
+                            result_ty,
+                        } => CoreDynRowFieldSource::ReceiverMethod {
+                            symbol: symbol.clone(),
+                            param_ty: param_ty.clone(),
+                            result_ty: result_ty.clone(),
+                        },
+                    },
+                })
+                .collect(),
+        },
+        CpsAtom::DynRowField { package, field } => CoreValue::DynRowField {
+            package: Box::new(core_value(package)),
+            field: field.clone(),
+        },
         CpsAtom::AdtCtor {
             data,
             ctor,
@@ -1734,6 +1806,14 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                     field: field.clone(),
                 });
             }
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
+        CpsAtom::DynRowPackage { payload, .. } => {
+            lower_atom_value(payload, ops);
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
+        CpsAtom::DynRowField { package, .. } => {
+            lower_atom_value(package, ops);
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::AdtCtor {

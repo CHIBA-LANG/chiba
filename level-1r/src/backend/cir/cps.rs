@@ -46,6 +46,14 @@ pub enum CpsAtom {
         record: Box<CpsAtom>,
         field: String,
     },
+    DynRowPackage {
+        payload: Box<CpsAtom>,
+        fields: Vec<CpsDynRowField>,
+    },
+    DynRowField {
+        package: Box<CpsAtom>,
+        field: String,
+    },
     Range {
         start: Box<CpsAtom>,
         end: Box<CpsAtom>,
@@ -109,6 +117,22 @@ pub enum CpsAtom {
 pub struct CpsRecordField {
     pub name: String,
     pub value: CpsAtom,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpsDynRowField {
+    pub name: String,
+    pub source: CpsDynRowFieldSource,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CpsDynRowFieldSource {
+    Field,
+    ReceiverMethod {
+        symbol: String,
+        param_ty: Type,
+        result_ty: Type,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -253,6 +277,23 @@ fn transform(
         TypedExprKind::RecordUpdate { base, fields } => {
             transform_record_update(base, fields, k, controls, ctx)
         }
+        TypedExprKind::DynRowPackage { payload, fields } => {
+            transform_dyn_row_package(payload, fields, k, controls, ctx)
+        }
+        TypedExprKind::DynRowField { package, name } => transform(
+            package,
+            Box::new(|package, ctx| {
+                k(
+                    CpsAtom::DynRowField {
+                        package: Box::new(package),
+                        field: name.clone(),
+                    },
+                    ctx,
+                )
+            }),
+            controls,
+            ctx,
+        ),
         TypedExprKind::AdtCtor {
             data,
             ctor,
@@ -769,6 +810,48 @@ fn transform_record_update(
     )
 }
 
+fn transform_dyn_row_package(
+    payload: &TypedExpr,
+    fields: &[crate::typed::TypedDynRowField],
+    k: MetaKont<'_>,
+    controls: Vec<ContinuationKind>,
+    ctx: &mut CpsCtx,
+) -> CpsTerm {
+    transform(
+        payload,
+        Box::new(|payload, ctx| {
+            k(
+                CpsAtom::DynRowPackage {
+                    payload: Box::new(payload),
+                    fields: fields
+                        .iter()
+                        .map(|field| CpsDynRowField {
+                            name: field.name.clone(),
+                            source: match &field.source {
+                                crate::typed::DynRowFieldSource::Field => {
+                                    CpsDynRowFieldSource::Field
+                                }
+                                crate::typed::DynRowFieldSource::ReceiverMethod {
+                                    symbol,
+                                    param_ty,
+                                    result_ty,
+                                } => CpsDynRowFieldSource::ReceiverMethod {
+                                    symbol: symbol.clone(),
+                                    param_ty: param_ty.clone(),
+                                    result_ty: result_ty.clone(),
+                                },
+                            },
+                        })
+                        .collect(),
+                },
+                ctx,
+            )
+        }),
+        controls,
+        ctx,
+    )
+}
+
 fn transform_record_update_fields(
     base: CpsAtom,
     fields: &[TypedRecordField],
@@ -1119,6 +1202,17 @@ impl fmt::Display for CpsAtom {
                 write!(f, "]")
             }
             CpsAtom::RecordField { record, field } => write!(f, "{record}.{field}"),
+            CpsAtom::DynRowPackage { payload, fields } => {
+                write!(f, "dyn {{payload={payload}, fields=[")?;
+                for (index, field) in fields.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", field.name)?;
+                }
+                write!(f, "]}}")
+            }
+            CpsAtom::DynRowField { package, field } => write!(f, "{package}.{field}"),
             CpsAtom::Range { start, end } => write!(f, "{start}..{end}"),
             CpsAtom::RangeField { range, boundary } => {
                 write!(f, "{range}.{}", boundary.source_name())

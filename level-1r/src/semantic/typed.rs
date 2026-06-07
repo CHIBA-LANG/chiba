@@ -39,6 +39,14 @@ pub enum TypedExprKind {
         base: Box<TypedExpr>,
         fields: Vec<TypedRecordField>,
     },
+    DynRowPackage {
+        payload: Box<TypedExpr>,
+        fields: Vec<TypedDynRowField>,
+    },
+    DynRowField {
+        package: Box<TypedExpr>,
+        name: String,
+    },
     AdtCtor {
         data: String,
         ctor: String,
@@ -114,6 +122,22 @@ pub struct TypedMatchArm {
 pub struct TypedRecordField {
     pub name: String,
     pub value: TypedExpr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypedDynRowField {
+    pub name: String,
+    pub source: DynRowFieldSource,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DynRowFieldSource {
+    Field,
+    ReceiverMethod {
+        symbol: String,
+        param_ty: Type,
+        result_ty: Type,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -600,6 +624,7 @@ fn type_expr_with_context_and_controls(
                 .iter()
                 .map(|arg| type_expr_with_context_and_controls(arg, env, context, controls))
                 .collect::<Vec<_>>();
+            let args = coerce_call_args(&callee.ty, args, context);
             let ty = call_result_type(&callee.ty, args.len());
             typed(
                 TypedExprKind::Call {
@@ -713,6 +738,16 @@ fn type_expr_with_context_and_controls(
         }
         Expr::Field { receiver, name } => {
             let receiver = type_expr_with_context_and_controls(receiver, env, context, controls);
+            if matches!(receiver.ty, Type::DynRow(_)) {
+                let ty = dyn_row_field_type(&receiver.ty, name).unwrap_or(Type::Unknown);
+                return typed(
+                    TypedExprKind::DynRowField {
+                        package: Box::new(receiver),
+                        name: name.clone(),
+                    },
+                    ty,
+                );
+            }
             let access = field_access_kind(&receiver.ty, name);
             let ty = match access {
                 FieldAccessKind::TuplePositionalRow { index } => {
@@ -1031,6 +1066,27 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 TypedExprKind::RecordUpdate {
                     base: Box::new(base),
                     fields,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::DynRowPackage { payload, fields } => {
+            let payload = refine_continuation_types(*payload, context);
+            typed(
+                TypedExprKind::DynRowPackage {
+                    payload: Box::new(payload),
+                    fields,
+                },
+                expr.ty,
+            )
+        }
+        TypedExprKind::DynRowField { package, name } => {
+            let package = refine_continuation_types(*package, context);
+            let ty = dyn_row_field_type(&package.ty, &name).unwrap_or(Type::Unknown);
+            typed(
+                TypedExprKind::DynRowField {
+                    package: Box::new(package),
+                    name,
                 },
                 ty,
             )
@@ -1398,6 +1454,27 @@ fn refine_pattern_binding_types(
                 ty,
             )
         }
+        TypedExprKind::DynRowPackage { payload, fields } => {
+            let payload = refine_pattern_binding_types(*payload, bindings, context);
+            typed(
+                TypedExprKind::DynRowPackage {
+                    payload: Box::new(payload),
+                    fields,
+                },
+                expr.ty,
+            )
+        }
+        TypedExprKind::DynRowField { package, name } => {
+            let package = refine_pattern_binding_types(*package, bindings, context);
+            let ty = dyn_row_field_type(&package.ty, &name).unwrap_or(Type::Unknown);
+            typed(
+                TypedExprKind::DynRowField {
+                    package: Box::new(package),
+                    name,
+                },
+                ty,
+            )
+        }
         TypedExprKind::AdtCtor {
             data,
             ctor,
@@ -1676,6 +1753,12 @@ fn collect_typed_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<
                 collect_typed_resume_inputs(binder, &field.value, inputs);
             }
         }
+        TypedExprKind::DynRowPackage { payload, .. } => {
+            collect_typed_resume_inputs(binder, payload, inputs);
+        }
+        TypedExprKind::DynRowField { package, .. } => {
+            collect_typed_resume_inputs(binder, package, inputs);
+        }
         TypedExprKind::AdtCtor { args, .. } => {
             for arg in args {
                 collect_typed_resume_inputs(binder, arg, inputs);
@@ -1824,6 +1907,20 @@ fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type
                         value: rewrite_continuation_callee_input(field.value, binder, input),
                     })
                     .collect(),
+            },
+            expr.ty,
+        ),
+        TypedExprKind::DynRowPackage { payload, fields } => typed(
+            TypedExprKind::DynRowPackage {
+                payload: Box::new(rewrite_continuation_callee_input(*payload, binder, input)),
+                fields,
+            },
+            expr.ty,
+        ),
+        TypedExprKind::DynRowField { package, name } => typed(
+            TypedExprKind::DynRowField {
+                package: Box::new(rewrite_continuation_callee_input(*package, binder, input)),
+                name,
             },
             expr.ty,
         ),
@@ -2134,6 +2231,84 @@ fn call_result_type(callee: &Type, arity: usize) -> Type {
         }
     }
     current.clone()
+}
+
+fn coerce_call_args(callee: &Type, args: Vec<TypedExpr>, context: &TypeContext) -> Vec<TypedExpr> {
+    let expected = call_param_types(callee, args.len());
+    args.into_iter()
+        .enumerate()
+        .map(|(index, arg)| match expected.get(index) {
+            Some(expected) => coerce_expected(arg, expected, context),
+            None => arg,
+        })
+        .collect()
+}
+
+fn call_param_types(callee: &Type, arity: usize) -> Vec<Type> {
+    let mut params = Vec::new();
+    let mut current = callee;
+    for _ in 0..arity {
+        match current {
+            Type::Func(param, result) => {
+                params.push(param.as_ref().clone());
+                current = result;
+            }
+            Type::Continuation { input, .. } => {
+                params.push(input.as_ref().clone());
+                break;
+            }
+            _ => break,
+        }
+    }
+    params
+}
+
+fn coerce_expected(expr: TypedExpr, expected: &Type, context: &TypeContext) -> TypedExpr {
+    match expected {
+        Type::DynRow(fields) if !matches!(expr.ty, Type::DynRow(_)) => {
+            let Some(adapter_fields) = dyn_row_adapter_fields(&expr.ty, fields, context) else {
+                return expr;
+            };
+            typed(
+                TypedExprKind::DynRowPackage {
+                    payload: Box::new(expr),
+                    fields: adapter_fields,
+                },
+                expected.clone(),
+            )
+        }
+        _ => expr,
+    }
+}
+
+fn dyn_row_adapter_fields(
+    payload: &Type,
+    fields: &[RecordTypeField],
+    context: &TypeContext,
+) -> Option<Vec<TypedDynRowField>> {
+    let mut adapters = Vec::new();
+    for field in fields {
+        let Some(field_ty) = record_field_type(payload, &field.name)
+            .or_else(|| context.nominal_field_type(payload, &field.name))
+        else {
+            return None;
+        };
+        if field_ty != field.ty && field.ty != Type::Unknown {
+            return None;
+        }
+        adapters.push(TypedDynRowField {
+            name: field.name.clone(),
+            source: DynRowFieldSource::Field,
+        });
+    }
+    Some(adapters)
+}
+
+fn dyn_row_field_type(receiver: &Type, name: &str) -> Option<Type> {
+    let Type::DynRow(fields) = receiver else {
+        return None;
+    };
+    field_type(fields, name)
 }
 
 fn field_callable_result_type(

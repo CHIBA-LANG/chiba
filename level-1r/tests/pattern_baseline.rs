@@ -16,6 +16,8 @@ fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::SliceLiteral { .. } => "slice-literal",
         TypedExprKind::Record { .. } => "record",
         TypedExprKind::RecordUpdate { .. } => "record-update",
+        TypedExprKind::DynRowPackage { .. } => "dyn-row-package",
+        TypedExprKind::DynRowField { .. } => "dyn-row-field",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",

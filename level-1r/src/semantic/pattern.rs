@@ -117,6 +117,8 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts, context: &TypeContext) {
                 visit(&field.value, facts, context);
             }
         }
+        TypedExprKind::DynRowPackage { payload, .. } => visit(payload, facts, context),
+        TypedExprKind::DynRowField { package, .. } => visit(package, facts, context),
         TypedExprKind::AdtCtor { args, .. } => {
             for arg in args {
                 visit(arg, facts, context);

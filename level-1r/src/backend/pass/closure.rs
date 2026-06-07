@@ -72,6 +72,8 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
                 collect(&field.value, scope, facts);
             }
         }
+        TypedExprKind::DynRowPackage { payload, .. } => collect(payload, scope, facts),
+        TypedExprKind::DynRowField { package, .. } => collect(package, scope, facts),
         TypedExprKind::AdtCtor { args, .. } => {
             for arg in args {
                 collect(arg, scope, facts);
@@ -419,6 +421,8 @@ fn collect_free_vars(expr: &TypedExpr, locals: &mut BTreeSet<String>, free: &mut
                 collect_free_vars(&field.value, locals, free);
             }
         }
+        TypedExprKind::DynRowPackage { payload, .. } => collect_free_vars(payload, locals, free),
+        TypedExprKind::DynRowField { package, .. } => collect_free_vars(package, locals, free),
         TypedExprKind::AdtCtor { args, .. } => {
             for arg in args {
                 collect_free_vars(arg, locals, free);

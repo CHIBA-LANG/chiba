@@ -84,6 +84,12 @@ fn visit(
                 visit(&field.value, stack, facts, replay_context);
             }
         }
+        TypedExprKind::DynRowPackage { payload, .. } => {
+            visit(payload, stack, facts, replay_context);
+        }
+        TypedExprKind::DynRowField { package, .. } => {
+            visit(package, stack, facts, replay_context);
+        }
         TypedExprKind::AdtCtor { args, .. } => {
             for arg in args {
                 visit(arg, stack, facts, replay_context);
@@ -283,6 +289,12 @@ fn collect_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<Type>)
             for field in fields {
                 collect_resume_inputs(binder, &field.value, inputs);
             }
+        }
+        TypedExprKind::DynRowPackage { payload, .. } => {
+            collect_resume_inputs(binder, payload, inputs);
+        }
+        TypedExprKind::DynRowField { package, .. } => {
+            collect_resume_inputs(binder, package, inputs);
         }
         TypedExprKind::AdtCtor { args, .. } => {
             for arg in args {

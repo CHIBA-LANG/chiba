@@ -290,6 +290,8 @@ fn type_for_var(expr: &TypedExpr, name: &str) -> Option<Type> {
                     .iter()
                     .find_map(|field| type_for_var(&field.value, name))
             }),
+        crate::typed::TypedExprKind::DynRowPackage { payload, .. } => type_for_var(payload, name),
+        crate::typed::TypedExprKind::DynRowField { package, .. } => type_for_var(package, name),
         crate::typed::TypedExprKind::AdtCtor { args, .. } => {
             args.iter().find_map(|arg| type_for_var(arg, name))
         }

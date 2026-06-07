@@ -1893,6 +1893,12 @@ fn collect_assignment_diagnostics(
                 collect_assignment_diagnostics(def, &field.value, diagnostics);
             }
         }
+        crate::typed::TypedExprKind::DynRowPackage { payload, .. } => {
+            collect_assignment_diagnostics(def, payload, diagnostics);
+        }
+        crate::typed::TypedExprKind::DynRowField { package, .. } => {
+            collect_assignment_diagnostics(def, package, diagnostics);
+        }
         crate::typed::TypedExprKind::AdtCtor { args, .. } => {
             for arg in args {
                 collect_assignment_diagnostics(def, arg, diagnostics);

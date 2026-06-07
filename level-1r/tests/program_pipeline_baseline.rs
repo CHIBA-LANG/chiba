@@ -93,6 +93,8 @@ fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::SliceLiteral { .. } => "slice-literal",
         TypedExprKind::Record { .. } => "record",
         TypedExprKind::RecordUpdate { .. } => "record-update",
+        TypedExprKind::DynRowPackage { .. } => "dyn-row-package",
+        TypedExprKind::DynRowField { .. } => "dyn-row-field",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",
@@ -679,6 +681,42 @@ def main(): i64 = 0
     assert!(use_dyn.output.core.ops.iter().any(|op| {
         matches!(op, CoreOp::DynRowAdapterAccess { subject, .. } if subject.contains("x:i64") && subject.contains("y:(Unit) -> i64"))
     }));
+}
+
+#[test]
+fn program_dyn_row_param_wraps_record_value_and_reads_adapter_field() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def use_dyn(v: dyn {x: i64}): i64 = v.x
+def main(): i64 = use_dyn({x: 41})
+"#,
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let use_dyn = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "use_dyn")
+        .expect("use_dyn def");
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(use_dyn
+        .output
+        .visual
+        .typed
+        .contains("node kind=dyn-row-field type=i64"));
+    assert!(main
+        .output
+        .visual
+        .typed
+        .contains("node kind=dyn-row-package type=dyn {x: i64}"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "41");
 }
 
 #[test]

@@ -647,6 +647,12 @@ fn collect_runtime_value_imports(
         CoreValue::RecordField { record, .. } => {
             collect_runtime_value_imports(record, env, imports)
         }
+        CoreValue::DynRowPackage { payload, .. } => {
+            collect_runtime_value_imports(payload, env, imports);
+        }
+        CoreValue::DynRowField { package, .. } => {
+            collect_runtime_value_imports(package, env, imports);
+        }
         CoreValue::Adt { args, .. } => {
             for arg in args {
                 collect_runtime_value_imports(arg, env, imports);
@@ -2651,6 +2657,12 @@ fn infer_param_kinds_from_value(
         CoreValue::RecordField { record, .. } => {
             infer_param_kinds_from_value(record, params, kinds)
         }
+        CoreValue::DynRowPackage { payload, .. } => {
+            infer_param_kinds_from_value(payload, params, kinds);
+        }
+        CoreValue::DynRowField { package, .. } => {
+            infer_param_kinds_from_value(package, params, kinds);
+        }
         CoreValue::Adt { args, .. } => {
             for arg in args {
                 infer_param_kinds_from_value(arg, params, kinds);
@@ -2862,6 +2874,28 @@ fn render_core_value_i32(
         CoreValue::RecordField { record, field } => {
             if let Some(value) = record_field_value(record, field, env) {
                 render_core_value_i32(wat, value, env)?;
+            } else if let CoreValue::Var(name) = resolve_core_value_binding(record, env) {
+                if env.param_kind(name) == WasmValueKind::I32 {
+                    wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
+                } else {
+                    return Err(unsupported_i32_render_diagnostic(value));
+                }
+            } else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            }
+        }
+        CoreValue::DynRowPackage { .. } => {
+            if let Some(value) = single_field_dyn_row_package_i32_value(value, env) {
+                render_core_value_i32(wat, value, env)?;
+            } else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            }
+        }
+        CoreValue::DynRowField { package, field } => {
+            if let Some(value) = dyn_row_field_value(package, field, env) {
+                render_core_value_i32(wat, value, env)?;
+            } else if let Some(param) = single_field_dyn_row_param(package, field, env) {
+                wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(&param)));
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
             }
@@ -3321,7 +3355,13 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
             .unwrap_or(false),
         CoreValue::RecordField { record, field } => record_field_value(record, field, env)
             .map(|value| core_value_is_renderable_i32(value, env))
-            .unwrap_or(false),
+            .unwrap_or_else(|| {
+                matches!(resolve_core_value_binding(record, env), CoreValue::Var(name) if env.param_kind(name) == WasmValueKind::I32)
+                    && !field.is_empty()
+            }),
+        CoreValue::DynRowField { package, field } => dyn_row_field_value(package, field, env)
+            .map(|value| core_value_is_renderable_i32(value, env))
+            .unwrap_or_else(|| single_field_dyn_row_param(package, field, env).is_some()),
         CoreValue::RangeField { range, field } => range_field_value(range, *field, env)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or_else(|| core_value_is_renderable_externref(range, env)),
@@ -3349,6 +3389,11 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
             .unwrap_or(false),
         CoreValue::BuiltinRuntimeCall { call, args } => {
             builtin_runtime_call_is_renderable_i32(*call, args, env)
+        }
+        CoreValue::DynRowPackage { .. } => {
+            single_field_dyn_row_package_i32_value(value, env)
+                .map(|value| core_value_is_renderable_i32(value, env))
+                .unwrap_or(false)
         }
         CoreValue::Tuple { .. }
         | CoreValue::TextLiteral { .. }
@@ -3440,6 +3485,50 @@ fn record_field_value<'a>(
             .map(|candidate| &candidate.value)
             .or_else(|| record_field_value(base, field, env)),
         _ => None,
+    }
+}
+
+fn dyn_row_field_value<'a>(
+    package: &'a CoreValue,
+    field: &str,
+    env: &'a RenderEnv,
+) -> Option<&'a CoreValue> {
+    let package = resolve_core_value_binding(package, env);
+    let CoreValue::DynRowPackage { payload, fields } = package else {
+        return None;
+    };
+    let adapter = fields.iter().find(|candidate| candidate.name == field)?;
+    match &adapter.source {
+        crate::core::CoreDynRowFieldSource::Field => record_field_value(payload, field, env),
+        crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
+    }
+}
+
+fn single_field_dyn_row_param(package: &CoreValue, field: &str, env: &RenderEnv) -> Option<String> {
+    let package = resolve_core_value_binding(package, env);
+    let CoreValue::Var(name) = package else {
+        return None;
+    };
+    if field.is_empty() || env.param_kind(name) != WasmValueKind::I32 {
+        return None;
+    }
+    Some(name.clone())
+}
+
+fn single_field_dyn_row_package_i32_value<'a>(
+    value: &'a CoreValue,
+    env: &'a RenderEnv,
+) -> Option<&'a CoreValue> {
+    let CoreValue::DynRowPackage { payload, fields } = resolve_core_value_binding(value, env)
+    else {
+        return None;
+    };
+    let [field] = fields.as_slice() else {
+        return None;
+    };
+    match field.source {
+        crate::core::CoreDynRowFieldSource::Field => record_field_value(payload, &field.name, env),
+        crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
     }
 }
 
