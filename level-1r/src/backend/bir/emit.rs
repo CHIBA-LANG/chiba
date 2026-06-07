@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::control::ContinuationKind;
 use crate::core::{
     CoreCapturedContinuation, CoreExternAbi, CoreMatchArm, CoreOp, CorePattern, CoreProgram,
-    CoreValidation, CoreValue, OperatorIntrinsic, OwnershipDecision, RangeField, SliceField,
-    TextField,
+    CoreRefCellLane, CoreValidation, CoreValue, OperatorIntrinsic, OwnershipDecision, RangeField,
+    SliceField, TextField,
 };
 use crate::symbol::encode_debug_symbol;
 use crate::typed::{AggregateKind, BuiltinMethodCall, TextKind};
@@ -233,7 +233,7 @@ fn unsupported_runtime_return_value(
     params: &[String],
     param_kinds: &BTreeMap<String, WasmValueKind>,
 ) -> Option<BackendDiagnostic> {
-    let mut env = RenderEnv::new(params, param_kinds);
+    let mut env = env_with_tailcall_result_facts(core, &RenderEnv::new(params, param_kinds));
     let mut continuations = BTreeSet::new();
     for (index, op) in core.ops.iter().enumerate() {
         if let Some(diagnostic) = match op {
@@ -414,7 +414,7 @@ fn manifest_for_core(
     params: &[String],
     param_kinds: &BTreeMap<String, WasmValueKind>,
 ) -> BackendManifest {
-    let env = RenderEnv::new(params, param_kinds);
+    let env = env_with_tailcall_result_facts(core, &RenderEnv::new(params, param_kinds));
     let mut entries = Vec::new();
     for op in &core.ops {
         collect_manifest_entries(op, core, &mut entries);
@@ -987,6 +987,15 @@ enum RefRuntimeLane {
     ExternRef,
 }
 
+impl From<CoreRefCellLane> for RefRuntimeLane {
+    fn from(value: CoreRefCellLane) -> Self {
+        match value {
+            CoreRefCellLane::I32 => Self::I32,
+            CoreRefCellLane::ExternRef => Self::ExternRef,
+        }
+    }
+}
+
 fn ref_runtime_lane(
     call: BuiltinMethodCall,
     args: &[CoreValue],
@@ -1012,6 +1021,11 @@ fn ref_value_lane(value: &CoreValue, env: &RenderEnv) -> Option<RefRuntimeLane> 
 }
 
 fn ref_cell_lane(cell: &CoreValue, env: &RenderEnv) -> Option<RefRuntimeLane> {
+    if let CoreValue::Var(name) = resolve_core_value_binding(cell, env) {
+        if let Some(lane) = env.local_ref_cell_lane(name) {
+            return Some(RefRuntimeLane::from(lane));
+        }
+    }
     let CoreValue::BuiltinRuntimeCall { call, args } = resolve_core_value_binding(cell, env) else {
         return Some(RefRuntimeLane::I32);
     };
@@ -1982,10 +1996,7 @@ fn render_tailcall_result_chain(
     {
         return Ok(false);
     }
-    let mut chain_env = env.with_locals(result_binders.clone());
-    for (binder, kind) in tailcall_result_kinds(core) {
-        chain_env = chain_env.with_local_kind(&binder, kind);
-    }
+    let chain_env = env_with_tailcall_result_facts(core, &env.with_locals(result_binders.clone()));
     wat.push_str("  ;; tailcall-result-chain\n");
     render_func_header(wat, "main", Some("main"), &chain_env);
     for binder in &result_binders {
@@ -2052,6 +2063,49 @@ fn tailcall_result_kinds(core: &CoreProgram) -> BTreeMap<String, WasmValueKind> 
     kinds
 }
 
+fn tailcall_result_ref_cell_lanes(core: &CoreProgram) -> BTreeMap<String, CoreRefCellLane> {
+    let mut lanes = BTreeMap::new();
+    for (index, op) in core.ops.iter().enumerate() {
+        let CoreOp::TailCall { func, .. } = op else {
+            continue;
+        };
+        let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
+            continue;
+        };
+        if let Some(lane) = tailcall_result_ref_cell_lane(core, func) {
+            lanes.insert(binder.clone(), lane);
+        }
+    }
+    lanes
+}
+
+fn env_with_tailcall_result_facts(core: &CoreProgram, env: &RenderEnv) -> RenderEnv {
+    let mut next = env.clone();
+    for binder in tailcall_result_binders(core) {
+        next = next.with_locals(vec![binder]);
+    }
+    for (binder, kind) in tailcall_result_kinds(core) {
+        next = next.with_local_kind(&binder, kind);
+    }
+    for (binder, lane) in tailcall_result_ref_cell_lanes(core) {
+        next = next.with_local_ref_cell_lane(&binder, lane);
+    }
+    next
+}
+
+fn tailcall_result_binders(core: &CoreProgram) -> Vec<String> {
+    core.ops
+        .iter()
+        .filter_map(|op| {
+            if let CoreOp::TailCallResult { binder } = op {
+                Some(binder.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 fn operator_intrinsic_opcode(intrinsic: Option<OperatorIntrinsic>) -> Option<&'static str> {
     match intrinsic {
         Some(OperatorIntrinsic::I64Add) => Some("i32.add"),
@@ -2066,6 +2120,7 @@ fn operator_intrinsic_opcode(intrinsic: Option<OperatorIntrinsic>) -> Option<&'s
 struct RenderEnv {
     params: BTreeSet<String>,
     locals: BTreeMap<String, WasmValueKind>,
+    local_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     param_kinds: BTreeMap<String, WasmValueKind>,
     bindings: BTreeMap<String, CoreValue>,
 }
@@ -2075,6 +2130,7 @@ impl RenderEnv {
         Self {
             params: params.iter().cloned().collect(),
             locals: BTreeMap::new(),
+            local_ref_cell_lanes: BTreeMap::new(),
             param_kinds: param_kinds.clone(),
             bindings: BTreeMap::new(),
         }
@@ -2106,6 +2162,16 @@ impl RenderEnv {
         let mut next = self.clone();
         next.locals.insert(name.to_string(), kind);
         next
+    }
+
+    fn with_local_ref_cell_lane(&self, name: &str, lane: CoreRefCellLane) -> Self {
+        let mut next = self.clone();
+        next.local_ref_cell_lanes.insert(name.to_string(), lane);
+        next
+    }
+
+    fn local_ref_cell_lane(&self, name: &str) -> Option<CoreRefCellLane> {
+        self.local_ref_cell_lanes.get(name).copied()
     }
 
     fn signature(&self) -> String {
@@ -2413,6 +2479,20 @@ fn render_tailcall_func_header(
 
 fn tailcall_result_kind(core: &CoreProgram, func: &str) -> Option<WasmValueKind> {
     extern_signature_for_target(core, func).and_then(|(_, result)| result)
+}
+
+fn tailcall_result_ref_cell_lane(core: &CoreProgram, func: &str) -> Option<CoreRefCellLane> {
+    core.ops.iter().find_map(|op| {
+        let CoreOp::ExternFunctionTarget {
+            target,
+            result_ref_cell_lane,
+            ..
+        } = op
+        else {
+            return None;
+        };
+        (target == func).then_some(*result_ref_cell_lane).flatten()
+    })
 }
 
 fn render_core_value_i32(

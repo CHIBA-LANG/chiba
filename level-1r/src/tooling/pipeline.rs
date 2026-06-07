@@ -47,8 +47,8 @@ use crate::symbol::encode_debug_symbol;
 use crate::template::{analyze_template_with_source, TemplateDiagnostic, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
-    nominal_base_name_for_type, source_type_name_to_type, type_expr_with_context, RecordTypeField,
-    Type, TypeContext, TypeEnv, TypedExpr,
+    nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_to_type,
+    type_expr_with_context, RecordTypeField, Type, TypeContext, TypeEnv, TypedExpr,
 };
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -639,6 +639,15 @@ fn attach_extern_function_targets(
                     &function.param_types,
                     &function.return_type,
                 ),
+                result_type: function
+                    .return_type
+                    .as_deref()
+                    .map(source_type_name_to_type),
+                result_ref_cell_lane: function
+                    .return_type
+                    .as_deref()
+                    .map(source_type_name_to_type)
+                    .and_then(|ty| core_ref_cell_lane_for_type(&ty)),
             })
         })
         .collect::<Vec<_>>();
@@ -660,6 +669,7 @@ fn render_core_extern_target_key(op: &CoreOp) -> String {
             abi,
             name,
             signature,
+            ..
         } => format!(
             "{}|{}|{}|{}|{}|{}",
             target,
@@ -1209,6 +1219,33 @@ fn backend_value_kind_for_type(ty: &Type) -> Option<BackendValueKind> {
         | Type::Func(_, _)
         | Type::Continuation { .. } => None,
     }
+}
+
+fn core_ref_cell_lane_for_type(ty: &Type) -> Option<crate::core::CoreRefCellLane> {
+    match nominal_base_name_for_type(ty) {
+        Some("Ref" | "UnsafeRef") => {
+            let inner = ref_cell_type_arg(ty)?;
+            if backend_value_kind_for_type(&inner) == Some(BackendValueKind::ExternRef)
+                || matches!(
+                    inner,
+                    Type::Tuple(_)
+                        | Type::Record(_)
+                        | Type::Adt { .. }
+                        | Type::Func(_, _)
+                        | Type::Continuation { .. }
+                )
+            {
+                Some(crate::core::CoreRefCellLane::ExternRef)
+            } else {
+                Some(crate::core::CoreRefCellLane::I32)
+            }
+        }
+        _ => None,
+    }
+}
+
+fn ref_cell_type_arg(ty: &Type) -> Option<Type> {
+    nominal_type_args_for_type(ty)?.into_iter().next()
 }
 
 fn backend_nominal_is_externref(ty: &Type) -> bool {

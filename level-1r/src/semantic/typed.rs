@@ -2473,6 +2473,16 @@ pub(crate) fn nominal_base_name_for_type(ty: &Type) -> Option<&str> {
     Some(nominal_base_name(name))
 }
 
+pub(crate) fn nominal_type_args_for_type(ty: &Type) -> Option<Vec<Type>> {
+    let Type::Nominal(name) = ty else {
+        return None;
+    };
+    let ParsedTypeHeader::Nominal { args, .. } = parse_type_header(name)? else {
+        return None;
+    };
+    Some(args.into_iter().map(|arg| arg.to_type()).collect())
+}
+
 fn tuple_row_fields(fields: &[Type]) -> Vec<TupleRowField> {
     fields
         .iter()

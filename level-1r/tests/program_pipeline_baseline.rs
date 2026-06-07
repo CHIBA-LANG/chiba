@@ -4628,6 +4628,71 @@ def main(): i64 = id(String.from("hé")).bytes_len()
 }
 
 #[test]
+fn program_extern_c_builtin_handle_results_can_feed_composite_builtin_chains_wat() {
+    let slice = compile_source_program_bundle(
+        r#"
+def id(value: Slice[String]): Slice[String] = extern "C" "level1r_identity_externref"
+def main(): i64 = id([String.from("hé")])[0].bytes_len()
+"#,
+    )
+    .expect("compile slice extern return builtin chain")
+    .program;
+    let vec = compile_source_program_bundle(
+        r#"
+def id(value: Vec[String]): Vec[String] = extern "C" "level1r_identity_externref"
+def main(): rune = id(Vec.new().push(String.from("x"))).push(String.from("hé")).freeze()[1].char_at(0)
+"#,
+    )
+    .expect("compile vec extern return builtin chain")
+    .program;
+    let cell = compile_source_program_bundle(
+        r#"
+def id(value: Ref[String]): Ref[String] = extern "C" "level1r_identity_externref"
+def main(): i64 = id(Ref.new(String.from("hé"))).get().bytes_len()
+"#,
+    )
+    .expect("compile ref extern return builtin chain")
+    .program;
+    let range = compile_source_program_bundle(
+        r#"
+def id(value: Range): Range = extern "C" "level1r_identity_externref"
+def main(): i64 = id(3..9).end
+"#,
+    )
+    .expect("compile range extern return builtin chain")
+    .program;
+
+    for bundle in [&slice, &vec, &cell, &range] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle.backend_link.linked_wat.contains(
+            "(import \"env\" \"level1r_identity_externref\" (func $id (param externref) (result externref)))"
+        ));
+    }
+    assert!(slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert!(vec
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push_externref"));
+    assert!(cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_get_externref"));
+    assert!(range
+        .backend_link
+        .linked_wat
+        .contains("call $std_range_i64_end"));
+
+    assert_eq!(run_wat_text(&slice.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&vec.backend_link.linked_wat), "104");
+    assert_eq!(run_wat_text(&cell.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&range.backend_link.linked_wat), "9");
+}
+
+#[test]
 fn program_extern_c_unsupported_signature_is_backend_diagnostic() {
     let bundle = compile_source_program_bundle(
         r#"

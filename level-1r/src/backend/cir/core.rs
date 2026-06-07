@@ -8,7 +8,7 @@ use crate::specialize::{DischargedObligation, SpecializationFacts};
 use crate::template::{dyn_row_contract_key, row_shape_key, DynRowContract, RowShape};
 use crate::typed::{
     AggregateBoundary, AggregateKind, BuiltinMethodCall, RangeBoundary, SendColor, TextBoundary,
-    TextKind, UsageColor,
+    TextKind, Type, UsageColor,
 };
 use crate::usage::UsageFacts;
 
@@ -49,6 +49,8 @@ pub enum CoreOp {
         abi: CoreExternAbi,
         name: String,
         signature: String,
+        result_type: Option<Type>,
+        result_ref_cell_lane: Option<CoreRefCellLane>,
     },
     Prompt {
         kind: ContinuationKind,
@@ -153,6 +155,12 @@ pub enum OperatorIntrinsic {
 pub enum CoreExternAbi {
     Wasi,
     C,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CoreRefCellLane {
+    I32,
+    ExternRef,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

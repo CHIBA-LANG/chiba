@@ -297,9 +297,18 @@ fn render_core_op(op: &CoreOp) -> String {
             abi,
             name,
             signature,
+            result_type,
+            result_ref_cell_lane,
         } => format!(
-            "extern-function-target {target} owner={owner} symbol={symbol} abi={} name={name} signature={signature}",
-            render_core_extern_abi(*abi)
+            "extern-function-target {target} owner={owner} symbol={symbol} abi={} name={name} signature={signature} result={} ref-cell-lane={}",
+            render_core_extern_abi(*abi),
+            result_type
+                .as_ref()
+                .map(render_type)
+                .unwrap_or_else(|| "unit".to_string()),
+            result_ref_cell_lane
+                .map(render_core_ref_cell_lane)
+                .unwrap_or("none")
         ),
         CoreOp::Prompt { kind } => format!("prompt kind={}", render_continuation_kind(*kind)),
         CoreOp::CaptureContinuation {
@@ -1063,6 +1072,13 @@ fn render_core_extern_abi(abi: crate::core::CoreExternAbi) -> &'static str {
     match abi {
         crate::core::CoreExternAbi::Wasi => "wasi",
         crate::core::CoreExternAbi::C => "c",
+    }
+}
+
+fn render_core_ref_cell_lane(lane: crate::core::CoreRefCellLane) -> &'static str {
+    match lane {
+        crate::core::CoreRefCellLane::I32 => "i32",
+        crate::core::CoreRefCellLane::ExternRef => "externref",
     }
 }
 
