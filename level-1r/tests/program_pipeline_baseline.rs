@@ -2106,6 +2106,121 @@ fn source_vec_new_push_preserves_string_element_type_through_freeze_range_slice(
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
 }
 
+#[test]
+fn source_aggregate_and_ref_builtins_can_return_executable_externref_handles() {
+    let vec_i64 = compile_source_program_bundle("def main(): Vec[i64] = Vec.new().push(7)")
+        .expect("compile vec i64 return")
+        .program;
+    let vec_string =
+        compile_source_program_bundle("def main(): Vec[String] = Vec.new().push(String.from(\"hé\"))")
+            .expect("compile vec string return")
+            .program;
+    let frozen_string = compile_source_program_bundle(
+        "def main(): Slice[String] = Vec.new().push(String.from(\"hé\")).freeze()",
+    )
+    .expect("compile frozen string vec return")
+    .program;
+    let slice_slice = compile_source_program_bundle("def main(): Slice[i64] = [1, 2, 3][1..3]")
+        .expect("compile slice slice return")
+        .program;
+    let ref_string =
+        compile_source_program_bundle("def main(): Ref[String] = Ref.new(String.from(\"hé\"))")
+            .expect("compile ref string return")
+            .program;
+    let ref_slice =
+        compile_source_program_bundle("def main(): Ref[Slice[i64]] = Ref.new([1, 2, 3])")
+            .expect("compile ref slice return")
+            .program;
+    let unsafe_ref_range =
+        compile_source_program_bundle("def main(): UnsafeRef[Range] = UnsafeRef.new(3..9)")
+            .expect("compile unsafe ref range return")
+            .program;
+
+    for bundle in [
+        &vec_i64,
+        &vec_string,
+        &frozen_string,
+        &slice_slice,
+        &ref_string,
+        &ref_slice,
+        &unsafe_ref_range,
+    ] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("(func $main (export \"main\") (result externref)"));
+    }
+    assert_eq!(
+        vec_i64.defs[0].output.typed.ty,
+        Type::Nominal("Vec[i64]".to_string())
+    );
+    assert_eq!(
+        vec_string.defs[0].output.typed.ty,
+        Type::Nominal("Vec[String]".to_string())
+    );
+    assert_eq!(
+        frozen_string.defs[0].output.typed.ty,
+        Type::Nominal("Slice[String]".to_string())
+    );
+    assert_eq!(
+        slice_slice.defs[0].output.typed.ty,
+        Type::Nominal("Slice[i64]".to_string())
+    );
+    assert_eq!(
+        ref_string.defs[0].output.typed.ty,
+        Type::Nominal("Ref[String]".to_string())
+    );
+    assert_eq!(
+        ref_slice.defs[0].output.typed.ty,
+        Type::Nominal("Ref[Slice[i64]]".to_string())
+    );
+    assert_eq!(
+        unsafe_ref_range.defs[0].output.typed.ty,
+        Type::Nominal("UnsafeRef[Range]".to_string())
+    );
+    assert!(vec_i64.backend_link.linked_wat.contains("call $std_vec_push"));
+    assert!(vec_string
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push_externref"));
+    assert!(frozen_string
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_freeze"));
+    assert!(slice_slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_slice"));
+    assert!(ref_string
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_new_externref"));
+    assert!(ref_slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_new_externref"));
+    assert!(unsafe_ref_range
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_new_externref"));
+
+    assert_eq!(run_wat_text(&vec_i64.backend_link.linked_wat), "slice/1");
+    assert_eq!(run_wat_text(&vec_string.backend_link.linked_wat), "slice/1");
+    assert_eq!(
+        run_wat_text(&frozen_string.backend_link.linked_wat),
+        "slice/1"
+    );
+    assert_eq!(run_wat_text(&slice_slice.backend_link.linked_wat), "slice/2");
+    assert_eq!(run_wat_text(&ref_string.backend_link.linked_wat), "ref/bytes/3");
+    assert_eq!(run_wat_text(&ref_slice.backend_link.linked_wat), "ref/slice/3");
+    assert_eq!(
+        run_wat_text(&unsafe_ref_range.backend_link.linked_wat),
+        "ref/range/3/9"
+    );
+}
+
 fn assert_invalid_assignment_target(source: &str, target_type: &str) {
     let bundle = compile_source_program_bundle(source)
         .expect("compile invalid assignment target")
