@@ -982,11 +982,27 @@ fn aggregate_index_lane(
         return runtime_value_lane(item, env);
     }
     if core_value_is_renderable_i32(index, env) {
-        if let CoreValue::Var(name) = resolve_core_value_binding(value, env) {
-            return env.aggregate_element_lane(name).map(RuntimeValueLane::from);
-        }
+        return aggregate_value_element_lane(value, env);
     }
     None
+}
+
+fn aggregate_value_element_lane(value: &CoreValue, env: &RenderEnv) -> Option<RuntimeValueLane> {
+    match resolve_core_value_binding(value, env) {
+        CoreValue::Var(name) => env.aggregate_element_lane(name).map(RuntimeValueLane::from),
+        CoreValue::BuiltinRuntimeCall {
+            call: BuiltinMethodCall::VecFreeze,
+            args,
+        } => args
+            .first()
+            .and_then(|vec| aggregate_value_element_lane(vec, env)),
+        CoreValue::BuiltinRuntimeCall {
+            call: BuiltinMethodCall::VecPush,
+            args,
+        } => args.get(1).and_then(|item| runtime_value_lane(item, env)),
+        CoreValue::SliceLiteral { items } => aggregate_items_lane(items, env),
+        _ => None,
+    }
 }
 
 fn render_runtime_lane_value(
@@ -3063,9 +3079,11 @@ fn builtin_runtime_call_is_renderable_i32(
     match (call, args) {
         (BuiltinMethodCall::TextLen { .. } | BuiltinMethodCall::TextRuneLen { .. }, [text]) => {
             core_value_is_renderable_externref_operand(text, env)
+                || core_value_is_renderable_externref(text, env)
         }
         (BuiltinMethodCall::TextCharAt { .. }, [text, index]) => {
-            core_value_is_renderable_externref_operand(text, env)
+            (core_value_is_renderable_externref_operand(text, env)
+                || core_value_is_renderable_externref(text, env))
                 && core_value_is_renderable_i32(index, env)
         }
         (BuiltinMethodCall::RefGet, [cell]) => {

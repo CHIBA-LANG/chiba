@@ -7094,6 +7094,54 @@ def main(): i64 = CELL.get().end
 }
 
 #[test]
+fn global_init_lowers_aggregate_string_ref_statics_into_executable_assignment_chains() {
+    let slice_cell = compile_source_program_bundle(
+        r#"
+def CELLS: Slice[Ref[String]] = [Ref.new(String.from("x"))]
+def main(): i64 = (CELLS[0] := String.from("hé")).*.bytes_len()
+"#,
+    )
+    .expect("compile slice string ref static assignment")
+    .program;
+    let vec_cell = compile_source_program_bundle(
+        r#"
+def CELLS: Vec[UnsafeRef[String]] = Vec.new().push(UnsafeRef.new(String.from("x")))
+def main(): i64 = (CELLS.freeze()[0] := String.from("hé")).*.bytes_len()
+"#,
+    )
+    .expect("compile vec unsafe string ref static assignment")
+    .program;
+
+    for bundle in [&slice_cell, &vec_cell] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("(global $global__CELLS (mut externref)"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("global.get $global__CELLS"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_string_i64_len"));
+    }
+    assert!(slice_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_set_externref"));
+    assert!(vec_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_set_externref"));
+
+    assert_eq!(run_wat_text(&slice_cell.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&vec_cell.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn global_init_lowers_scalar_ref_statics_into_executable_externref_globals() {
     let cell = compile_source_program_bundle(
         r#"

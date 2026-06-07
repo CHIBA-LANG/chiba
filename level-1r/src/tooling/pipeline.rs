@@ -1239,7 +1239,12 @@ fn backend_param_abi(
         functions: backend_callable_abis_for_interface(functions),
         statics: backend_static_abis_for_interface(statics),
         static_ref_cell_lanes: backend_static_ref_cell_lanes_for_interface(statics),
-        aggregate_element_lanes: backend_aggregate_element_lanes_for_signature(signature),
+        aggregate_element_lanes: backend_aggregate_element_lanes_for_signature(signature)
+            .into_iter()
+            .chain(backend_static_aggregate_element_lanes_for_interface(
+                statics,
+            ))
+            .collect(),
     }
 }
 
@@ -1252,6 +1257,19 @@ fn backend_aggregate_element_lanes_for_signature(
         .filter_map(|param| {
             let ty = source_type_name_to_type(&param.ty);
             aggregate_element_lane_for_type(&ty).map(|lane| (param.name.clone(), lane))
+        })
+        .collect()
+}
+
+fn backend_static_aggregate_element_lanes_for_interface(
+    statics: &[crate::surface::InterfaceStatic],
+) -> BTreeMap<String, BackendValueKind> {
+    statics
+        .iter()
+        .filter_map(|static_value| {
+            let ty = static_value.ty.as_deref().map(source_type_name_to_type)?;
+            aggregate_element_lane_for_type(&ty)
+                .map(|lane| (static_value.source_name.clone(), lane))
         })
         .collect()
 }
@@ -2101,14 +2119,16 @@ fn lower_global_init_into_linked_wat(
     let Some(body) = body.strip_suffix(")\n") else {
         return bundle;
     };
-    let (body_imports, body_without_imports) = split_module_imports(body);
+    let (_, body_without_imports) = split_module_imports(body);
 
     let mut wat = String::from("(module\n");
-    let global_imports = global_init_runtime_imports(global_init);
-    for import in &global_imports {
+    let mut imports = bundle.manifest.imports.clone();
+    imports.extend(global_init_runtime_imports(global_init));
+    sort_dedup_imports(&mut imports);
+    bundle.manifest.imports = imports.clone();
+    for import in &imports {
         render_program_extern_import_wat(&mut wat, import);
     }
-    wat.push_str(&body_imports);
     for static_value in &global_init.statics {
         match global_static_value_kind(static_value) {
             BackendValueKind::ExternRef => {
