@@ -242,9 +242,7 @@ fn unsupported_runtime_return_value(
                 env = env.with_locals(vec![binder.clone()]);
                 None
             }
-            CoreOp::TailCall { args, .. } => {
-                args.iter().find_map(|arg| unsupported_i32_value(arg, &env))
-            }
+            CoreOp::TailCall { func, args } => unsupported_tailcall_args(core, func, args, &env),
             CoreOp::TailCallResult { binder } => {
                 env = env.with_locals(vec![binder.clone()]);
                 None
@@ -282,8 +280,7 @@ fn return_value_is_tailcall_result(
     };
     if matches!(
         index.checked_sub(1).and_then(|previous| core.ops.get(previous)),
-        Some(CoreOp::TailCall { args, .. })
-            if args.iter().all(|arg| core_value_is_renderable_i32(arg, env))
+        Some(CoreOp::TailCall { func, args }) if tailcall_args_are_renderable(core, func, args, env)
     ) {
         return true;
     }
@@ -291,9 +288,9 @@ fn return_value_is_tailcall_result(
         matches!(
             window,
             [
-                CoreOp::TailCall { args, .. },
+                CoreOp::TailCall { func, args },
                 CoreOp::TailCallResult { binder },
-            ] if binder == name && args.iter().all(|arg| core_value_is_renderable_i32(arg, env))
+            ] if binder == name && tailcall_args_are_renderable(core, func, args, env)
         )
     })
 }
@@ -303,6 +300,31 @@ fn unsupported_i32_value(value: &CoreValue, env: &RenderEnv) -> Option<BackendDi
         BackendDiagnostic::UnsupportedI32ReturnValue {
             value: value.debug_name(),
         }
+    })
+}
+
+fn unsupported_tailcall_args(
+    core: &CoreProgram,
+    func: &str,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> Option<BackendDiagnostic> {
+    let Some((params, _)) = extern_signature_for_target(core, func) else {
+        return args.iter().find_map(|arg| unsupported_i32_value(arg, env));
+    };
+    if params.len() != args.len() {
+        return Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: format!("{} /{}", final_symbol(func), args.len()),
+        });
+    }
+    params.iter().zip(args).find_map(|(kind, arg)| {
+        let renderable = match kind {
+            WasmValueKind::I32 => core_value_is_renderable_i32(arg, env),
+            WasmValueKind::ExternRef => core_value_is_renderable_externref(arg, env),
+        };
+        (!renderable).then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: arg.debug_name(),
+        })
     })
 }
 
@@ -454,6 +476,11 @@ fn collect_manifest_imports(op: &CoreOp, imports: &mut Vec<BackendExternImport>)
             name: name.clone(),
             signature_hash: signature.clone(),
         }),
+        CoreOp::TailCall { args, .. } => {
+            for arg in args {
+                collect_runtime_value_imports(arg, imports);
+            }
+        }
         CoreOp::CaptureContinuation { captured, .. } => {
             for op in &captured.ops {
                 collect_manifest_imports(op, imports);
@@ -878,15 +905,10 @@ fn render_wat(
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                if args
-                    .iter()
-                    .all(|arg| core_value_is_renderable_i32(arg, &env))
-                {
+                if tailcall_args_are_renderable(core, func, args, &env) {
                     let symbol = format!("chiba_tailcall_{tailcall_index}");
                     render_func_header(&mut wat, &symbol, None, &env);
-                    for arg in args {
-                        render_core_value_i32(&mut wat, arg, &env)?;
-                    }
+                    render_tailcall_args(&mut wat, core, func, args, &env)?;
                     wat.push_str(&format!("    call ${}\n", final_symbol(func)));
                     wat.push_str("  )\n");
                     tailcall_index += 1;
@@ -1152,9 +1174,7 @@ fn render_continuation_wat(
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                for arg in args {
-                    render_core_value_i32(&mut wat, arg, &env)?;
-                }
+                render_tailcall_args(&mut wat, core, func, args, &env)?;
                 wat.push_str(&format!("    call ${}\n", final_symbol(func)));
                 wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
             }
@@ -1563,6 +1583,43 @@ fn extern_scalar_wat_type(scalar: &str) -> Option<&'static str> {
     }
 }
 
+fn extern_signature_for_target<'a>(
+    core: &'a CoreProgram,
+    target: &str,
+) -> Option<(Vec<WasmValueKind>, Option<WasmValueKind>)> {
+    core.ops.iter().find_map(|op| {
+        let CoreOp::ExternFunctionTarget {
+            target: candidate,
+            signature,
+            ..
+        } = op
+        else {
+            return None;
+        };
+        if candidate != target {
+            return None;
+        }
+        let (params, result) = extern_import_wat_signature(signature)?;
+        let params = params
+            .into_iter()
+            .map(wasm_value_kind_from_wat)
+            .collect::<Option<Vec<_>>>()?;
+        let result = match result {
+            Some(result) => Some(wasm_value_kind_from_wat(result)?),
+            None => None,
+        };
+        Some((params, result))
+    })
+}
+
+fn wasm_value_kind_from_wat(wat: &str) -> Option<WasmValueKind> {
+    match wat {
+        "i32" => Some(WasmValueKind::I32),
+        "externref" => Some(WasmValueKind::ExternRef),
+        _ => None,
+    }
+}
+
 fn escape_wat_string(text: &str) -> String {
     text.replace('\\', "\\\\").replace('"', "\\\"")
 }
@@ -1605,9 +1662,7 @@ fn render_tailcall_result_chain(
                     .collect::<Vec<_>>()
                     .join(", ")
             ));
-            for arg in args {
-                render_core_value_i32(wat, arg, &chain_env)?;
-            }
+            render_tailcall_args(wat, core, func, args, &chain_env)?;
             wat.push_str(&format!("    call ${}\n", final_symbol(func)));
             wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
         }
@@ -1861,6 +1916,51 @@ fn render_func_header(wat: &mut String, symbol: &str, export: Option<&str>, env:
             env.signature()
         )),
     }
+}
+
+fn tailcall_args_are_renderable(
+    core: &CoreProgram,
+    func: &str,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> bool {
+    let Some((params, _)) = extern_signature_for_target(core, func) else {
+        return args
+            .iter()
+            .all(|arg| core_value_is_renderable_i32(arg, env));
+    };
+    params.len() == args.len()
+        && params.iter().zip(args).all(|(kind, arg)| match kind {
+            WasmValueKind::I32 => core_value_is_renderable_i32(arg, env),
+            WasmValueKind::ExternRef => core_value_is_renderable_externref(arg, env),
+        })
+}
+
+fn render_tailcall_args(
+    wat: &mut String,
+    core: &CoreProgram,
+    func: &str,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> Result<(), BackendDiagnostic> {
+    let Some((params, _)) = extern_signature_for_target(core, func) else {
+        for arg in args {
+            render_core_value_i32(wat, arg, env)?;
+        }
+        return Ok(());
+    };
+    if params.len() != args.len() {
+        return Err(BackendDiagnostic::UnsupportedI32ReturnValue {
+            value: format!("{} /{}", final_symbol(func), args.len()),
+        });
+    }
+    for (kind, arg) in params.iter().zip(args) {
+        match kind {
+            WasmValueKind::I32 => render_core_value_i32(wat, arg, env)?,
+            WasmValueKind::ExternRef => render_core_value_externref(wat, arg, env)?,
+        }
+    }
+    Ok(())
 }
 
 fn render_externref_func_header(wat: &mut String, symbol: &str, export: Option<&str>) {

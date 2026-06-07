@@ -114,6 +114,11 @@ async function makeImports(wat, args) {
       level1r_add(left, right) {
         return Number(left) + Number(right);
       },
+      level1r_cstr_len(text) {
+        const bytes = cstrByteArray(text);
+        const nul = bytes.indexOf(0);
+        return nul >= 0 ? nul : bytes.length;
+      },
       share_state() {
         return 0n;
       },

@@ -784,10 +784,24 @@ fn backend_extern_signature_hash(
 ) -> String {
     let params = params
         .iter()
-        .map(|param| param.as_deref().unwrap_or("_"))
+        .map(|param| backend_extern_type_name(param.as_deref()))
         .collect::<Vec<_>>()
         .join("_");
-    format!("{}_to_{}", params, return_type.as_deref().unwrap_or("unit"))
+    format!(
+        "{}_to_{}",
+        params,
+        backend_extern_type_name(return_type.as_deref())
+    )
+}
+
+fn backend_extern_type_name(source: Option<&str>) -> String {
+    match source {
+        Some("cstr") => "externref".to_string(),
+        Some("i64") => "i64".to_string(),
+        Some("bool") => "bool".to_string(),
+        Some("Unit") | Some("unit") | None => "unit".to_string(),
+        Some(source) => source.to_string(),
+    }
 }
 
 fn normalize_pattern_clause_defs(program: &SourceProgram) -> SourceProgram {

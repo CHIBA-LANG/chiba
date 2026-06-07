@@ -2810,6 +2810,46 @@ def main() = add(8, 5)
 }
 
 #[test]
+fn program_extern_c_cstr_arg_lowers_to_executable_externref_import_wat() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def c_len(value: cstr): i64 = extern "C" "level1r_cstr_len"
+def main(): i64 = c_len(String.from("hé").to_cstr())
+"#,
+    )
+    .expect("compile cstr extern call")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+    assert!(main.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::ExternFunctionTarget {
+                target,
+                abi: chiba_level1r::core::CoreExternAbi::C,
+                name,
+                signature,
+                ..
+            } if target == "c_len" && name == "level1r_cstr_len" && signature == "externref_to_i64"
+        )
+    }));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"level1r_cstr_len\" (func $c_len (param externref) (result i32)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        ";; extern-import c symbol=c_len module=env name=level1r_cstr_len signature=externref_to_i64"
+    ));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn program_extern_c_unsupported_signature_is_backend_diagnostic() {
     let bundle = compile_source_program_bundle(
         r#"
