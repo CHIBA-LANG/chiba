@@ -721,6 +721,23 @@ def main(): i64 = apply((n: i64): i64 => n + 1, 8)
 }
 
 #[test]
+fn program_callable_param_calls_stored_capturing_closure() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def apply(f: (i64) -> i64, x: i64): i64 = f(x)
+def make(base: i64): i64 = apply((n: i64): i64 => base + n, 5)
+def main(): i64 = make(7)
+"#,
+    )
+    .expect("compile callable param capturing closure");
+    let bundle = output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "12");
+}
+
+#[test]
 fn program_dyn_row_param_builds_static_to_dyn_package_contract() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"

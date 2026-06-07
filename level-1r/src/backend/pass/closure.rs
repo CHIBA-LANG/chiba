@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::alpha::{AlphaExpr, AlphaExprKind, BinderId};
+use crate::alpha::{AlphaBinder, AlphaExpr, AlphaExprKind, BinderId};
 use crate::typed::{TypedExpr, TypedExprKind, UsageColor};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -36,8 +36,15 @@ pub fn analyze_closures(expr: &TypedExpr) -> ClosureFacts {
 }
 
 pub fn analyze_alpha_closures(expr: &AlphaExpr) -> ClosureFacts {
+    analyze_alpha_closures_with_params(expr, &[])
+}
+
+pub fn analyze_alpha_closures_with_params(
+    expr: &AlphaExpr,
+    params: &[AlphaBinder],
+) -> ClosureFacts {
     let mut facts = ClosureFacts::default();
-    let mut scope = BTreeSet::new();
+    let mut scope = params.iter().map(|param| param.id).collect::<BTreeSet<_>>();
     collect_alpha(expr, &mut scope, &mut facts);
     facts
 }

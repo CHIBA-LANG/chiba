@@ -1480,11 +1480,7 @@ fn lower_lifted_functions(
     ops: &mut Vec<CoreOp>,
 ) {
     for function in &lambda_lift.functions {
-        let (param, body) = if function.direct {
-            lowered_direct_lifted_body(cps, function, continuations, lambda_lift)
-        } else {
-            (None, Vec::new())
-        };
+        let (param, body) = lowered_lifted_body(cps, function, continuations, lambda_lift);
         ops.push(CoreOp::LiftedFunction {
             source: function.source.clone(),
             symbol: function.symbol.clone(),
@@ -1496,7 +1492,7 @@ fn lower_lifted_functions(
     }
 }
 
-fn lowered_direct_lifted_body(
+fn lowered_lifted_body(
     cps: &CpsProgram,
     function: &crate::lambda_lift::LiftedFunctionFact,
     continuations: &[ContinuationFact],

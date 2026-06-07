@@ -12,7 +12,7 @@ use crate::backend::{
     BackendDynRowParamMethodAbi, BackendExternAbi, BackendExternImport, BackendLinkDiagnostic,
     BackendLinkedBundle, BackendParamAbi, BackendValueKind,
 };
-use crate::closure::{analyze_alpha_closures, ClosureFacts};
+use crate::closure::{analyze_alpha_closures_with_params, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
 use crate::closure_simplify::{simplify_closure_core, ClosureSimplificationFacts};
 use crate::control::{analyze_control, ControlError, ControlFacts};
@@ -326,7 +326,7 @@ fn compile_expr_with_indexes_and_generics(
         || simplify_continuations(&cps_usage),
     );
     let closure = passes.record("L14Closure", "AlphaExpr", "ClosureFacts", || {
-        analyze_alpha_closures(&alpha.expr)
+        analyze_alpha_closures_with_params(&alpha.expr, &alpha.param_binders)
     });
     let lambda_lift = passes.record("L15LambdaLift", "ClosureFacts", "LambdaLiftFacts", || {
         lift_lambdas(&closure)
@@ -1086,7 +1086,7 @@ fn program_lifted_callable_abis(defs: &[ProgramDefOutput]) -> BTreeMap<String, B
         .filter_map(|op| {
             let CoreOp::LiftedFunction {
                 symbol,
-                direct,
+                env_params,
                 param,
                 body,
                 ..
@@ -1094,13 +1094,15 @@ fn program_lifted_callable_abis(defs: &[ProgramDefOutput]) -> BTreeMap<String, B
             else {
                 return None;
             };
-            if !direct || param.is_none() || body.is_empty() {
+            if param.is_none() || body.is_empty() {
                 return None;
             }
+            let mut params = vec![BackendValueKind::I32; env_params.len()];
+            params.push(BackendValueKind::I32);
             Some((
                 symbol.clone(),
                 BackendCallableAbi {
-                    params: vec![BackendValueKind::I32],
+                    params,
                     arg_expansions: vec![BackendCallableArgExpansion::Direct(
                         BackendValueKind::I32,
                     )],
@@ -1381,7 +1383,7 @@ fn backend_callable_params_for_signature(
             Some((
                 param.name.clone(),
                 BackendCallableAbi {
-                    params: vec![input_kind],
+                    params: vec![BackendValueKind::I32, input_kind],
                     arg_expansions: vec![BackendCallableArgExpansion::Direct(input_kind)],
                     result: result_kind,
                     result_ref_cell_lane: None,
@@ -1522,6 +1524,7 @@ fn backend_callable_abis_for_interface(
                                 .or_else(|| backend_storage_value_kind_for_type(&input))
                                 .into_iter()
                                 .collect(),
+                            env: vec![BackendValueKind::I32],
                             result: backend_value_kind_for_type(&result)
                                 .or_else(|| backend_storage_value_kind_for_type(&result)),
                         },
@@ -1538,7 +1541,11 @@ fn backend_callable_abis_for_interface(
                 .iter()
                 .flat_map(|expansion| match expansion {
                     BackendCallableArgExpansion::Direct(kind) => vec![*kind],
-                    BackendCallableArgExpansion::Callable { .. } => vec![BackendValueKind::I32],
+                    BackendCallableArgExpansion::Callable { env, .. } => {
+                        let mut params = vec![BackendValueKind::I32];
+                        params.extend(env.iter().copied());
+                        params
+                    }
                     BackendCallableArgExpansion::DynRowFields(fields) => {
                         fields.iter().map(|field| field.kind).collect()
                     }

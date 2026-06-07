@@ -532,13 +532,29 @@ fn lifted_functions_enter_core_with_target_neutral_symbols() {
                 && !body.is_empty()
         )
     }));
-    assert!(output.core.ops.contains(&CoreOp::LiftedFunction {
-        source: "closure::y".to_string(),
-        symbol: "lift::0001::closure__y".to_string(),
-        env_params: vec!["x".to_string()],
-        direct: false,
-        param: None,
-        body: vec![],
+    assert!(output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::LiftedFunction {
+                source,
+                symbol,
+                env_params,
+                direct: false,
+                param: Some(param),
+                body,
+            } if source == "closure::y"
+                && symbol == "lift::0001::closure__y"
+                && env_params == &vec!["x".to_string()]
+                && param == "y"
+                && body.iter().any(|op| matches!(
+                    op,
+                    CoreOp::TailCall {
+                        func,
+                        args,
+                    } if func == "x" && args == &vec![CoreValue::Var("y".to_string())]
+                ))
+                && !body.is_empty()
+        )
     }));
     assert_eq!(output.core_validation.diagnostics, vec![]);
 }
