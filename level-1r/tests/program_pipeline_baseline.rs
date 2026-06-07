@@ -2612,6 +2612,36 @@ fn source_str_param_range_slice_lowers_to_executable_runtime_import() {
 }
 
 #[test]
+fn source_str_param_rune_methods_lower_to_executable_runtime_import() {
+    let rune_len = compile_source_program_bundle("def main(s: str): i64 = s.rune_len()")
+        .expect("compile str param rune_len")
+        .program;
+    let char_at = compile_source_program_bundle("def main(s: str): rune = s.char_at(0)")
+        .expect("compile str param char_at")
+        .program;
+
+    for bundle in [&rune_len, &char_at] {
+        assert_eq!(
+            bundle.diagnostics,
+            vec![ProgramDiagnostic::EntryHasParams {
+                name: "main".to_string(),
+                params: vec!["s".to_string()]
+            }]
+        );
+        assert_backend_link_clean(bundle, 0);
+    }
+    assert!(rune_len.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.str_rune_len\" (func $std_str_rune_len (param externref) (result i32)))"
+    ));
+    assert!(char_at.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.str_char_at\" (func $std_str_char_at (param externref) (param i32) (result i32)))"
+    ));
+
+    assert_eq!(run_wat_text(&rune_len.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&char_at.backend_link.linked_wat), "1");
+}
+
+#[test]
 fn source_string_param_len_lowers_to_executable_runtime_import() {
     let bundle = compile_source_program_bundle("def main(s: String): i64 = s.len")
         .expect("compile string param len")
@@ -2700,6 +2730,36 @@ fn source_string_param_index_lowers_to_executable_runtime_import() {
         .contains("call $std_string_i64_byte_at"));
 
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
+fn source_string_param_rune_methods_lower_to_executable_runtime_import() {
+    let rune_len = compile_source_program_bundle("def main(s: String): i64 = s.rune_len()")
+        .expect("compile string param rune_len")
+        .program;
+    let char_at = compile_source_program_bundle("def main(s: String): rune = s.char_at(0)")
+        .expect("compile string param char_at")
+        .program;
+
+    for bundle in [&rune_len, &char_at] {
+        assert_eq!(
+            bundle.diagnostics,
+            vec![ProgramDiagnostic::EntryHasParams {
+                name: "main".to_string(),
+                params: vec!["s".to_string()]
+            }]
+        );
+        assert_backend_link_clean(bundle, 0);
+    }
+    assert!(rune_len.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.string_rune_len\" (func $std_string_rune_len (param externref) (result i32)))"
+    ));
+    assert!(char_at.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.string_char_at\" (func $std_string_char_at (param externref) (param i32) (result i32)))"
+    ));
+
+    assert_eq!(run_wat_text(&rune_len.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&char_at.backend_link.linked_wat), "1");
 }
 
 #[test]
@@ -3014,6 +3074,50 @@ fn source_cstr_literal_lowers_to_executable_abi_text_runtime_import() {
 
     assert_eq!(run_wat_text(&len.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&nul.backend_link.linked_wat), "0");
+}
+
+#[test]
+fn source_cstr_param_methods_lower_to_executable_runtime_import() {
+    let len = compile_source_program_bundle("def main(s: cstr): i64 = s.bytes_len()")
+        .expect("compile cstr param bytes_len")
+        .program;
+    let byte = compile_source_program_bundle("def main(s: cstr): i64 = s[1]")
+        .expect("compile cstr param byte index")
+        .program;
+    let rune_len = compile_source_program_bundle("def main(s: cstr): i64 = s.rune_len()")
+        .expect("compile cstr param rune_len")
+        .program;
+    let char_at = compile_source_program_bundle("def main(s: cstr): rune = s.char_at(0)")
+        .expect("compile cstr param char_at")
+        .program;
+
+    for bundle in [&len, &byte, &rune_len, &char_at] {
+        assert_eq!(
+            bundle.diagnostics,
+            vec![ProgramDiagnostic::EntryHasParams {
+                name: "main".to_string(),
+                params: vec!["s".to_string()]
+            }]
+        );
+        assert_backend_link_clean(bundle, 0);
+    }
+    assert!(len.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.cstr_i64_len\" (func $std_cstr_i64_len (param externref) (result i32)))"
+    ));
+    assert!(byte.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.cstr_i64_byte_at\" (func $std_cstr_i64_byte_at (param externref) (param i32) (result i32)))"
+    ));
+    assert!(rune_len.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.cstr_rune_len\" (func $std_cstr_rune_len (param externref) (result i32)))"
+    ));
+    assert!(char_at.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.cstr_char_at\" (func $std_cstr_char_at (param externref) (param i32) (result i32)))"
+    ));
+
+    assert_eq!(run_wat_text(&len.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&byte.backend_link.linked_wat), "2");
+    assert_eq!(run_wat_text(&rune_len.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&char_at.backend_link.linked_wat), "1");
 }
 
 #[test]
