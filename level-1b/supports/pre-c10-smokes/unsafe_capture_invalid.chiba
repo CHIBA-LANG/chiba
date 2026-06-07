@@ -1,9 +1,0 @@
-/// C10 fixture for rejecting unsafe continuation captures.
-namespace pre_c10.unsafe_capture_invalid
-
-/// Capturing pointer-derived state through a continuation must not reach Core.
-def unsafe_capture_invalid(p: Ptr[u8]): i64 = reset {
-    shift k {
-        k(p.load8(0) as i64)
-    }
-}

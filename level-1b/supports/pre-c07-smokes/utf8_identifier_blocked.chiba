@@ -1,9 +1,0 @@
-/// UTF-8 identifier fixture for the scanner fallback blocker.
-namespace pre_c07.utf8_identifier_blocked
-
-data Résultat[T] {
-    Succès(T),
-    Erreur(String),
-}
-
-def café(): i32 = 42

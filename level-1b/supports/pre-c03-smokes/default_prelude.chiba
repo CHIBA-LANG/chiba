@@ -1,7 +1,0 @@
-namespace pre_c03.default_prelude
-
-def default_prelude_smoke(value: Option[String]): Result[(), IoError] =
-    match value {
-        Some(text) => println(text.slice(0, text.len()))
-        None => Ok(())
-    }

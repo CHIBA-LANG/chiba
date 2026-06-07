@@ -1,3 +1,0 @@
-namespace semantic.gates.parts
-
-def left(): i64 = 20

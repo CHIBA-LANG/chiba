@@ -1,3 +1,0 @@
-namespace pre_c12.invalid_ref_without_world_local
-
-def global_ref_without_attr: Ref[i64] = Ref.new(0)

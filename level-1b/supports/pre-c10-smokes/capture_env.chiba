@@ -1,8 +1,0 @@
-/// C10 fixture for closure environment capture.
-namespace pre_c10.capture_env
-
-/// Capturing `seed` requires an explicit closure environment before lowering.
-def capture_env(seed: i64): i64 = {
-    consume(1) {|value: i64| value + seed }
-    return seed + 1
-}

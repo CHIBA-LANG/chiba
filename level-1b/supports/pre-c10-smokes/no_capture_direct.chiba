@@ -1,8 +1,0 @@
-/// C10 fixture for an immediately-called no-capture closure.
-namespace pre_c10.no_capture_direct
-
-/// A no-capture closure can be directified without allocating an environment.
-def no_capture_direct(): i64 = {
-    consume(41) {|value: i64| value + 1 }
-    return 42
-}
