@@ -1351,6 +1351,51 @@ fn frontend_indexing_enters_operator_obligation_path() {
 }
 
 #[test]
+fn frontend_ref_deref_sugar_parses_as_get_method_call() {
+    let parsed = parse_source_program("def main() = Ref.new(9).*").expect("parse ref deref sugar");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::method_call_args(
+                    Expr::method_call(Expr::var("Ref"), "new", Expr::i64(9)),
+                    "get",
+                    Vec::new()
+                )
+            );
+        }
+        other => panic!(
+            "expected function def, got {}",
+            source_item_kind_name(other)
+        ),
+    }
+}
+
+#[test]
+fn frontend_ref_assignment_sugar_parses_as_set_method_call() {
+    let parsed =
+        parse_source_program("def main() = Ref.new(1) := 4").expect("parse ref assignment sugar");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            assert_eq!(
+                body,
+                &Expr::method_call(
+                    Expr::method_call(Expr::var("Ref"), "new", Expr::i64(1)),
+                    "set",
+                    Expr::i64(4)
+                )
+            );
+        }
+        other => panic!(
+            "expected function def, got {}",
+            source_item_kind_name(other)
+        ),
+    }
+}
+
+#[test]
 fn frontend_slice_indexing_uses_index_slice_operator_path() {
     let parsed = parse_source_program("def main() = values[start..end]").expect("parse");
 

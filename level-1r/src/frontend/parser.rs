@@ -277,6 +277,7 @@ fn chiba_lexer_spec() -> LexerSpec {
             punct("FatArrow", "=>"),
             punct("Arrow", "->"),
             punct("PipeForward", "\\|>"),
+            punct("ColonEq", ":="),
             punct("DotDot", "\\.\\."),
             punct("Dot", "\\."),
             punct("Colon", ":"),
@@ -710,6 +711,16 @@ impl FrontendParser {
     fn parse_expr_bp(&mut self, min_bp: u32) -> Result<Expr, FrontendError> {
         let mut lhs = self.parse_postfix()?;
         loop {
+            if self.peek_name() == Some("ColonEq") {
+                let (lbp, rbp) = (2, 2);
+                if lbp < min_bp {
+                    break;
+                }
+                self.pos += 1;
+                let rhs = self.parse_expr_bp(rbp)?;
+                lhs = Expr::method_call(lhs, "set", rhs);
+                continue;
+            }
             if self.peek_name() == Some("PipeForward") {
                 let (lbp, rbp) = (3, 4);
                 if lbp < min_bp {
@@ -766,6 +777,11 @@ impl FrontendParser {
                 }
                 Some("Dot") => {
                     self.pos += 1;
+                    if self.peek_name() == Some("Star") {
+                        self.pos += 1;
+                        expr = Expr::method_call_args(expr, "get", Vec::new());
+                        continue;
+                    }
                     let name = self.expect_lexeme("Ident")?;
                     if self.peek_name() == Some("LParen") {
                         self.pos += 1;

@@ -1404,6 +1404,35 @@ fn source_ref_new_set_get_lowers_to_executable_runtime_imports() {
 }
 
 #[test]
+fn source_ref_deref_sugar_lowers_to_executable_get_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(): i64 = Ref.new(9).*")
+        .expect("compile ref deref sugar")
+        .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains("call $std_ref_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
+#[test]
+fn source_ref_assignment_sugar_lowers_to_executable_set_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(): i64 = (Ref.new(1) := 4).*")
+        .expect("compile ref assignment sugar")
+        .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains("call $std_ref_set"));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_ref_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "4");
+}
+
+#[test]
 fn source_str_param_len_lowers_to_executable_runtime_import() {
     let bundle = compile_source_program_bundle("def main(s: str): i64 = s.len")
         .expect("compile str param len")
