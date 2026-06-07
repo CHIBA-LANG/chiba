@@ -2384,6 +2384,55 @@ fn source_array_ref_index_assignment_lowers_to_executable_ref_set() {
 }
 
 #[test]
+fn source_slice_ref_index_assignment_lowers_to_executable_ref_set() {
+    let bundle =
+        compile_source_program_bundle("def main(cells: Slice[Ref[i64]]): i64 = (cells[0] := 9).*")
+            .expect("compile slice ref index assignment")
+            .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.slice_get\" (func $std_slice_get (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.ref_set\" (func $std_ref_set (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_ref_set"));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_ref_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
+#[test]
+fn source_vec_ref_index_assignment_lowers_to_executable_ref_set() {
+    let bundle =
+        compile_source_program_bundle("def main(cells: Vec[Ref[i64]]): i64 = (cells[0] := 9).*")
+            .expect("compile vec ref index assignment")
+            .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_get\" (func $std_vec_get (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.ref_set\" (func $std_ref_set (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_vec_get"));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_ref_set"));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_ref_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
+#[test]
 fn source_ref_array_index_assignment_is_program_diagnostic() {
     assert_invalid_assignment_target(
         "def main(cell: Ref[Array[i64]]): i64 = cell[0] := 9",
