@@ -2252,6 +2252,70 @@ fn source_ref_new_preserves_string_element_type_through_get_and_set() {
 }
 
 #[test]
+fn source_ref_new_preserves_slice_string_value_through_get_and_set() {
+    let get = compile_source_program_bundle(
+        "def main(): i64 = Ref.new([String.from(\"hé\")]).get()[0].bytes_len()",
+    )
+    .expect("compile string slice ref get")
+    .program;
+    let set = compile_source_program_bundle(
+        "def main(): rune = (Ref.new([String.from(\"x\")]) := [String.from(\"hi\")]).*[0].char_at(0)",
+    )
+    .expect("compile string slice ref set")
+    .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_get_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_slice_get"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_set_externref"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "104");
+}
+
+#[test]
+fn source_ref_new_preserves_range_value_through_get_and_set() {
+    let get = compile_source_program_bundle("def main(): i64 = Ref.new(3..9).get().end")
+        .expect("compile range ref get")
+        .program;
+    let set = compile_source_program_bundle("def main(): i64 = (Ref.new(1..2) := 5..8).*.start")
+        .expect("compile range ref set")
+        .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_get_externref"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_set_externref"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "9");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "5");
+}
+
+#[test]
 fn source_assignment_to_non_ref_is_program_diagnostic() {
     let bundle = compile_source_program_bundle("def main(): i64 = 1 := 4")
         .expect("compile invalid assignment target")
@@ -2362,6 +2426,71 @@ fn source_unsafe_ref_new_preserves_string_element_type_through_get_and_set() {
         .contains("call $std_unsafe_ref_set_externref"));
     assert_eq!(run_wat_text(&get.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&set.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_unsafe_ref_new_preserves_slice_string_value_through_get_and_set() {
+    let get = compile_source_program_bundle(
+        "def main(): i64 = UnsafeRef.new([String.from(\"hé\")]).get()[0].bytes_len()",
+    )
+    .expect("compile string slice unsafe ref get")
+    .program;
+    let set = compile_source_program_bundle(
+        "def main(): rune = (UnsafeRef.new([String.from(\"x\")]) := [String.from(\"hi\")]).*[0].char_at(0)",
+    )
+    .expect("compile string slice unsafe ref set")
+    .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_get_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_slice_get"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_set_externref"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "104");
+}
+
+#[test]
+fn source_unsafe_ref_new_preserves_range_value_through_get_and_set() {
+    let get = compile_source_program_bundle("def main(): i64 = UnsafeRef.new(3..9).get().end")
+        .expect("compile range unsafe ref get")
+        .program;
+    let set =
+        compile_source_program_bundle("def main(): i64 = (UnsafeRef.new(1..2) := 5..8).*.start")
+            .expect("compile range unsafe ref set")
+            .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_get_externref"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_set_externref"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "9");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "5");
 }
 
 #[test]

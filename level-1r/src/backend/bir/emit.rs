@@ -514,6 +514,10 @@ fn collect_runtime_value_imports(
             collect_runtime_value_imports(start, env, imports);
             collect_runtime_value_imports(end, env, imports);
         }
+        CoreValue::RangeField { range, field } => {
+            imports.push(range_field_import(*field));
+            collect_runtime_value_imports(range, env, imports);
+        }
         CoreValue::AggregateField { kind, value, field } => {
             imports.push(aggregate_field_import(*kind, *field));
             collect_runtime_value_imports(value, env, imports);
@@ -563,7 +567,6 @@ fn collect_runtime_value_imports(
             }
         }
         CoreValue::TupleField { tuple, .. } => collect_runtime_value_imports(tuple, env, imports),
-        CoreValue::RangeField { range, .. } => collect_runtime_value_imports(range, env, imports),
         CoreValue::Record { fields } => {
             for field in fields {
                 collect_runtime_value_imports(&field.value, env, imports);
@@ -632,6 +635,27 @@ fn range_import() -> BackendExternImport {
 
 fn range_import_symbol() -> String {
     "std_range_i64_new".to_string()
+}
+
+fn range_field_import(field: RangeField) -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: range_field_import_symbol(field),
+        module: "env".to_string(),
+        name: format!("std.range_i64_{}", range_field_import_suffix(field)),
+        signature_hash: "externref_to_i64".to_string(),
+    }
+}
+
+fn range_field_import_symbol(field: RangeField) -> String {
+    format!("std_range_i64_{}", range_field_import_suffix(field))
+}
+
+fn range_field_import_suffix(field: RangeField) -> &'static str {
+    match field {
+        RangeField::Start => "start",
+        RangeField::End => "end",
+    }
 }
 
 fn aggregate_field_import(kind: AggregateKind, field: SliceField) -> BackendExternImport {
@@ -2295,6 +2319,12 @@ fn render_core_value_i32(
         CoreValue::RangeField { range, field } => {
             if let Some(value) = range_field_value(range, *field, env) {
                 render_core_value_i32(wat, value, env)?;
+            } else if core_value_is_renderable_externref(range, env) {
+                render_core_value_externref(wat, range, env)?;
+                wat.push_str(&format!(
+                    "    call ${}\n",
+                    range_field_import_symbol(*field)
+                ));
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
             }
@@ -2736,7 +2766,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
             .unwrap_or(false),
         CoreValue::RangeField { range, field } => range_field_value(range, *field, env)
             .map(|value| core_value_is_renderable_i32(value, env))
-            .unwrap_or(false),
+            .unwrap_or_else(|| core_value_is_renderable_externref(range, env)),
         CoreValue::AggregateField { value, field, .. } => slice_field_value(value, *field, env)
             .map(|value| core_value_is_renderable_i32(&value, env))
             .unwrap_or_else(|| core_value_is_renderable_externref(value, env)),

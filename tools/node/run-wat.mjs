@@ -268,6 +268,12 @@ async function makeImports(wat, args) {
       "std.range_i64_new"(start, end) {
         return { start: Number(start), end: Number(end) };
       },
+      "std.range_i64_start"(range) {
+        return range && typeof range.start !== "undefined" ? Number(range.start) : 0;
+      },
+      "std.range_i64_end"(range) {
+        return range && typeof range.end !== "undefined" ? Number(range.end) : 0;
+      },
       "Array.len"(array) {
         return BigInt(asArray(array).length);
       },
