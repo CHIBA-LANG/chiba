@@ -171,6 +171,7 @@ pub enum BuiltinMethodCall {
     VecNew,
     VecPush,
     VecFreeze,
+    TextCharAt { kind: TextKind },
 }
 
 impl BuiltinMethodCall {
@@ -179,6 +180,10 @@ impl BuiltinMethodCall {
             Self::VecNew => "builtin.vec.new",
             Self::VecPush => "builtin.vec.push",
             Self::VecFreeze => "builtin.vec.freeze",
+            Self::TextCharAt { kind } => match kind {
+                TextKind::Str => "builtin.str.char_at",
+                TextKind::String => "builtin.string.char_at",
+            },
         }
     }
 }
@@ -187,6 +192,7 @@ impl BuiltinMethodCall {
 pub enum Type {
     Unknown,
     I64,
+    Rune,
     Bool,
     Tuple(Vec<Type>),
     Record(Vec<RecordTypeField>),
@@ -507,9 +513,16 @@ fn type_expr_with_context_and_controls(
         Expr::Lit(Literal::I64(value)) => {
             typed(TypedExprKind::Lit(Literal::I64(*value)), Type::I64)
         }
+        Expr::Lit(Literal::Rune(value)) => {
+            typed(TypedExprKind::Lit(Literal::Rune(*value)), Type::Rune)
+        }
         Expr::Lit(Literal::Bool(value)) => {
             typed(TypedExprKind::Lit(Literal::Bool(*value)), Type::Bool)
         }
+        Expr::Lit(Literal::String(value)) => typed(
+            TypedExprKind::Lit(Literal::String(value.clone())),
+            Type::Nominal("String".to_string()),
+        ),
         Expr::Lambda { param, body } => {
             let param_ty = Type::Unknown;
             let mut env = env.clone();
@@ -2021,6 +2034,11 @@ fn builtin_method_call(
     ) {
         return Some(BuiltinMethodCall::VecNew);
     }
+    if let Some(kind) = text_kind_for_type(&receiver.ty) {
+        if matches!((name, args), ("char_at", [_])) {
+            return Some(BuiltinMethodCall::TextCharAt { kind });
+        }
+    }
     if aggregate_kind_for_type(&receiver.ty) != Some(AggregateKind::Vec) {
         return None;
     }
@@ -2038,6 +2056,7 @@ fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Op
         BuiltinMethodCall::VecFreeze => vec_element_type(receiver).map(|element| {
             Type::Nominal(format!("Slice[{}]", source_type_name_for_type(&element)))
         }),
+        BuiltinMethodCall::TextCharAt { .. } => Some(Type::Rune),
     }
 }
 
@@ -2262,6 +2281,7 @@ pub(crate) fn source_type_name_to_type(name: &str) -> Type {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum ParsedTypeHeader {
     ScalarI64,
+    ScalarRune,
     ScalarBool,
     Nominal {
         base: String,
@@ -2285,6 +2305,7 @@ impl ParsedTypeHeader {
     fn to_type(&self) -> Type {
         match self {
             ParsedTypeHeader::ScalarI64 => Type::I64,
+            ParsedTypeHeader::ScalarRune => Type::Rune,
             ParsedTypeHeader::ScalarBool => Type::Bool,
             ParsedTypeHeader::Nominal { base, args } => {
                 if args.is_empty() {
@@ -2316,6 +2337,7 @@ fn parse_type_header(name: &str) -> Option<ParsedTypeHeader> {
     let name = name.trim();
     match name {
         "I64" | "i64" => return Some(ParsedTypeHeader::ScalarI64),
+        "Rune" | "rune" => return Some(ParsedTypeHeader::ScalarRune),
         "Bool" | "bool" => return Some(ParsedTypeHeader::ScalarBool),
         "" => return None,
         _ => {}
@@ -2459,6 +2481,7 @@ fn render_nominal_type_header(base: &str, args: &[ParsedTypeHeader]) -> String {
 fn render_type_header(header: &ParsedTypeHeader) -> String {
     match header {
         ParsedTypeHeader::ScalarI64 => "i64".to_string(),
+        ParsedTypeHeader::ScalarRune => "rune".to_string(),
         ParsedTypeHeader::ScalarBool => "bool".to_string(),
         ParsedTypeHeader::Nominal { base, args } => {
             if args.is_empty() {
@@ -2557,6 +2580,7 @@ fn substitute_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> 
         },
         Type::Unknown => Type::Unknown,
         Type::I64 => Type::I64,
+        Type::Rune => Type::Rune,
         Type::Bool => Type::Bool,
     }
 }
@@ -2628,7 +2652,12 @@ fn collect_payload_substitutions(
             collect_payload_substitutions(payload_input, actual_input, generics, substitutions)?;
             collect_payload_substitutions(payload_answer, actual_answer, generics, substitutions)
         }
-        Type::Adt { .. } | Type::Unknown | Type::I64 | Type::Bool | Type::Nominal(_) => Some(()),
+        Type::Adt { .. }
+        | Type::Unknown
+        | Type::I64
+        | Type::Rune
+        | Type::Bool
+        | Type::Nominal(_) => Some(()),
     }
 }
 
@@ -2660,6 +2689,7 @@ fn render_source_type_application(base: &str, args: &[String]) -> String {
 fn source_type_name_for_type(ty: &Type) -> String {
     match ty {
         Type::I64 => "i64".to_string(),
+        Type::Rune => "rune".to_string(),
         Type::Bool => "bool".to_string(),
         Type::Nominal(name) => name.clone(),
         Type::Tuple(fields) => {
@@ -2714,6 +2744,7 @@ fn type_stable_name(ty: &Type) -> String {
     match ty {
         Type::Unknown => "Unknown".to_string(),
         Type::I64 => "I64".to_string(),
+        Type::Rune => "Rune".to_string(),
         Type::Bool => "Bool".to_string(),
         Type::Tuple(fields) => tuple_nominal_name(fields),
         Type::Adt { name, variants } => {

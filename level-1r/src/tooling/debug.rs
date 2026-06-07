@@ -470,6 +470,7 @@ fn render_core_value(value: &CoreValue) -> String {
         CoreValue::Unit => "unit".to_string(),
         CoreValue::I64(value) => value.to_string(),
         CoreValue::Bool(value) => value.to_string(),
+        CoreValue::TextLiteral { value, .. } => format!("{value:?}"),
         CoreValue::Var(name) => name.clone(),
         CoreValue::Tuple { fields } => {
             let fields = fields
@@ -545,7 +546,7 @@ fn render_core_value(value: &CoreValue) -> String {
         } => {
             format!("{}[{}]", render_core_value(value), render_core_value(index))
         }
-        CoreValue::VecRuntimeCall { call, args } => {
+        CoreValue::BuiltinRuntimeCall { call, args } => {
             let args = args
                 .iter()
                 .map(render_core_value)
@@ -891,6 +892,9 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
         crate::core::CoreValue::Unit => "unit".to_string(),
         crate::core::CoreValue::I64(value) => format!("i64({value})"),
         crate::core::CoreValue::Bool(value) => format!("bool({value})"),
+        crate::core::CoreValue::TextLiteral { kind, value } => {
+            format!("{}-literal/{}", kind.source_name(), value.as_bytes().len())
+        }
         crate::core::CoreValue::Var(name) => format!("var({name})"),
         crate::core::CoreValue::Tuple { fields } => {
             format!("tuple/{}", fields.len())
@@ -971,7 +975,7 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
                 render_core_value_summary(index)
             )
         }
-        crate::core::CoreValue::VecRuntimeCall { call, args } => {
+        crate::core::CoreValue::BuiltinRuntimeCall { call, args } => {
             format!("{} /{}", call.debug_name(), args.len())
         }
         crate::core::CoreValue::Adt {
@@ -1499,6 +1503,7 @@ fn render_type(ty: &Type) -> String {
     match ty {
         Type::Unknown => "_".to_string(),
         Type::I64 => "i64".to_string(),
+        Type::Rune => "rune".to_string(),
         Type::Bool => "bool".to_string(),
         Type::Tuple(fields) => {
             let fields = fields

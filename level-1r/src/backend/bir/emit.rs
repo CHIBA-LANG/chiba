@@ -491,8 +491,11 @@ fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExt
             collect_runtime_value_imports(value, imports);
             collect_runtime_value_imports(index, imports);
         }
-        CoreValue::VecRuntimeCall { call, args } => {
-            imports.push(vec_runtime_import(*call));
+        CoreValue::TextLiteral { kind, value } => {
+            imports.push(text_literal_import(*kind, value.as_bytes().len()));
+        }
+        CoreValue::BuiltinRuntimeCall { call, args } => {
+            imports.push(builtin_runtime_import(*call));
             for arg in args {
                 collect_runtime_value_imports(arg, imports);
             }
@@ -629,33 +632,62 @@ fn text_index_import_symbol(kind: TextKind) -> String {
     format!("std_{}_i64_byte_at", kind.runtime_prefix())
 }
 
-fn vec_runtime_import(call: BuiltinMethodCall) -> BackendExternImport {
+fn text_literal_import(kind: TextKind, arity: usize) -> BackendExternImport {
     BackendExternImport {
         abi: BackendExternAbi::C,
-        final_symbol: vec_runtime_import_symbol(call),
+        final_symbol: text_literal_import_symbol(kind, arity),
         module: "env".to_string(),
-        name: vec_runtime_import_name(call).to_string(),
-        signature_hash: vec_runtime_import_signature(call).to_string(),
+        name: format!("std.{}_literal_{}", kind.runtime_prefix(), arity),
+        signature_hash: text_literal_import_signature(arity),
     }
 }
 
-fn vec_runtime_import_symbol(call: BuiltinMethodCall) -> String {
-    vec_runtime_import_name(call).replace('.', "_")
+fn text_literal_import_symbol(kind: TextKind, arity: usize) -> String {
+    format!("std_{}_literal_{}", kind.runtime_prefix(), arity)
 }
 
-fn vec_runtime_import_name(call: BuiltinMethodCall) -> &'static str {
+fn text_literal_import_signature(arity: usize) -> String {
+    let params = std::iter::repeat("i64")
+        .take(arity)
+        .collect::<Vec<_>>()
+        .join("_");
+    format!("{params}_to_externref")
+}
+
+fn builtin_runtime_import(call: BuiltinMethodCall) -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: builtin_runtime_import_symbol(call),
+        module: "env".to_string(),
+        name: builtin_runtime_import_name(call).to_string(),
+        signature_hash: builtin_runtime_import_signature(call).to_string(),
+    }
+}
+
+fn builtin_runtime_import_symbol(call: BuiltinMethodCall) -> String {
+    builtin_runtime_import_name(call).replace('.', "_")
+}
+
+fn builtin_runtime_import_name(call: BuiltinMethodCall) -> &'static str {
     match call {
         BuiltinMethodCall::VecNew => "std.vec_new",
         BuiltinMethodCall::VecPush => "std.vec_push",
         BuiltinMethodCall::VecFreeze => "std.vec_freeze",
+        BuiltinMethodCall::TextCharAt {
+            kind: TextKind::Str,
+        } => "std.str_char_at",
+        BuiltinMethodCall::TextCharAt {
+            kind: TextKind::String,
+        } => "std.string_char_at",
     }
 }
 
-fn vec_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
+fn builtin_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
     match call {
         BuiltinMethodCall::VecNew => "_to_externref",
         BuiltinMethodCall::VecPush => "externref_i64_to_externref",
         BuiltinMethodCall::VecFreeze => "externref_to_externref",
+        BuiltinMethodCall::TextCharAt { .. } => "externref_i64_to_i64",
     }
 }
 
@@ -1675,7 +1707,7 @@ fn infer_param_kinds_from_value(
             infer_param_kinds_from_value(value, params, kinds);
             infer_param_kinds_from_value(index, params, kinds);
         }
-        CoreValue::VecRuntimeCall { args, .. } => {
+        CoreValue::BuiltinRuntimeCall { args, .. } => {
             if let Some(receiver) = args.first() {
                 mark_externref_operand(receiver, params, kinds);
             }
@@ -1717,6 +1749,7 @@ fn infer_param_kinds_from_value(
         | CoreValue::I64(_)
         | CoreValue::Bool(_)
         | CoreValue::Var(_)
+        | CoreValue::TextLiteral { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Rendered { .. } => {}
     }
@@ -1862,6 +1895,25 @@ fn render_core_value_i32(
                 return Err(unsupported_i32_render_diagnostic(value));
             }
         }
+        CoreValue::BuiltinRuntimeCall { call, args }
+            if builtin_runtime_call_is_renderable_i32(*call, args, env) =>
+        {
+            match call {
+                BuiltinMethodCall::TextCharAt { .. } => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                    render_core_value_i32(wat, &args[1], env)?;
+                }
+                BuiltinMethodCall::VecNew
+                | BuiltinMethodCall::VecPush
+                | BuiltinMethodCall::VecFreeze => {
+                    unreachable!("vec runtime calls return externref and are not renderable as i32")
+                }
+            }
+            wat.push_str(&format!(
+                "    call ${}\n",
+                builtin_runtime_import_symbol(*call)
+            ));
+        }
         CoreValue::Adt { ctor, variants, .. } => {
             if let Some(tag) = variants.iter().position(|variant| variant == ctor) {
                 wat.push_str(&format!("    i32.const {tag}\n"));
@@ -1870,10 +1922,11 @@ fn render_core_value_i32(
             }
         }
         CoreValue::Var(_)
+        | CoreValue::TextLiteral { .. }
         | CoreValue::Tuple { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
-        | CoreValue::VecRuntimeCall { .. }
+        | CoreValue::BuiltinRuntimeCall { .. }
         | CoreValue::Record { .. }
         | CoreValue::RecordUpdate { .. }
         | CoreValue::Rendered { .. } => {
@@ -1904,6 +1957,16 @@ fn render_core_value_externref(
             ));
             Ok(())
         }
+        CoreValue::TextLiteral { kind, value } => {
+            for byte in value.as_bytes() {
+                wat.push_str(&format!("    i32.const {}\n", *byte as i32));
+            }
+            wat.push_str(&format!(
+                "    call ${}\n",
+                text_literal_import_symbol(*kind, value.as_bytes().len())
+            ));
+            Ok(())
+        }
         CoreValue::Range { start, end }
             if core_value_is_renderable_i32(start, env)
                 && core_value_is_renderable_i32(end, env) =>
@@ -1913,8 +1976,8 @@ fn render_core_value_externref(
             wat.push_str(&format!("    call ${}\n", range_import_symbol()));
             Ok(())
         }
-        CoreValue::VecRuntimeCall { call, args }
-            if vec_runtime_call_is_renderable(*call, args, env) =>
+        CoreValue::BuiltinRuntimeCall { call, args }
+            if builtin_runtime_call_is_renderable_externref(*call, args, env) =>
         {
             match call {
                 BuiltinMethodCall::VecNew => {}
@@ -1925,15 +1988,21 @@ fn render_core_value_externref(
                 BuiltinMethodCall::VecFreeze => {
                     render_core_value_externref(wat, &args[0], env)?;
                 }
+                BuiltinMethodCall::TextCharAt { .. } => {
+                    unreachable!("text char_at returns rune/i32 and is not renderable as externref")
+                }
             }
-            wat.push_str(&format!("    call ${}\n", vec_runtime_import_symbol(*call)));
+            wat.push_str(&format!(
+                "    call ${}\n",
+                builtin_runtime_import_symbol(*call)
+            ));
             Ok(())
         }
         _ => Err(unsupported_i32_render_diagnostic(value)),
     }
 }
 
-fn vec_runtime_call_is_renderable(
+fn builtin_runtime_call_is_renderable_externref(
     call: BuiltinMethodCall,
     args: &[CoreValue],
     env: &RenderEnv,
@@ -1944,6 +2013,20 @@ fn vec_runtime_call_is_renderable(
             core_value_is_renderable_externref(vec, env) && core_value_is_renderable_i32(item, env)
         }
         (BuiltinMethodCall::VecFreeze, [vec]) => core_value_is_renderable_externref(vec, env),
+        _ => false,
+    }
+}
+
+fn builtin_runtime_call_is_renderable_i32(
+    call: BuiltinMethodCall,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> bool {
+    match (call, args) {
+        (BuiltinMethodCall::TextCharAt { .. }, [text, index]) => {
+            core_value_is_renderable_externref(text, env)
+                && core_value_is_renderable_i32(index, env)
+        }
         _ => false,
     }
 }
@@ -1995,10 +2078,13 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
             core_value_is_renderable_externref(value, env)
                 && core_value_is_renderable_i32(index, env)
         }
+        CoreValue::BuiltinRuntimeCall { call, args } => {
+            builtin_runtime_call_is_renderable_i32(*call, args, env)
+        }
         CoreValue::Tuple { .. }
+        | CoreValue::TextLiteral { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
-        | CoreValue::VecRuntimeCall { .. }
         | CoreValue::Record { .. }
         | CoreValue::RecordUpdate { .. }
         | CoreValue::Rendered { .. } => false,
@@ -2009,12 +2095,13 @@ fn core_value_is_renderable_externref(value: &CoreValue, env: &RenderEnv) -> boo
     let value = resolve_core_value_binding(value, env);
     match value {
         CoreValue::Var(name) => env.param_kind(name) == WasmValueKind::ExternRef,
+        CoreValue::TextLiteral { .. } => true,
         CoreValue::SliceLiteral { items } => slice_literal_items_are_i32(items, env),
         CoreValue::Range { start, end } => {
             core_value_is_renderable_i32(start, env) && core_value_is_renderable_i32(end, env)
         }
-        CoreValue::VecRuntimeCall { call, args } => {
-            vec_runtime_call_is_renderable(*call, args, env)
+        CoreValue::BuiltinRuntimeCall { call, args } => {
+            builtin_runtime_call_is_renderable_externref(*call, args, env)
         }
         _ => false,
     }

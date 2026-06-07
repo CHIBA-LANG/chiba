@@ -229,6 +229,7 @@ fn render_type(ty: &Type) -> String {
     match ty {
         Type::Unknown => "Unknown".to_string(),
         Type::I64 => "i64".to_string(),
+        Type::Rune => "rune".to_string(),
         Type::Bool => "bool".to_string(),
         Type::Tuple(fields) => {
             let fields = fields

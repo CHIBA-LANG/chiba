@@ -74,7 +74,7 @@ pub enum CpsAtom {
         value: Box<CpsAtom>,
         index: Box<CpsAtom>,
     },
-    VecRuntimeCall {
+    BuiltinRuntimeCall {
         call: BuiltinMethodCall,
         args: Vec<CpsAtom>,
     },
@@ -862,7 +862,7 @@ fn transform_builtin_method_args(
         }
         runtime_args.extend(values);
         return k(
-            CpsAtom::VecRuntimeCall {
+            CpsAtom::BuiltinRuntimeCall {
                 call,
                 args: runtime_args,
             },
@@ -968,7 +968,9 @@ impl fmt::Display for CpsAtom {
         match self {
             CpsAtom::Var(name) => write!(f, "{name}"),
             CpsAtom::Lit(Literal::I64(value)) => write!(f, "{value}"),
+            CpsAtom::Lit(Literal::Rune(value)) => write!(f, "{value}rune"),
             CpsAtom::Lit(Literal::Bool(value)) => write!(f, "{value}"),
+            CpsAtom::Lit(Literal::String(value)) => write!(f, "{value:?}"),
             CpsAtom::OperatorCallee {
                 protocol, receiver, ..
             } => {
@@ -1034,7 +1036,7 @@ impl fmt::Display for CpsAtom {
                 value,
                 index,
             } => write!(f, "{value}[{index}]"),
-            CpsAtom::VecRuntimeCall { call, args } => {
+            CpsAtom::BuiltinRuntimeCall { call, args } => {
                 write!(f, "{}(", call.debug_name())?;
                 for (index, arg) in args.iter().enumerate() {
                     if index > 0 {
@@ -1188,7 +1190,9 @@ fn display_pattern(pattern: &Pattern) -> String {
             format!("{name} @ {}", display_pattern(pattern))
         }
         Pattern::Lit(Literal::I64(value)) => value.to_string(),
+        Pattern::Lit(Literal::Rune(value)) => format!("'{value}'"),
         Pattern::Lit(Literal::Bool(value)) => value.to_string(),
+        Pattern::Lit(Literal::String(value)) => format!("{value:?}"),
     }
 }
 

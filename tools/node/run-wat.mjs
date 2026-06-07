@@ -80,6 +80,12 @@ async function makeImports(wat, args) {
     return new Uint8Array();
   }
 
+  function runeAt(value, index) {
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(byteArray(value));
+    const rune = Array.from(text)[Number(index)];
+    return rune ? rune.codePointAt(0) : 0;
+  }
+
   const env = new Proxy(
     {
       js_log(value) {
@@ -200,10 +206,10 @@ async function makeImports(wat, args) {
         return Number(byteArray(text)[Number(index)] ?? 0);
       },
       "std.string_char_at"(text, index) {
-        return BigInt(byteArray(text)[Number(index)] ?? 0);
+        return runeAt(text, index);
       },
       "std.str_char_at"(text, index) {
-        return BigInt(byteArray(text)[Number(index)] ?? 0);
+        return runeAt(text, index);
       },
       "std.string_slice"(text, start, len) {
         return byteArray(text).slice(Number(start), Number(start) + Number(len));
@@ -230,6 +236,11 @@ async function makeImports(wat, args) {
         if (sliceLiteral) {
           const arity = Number(sliceLiteral[1]);
           return (...items) => items.slice(0, arity).map(Number);
+        }
+        const textLiteral = /^std\.(string|str)_literal_(\d+)$/.exec(String(prop));
+        if (textLiteral) {
+          const arity = Number(textLiteral[2]);
+          return (...bytes) => Uint8Array.from(bytes.slice(0, arity).map(Number));
         }
         return () => 0n;
       },

@@ -2134,12 +2134,19 @@ fn global_pattern_bindings(
             expected: *expected as i32,
             bindings: bindings.clone(),
         }),
+        Pattern::Lit(crate::ast::Literal::Rune(expected)) => {
+            Some(GlobalPatternMatch::Conditional {
+                expected: *expected as i32,
+                bindings: bindings.clone(),
+            })
+        }
         Pattern::Lit(crate::ast::Literal::Bool(expected)) => {
             Some(GlobalPatternMatch::Conditional {
                 expected: i32::from(*expected),
                 bindings: bindings.clone(),
             })
         }
+        Pattern::Lit(crate::ast::Literal::String(_)) => None,
         Pattern::Constructor { data, ctor, args } => {
             let Expr::AdtCtor {
                 data: value_data,

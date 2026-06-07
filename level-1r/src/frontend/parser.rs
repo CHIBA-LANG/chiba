@@ -48,6 +48,10 @@ pub enum FrontendError {
         lexeme: String,
         offset: usize,
     },
+    InvalidRune {
+        lexeme: String,
+        offset: usize,
+    },
     TrailingTokens {
         offset: usize,
     },
@@ -77,6 +81,9 @@ pub fn render_frontend_error(source: &str, error: &FrontendError) -> String {
         ),
         FrontendError::InvalidInteger { lexeme, offset } => {
             render_source_error(source, *offset, format!("invalid integer `{lexeme}`"))
+        }
+        FrontendError::InvalidRune { lexeme, offset } => {
+            render_source_error(source, *offset, format!("invalid rune literal `{lexeme}`"))
         }
         FrontendError::TrailingTokens { offset } => {
             render_source_error(source, *offset, "trailing tokens".to_string())
@@ -244,6 +251,11 @@ fn chiba_lexer_spec() -> LexerSpec {
             LexerRule {
                 name: "StringLit".to_string(),
                 pattern: "\"[^\"\\\\]*(\\\\.[^\"\\\\]*)*\"".to_string(),
+                skip: false,
+            },
+            LexerRule {
+                name: "RuneLit".to_string(),
+                pattern: "'[^'\\\\]*(\\\\.[^'\\\\]*)*'".to_string(),
                 skip: false,
             },
             LexerRule {
@@ -818,6 +830,19 @@ impl FrontendParser {
                 self.pos += 1;
                 Ok(Expr::bool(false))
             }
+            Some("StringLit") => {
+                let token = self.expect("StringLit")?;
+                Ok(Expr::string(unquote_string_literal(&token.lexeme)))
+            }
+            Some("RuneLit") => {
+                let token = self.expect("RuneLit")?;
+                rune_literal_value(&token.lexeme)
+                    .map(Expr::rune)
+                    .ok_or_else(|| FrontendError::InvalidRune {
+                        lexeme: token.lexeme,
+                        offset: token.start,
+                    })
+            }
             Some("KwIf") => self.parse_if(),
             Some("KwMatch") => self.parse_match(),
             Some("KwReset") => self.parse_reset(false),
@@ -856,6 +881,7 @@ impl FrontendParser {
                         "Number".to_string(),
                         "True".to_string(),
                         "False".to_string(),
+                        "RuneLit".to_string(),
                         "KwIf".to_string(),
                         "KwMatch".to_string(),
                         "KwReset".to_string(),
@@ -1619,6 +1645,31 @@ fn is_type_or_namespace_path(expr: &Expr) -> bool {
     }
 }
 
+fn unquote_string_literal(lexeme: &str) -> String {
+    let body = lexeme
+        .strip_prefix('"')
+        .and_then(|text| text.strip_suffix('"'))
+        .unwrap_or(lexeme);
+    let mut out = String::new();
+    let mut chars = body.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('t') => out.push('\t'),
+            Some('"') => out.push('"'),
+            Some('\\') => out.push('\\'),
+            Some(other) => out.push(other),
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
 fn is_instantiable_callee(expr: &Expr) -> bool {
     matches!(
         expr,
@@ -1646,6 +1697,34 @@ fn string_literal_value(lexeme: &str) -> Option<String> {
         }
     }
     Some(value)
+}
+
+fn rune_literal_value(lexeme: &str) -> Option<u32> {
+    let inner = lexeme.strip_prefix('\'')?.strip_suffix('\'')?;
+    let mut value = String::new();
+    let mut chars = inner.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            value.push(ch);
+            continue;
+        }
+        let escaped = chars.next()?;
+        match escaped {
+            '\'' => value.push('\''),
+            '"' => value.push('"'),
+            '\\' => value.push('\\'),
+            'n' => value.push('\n'),
+            't' => value.push('\t'),
+            'r' => value.push('\r'),
+            other => value.push(other),
+        }
+    }
+    let mut scalars = value.chars();
+    let rune = scalars.next()?;
+    if scalars.next().is_some() {
+        return None;
+    }
+    Some(rune as u32)
 }
 
 fn data_variant_map(data: &[DataDecl]) -> BTreeMap<String, Vec<String>> {

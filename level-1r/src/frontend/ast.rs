@@ -496,7 +496,9 @@ pub struct RecordPatternField {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Literal {
     I64(i64),
+    Rune(u32),
     Bool(bool),
+    String(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -682,7 +684,9 @@ pub fn render_source_pattern(pattern: &Pattern) -> String {
 pub fn render_source_literal(literal: &Literal) -> String {
     match literal {
         Literal::I64(value) => value.to_string(),
+        Literal::Rune(value) => format!("'{}'", char::from_u32(*value).unwrap_or('\u{fffd}')),
         Literal::Bool(value) => value.to_string(),
+        Literal::String(value) => format!("{value:?}"),
     }
 }
 
@@ -704,8 +708,16 @@ impl Expr {
         Self::Lit(Literal::I64(value))
     }
 
+    pub fn rune(value: u32) -> Self {
+        Self::Lit(Literal::Rune(value))
+    }
+
     pub fn bool(value: bool) -> Self {
         Self::Lit(Literal::Bool(value))
+    }
+
+    pub fn string(value: impl Into<String>) -> Self {
+        Self::Lit(Literal::String(value.into()))
     }
 
     pub fn lambda(param: impl Into<String>, body: Expr) -> Self {

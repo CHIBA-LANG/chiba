@@ -1505,6 +1505,59 @@ fn source_string_param_index_lowers_to_executable_runtime_import() {
 }
 
 #[test]
+fn source_string_literal_index_keeps_utf8_byte_semantics() {
+    let bundle = compile_source_program_bundle("def main(): i64 = \"é\"[0]")
+        .expect("compile string literal byte index")
+        .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_byte_at"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "195");
+}
+
+#[test]
+fn source_string_char_at_returns_rune() {
+    let bundle = compile_source_program_bundle("def main(): rune = \"é\".char_at(0)")
+        .expect("compile string char_at")
+        .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::Rune);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.string_char_at\" (func $std_string_char_at (param externref) (param i32) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_char_at"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "233");
+}
+
+#[test]
+fn source_rune_literal_lowers_to_executable_scalar() {
+    let bundle = compile_source_program_bundle("def main(): rune = 'é'")
+        .expect("compile rune literal")
+        .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::Rune);
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "233");
+}
+
+#[test]
 fn program_record_update_field_return_lowers_to_executable_wat_value() {
     let program = SourceProgram::new(vec![def(
         "main",

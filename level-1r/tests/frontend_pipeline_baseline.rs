@@ -466,6 +466,25 @@ fn frontend_rejects_unknown_extern_abi_at_header_boundary() {
 }
 
 #[test]
+fn frontend_parses_rune_literal_as_one_unicode_scalar() {
+    let output = parse_source_program("def main(): rune = 'é'").expect("parse rune literal");
+
+    assert!(output
+        .tokens
+        .iter()
+        .any(|token| token.name == "RuneLit" && token.lexeme == "'é'"));
+    match &output.program.items[0] {
+        SourceItem::Def {
+            body, return_type, ..
+        } => {
+            assert_eq!(return_type.as_deref(), Some("rune"));
+            assert_eq!(body, &Expr::rune(233));
+        }
+        other => panic!("expected def, got {other:?}"),
+    }
+}
+
+#[test]
 fn frontend_source_compile_entry_keeps_tokens_program_and_linked_wat() {
     let output = compile_source_program_bundle(
         "def helper(x) = f(1)

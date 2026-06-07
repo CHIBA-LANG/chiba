@@ -225,6 +225,10 @@ pub enum CoreValue {
     Unit,
     I64(i64),
     Bool(bool),
+    TextLiteral {
+        kind: TextKind,
+        value: String,
+    },
     Var(String),
     Tuple {
         fields: Vec<CoreValue>,
@@ -276,7 +280,7 @@ pub enum CoreValue {
         value: Box<CoreValue>,
         index: Box<CoreValue>,
     },
-    VecRuntimeCall {
+    BuiltinRuntimeCall {
         call: BuiltinMethodCall,
         args: Vec<CoreValue>,
     },
@@ -319,6 +323,7 @@ impl CoreValue {
             CoreValue::Unit => "unit".to_string(),
             CoreValue::I64(value) => value.to_string(),
             CoreValue::Bool(value) => value.to_string(),
+            CoreValue::TextLiteral { value, .. } => format!("{value:?}"),
             CoreValue::Var(name) => name.clone(),
             CoreValue::Tuple { fields } => {
                 let fields = fields
@@ -392,7 +397,7 @@ impl CoreValue {
             } => {
                 format!("{}[{}]", value.debug_name(), index.debug_name())
             }
-            CoreValue::VecRuntimeCall { call, args } => {
+            CoreValue::BuiltinRuntimeCall { call, args } => {
                 let args = args
                     .iter()
                     .map(CoreValue::debug_name)
@@ -1326,7 +1331,9 @@ fn render_atom(atom: &CpsAtom) -> String {
     match atom {
         CpsAtom::Var(name) => name.clone(),
         CpsAtom::Lit(crate::ast::Literal::I64(value)) => value.to_string(),
+        CpsAtom::Lit(crate::ast::Literal::Rune(value)) => format!("{value}rune"),
         CpsAtom::Lit(crate::ast::Literal::Bool(value)) => value.to_string(),
+        CpsAtom::Lit(crate::ast::Literal::String(value)) => format!("{value:?}"),
         CpsAtom::OperatorCallee {
             protocol, receiver, ..
         } => {
@@ -1379,7 +1386,7 @@ fn render_atom(atom: &CpsAtom) -> String {
         } => {
             format!("{}[{}]", render_atom(value), render_atom(index))
         }
-        CpsAtom::VecRuntimeCall { call, args } => {
+        CpsAtom::BuiltinRuntimeCall { call, args } => {
             format!(
                 "{}({})",
                 call.debug_name(),
@@ -1420,7 +1427,12 @@ fn render_atom(atom: &CpsAtom) -> String {
 fn core_value(atom: &CpsAtom) -> CoreValue {
     match atom {
         CpsAtom::Lit(crate::ast::Literal::I64(value)) => CoreValue::I64(*value),
+        CpsAtom::Lit(crate::ast::Literal::Rune(value)) => CoreValue::I64(i64::from(*value)),
         CpsAtom::Lit(crate::ast::Literal::Bool(value)) => CoreValue::Bool(*value),
+        CpsAtom::Lit(crate::ast::Literal::String(value)) => CoreValue::TextLiteral {
+            kind: TextKind::String,
+            value: value.clone(),
+        },
         CpsAtom::Var(name) if name == "Unit" || name == "unit" => CoreValue::Unit,
         CpsAtom::Var(name) => CoreValue::Var(name.clone()),
         CpsAtom::OperatorCallee { .. } => CoreValue::Rendered {
@@ -1496,7 +1508,7 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
             value: Box::new(core_value(value)),
             index: Box::new(core_value(index)),
         },
-        CpsAtom::VecRuntimeCall { call, args } => CoreValue::VecRuntimeCall {
+        CpsAtom::BuiltinRuntimeCall { call, args } => CoreValue::BuiltinRuntimeCall {
             call: *call,
             args: args.iter().map(core_value).collect(),
         },
@@ -1558,7 +1570,7 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
         CpsAtom::Range { .. } => {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
-        CpsAtom::VecRuntimeCall { .. } => {
+        CpsAtom::BuiltinRuntimeCall { .. } => {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::RangeField { boundary, .. } => {
