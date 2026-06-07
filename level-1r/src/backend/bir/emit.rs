@@ -165,8 +165,8 @@ pub fn emit_wasm_gc_with_params(
         };
     }
 
-    let manifest = manifest_for_core(core);
     let param_kinds = infer_param_kinds(core, params);
+    let manifest = manifest_for_core(core, params, &param_kinds);
     if let Some(diagnostic) = unsupported_extern_import_signature(&manifest) {
         return BackendArtifact {
             target: BackendTarget::WasmGc,
@@ -375,14 +375,19 @@ fn first_return_value(core: &CoreProgram) -> Option<CoreValue> {
     })
 }
 
-fn manifest_for_core(core: &CoreProgram) -> BackendManifest {
+fn manifest_for_core(
+    core: &CoreProgram,
+    params: &[String],
+    param_kinds: &BTreeMap<String, WasmValueKind>,
+) -> BackendManifest {
+    let env = RenderEnv::new(params, param_kinds);
     let mut entries = Vec::new();
     for op in &core.ops {
         collect_manifest_entries(op, core, &mut entries);
     }
     let mut imports = Vec::new();
     for op in &core.ops {
-        collect_manifest_imports(op, &mut imports);
+        collect_manifest_imports(op, &env, &mut imports);
     }
     sort_dedup_imports(&mut imports);
     BackendManifest { entries, imports }
@@ -445,22 +450,22 @@ fn collect_manifest_entries(
     }
 }
 
-fn collect_manifest_imports(op: &CoreOp, imports: &mut Vec<BackendExternImport>) {
+fn collect_manifest_imports(op: &CoreOp, env: &RenderEnv, imports: &mut Vec<BackendExternImport>) {
     match op {
-        CoreOp::ReturnValue(value) => collect_runtime_value_imports(value, imports),
+        CoreOp::ReturnValue(value) => collect_runtime_value_imports(value, env, imports),
         CoreOp::ReturnBranch {
             cond,
             then_value,
             else_value,
         } => {
-            collect_runtime_value_imports(cond, imports);
-            collect_runtime_value_imports(then_value, imports);
-            collect_runtime_value_imports(else_value, imports);
+            collect_runtime_value_imports(cond, env, imports);
+            collect_runtime_value_imports(then_value, env, imports);
+            collect_runtime_value_imports(else_value, env, imports);
         }
         CoreOp::ReturnMatch { scrutinee, arms } => {
-            collect_runtime_value_imports(scrutinee, imports);
+            collect_runtime_value_imports(scrutinee, env, imports);
             for arm in arms {
-                collect_runtime_value_imports(&arm.value, imports);
+                collect_runtime_value_imports(&arm.value, env, imports);
             }
         }
         CoreOp::ExternFunctionTarget {
@@ -478,87 +483,93 @@ fn collect_manifest_imports(op: &CoreOp, imports: &mut Vec<BackendExternImport>)
         }),
         CoreOp::TailCall { args, .. } => {
             for arg in args {
-                collect_runtime_value_imports(arg, imports);
+                collect_runtime_value_imports(arg, env, imports);
             }
         }
         CoreOp::CaptureContinuation { captured, .. } => {
             for op in &captured.ops {
-                collect_manifest_imports(op, imports);
+                collect_manifest_imports(op, env, imports);
             }
         }
         _ => {}
     }
 }
 
-fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExternImport>) {
+fn collect_runtime_value_imports(
+    value: &CoreValue,
+    env: &RenderEnv,
+    imports: &mut Vec<BackendExternImport>,
+) {
     match value {
         CoreValue::SliceLiteral { items } => {
             imports.push(slice_literal_import(items.len()));
         }
         CoreValue::Range { start, end } => {
             imports.push(range_import());
-            collect_runtime_value_imports(start, imports);
-            collect_runtime_value_imports(end, imports);
+            collect_runtime_value_imports(start, env, imports);
+            collect_runtime_value_imports(end, env, imports);
         }
         CoreValue::AggregateField { kind, value, field } => {
             imports.push(aggregate_field_import(*kind, *field));
-            collect_runtime_value_imports(value, imports);
+            collect_runtime_value_imports(value, env, imports);
         }
         CoreValue::TextField { kind, value, field } => {
             imports.push(text_field_import(*kind, *field));
-            collect_runtime_value_imports(value, imports);
+            collect_runtime_value_imports(value, env, imports);
         }
         CoreValue::AggregateIndex { kind, value, index } => {
             imports.push(aggregate_index_import(*kind));
-            collect_runtime_value_imports(value, imports);
-            collect_runtime_value_imports(index, imports);
+            collect_runtime_value_imports(value, env, imports);
+            collect_runtime_value_imports(index, env, imports);
         }
         CoreValue::AggregateSlice { kind, value, range } => {
             imports.push(aggregate_slice_import(*kind));
-            collect_runtime_value_imports(value, imports);
-            collect_runtime_value_imports(range, imports);
+            collect_runtime_value_imports(value, env, imports);
+            collect_runtime_value_imports(range, env, imports);
         }
         CoreValue::TextIndex { kind, value, index } => {
             imports.push(text_index_import(*kind));
-            collect_runtime_value_imports(value, imports);
-            collect_runtime_value_imports(index, imports);
+            collect_runtime_value_imports(value, env, imports);
+            collect_runtime_value_imports(index, env, imports);
         }
         CoreValue::TextSlice { kind, value, range } => {
             imports.push(text_slice_import(*kind));
-            collect_runtime_value_imports(value, imports);
-            collect_runtime_value_imports(range, imports);
+            collect_runtime_value_imports(value, env, imports);
+            collect_runtime_value_imports(range, env, imports);
         }
         CoreValue::TextLiteral { kind, value } => {
             imports.push(text_literal_import(*kind, value.as_bytes().len()));
         }
         CoreValue::BuiltinRuntimeCall { call, args } => {
-            imports.push(builtin_runtime_import(*call));
+            imports.push(builtin_runtime_import_for_call(*call, args, env));
             for arg in args {
-                collect_runtime_value_imports(arg, imports);
+                collect_runtime_value_imports(arg, env, imports);
             }
         }
         CoreValue::Tuple { fields } => {
             for field in fields {
-                collect_runtime_value_imports(field, imports);
+                collect_runtime_value_imports(field, env, imports);
             }
         }
-        CoreValue::TupleField { tuple, .. } => collect_runtime_value_imports(tuple, imports),
-        CoreValue::RangeField { range, .. } => collect_runtime_value_imports(range, imports),
+        CoreValue::TupleField { tuple, .. } => collect_runtime_value_imports(tuple, env, imports),
+        CoreValue::RangeField { range, .. } => collect_runtime_value_imports(range, env, imports),
         CoreValue::Record { fields } => {
             for field in fields {
-                collect_runtime_value_imports(&field.value, imports);
+                collect_runtime_value_imports(&field.value, env, imports);
             }
         }
         CoreValue::RecordUpdate { base, fields } => {
-            collect_runtime_value_imports(base, imports);
+            collect_runtime_value_imports(base, env, imports);
             for field in fields {
-                collect_runtime_value_imports(&field.value, imports);
+                collect_runtime_value_imports(&field.value, env, imports);
             }
         }
-        CoreValue::RecordField { record, .. } => collect_runtime_value_imports(record, imports),
+        CoreValue::RecordField { record, .. } => {
+            collect_runtime_value_imports(record, env, imports)
+        }
         CoreValue::Adt { args, .. } => {
             for arg in args {
-                collect_runtime_value_imports(arg, imports);
+                collect_runtime_value_imports(arg, env, imports);
             }
         }
         CoreValue::Unit
@@ -729,6 +740,17 @@ fn builtin_runtime_import(call: BuiltinMethodCall) -> BackendExternImport {
     }
 }
 
+fn builtin_runtime_import_for_call(
+    call: BuiltinMethodCall,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> BackendExternImport {
+    if let Some(lane) = ref_runtime_lane(call, args, env) {
+        return ref_runtime_import(call, lane);
+    }
+    builtin_runtime_import(call)
+}
+
 fn builtin_runtime_import_symbol(call: BuiltinMethodCall) -> String {
     builtin_runtime_import_name(call).replace('.', "_")
 }
@@ -800,6 +822,100 @@ fn builtin_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::UnsafeRefNew => "i64_to_externref",
         BuiltinMethodCall::UnsafeRefGet => "externref_to_i64",
         BuiltinMethodCall::UnsafeRefSet => "externref_i64_to_externref",
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RefRuntimeLane {
+    I32,
+    ExternRef,
+}
+
+fn ref_runtime_lane(
+    call: BuiltinMethodCall,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> Option<RefRuntimeLane> {
+    match (call, args) {
+        (BuiltinMethodCall::RefNew | BuiltinMethodCall::UnsafeRefNew, [value])
+        | (BuiltinMethodCall::RefSet | BuiltinMethodCall::UnsafeRefSet, [_, value]) => {
+            ref_value_lane(value, env)
+        }
+        (BuiltinMethodCall::RefGet | BuiltinMethodCall::UnsafeRefGet, [cell]) => {
+            ref_cell_lane(cell, env)
+        }
+        _ => None,
+    }
+}
+
+fn ref_value_lane(value: &CoreValue, env: &RenderEnv) -> Option<RefRuntimeLane> {
+    if core_value_is_renderable_externref(value, env) {
+        Some(RefRuntimeLane::ExternRef)
+    } else if core_value_is_renderable_i32(value, env) {
+        Some(RefRuntimeLane::I32)
+    } else {
+        None
+    }
+}
+
+fn ref_cell_lane(cell: &CoreValue, env: &RenderEnv) -> Option<RefRuntimeLane> {
+    let CoreValue::BuiltinRuntimeCall { call, args } = resolve_core_value_binding(cell, env) else {
+        return Some(RefRuntimeLane::I32);
+    };
+    match call {
+        BuiltinMethodCall::RefNew
+        | BuiltinMethodCall::RefSet
+        | BuiltinMethodCall::UnsafeRefNew
+        | BuiltinMethodCall::UnsafeRefSet => ref_runtime_lane(*call, args, env),
+        _ => Some(RefRuntimeLane::I32),
+    }
+}
+
+fn ref_runtime_import(call: BuiltinMethodCall, lane: RefRuntimeLane) -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: ref_runtime_import_symbol(call, lane),
+        module: "env".to_string(),
+        name: ref_runtime_import_name(call, lane),
+        signature_hash: ref_runtime_import_signature(call, lane),
+    }
+}
+
+fn ref_runtime_import_symbol(call: BuiltinMethodCall, lane: RefRuntimeLane) -> String {
+    ref_runtime_import_name(call, lane).replace('.', "_")
+}
+
+fn ref_runtime_import_name(call: BuiltinMethodCall, lane: RefRuntimeLane) -> String {
+    match lane {
+        RefRuntimeLane::I32 => builtin_runtime_import_name(call).to_string(),
+        RefRuntimeLane::ExternRef => format!("{}_externref", builtin_runtime_import_name(call)),
+    }
+}
+
+fn ref_runtime_import_signature(call: BuiltinMethodCall, lane: RefRuntimeLane) -> String {
+    match (call, lane) {
+        (BuiltinMethodCall::RefNew | BuiltinMethodCall::UnsafeRefNew, RefRuntimeLane::I32) => {
+            "i64_to_externref".to_string()
+        }
+        (BuiltinMethodCall::RefGet | BuiltinMethodCall::UnsafeRefGet, RefRuntimeLane::I32) => {
+            "externref_to_i64".to_string()
+        }
+        (BuiltinMethodCall::RefSet | BuiltinMethodCall::UnsafeRefSet, RefRuntimeLane::I32) => {
+            "externref_i64_to_externref".to_string()
+        }
+        (
+            BuiltinMethodCall::RefNew | BuiltinMethodCall::UnsafeRefNew,
+            RefRuntimeLane::ExternRef,
+        ) => "externref_to_externref".to_string(),
+        (
+            BuiltinMethodCall::RefGet | BuiltinMethodCall::UnsafeRefGet,
+            RefRuntimeLane::ExternRef,
+        ) => "externref_to_externref".to_string(),
+        (
+            BuiltinMethodCall::RefSet | BuiltinMethodCall::UnsafeRefSet,
+            RefRuntimeLane::ExternRef,
+        ) => "externref_externref_to_externref".to_string(),
+        _ => builtin_runtime_import_signature(call).to_string(),
     }
 }
 
@@ -2128,7 +2244,7 @@ fn render_core_value_i32(
             }
             wat.push_str(&format!(
                 "    call ${}\n",
-                builtin_runtime_import_symbol(*call)
+                builtin_runtime_call_symbol(*call, args, env)
             ));
         }
         CoreValue::Adt { ctor, variants, .. } => {
@@ -2267,33 +2383,45 @@ fn render_core_value_externref(
                     unreachable!("text char_at returns rune/i32 and is not renderable as externref")
                 }
                 BuiltinMethodCall::RefNew => {
-                    render_core_value_i32(wat, &args[0], env)?;
+                    render_ref_lane_value(wat, &args[0], env)?;
                 }
                 BuiltinMethodCall::RefGet => {
-                    unreachable!("ref get returns i32 and is not renderable as externref")
+                    render_core_value_externref(wat, &args[0], env)?;
                 }
                 BuiltinMethodCall::RefSet => {
                     render_core_value_externref(wat, &args[0], env)?;
-                    render_core_value_i32(wat, &args[1], env)?;
+                    render_ref_lane_value(wat, &args[1], env)?;
                 }
                 BuiltinMethodCall::UnsafeRefNew => {
-                    render_core_value_i32(wat, &args[0], env)?;
+                    render_ref_lane_value(wat, &args[0], env)?;
                 }
                 BuiltinMethodCall::UnsafeRefGet => {
-                    unreachable!("unsafe ref get returns i32 and is not renderable as externref")
+                    render_core_value_externref(wat, &args[0], env)?;
                 }
                 BuiltinMethodCall::UnsafeRefSet => {
                     render_core_value_externref(wat, &args[0], env)?;
-                    render_core_value_i32(wat, &args[1], env)?;
+                    render_ref_lane_value(wat, &args[1], env)?;
                 }
             }
             wat.push_str(&format!(
                 "    call ${}\n",
-                builtin_runtime_import_symbol(*call)
+                builtin_runtime_call_symbol(*call, args, env)
             ));
             Ok(())
         }
         _ => Err(unsupported_i32_render_diagnostic(value)),
+    }
+}
+
+fn render_ref_lane_value(
+    wat: &mut String,
+    value: &CoreValue,
+    env: &RenderEnv,
+) -> Result<(), BackendDiagnostic> {
+    match ref_value_lane(value, env) {
+        Some(RefRuntimeLane::ExternRef) => render_core_value_externref(wat, value, env),
+        Some(RefRuntimeLane::I32) => render_core_value_i32(wat, value, env),
+        None => Err(unsupported_i32_render_diagnostic(value)),
     }
 }
 
@@ -2319,15 +2447,21 @@ fn builtin_runtime_call_is_renderable_externref(
         (BuiltinMethodCall::StringPushRune, [text, rune]) => {
             core_value_is_renderable_externref(text, env) && core_value_is_renderable_i32(rune, env)
         }
-        (BuiltinMethodCall::RefNew, [value]) => core_value_is_renderable_i32(value, env),
-        (BuiltinMethodCall::RefSet, [cell, value]) => {
+        (BuiltinMethodCall::RefNew, [value]) => ref_value_lane(value, env).is_some(),
+        (BuiltinMethodCall::RefGet, [cell]) => {
             core_value_is_renderable_externref(cell, env)
-                && core_value_is_renderable_i32(value, env)
+                && matches!(ref_cell_lane(cell, env), Some(RefRuntimeLane::ExternRef))
         }
-        (BuiltinMethodCall::UnsafeRefNew, [value]) => core_value_is_renderable_i32(value, env),
-        (BuiltinMethodCall::UnsafeRefSet, [cell, value]) => {
+        (BuiltinMethodCall::RefSet, [cell, value]) => {
+            core_value_is_renderable_externref(cell, env) && ref_value_lane(value, env).is_some()
+        }
+        (BuiltinMethodCall::UnsafeRefNew, [value]) => ref_value_lane(value, env).is_some(),
+        (BuiltinMethodCall::UnsafeRefGet, [cell]) => {
             core_value_is_renderable_externref(cell, env)
-                && core_value_is_renderable_i32(value, env)
+                && matches!(ref_cell_lane(cell, env), Some(RefRuntimeLane::ExternRef))
+        }
+        (BuiltinMethodCall::UnsafeRefSet, [cell, value]) => {
+            core_value_is_renderable_externref(cell, env) && ref_value_lane(value, env).is_some()
         }
         _ => false,
     }
@@ -2346,9 +2480,27 @@ fn builtin_runtime_call_is_renderable_i32(
             core_value_is_renderable_externref(text, env)
                 && core_value_is_renderable_i32(index, env)
         }
-        (BuiltinMethodCall::RefGet, [cell]) => core_value_is_renderable_externref(cell, env),
-        (BuiltinMethodCall::UnsafeRefGet, [cell]) => core_value_is_renderable_externref(cell, env),
+        (BuiltinMethodCall::RefGet, [cell]) => {
+            core_value_is_renderable_externref(cell, env)
+                && matches!(ref_cell_lane(cell, env), Some(RefRuntimeLane::I32))
+        }
+        (BuiltinMethodCall::UnsafeRefGet, [cell]) => {
+            core_value_is_renderable_externref(cell, env)
+                && matches!(ref_cell_lane(cell, env), Some(RefRuntimeLane::I32))
+        }
         _ => false,
+    }
+}
+
+fn builtin_runtime_call_symbol(
+    call: BuiltinMethodCall,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> String {
+    if let Some(lane) = ref_runtime_lane(call, args, env) {
+        ref_runtime_import_symbol(call, lane)
+    } else {
+        builtin_runtime_import_symbol(call)
     }
 }
 

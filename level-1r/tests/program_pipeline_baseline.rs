@@ -1515,6 +1515,33 @@ fn source_array_param_range_slice_lowers_to_executable_runtime_import() {
 }
 
 #[test]
+fn source_array_param_bool_range_slice_lowers_to_executable_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(a: Array[bool]): bool = a[0..2][0]")
+        .expect("compile bool array param range slice")
+        .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["a".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::Bool);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.array_i64_slice\" (func $std_array_i64_slice (param externref) (param i32) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_i64_slice"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
+#[test]
 fn source_vec_param_len_lowers_to_executable_runtime_import() {
     let bundle = compile_source_program_bundle("def main(v: Vec[i64]): i64 = v.len")
         .expect("compile vec param len")
@@ -1678,6 +1705,28 @@ fn source_vec_new_push_freeze_range_slice_lowers_to_executable_runtime_imports()
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "8");
 }
 
+#[test]
+fn source_vec_new_push_preserves_bool_element_type_through_freeze_range_slice() {
+    let bundle = compile_source_program_bundle(
+        "def main(): bool = Vec.new().push(false).push(true).freeze()[1..2][0]",
+    )
+    .expect("compile bool vec new push freeze range slice")
+    .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::Bool);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.slice_i64_slice\" (func $std_slice_i64_slice (param externref) (param i32) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_slice"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
 fn assert_invalid_assignment_target(source: &str, target_type: &str) {
     let bundle = compile_source_program_bundle(source)
         .expect("compile invalid assignment target")
@@ -1790,6 +1839,40 @@ fn source_ref_new_preserves_bool_element_type_through_get_and_set() {
 }
 
 #[test]
+fn source_ref_new_preserves_string_element_type_through_get_and_set() {
+    let get = compile_source_program_bundle(
+        "def main(): i64 = Ref.new(String.from(\"hé\")).get().bytes_len()",
+    )
+    .expect("compile string ref get")
+    .program;
+    let set = compile_source_program_bundle(
+        "def main(): i64 = (Ref.new(String.from(\"x\")) := String.from(\"hé\")).*.bytes_len()",
+    )
+    .expect("compile string ref set")
+    .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        let main = &bundle.defs[0].output;
+        assert_eq!(main.typed.ty, Type::I64);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_get_externref"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_set_externref"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn source_assignment_to_non_ref_is_program_diagnostic() {
     let bundle = compile_source_program_bundle("def main(): i64 = 1 := 4")
         .expect("compile invalid assignment target")
@@ -1866,6 +1949,40 @@ fn source_unsafe_ref_new_preserves_bool_element_type_through_get_and_set() {
         .contains("call $std_unsafe_ref_set"));
     assert_eq!(run_wat_text(&get.backend_link.linked_wat), "1");
     assert_eq!(run_wat_text(&set.backend_link.linked_wat), "1");
+}
+
+#[test]
+fn source_unsafe_ref_new_preserves_string_element_type_through_get_and_set() {
+    let get = compile_source_program_bundle(
+        "def main(): i64 = UnsafeRef.new(String.from(\"hé\")).get().bytes_len()",
+    )
+    .expect("compile string unsafe ref get")
+    .program;
+    let set = compile_source_program_bundle(
+        "def main(): i64 = (UnsafeRef.new(String.from(\"x\")) := String.from(\"hé\")).*.bytes_len()",
+    )
+    .expect("compile string unsafe ref set")
+    .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        let main = &bundle.defs[0].output;
+        assert_eq!(main.typed.ty, Type::I64);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_get_externref"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_set_externref"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "3");
 }
 
 #[test]

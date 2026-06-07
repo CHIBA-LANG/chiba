@@ -185,6 +185,19 @@ async function makeImports(wat, args) {
         }
         return { cell: Number(value) };
       },
+      "std.ref_new_externref"(value) {
+        return { cell: value };
+      },
+      "std.ref_get_externref"(ref) {
+        return ref && typeof ref === "object" && "cell" in ref ? ref.cell : null;
+      },
+      "std.ref_set_externref"(ref, value) {
+        if (ref && typeof ref === "object") {
+          ref.cell = value;
+          return ref;
+        }
+        return { cell: value };
+      },
       "std.unsafe_ref_new"(value) {
         return { cell: Number(value) };
       },
@@ -197,6 +210,19 @@ async function makeImports(wat, args) {
           return ref;
         }
         return { cell: Number(value) };
+      },
+      "std.unsafe_ref_new_externref"(value) {
+        return { cell: value };
+      },
+      "std.unsafe_ref_get_externref"(ref) {
+        return ref && typeof ref === "object" && "cell" in ref ? ref.cell : null;
+      },
+      "std.unsafe_ref_set_externref"(ref, value) {
+        if (ref && typeof ref === "object") {
+          ref.cell = value;
+          return ref;
+        }
+        return { cell: value };
       },
       "std.array_len"(array) {
         return BigInt(asArray(array).length);
