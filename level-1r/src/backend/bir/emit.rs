@@ -468,6 +468,11 @@ fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExt
         CoreValue::SliceLiteral { items } => {
             imports.push(slice_literal_import(items.len()));
         }
+        CoreValue::Range { start, end } => {
+            imports.push(range_import());
+            collect_runtime_value_imports(start, imports);
+            collect_runtime_value_imports(end, imports);
+        }
         CoreValue::AggregateField { kind, value, field } => {
             imports.push(aggregate_field_import(*kind, *field));
             collect_runtime_value_imports(value, imports);
@@ -492,10 +497,6 @@ fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExt
             }
         }
         CoreValue::TupleField { tuple, .. } => collect_runtime_value_imports(tuple, imports),
-        CoreValue::Range { start, end } => {
-            collect_runtime_value_imports(start, imports);
-            collect_runtime_value_imports(end, imports);
-        }
         CoreValue::RangeField { range, .. } => collect_runtime_value_imports(range, imports),
         CoreValue::Record { fields } => {
             for field in fields {
@@ -542,6 +543,20 @@ fn slice_literal_import_signature(arity: usize) -> String {
         .collect::<Vec<_>>()
         .join("_");
     format!("{params}_to_externref")
+}
+
+fn range_import() -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: range_import_symbol(),
+        module: "env".to_string(),
+        name: "std.range_i64_new".to_string(),
+        signature_hash: "i64_i64_to_externref".to_string(),
+    }
+}
+
+fn range_import_symbol() -> String {
+    "std_range_i64_new".to_string()
 }
 
 fn aggregate_field_import(kind: AggregateKind, field: SliceField) -> BackendExternImport {
@@ -1844,6 +1859,15 @@ fn render_core_value_externref(
             ));
             Ok(())
         }
+        CoreValue::Range { start, end }
+            if core_value_is_renderable_i32(start, env)
+                && core_value_is_renderable_i32(end, env) =>
+        {
+            render_core_value_i32(wat, start, env)?;
+            render_core_value_i32(wat, end, env)?;
+            wat.push_str(&format!("    call ${}\n", range_import_symbol()));
+            Ok(())
+        }
         _ => Err(unsupported_i32_render_diagnostic(value)),
     }
 }
@@ -1909,6 +1933,9 @@ fn core_value_is_renderable_externref(value: &CoreValue, env: &RenderEnv) -> boo
     match value {
         CoreValue::Var(name) => env.param_kind(name) == WasmValueKind::ExternRef,
         CoreValue::SliceLiteral { items } => slice_literal_items_are_i32(items, env),
+        CoreValue::Range { start, end } => {
+            core_value_is_renderable_i32(start, env) && core_value_is_renderable_i32(end, env)
+        }
         _ => false,
     }
 }

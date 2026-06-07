@@ -1054,6 +1054,39 @@ fn program_range_field_return_lowers_to_executable_wat_value() {
 }
 
 #[test]
+fn program_range_return_lowers_to_executable_externref_handle() {
+    let bundle = compile_source_program_bundle("def main() = 3..9")
+        .expect("compile range return")
+        .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main");
+
+    assert_eq!(main.output.typed.ty, Type::Nominal("Range".to_string()));
+    assert!(matches!(
+        main.output.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::Range { .. })
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.range_i64_new\" (func $std_range_i64_new (param i32) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(func $main (export \"main\") (result externref)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_range_i64_new"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "range/3/9");
+}
+
+#[test]
 fn program_slice_literal_len_lowers_to_executable_wat_value() {
     let bundle = compile_source_program_bundle("def main() = [1, 2, 3].len")
         .expect("compile slice len")

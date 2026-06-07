@@ -58,6 +58,9 @@ async function readInput(args) {
 function summarizeResult(value) {
   if (Array.isArray(value)) return `slice/${value.length}`;
   if (value && Array.isArray(value.items)) return `slice/${value.items.length}`;
+  if (value && typeof value.start !== "undefined" && typeof value.end !== "undefined") {
+    return `range/${Number(value.start)}/${Number(value.end)}`;
+  }
   if (value instanceof Uint8Array) return `bytes/${value.length}`;
   if (value && value.bytes instanceof Uint8Array) return `bytes/${value.bytes.length}`;
   return String(value || 0);
@@ -162,6 +165,9 @@ async function makeImports(wat, args) {
       },
       "std.slice_slice"(slice, start, len) {
         return asArray(slice).slice(Number(start), Number(start) + Number(len));
+      },
+      "std.range_i64_new"(start, end) {
+        return { start: Number(start), end: Number(end) };
       },
       "Array.len"(array) {
         return BigInt(asArray(array).length);

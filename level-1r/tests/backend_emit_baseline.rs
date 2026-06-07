@@ -415,7 +415,7 @@ fn backend_emits_params_and_local_get_for_param_return_core() {
 }
 
 #[test]
-fn backend_rejects_range_return_instead_of_faking_i32_zero() {
+fn backend_lowers_range_return_to_externref_handle() {
     let core = CoreProgram {
         ops: vec![CoreOp::ReturnValue(CoreValue::Range {
             start: Box::new(CoreValue::I64(1)),
@@ -428,13 +428,21 @@ fn backend_rejects_range_return_instead_of_faking_i32_zero() {
 
     let artifact = emit_wasm_gc(&core, &CoreValidation::default());
 
+    assert_eq!(artifact.diagnostics, vec![]);
+    assert!(artifact.wat.contains(
+        "(import \"env\" \"std.range_i64_new\" (func $std_range_i64_new (param i32) (param i32) (result externref)))"
+    ));
+    assert!(artifact
+        .wat
+        .contains("(func $main (export \"main\") (result externref)"));
+    assert!(artifact.wat.contains("call $std_range_i64_new"));
     assert_eq!(
-        artifact.diagnostics,
-        vec![BackendDiagnostic::UnsupportedI32ReturnValue {
-            value: "1..3".to_string(),
-        }]
+        artifact.return_value,
+        Some(CoreValue::Range {
+            start: Box::new(CoreValue::I64(1)),
+            end: Box::new(CoreValue::I64(3))
+        })
     );
-    assert_eq!(artifact.wat, "");
 }
 
 #[test]
