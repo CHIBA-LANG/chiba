@@ -139,7 +139,9 @@ pub enum FieldAccessKind {
 pub enum IndexAccessKind {
     Operator,
     AggregateElement { kind: AggregateKind, element: Type },
+    AggregateSlice { kind: AggregateKind, element: Type },
     TextByte { kind: TextKind },
+    TextSlice { kind: TextKind },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1476,15 +1478,20 @@ fn refine_pattern_binding_types(
             let receiver = refine_pattern_binding_types(*receiver, bindings, context);
             let index = refine_pattern_binding_types(*index, bindings, context);
             let access = match access {
-                IndexAccessKind::AggregateElement { .. } => {
+                IndexAccessKind::AggregateElement { .. }
+                | IndexAccessKind::AggregateSlice { .. } => {
                     index_access_kind(&receiver.ty, &index.ty)
                 }
-                IndexAccessKind::TextByte { .. } => index_access_kind(&receiver.ty, &index.ty),
+                IndexAccessKind::TextByte { .. } | IndexAccessKind::TextSlice { .. } => {
+                    index_access_kind(&receiver.ty, &index.ty)
+                }
                 IndexAccessKind::Operator => IndexAccessKind::Operator,
             };
             let ty = match access {
-                IndexAccessKind::AggregateElement { .. } => index_result_type(&access),
-                IndexAccessKind::TextByte { .. } => index_result_type(&access),
+                IndexAccessKind::AggregateElement { .. }
+                | IndexAccessKind::AggregateSlice { .. }
+                | IndexAccessKind::TextByte { .. }
+                | IndexAccessKind::TextSlice { .. } => index_result_type(&access),
                 IndexAccessKind::Operator => expr.ty,
             };
             typed(
@@ -2012,7 +2019,8 @@ fn binary_result_type(lhs: &Type, rhs: &Type) -> Type {
 }
 
 fn index_access_kind(receiver: &Type, index: &Type) -> IndexAccessKind {
-    if index != &Type::I64 {
+    let is_range_index = matches!(index, Type::Nominal(name) if name == "Range");
+    if index != &Type::I64 && !is_range_index {
         return IndexAccessKind::Operator;
     }
     let Type::Nominal(name) = receiver else {
@@ -2022,20 +2030,38 @@ fn index_access_kind(receiver: &Type, index: &Type) -> IndexAccessKind {
         return IndexAccessKind::Operator;
     };
     match (base.as_str(), args.as_slice()) {
+        ("Slice", [element]) if is_range_index => IndexAccessKind::AggregateSlice {
+            kind: AggregateKind::Slice,
+            element: element.to_type(),
+        },
         ("Slice", [element]) => IndexAccessKind::AggregateElement {
             kind: AggregateKind::Slice,
+            element: element.to_type(),
+        },
+        ("Array", [element]) if is_range_index => IndexAccessKind::AggregateSlice {
+            kind: AggregateKind::Array,
             element: element.to_type(),
         },
         ("Array", [element]) => IndexAccessKind::AggregateElement {
             kind: AggregateKind::Array,
             element: element.to_type(),
         },
+        ("Vec", [element]) if is_range_index => IndexAccessKind::AggregateSlice {
+            kind: AggregateKind::Vec,
+            element: element.to_type(),
+        },
         ("Vec", [element]) => IndexAccessKind::AggregateElement {
             kind: AggregateKind::Vec,
             element: element.to_type(),
         },
+        ("str", []) if is_range_index => IndexAccessKind::TextSlice {
+            kind: TextKind::Str,
+        },
         ("str", []) => IndexAccessKind::TextByte {
             kind: TextKind::Str,
+        },
+        ("String", []) if is_range_index => IndexAccessKind::TextSlice {
+            kind: TextKind::String,
         },
         ("String", []) => IndexAccessKind::TextByte {
             kind: TextKind::String,
@@ -2047,7 +2073,14 @@ fn index_access_kind(receiver: &Type, index: &Type) -> IndexAccessKind {
 fn index_result_type(access: &IndexAccessKind) -> Type {
     match access {
         IndexAccessKind::AggregateElement { element, .. } => element.clone(),
+        IndexAccessKind::AggregateSlice { element, .. } => {
+            Type::Nominal(format!("Slice[{}]", source_type_name_for_type(element)))
+        }
         IndexAccessKind::TextByte { .. } => Type::I64,
+        IndexAccessKind::TextSlice { kind } => match kind {
+            TextKind::Str => Type::Nominal("str".to_string()),
+            TextKind::String => Type::Nominal("String".to_string()),
+        },
         IndexAccessKind::Operator => Type::Unknown,
     }
 }

@@ -73,6 +73,10 @@ async function makeImports(wat, args) {
     return [];
   }
 
+  function arraySlice(value, start, end) {
+    return asArray(value).slice(Number(start), Number(end));
+  }
+
   function byteArray(value) {
     if (value instanceof Uint8Array) return value;
     if (Array.isArray(value)) return Uint8Array.from(value);
@@ -134,6 +138,9 @@ async function makeImports(wat, args) {
       "std.vec_i64_get"(vec, index) {
         return Number(asArray(vec)[Number(index)] ?? 0);
       },
+      "std.vec_i64_slice"(vec, start, end) {
+        return arraySlice(vec, start, end);
+      },
       "std.vec_push"(vec, item) {
         const array = asArray(vec);
         array.push(item);
@@ -180,6 +187,9 @@ async function makeImports(wat, args) {
       "std.array_i64_get"(array, index) {
         return Number(asArray(array)[Number(index)] ?? 0);
       },
+      "std.array_i64_slice"(array, start, end) {
+        return arraySlice(array, start, end);
+      },
       "std.array_slice"(array, start, len) {
         return asArray(array).slice(Number(start), Number(start) + Number(len));
       },
@@ -191,6 +201,9 @@ async function makeImports(wat, args) {
       },
       "std.slice_i64_get"(slice, index) {
         return Number(asArray(slice)[Number(index)] ?? 0);
+      },
+      "std.slice_i64_slice"(slice, start, end) {
+        return arraySlice(slice, start, end);
       },
       "std.slice_get"(slice, index) {
         return asArray(slice)[Number(index)] ?? null;
@@ -248,11 +261,11 @@ async function makeImports(wat, args) {
       "std.str_char_at"(text, index) {
         return runeAt(text, index);
       },
-      "std.string_slice"(text, start, len) {
-        return byteArray(text).slice(Number(start), Number(start) + Number(len));
+      "std.string_slice"(text, start, end) {
+        return byteArray(text).slice(Number(start), Number(end));
       },
-      "std.str_slice"(text, start, len) {
-        return byteArray(text).slice(Number(start), Number(start) + Number(len));
+      "std.str_slice"(text, start, end) {
+        return byteArray(text).slice(Number(start), Number(end));
       },
       "std.str_to_string"(text) {
         return byteArray(text).slice();

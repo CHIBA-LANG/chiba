@@ -486,10 +486,20 @@ fn collect_runtime_value_imports(value: &CoreValue, imports: &mut Vec<BackendExt
             collect_runtime_value_imports(value, imports);
             collect_runtime_value_imports(index, imports);
         }
+        CoreValue::AggregateSlice { kind, value, range } => {
+            imports.push(aggregate_slice_import(*kind));
+            collect_runtime_value_imports(value, imports);
+            collect_runtime_value_imports(range, imports);
+        }
         CoreValue::TextIndex { kind, value, index } => {
             imports.push(text_index_import(*kind));
             collect_runtime_value_imports(value, imports);
             collect_runtime_value_imports(index, imports);
+        }
+        CoreValue::TextSlice { kind, value, range } => {
+            imports.push(text_slice_import(*kind));
+            collect_runtime_value_imports(value, imports);
+            collect_runtime_value_imports(range, imports);
         }
         CoreValue::TextLiteral { kind, value } => {
             imports.push(text_literal_import(*kind, value.as_bytes().len()));
@@ -600,6 +610,20 @@ fn aggregate_index_import_symbol(kind: AggregateKind) -> String {
     format!("std_{}_i64_get", kind.runtime_prefix())
 }
 
+fn aggregate_slice_import(kind: AggregateKind) -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: aggregate_slice_import_symbol(kind),
+        module: "env".to_string(),
+        name: format!("std.{}_i64_slice", kind.runtime_prefix()),
+        signature_hash: "externref_i64_i64_to_externref".to_string(),
+    }
+}
+
+fn aggregate_slice_import_symbol(kind: AggregateKind) -> String {
+    format!("std_{}_i64_slice", kind.runtime_prefix())
+}
+
 fn text_field_import(kind: TextKind, field: TextField) -> BackendExternImport {
     match field {
         TextField::Len => BackendExternImport {
@@ -630,6 +654,20 @@ fn text_index_import(kind: TextKind) -> BackendExternImport {
 
 fn text_index_import_symbol(kind: TextKind) -> String {
     format!("std_{}_i64_byte_at", kind.runtime_prefix())
+}
+
+fn text_slice_import(kind: TextKind) -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: text_slice_import_symbol(kind),
+        module: "env".to_string(),
+        name: format!("std.{}_slice", kind.runtime_prefix()),
+        signature_hash: "externref_i64_i64_to_externref".to_string(),
+    }
+}
+
+fn text_slice_import_symbol(kind: TextKind) -> String {
+    format!("std_{}_slice", kind.runtime_prefix())
 }
 
 fn text_literal_import(kind: TextKind, arity: usize) -> BackendExternImport {
@@ -1727,10 +1765,20 @@ fn infer_param_kinds_from_value(
             infer_param_kinds_from_value(value, params, kinds);
             infer_param_kinds_from_value(index, params, kinds);
         }
+        CoreValue::AggregateSlice { value, range, .. } => {
+            mark_externref_operand(value, params, kinds);
+            infer_param_kinds_from_value(value, params, kinds);
+            infer_param_kinds_from_value(range, params, kinds);
+        }
         CoreValue::TextIndex { value, index, .. } => {
             mark_externref_operand(value, params, kinds);
             infer_param_kinds_from_value(value, params, kinds);
             infer_param_kinds_from_value(index, params, kinds);
+        }
+        CoreValue::TextSlice { value, range, .. } => {
+            mark_externref_operand(value, params, kinds);
+            infer_param_kinds_from_value(value, params, kinds);
+            infer_param_kinds_from_value(range, params, kinds);
         }
         CoreValue::BuiltinRuntimeCall { args, .. } => {
             if let Some(receiver) = args.first() {
@@ -1909,6 +1957,9 @@ fn render_core_value_i32(
                 return Err(unsupported_i32_render_diagnostic(value));
             }
         }
+        CoreValue::AggregateSlice { .. } | CoreValue::TextSlice { .. } => {
+            return Err(unsupported_i32_render_diagnostic(value));
+        }
         CoreValue::TextIndex { kind, value, index } => {
             if core_value_is_renderable_externref(value, env)
                 && core_value_is_renderable_i32(index, env)
@@ -2016,6 +2067,43 @@ fn render_core_value_externref(
             render_core_value_i32(wat, end, env)?;
             wat.push_str(&format!("    call ${}\n", range_import_symbol()));
             Ok(())
+        }
+        CoreValue::AggregateSlice { kind, value, range } => {
+            let Some((start, end)) = range_bounds(range, env) else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            };
+            if core_value_is_renderable_externref(value, env)
+                && core_value_is_renderable_i32(start, env)
+                && core_value_is_renderable_i32(end, env)
+            {
+                render_core_value_externref(wat, value, env)?;
+                render_core_value_i32(wat, start, env)?;
+                render_core_value_i32(wat, end, env)?;
+                wat.push_str(&format!(
+                    "    call ${}\n",
+                    aggregate_slice_import_symbol(*kind)
+                ));
+                Ok(())
+            } else {
+                Err(unsupported_i32_render_diagnostic(value))
+            }
+        }
+        CoreValue::TextSlice { kind, value, range } => {
+            let Some((start, end)) = range_bounds(range, env) else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            };
+            if core_value_is_renderable_externref(value, env)
+                && core_value_is_renderable_i32(start, env)
+                && core_value_is_renderable_i32(end, env)
+            {
+                render_core_value_externref(wat, value, env)?;
+                render_core_value_i32(wat, start, env)?;
+                render_core_value_i32(wat, end, env)?;
+                wat.push_str(&format!("    call ${}\n", text_slice_import_symbol(*kind)));
+                Ok(())
+            } else {
+                Err(unsupported_i32_render_diagnostic(value))
+            }
         }
         CoreValue::BuiltinRuntimeCall { call, args }
             if builtin_runtime_call_is_renderable_externref(*call, args, env) =>
@@ -2170,6 +2258,14 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
             core_value_is_renderable_externref(value, env)
                 && core_value_is_renderable_i32(index, env)
         }
+        CoreValue::AggregateSlice { value, range, .. }
+        | CoreValue::TextSlice { value, range, .. } => range_bounds(range, env)
+            .map(|(start, end)| {
+                core_value_is_renderable_externref(value, env)
+                    && core_value_is_renderable_i32(start, env)
+                    && core_value_is_renderable_i32(end, env)
+            })
+            .unwrap_or(false),
         CoreValue::BuiltinRuntimeCall { call, args } => {
             builtin_runtime_call_is_renderable_i32(*call, args, env)
         }
@@ -2192,6 +2288,14 @@ fn core_value_is_renderable_externref(value: &CoreValue, env: &RenderEnv) -> boo
         CoreValue::Range { start, end } => {
             core_value_is_renderable_i32(start, env) && core_value_is_renderable_i32(end, env)
         }
+        CoreValue::AggregateSlice { value, range, .. }
+        | CoreValue::TextSlice { value, range, .. } => range_bounds(range, env)
+            .map(|(start, end)| {
+                core_value_is_renderable_externref(value, env)
+                    && core_value_is_renderable_i32(start, env)
+                    && core_value_is_renderable_i32(end, env)
+            })
+            .unwrap_or(false),
         CoreValue::BuiltinRuntimeCall { call, args } => {
             builtin_runtime_call_is_renderable_externref(*call, args, env)
         }
@@ -2257,6 +2361,17 @@ fn range_field_value<'a>(
         RangeField::Start => Some(start),
         RangeField::End => Some(end),
     }
+}
+
+fn range_bounds<'a>(
+    range: &'a CoreValue,
+    env: &'a RenderEnv,
+) -> Option<(&'a CoreValue, &'a CoreValue)> {
+    let range = resolve_core_value_binding(range, env);
+    let CoreValue::Range { start, end } = range else {
+        return None;
+    };
+    Some((start, end))
 }
 
 fn slice_field_value(slice: &CoreValue, field: SliceField, env: &RenderEnv) -> Option<CoreValue> {

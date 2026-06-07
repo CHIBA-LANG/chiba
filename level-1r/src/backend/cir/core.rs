@@ -275,10 +275,20 @@ pub enum CoreValue {
         value: Box<CoreValue>,
         index: Box<CoreValue>,
     },
+    AggregateSlice {
+        kind: AggregateKind,
+        value: Box<CoreValue>,
+        range: Box<CoreValue>,
+    },
     TextIndex {
         kind: TextKind,
         value: Box<CoreValue>,
         index: Box<CoreValue>,
+    },
+    TextSlice {
+        kind: TextKind,
+        value: Box<CoreValue>,
+        range: Box<CoreValue>,
     },
     BuiltinRuntimeCall {
         call: BuiltinMethodCall,
@@ -390,12 +400,26 @@ impl CoreValue {
             } => {
                 format!("{}[{}]", value.debug_name(), index.debug_name())
             }
+            CoreValue::AggregateSlice {
+                kind: _,
+                value,
+                range,
+            } => {
+                format!("{}[{}]", value.debug_name(), range.debug_name())
+            }
             CoreValue::TextIndex {
                 kind: _,
                 value,
                 index,
             } => {
                 format!("{}[{}]", value.debug_name(), index.debug_name())
+            }
+            CoreValue::TextSlice {
+                kind: _,
+                value,
+                range,
+            } => {
+                format!("{}[{}]", value.debug_name(), range.debug_name())
             }
             CoreValue::BuiltinRuntimeCall { call, args } => {
                 let args = args
@@ -1379,12 +1403,26 @@ fn render_atom(atom: &CpsAtom) -> String {
         } => {
             format!("{}[{}]", render_atom(value), render_atom(index))
         }
+        CpsAtom::AggregateSlice {
+            kind: _,
+            value,
+            range,
+        } => {
+            format!("{}[{}]", render_atom(value), render_atom(range))
+        }
         CpsAtom::TextIndex {
             kind: _,
             value,
             index,
         } => {
             format!("{}[{}]", render_atom(value), render_atom(index))
+        }
+        CpsAtom::TextSlice {
+            kind: _,
+            value,
+            range,
+        } => {
+            format!("{}[{}]", render_atom(value), render_atom(range))
         }
         CpsAtom::BuiltinRuntimeCall { call, args } => {
             format!(
@@ -1503,10 +1541,20 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
             value: Box::new(core_value(value)),
             index: Box::new(core_value(index)),
         },
+        CpsAtom::AggregateSlice { kind, value, range } => CoreValue::AggregateSlice {
+            kind: *kind,
+            value: Box::new(core_value(value)),
+            range: Box::new(core_value(range)),
+        },
         CpsAtom::TextIndex { kind, value, index } => CoreValue::TextIndex {
             kind: *kind,
             value: Box::new(core_value(value)),
             index: Box::new(core_value(index)),
+        },
+        CpsAtom::TextSlice { kind, value, range } => CoreValue::TextSlice {
+            kind: *kind,
+            value: Box::new(core_value(value)),
+            range: Box::new(core_value(range)),
         },
         CpsAtom::BuiltinRuntimeCall { call, args } => CoreValue::BuiltinRuntimeCall {
             call: *call,
@@ -1591,7 +1639,13 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
         CpsAtom::AggregateIndex { .. } => {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
+        CpsAtom::AggregateSlice { .. } => {
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
         CpsAtom::TextIndex { .. } => {
+            ops.push(CoreOp::ReturnValue(core_value(atom)));
+        }
+        CpsAtom::TextSlice { .. } => {
             ops.push(CoreOp::ReturnValue(core_value(atom)));
         }
         CpsAtom::Record { layout, fields } => {

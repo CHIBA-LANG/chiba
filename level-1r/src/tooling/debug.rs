@@ -539,12 +539,26 @@ fn render_core_value(value: &CoreValue) -> String {
         } => {
             format!("{}[{}]", render_core_value(value), render_core_value(index))
         }
+        CoreValue::AggregateSlice {
+            kind: _,
+            value,
+            range,
+        } => {
+            format!("{}[{}]", render_core_value(value), render_core_value(range))
+        }
         CoreValue::TextIndex {
             kind: _,
             value,
             index,
         } => {
             format!("{}[{}]", render_core_value(value), render_core_value(index))
+        }
+        CoreValue::TextSlice {
+            kind: _,
+            value,
+            range,
+        } => {
+            format!("{}[{}]", render_core_value(value), render_core_value(range))
         }
         CoreValue::BuiltinRuntimeCall { call, args } => {
             let args = args
@@ -968,12 +982,31 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
                 render_core_value_summary(index)
             )
         }
+        crate::core::CoreValue::AggregateSlice {
+            kind: _,
+            value,
+            range,
+        } => {
+            format!(
+                "slice-range {}[{}]",
+                render_core_value_summary(value),
+                render_core_value_summary(range)
+            )
+        }
         crate::core::CoreValue::TextIndex { kind, value, index } => {
             format!(
                 "{}-index {}[{}]",
                 kind.source_name(),
                 render_core_value_summary(value),
                 render_core_value_summary(index)
+            )
+        }
+        crate::core::CoreValue::TextSlice { kind, value, range } => {
+            format!(
+                "{}-slice {}[{}]",
+                kind.source_name(),
+                render_core_value_summary(value),
+                render_core_value_summary(range)
             )
         }
         crate::core::CoreValue::BuiltinRuntimeCall { call, args } => {

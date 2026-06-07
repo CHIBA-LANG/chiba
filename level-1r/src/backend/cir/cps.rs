@@ -69,10 +69,20 @@ pub enum CpsAtom {
         value: Box<CpsAtom>,
         index: Box<CpsAtom>,
     },
+    AggregateSlice {
+        kind: AggregateKind,
+        value: Box<CpsAtom>,
+        range: Box<CpsAtom>,
+    },
     TextIndex {
         kind: TextKind,
         value: Box<CpsAtom>,
         index: Box<CpsAtom>,
+    },
+    TextSlice {
+        kind: TextKind,
+        value: Box<CpsAtom>,
+        range: Box<CpsAtom>,
     },
     BuiltinRuntimeCall {
         call: BuiltinMethodCall,
@@ -364,12 +374,32 @@ fn transform(
                                     ctx,
                                 );
                             }
+                            if let IndexAccessKind::AggregateSlice { kind, .. } = access {
+                                return k(
+                                    CpsAtom::AggregateSlice {
+                                        kind: *kind,
+                                        value: Box::new(receiver),
+                                        range: Box::new(index),
+                                    },
+                                    ctx,
+                                );
+                            }
                             if let IndexAccessKind::TextByte { kind } = access {
                                 return k(
                                     CpsAtom::TextIndex {
                                         kind: *kind,
                                         value: Box::new(receiver),
                                         index: Box::new(index),
+                                    },
+                                    ctx,
+                                );
+                            }
+                            if let IndexAccessKind::TextSlice { kind } = access {
+                                return k(
+                                    CpsAtom::TextSlice {
+                                        kind: *kind,
+                                        value: Box::new(receiver),
+                                        range: Box::new(index),
                                     },
                                     ctx,
                                 );
@@ -1067,11 +1097,21 @@ impl fmt::Display for CpsAtom {
                 value,
                 index,
             } => write!(f, "{value}[{index}]"),
+            CpsAtom::AggregateSlice {
+                kind: _,
+                value,
+                range,
+            } => write!(f, "{value}[{range}]"),
             CpsAtom::TextIndex {
                 kind: _,
                 value,
                 index,
             } => write!(f, "{value}[{index}]"),
+            CpsAtom::TextSlice {
+                kind: _,
+                value,
+                range,
+            } => write!(f, "{value}[{range}]"),
             CpsAtom::BuiltinRuntimeCall { call, args } => {
                 write!(f, "{}(", call.debug_name())?;
                 for (index, arg) in args.iter().enumerate() {

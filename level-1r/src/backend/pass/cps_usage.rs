@@ -158,9 +158,17 @@ fn visit_atom(atom: &CpsAtom, facts: &mut CpsUsageFacts) {
             visit_atom(value, facts);
             visit_atom(index, facts);
         }
+        CpsAtom::AggregateSlice { value, range, .. } => {
+            visit_atom(value, facts);
+            visit_atom(range, facts);
+        }
         CpsAtom::TextIndex { value, index, .. } => {
             visit_atom(value, facts);
             visit_atom(index, facts);
+        }
+        CpsAtom::TextSlice { value, range, .. } => {
+            visit_atom(value, facts);
+            visit_atom(range, facts);
         }
         CpsAtom::BuiltinRuntimeCall { args, .. } => {
             for arg in args {
@@ -267,9 +275,17 @@ fn count_atom_refs(atom: &CpsAtom, binder: &str, count: &mut UseCount) {
             count_atom_refs(value, binder, count);
             count_atom_refs(index, binder, count);
         }
+        CpsAtom::AggregateSlice { value, range, .. } => {
+            count_atom_refs(value, binder, count);
+            count_atom_refs(range, binder, count);
+        }
         CpsAtom::TextIndex { value, index, .. } => {
             count_atom_refs(value, binder, count);
             count_atom_refs(index, binder, count);
+        }
+        CpsAtom::TextSlice { value, range, .. } => {
+            count_atom_refs(value, binder, count);
+            count_atom_refs(range, binder, count);
         }
         CpsAtom::BuiltinRuntimeCall { args, .. } => {
             for arg in args {
