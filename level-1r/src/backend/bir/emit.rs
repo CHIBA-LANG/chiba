@@ -92,6 +92,7 @@ pub struct BackendParamAbi {
     pub params: BTreeMap<String, BackendValueKind>,
     pub functions: BTreeMap<String, BackendCallableAbi>,
     pub statics: BTreeMap<String, BackendValueKind>,
+    pub static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2166,6 +2167,7 @@ struct RenderEnv {
     param_kinds: BTreeMap<String, WasmValueKind>,
     function_abis: BTreeMap<String, BackendCallableAbi>,
     static_kinds: BTreeMap<String, WasmValueKind>,
+    static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     bindings: BTreeMap<String, CoreValue>,
 }
 
@@ -2178,6 +2180,7 @@ impl RenderEnv {
             param_kinds: param_kinds.clone(),
             function_abis: BTreeMap::new(),
             static_kinds: BTreeMap::new(),
+            static_ref_cell_lanes: BTreeMap::new(),
             bindings: BTreeMap::new(),
         }
     }
@@ -2190,6 +2193,7 @@ impl RenderEnv {
         Self::new(params, param_kinds)
             .with_function_abis(param_abi.functions.clone())
             .with_static_kinds(param_abi.statics.clone())
+            .with_static_ref_cell_lanes(param_abi.static_ref_cell_lanes.clone())
     }
 
     fn with_function_abis(&self, function_abis: BTreeMap<String, BackendCallableAbi>) -> Self {
@@ -2204,6 +2208,15 @@ impl RenderEnv {
             .into_iter()
             .map(|(name, kind)| (name, WasmValueKind::from(kind)))
             .collect();
+        next
+    }
+
+    fn with_static_ref_cell_lanes(
+        &self,
+        static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
+    ) -> Self {
+        let mut next = self.clone();
+        next.static_ref_cell_lanes = static_ref_cell_lanes;
         next
     }
 
@@ -2252,7 +2265,10 @@ impl RenderEnv {
     }
 
     fn local_ref_cell_lane(&self, name: &str) -> Option<CoreRefCellLane> {
-        self.local_ref_cell_lanes.get(name).copied()
+        self.local_ref_cell_lanes
+            .get(name)
+            .copied()
+            .or_else(|| self.static_ref_cell_lanes.get(name).copied())
     }
 
     fn signature(&self) -> String {

@@ -341,7 +341,19 @@ fn validate_static_initializer_expr_scoped(
             receiver,
             name,
             args,
-        } if is_supported_static_handle_builtin(receiver, name, args) => true,
+        } if validate_static_handle_builtin_expr(
+            receiver,
+            name,
+            args,
+            static_name,
+            statics,
+            static_names,
+            diagnostics,
+            bound,
+        ) =>
+        {
+            true
+        }
         Expr::Range { start, end } => {
             validate_static_initializer_expr_scoped(
                 start,
@@ -393,15 +405,62 @@ fn validate_static_initializer_expr_scoped(
     }
 }
 
-fn is_supported_static_handle_builtin(receiver: &Expr, name: &str, args: &[Expr]) -> bool {
-    matches!(
-        (receiver, name, args),
-        (
-            Expr::Var(type_name),
-            "from",
-            [Expr::Lit(crate::ast::Literal::String(_))]
-        ) if type_name == "String"
-    )
+fn validate_static_handle_builtin_expr(
+    receiver: &Expr,
+    name: &str,
+    args: &[Expr],
+    static_name: &str,
+    statics: &[GlobalStatic],
+    static_names: &BTreeSet<String>,
+    diagnostics: &mut Vec<GlobalInitDiagnostic>,
+    bound: &BTreeSet<String>,
+) -> bool {
+    match (receiver, name, args) {
+        (Expr::Var(type_name), "new", []) if type_name == "String" || type_name == "Vec" => true,
+        (Expr::Var(type_name), "from", [Expr::Lit(crate::ast::Literal::String(_))])
+            if type_name == "String" =>
+        {
+            true
+        }
+        (Expr::Var(type_name), "new", [value])
+            if type_name == "Ref" || type_name == "UnsafeRef" =>
+        {
+            validate_static_initializer_expr_scoped(
+                value,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+                bound,
+            )
+        }
+        (_, "concat" | "push" | "push_rune", [value]) => {
+            validate_static_initializer_expr_scoped(
+                receiver,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+                bound,
+            ) & validate_static_initializer_expr_scoped(
+                value,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+                bound,
+            )
+        }
+        (_, "freeze" | "as_str" | "to_cstr", []) => validate_static_initializer_expr_scoped(
+            receiver,
+            static_name,
+            statics,
+            static_names,
+            diagnostics,
+            bound,
+        ),
+        _ => false,
+    }
 }
 
 fn static_record_field_expr<'a>(

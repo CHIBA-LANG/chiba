@@ -1238,6 +1238,7 @@ fn backend_param_abi(
             .collect(),
         functions: backend_callable_abis_for_interface(functions),
         statics: backend_static_abis_for_interface(statics),
+        static_ref_cell_lanes: backend_static_ref_cell_lanes_for_interface(statics),
     }
 }
 
@@ -1249,6 +1250,18 @@ fn backend_static_abis_for_interface(
         .filter_map(|static_value| {
             let ty = static_value.ty.as_deref().map(source_type_name_to_type)?;
             backend_value_kind_for_type(&ty).map(|kind| (static_value.source_name.clone(), kind))
+        })
+        .collect()
+}
+
+fn backend_static_ref_cell_lanes_for_interface(
+    statics: &[crate::surface::InterfaceStatic],
+) -> BTreeMap<String, crate::core::CoreRefCellLane> {
+    statics
+        .iter()
+        .filter_map(|static_value| {
+            let ty = static_value.ty.as_deref().map(source_type_name_to_type)?;
+            core_ref_cell_lane_for_type(&ty).map(|lane| (static_value.source_name.clone(), lane))
         })
         .collect()
 }
@@ -2102,9 +2115,12 @@ fn lower_global_init_into_linked_wat(
         }
         wat.push_str(&format!("    ;; init static {}\n", static_value.name));
         let init_result = match global_static_value_kind(static_value) {
-            BackendValueKind::ExternRef => {
-                render_global_init_expr_externref(&mut wat, &static_value.name, &static_value.body)
-            }
+            BackendValueKind::ExternRef => render_global_init_expr_externref(
+                &mut wat,
+                &static_value.name,
+                &static_value.body,
+                global_init,
+            ),
             BackendValueKind::I32 => render_global_init_expr(
                 &mut wat,
                 &static_value.name,
@@ -2177,6 +2193,82 @@ fn collect_global_init_runtime_imports(expr: &Expr, imports: &mut Vec<BackendExt
                     "externref_to_externref",
                 ));
             }
+        }
+        Expr::MethodCall {
+            receiver,
+            name,
+            args,
+        } => {
+            collect_global_init_runtime_imports(receiver, imports);
+            for arg in args {
+                collect_global_init_runtime_imports(arg, imports);
+            }
+            match (receiver.as_ref(), name.as_str(), args.as_slice()) {
+                (Expr::Var(type_name), "new", []) if type_name == "String" => {
+                    imports.push(global_builtin_import(
+                        "std_string_new",
+                        "std.string_new",
+                        "_to_externref",
+                    ));
+                }
+                (_, "concat", [_]) => {
+                    imports.push(global_builtin_import(
+                        "std_string_concat",
+                        "std.string_concat",
+                        "externref_externref_to_externref",
+                    ));
+                }
+                (_, "as_str", []) => {
+                    imports.push(global_builtin_import(
+                        "std_string_as_str",
+                        "std.string_as_str",
+                        "externref_to_externref",
+                    ));
+                }
+                (_, "to_cstr", []) => {
+                    imports.push(global_builtin_import(
+                        "std_string_to_cstr",
+                        "std.string_to_cstr",
+                        "externref_to_externref",
+                    ));
+                }
+                (_, "push_rune", [_]) => {
+                    imports.push(global_builtin_import(
+                        "std_string_push_rune",
+                        "std.string_push_rune",
+                        "externref_i64_to_externref",
+                    ));
+                }
+                (Expr::Var(type_name), "new", []) if type_name == "Vec" => {
+                    imports.push(global_builtin_import(
+                        "std_vec_new",
+                        "std.vec_new",
+                        "_to_externref",
+                    ));
+                }
+                (_, "push", [item]) => {
+                    imports.push(global_vec_push_import(item));
+                }
+                (_, "freeze", []) => {
+                    imports.push(global_builtin_import(
+                        "std_vec_freeze",
+                        "std.vec_freeze",
+                        "externref_to_externref",
+                    ));
+                }
+                (Expr::Var(type_name), "new", [value])
+                    if type_name == "Ref" || type_name == "UnsafeRef" =>
+                {
+                    imports.push(global_ref_new_import(type_name, value));
+                }
+                _ => {}
+            }
+        }
+        Expr::Lit(crate::ast::Literal::String(text)) => {
+            imports.push(global_text_literal_import(text));
+        }
+        Expr::Lit(crate::ast::Literal::CStr(text)) => {
+            imports.push(global_cstr_literal_import(text));
         }
         Expr::Range { start, end } => {
             collect_global_init_runtime_imports(start, imports);
@@ -2263,10 +2355,55 @@ fn global_slice_literal_import(items: &[Expr]) -> BackendExternImport {
     )
 }
 
+fn global_vec_push_import(item: &Expr) -> BackendExternImport {
+    if global_static_expr_is_i32(item) {
+        global_builtin_import("std_vec_push", "std.vec_push", "externref_i64_to_externref")
+    } else {
+        global_builtin_import(
+            "std_vec_push_externref",
+            "std.vec_push_externref",
+            "externref_externref_to_externref",
+        )
+    }
+}
+
+fn global_ref_new_import(type_name: &str, value: &Expr) -> BackendExternImport {
+    let base = if type_name == "UnsafeRef" {
+        "std.unsafe_ref_new"
+    } else {
+        "std.ref_new"
+    };
+    if global_static_expr_is_i32(value) {
+        global_builtin_import(&base.replace('.', "_"), base, "i64_to_externref")
+    } else {
+        let name = format!("{base}_externref");
+        global_builtin_import(&name.replace('.', "_"), &name, "externref_to_externref")
+    }
+}
+
+fn global_cstr_literal_import(text: &str) -> BackendExternImport {
+    let arity = text.as_bytes().len() + 1;
+    global_builtin_import(
+        &format!("std_cstr_literal_{arity}"),
+        &format!("std.cstr_literal_{arity}"),
+        &format!(
+            "{}_to_externref",
+            std::iter::repeat("i64")
+                .take(arity)
+                .collect::<Vec<_>>()
+                .join("_")
+        ),
+    )
+}
+
 fn global_static_expr_is_i32(expr: &Expr) -> bool {
     matches!(
         expr,
-        Expr::Lit(crate::ast::Literal::I64(_) | crate::ast::Literal::Bool(_))
+        Expr::Lit(
+            crate::ast::Literal::I64(_)
+                | crate::ast::Literal::Rune(_)
+                | crate::ast::Literal::Bool(_)
+        )
     )
 }
 
@@ -2381,14 +2518,12 @@ fn render_global_init_expr_externref(
     wat: &mut String,
     static_name: &str,
     expr: &Expr,
+    global_init: &GlobalInitPlan,
 ) -> Result<(), BackendLinkDiagnostic> {
     match expr {
-        Expr::MethodCall {
-            receiver,
-            name,
-            args,
-        } => {
-            let Some(text) = global_string_from_literal(receiver, name, args) else {
+        Expr::Var(name) => {
+            let Some(static_value) = global_init.statics.iter().find(|item| item.name == *name)
+            else {
                 return Err(
                     BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
                         static_name: static_name.to_string(),
@@ -2396,16 +2531,32 @@ fn render_global_init_expr_externref(
                     },
                 );
             };
-            for byte in text.as_bytes() {
-                wat.push_str(&format!("    i32.const {}\n", *byte as i32));
-            }
             wat.push_str(&format!(
-                "    call $std_string_literal_{}\n",
-                text.as_bytes().len()
+                "    global.get ${}\n",
+                global_symbol(&static_value.owner, &static_value.name)
             ));
-            wat.push_str("    call $std_str_to_string\n");
             Ok(())
         }
+        Expr::Lit(crate::ast::Literal::String(text)) => {
+            render_global_text_literal(wat, text);
+            Ok(())
+        }
+        Expr::Lit(crate::ast::Literal::CStr(text)) => {
+            render_global_cstr_literal(wat, text);
+            Ok(())
+        }
+        Expr::MethodCall {
+            receiver,
+            name,
+            args,
+        } => render_global_init_method_call_externref(
+            wat,
+            static_name,
+            receiver,
+            name,
+            args,
+            global_init,
+        ),
         Expr::Range { start, end } => {
             render_global_init_expr_with_bindings(
                 wat,
@@ -2436,7 +2587,7 @@ fn render_global_init_expr_externref(
                         &BTreeMap::new(),
                     )?;
                 } else {
-                    render_global_init_expr_externref(wat, static_name, item)?;
+                    render_global_init_expr_externref(wat, static_name, item, global_init)?;
                 }
             }
             wat.push_str(&format!(
@@ -2453,6 +2604,129 @@ fn render_global_init_expr_externref(
             },
         ),
     }
+}
+
+fn render_global_init_method_call_externref(
+    wat: &mut String,
+    static_name: &str,
+    receiver: &Expr,
+    name: &str,
+    args: &[Expr],
+    global_init: &GlobalInitPlan,
+) -> Result<(), BackendLinkDiagnostic> {
+    if let Some(text) = global_string_from_literal(receiver, name, args) {
+        render_global_text_literal(wat, text);
+        wat.push_str("    call $std_str_to_string\n");
+        return Ok(());
+    }
+    match (receiver, name, args) {
+        (Expr::Var(type_name), "new", []) if type_name == "String" => {
+            wat.push_str("    call $std_string_new\n");
+        }
+        (_, "concat", [arg]) => {
+            render_global_init_expr_externref(wat, static_name, receiver, global_init)?;
+            render_global_init_expr_externref(wat, static_name, arg, global_init)?;
+            wat.push_str("    call $std_string_concat\n");
+        }
+        (_, "as_str", []) => {
+            render_global_init_expr_externref(wat, static_name, receiver, global_init)?;
+            wat.push_str("    call $std_string_as_str\n");
+        }
+        (_, "to_cstr", []) => {
+            render_global_init_expr_externref(wat, static_name, receiver, global_init)?;
+            wat.push_str("    call $std_string_to_cstr\n");
+        }
+        (_, "push_rune", [rune]) => {
+            render_global_init_expr_externref(wat, static_name, receiver, global_init)?;
+            render_global_init_expr_with_bindings(
+                wat,
+                static_name,
+                rune,
+                &GlobalInitPlan::default(),
+                &BTreeMap::new(),
+            )?;
+            wat.push_str("    call $std_string_push_rune\n");
+        }
+        (Expr::Var(type_name), "new", []) if type_name == "Vec" => {
+            wat.push_str("    call $std_vec_new\n");
+        }
+        (_, "push", [item]) => {
+            render_global_init_expr_externref(wat, static_name, receiver, global_init)?;
+            if global_static_expr_is_i32(item) {
+                render_global_init_expr_with_bindings(
+                    wat,
+                    static_name,
+                    item,
+                    &GlobalInitPlan::default(),
+                    &BTreeMap::new(),
+                )?;
+                wat.push_str("    call $std_vec_push\n");
+            } else {
+                render_global_init_expr_externref(wat, static_name, item, global_init)?;
+                wat.push_str("    call $std_vec_push_externref\n");
+            }
+        }
+        (_, "freeze", []) => {
+            render_global_init_expr_externref(wat, static_name, receiver, global_init)?;
+            wat.push_str("    call $std_vec_freeze\n");
+        }
+        (Expr::Var(type_name), "new", [value])
+            if type_name == "Ref" || type_name == "UnsafeRef" =>
+        {
+            let prefix = if type_name == "UnsafeRef" {
+                "std_unsafe_ref_new"
+            } else {
+                "std_ref_new"
+            };
+            if global_static_expr_is_i32(value) {
+                render_global_init_expr_with_bindings(
+                    wat,
+                    static_name,
+                    value,
+                    &GlobalInitPlan::default(),
+                    &BTreeMap::new(),
+                )?;
+                wat.push_str(&format!("    call ${prefix}\n"));
+            } else {
+                render_global_init_expr_externref(wat, static_name, value, global_init)?;
+                wat.push_str(&format!("    call ${prefix}_externref\n"));
+            }
+        }
+        _ => {
+            return Err(
+                BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
+                    static_name: static_name.to_string(),
+                    expr: render_source_expr(&Expr::MethodCall {
+                        receiver: Box::new(receiver.clone()),
+                        name: name.to_string(),
+                        args: args.to_vec(),
+                    }),
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
+fn render_global_text_literal(wat: &mut String, text: &str) {
+    for byte in text.as_bytes() {
+        wat.push_str(&format!("    i32.const {}\n", *byte as i32));
+    }
+    wat.push_str(&format!(
+        "    call $std_string_literal_{}\n",
+        text.as_bytes().len()
+    ));
+}
+
+fn render_global_cstr_literal(wat: &mut String, text: &str) {
+    for byte in text.as_bytes() {
+        wat.push_str(&format!("    i32.const {}\n", *byte as i32));
+    }
+    wat.push_str("    i32.const 0\n");
+    wat.push_str(&format!(
+        "    call $std_cstr_literal_{}\n",
+        text.as_bytes().len() + 1
+    ));
 }
 
 fn global_string_from_literal<'a>(
@@ -2480,6 +2754,9 @@ fn render_global_init_expr_with_bindings(
     match expr {
         Expr::Lit(crate::ast::Literal::I64(value)) => {
             wat.push_str(&format!("    i32.const {}\n", *value as i32));
+        }
+        Expr::Lit(crate::ast::Literal::Rune(value)) => {
+            wat.push_str(&format!("    i32.const {value}\n"));
         }
         Expr::Lit(crate::ast::Literal::Bool(value)) => {
             wat.push_str(&format!("    i32.const {}\n", i32::from(*value)));

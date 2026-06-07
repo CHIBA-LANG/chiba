@@ -6607,6 +6607,150 @@ def main(): i64 = NAMES[0].bytes_len()
 }
 
 #[test]
+fn global_init_lowers_text_view_statics_into_executable_externref_globals() {
+    let str_view = compile_source_program_bundle(
+        r#"
+def VIEW: str = String.from("hé").as_str()
+def main(): i64 = VIEW.char_at(0)
+"#,
+    )
+    .expect("compile str static initializer")
+    .program;
+    let cstr = compile_source_program_bundle(
+        r#"
+def ABI: cstr = String.from("hé").to_cstr()
+def main(): i64 = ABI[3]
+"#,
+    )
+    .expect("compile cstr static initializer")
+    .program;
+
+    for bundle in [&str_view, &cstr] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle.backend_link.linked_wat.contains("(mut externref)"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("global.set $global__"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("global.get $global__"));
+    }
+    assert!(str_view
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_as_str"));
+    assert!(cstr
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_to_cstr"));
+
+    assert_eq!(run_wat_text(&str_view.backend_link.linked_wat), "104");
+    assert_eq!(run_wat_text(&cstr.backend_link.linked_wat), "0");
+}
+
+#[test]
+fn global_init_lowers_string_builder_static_into_executable_externref_global() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def BUILT: String = String.new().push_rune('é')
+def main(): i64 = BUILT.bytes_len()
+"#,
+    )
+    .expect("compile string builder static initializer")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_new"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_push_rune"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
+fn global_init_lowers_vec_string_static_into_executable_externref_global() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def NAMES: Vec[String] = Vec.new().push(String.from("hé"))
+def main(): i64 = NAMES.freeze()[0].bytes_len()
+"#,
+    )
+    .expect("compile string vec static initializer")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(bundle.backend_link.linked_wat.contains("call $std_vec_new"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push_externref"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.get $global__NAMES"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn global_init_lowers_ref_handle_statics_into_executable_externref_globals() {
+    let cell = compile_source_program_bundle(
+        r#"
+def TEXT: String = String.from("hé")
+def CELL: Ref[String] = Ref.new(TEXT)
+def main(): i64 = CELL.get().bytes_len()
+"#,
+    )
+    .expect("compile ref string static initializer")
+    .program;
+    let unsafe_cell = compile_source_program_bundle(
+        r#"
+def LIMITS: Range = 3..9
+def CELL: UnsafeRef[Range] = UnsafeRef.new(LIMITS)
+def main(): i64 = CELL.get().end
+"#,
+    )
+    .expect("compile unsafe ref range static initializer")
+    .program;
+
+    for bundle in [&cell, &unsafe_cell] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("global.get $global__"));
+    }
+    assert!(cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_new_externref"));
+    assert!(cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_get_externref"));
+    assert!(unsafe_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_new_externref"));
+    assert!(unsafe_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_get_externref"));
+
+    assert_eq!(run_wat_text(&cell.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&unsafe_cell.backend_link.linked_wat), "9");
+}
+
+#[test]
 fn global_init_rejects_unknown_adt_constructor_instead_of_faking_tag_zero() {
     let program = SourceProgram::new(vec![
         static_value(
