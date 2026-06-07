@@ -818,7 +818,7 @@ fn lower_term(
     ops: &mut Vec<CoreOp>,
 ) {
     match term {
-        CpsTerm::Halt(atom) => lower_atom_value(atom, ops),
+        CpsTerm::Halt(atom) => lower_atom_value(atom, lambda_lift, ops),
         CpsTerm::LetRuntime {
             binder,
             value,
@@ -826,11 +826,11 @@ fn lower_term(
         } => {
             ops.push(CoreOp::RuntimeLet {
                 binder: binder.clone(),
-                value: core_value(value),
+                value: core_value_with_lift(value, lambda_lift),
             });
             lower_term(body, continuations, lambda_lift, ops);
         }
-        CpsTerm::AppCont { value, .. } => lower_atom_value(value, ops),
+        CpsTerm::AppCont { value, .. } => lower_atom_value(value, lambda_lift, ops),
         CpsTerm::AppFun { func, args, kont } => {
             if let Some(inlined) = inline_fun_lambda_call(func, args, kont) {
                 lower_term(&inlined, continuations, lambda_lift, ops);
@@ -1256,6 +1256,10 @@ fn lower_call_args(
 }
 
 fn core_callable_arg_value(atom: &CpsAtom, lambda_lift: &LambdaLiftFacts) -> CoreValue {
+    core_value_with_lift(atom, lambda_lift)
+}
+
+fn core_value_with_lift(atom: &CpsAtom, lambda_lift: &LambdaLiftFacts) -> CoreValue {
     let CpsAtom::FunLambda { param, .. } = atom else {
         return core_value(atom);
     };
@@ -2305,7 +2309,7 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
     }
 }
 
-fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
+fn lower_atom_value(atom: &CpsAtom, lambda_lift: &LambdaLiftFacts, ops: &mut Vec<CoreOp>) {
     match atom {
         CpsAtom::Tuple { nominal, fields } => {
             let layout = format!("tuple::{nominal}");
@@ -2314,7 +2318,7 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 layout,
                 fields: fields.iter().map(render_atom).collect(),
             });
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::TupleField {
             tuple,
@@ -2334,50 +2338,50 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                     field_index: *field_index,
                 });
             }
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::SliceLiteral { .. } => {
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::Range { .. } => {
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::BuiltinRuntimeCall { .. } => {
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::RangeField { boundary, .. } => {
             ops.push(CoreOp::RangeFieldGet {
                 field: range_field_from_boundary(*boundary),
             });
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::AggregateField { boundary, .. } => {
             ops.push(CoreOp::SliceFieldGet {
                 field: slice_field_from_boundary(*boundary),
             });
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::TextField { .. } => {
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::AggregateIndex { .. } => {
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::AggregateSlice { .. } => {
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::TextIndex { .. } => {
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::TextSlice { .. } => {
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::Record { layout, fields } => {
             ops.push(CoreOp::RecordConstruct {
                 layout: layout.clone(),
                 fields: fields.iter().map(|field| field.name.clone()).collect(),
             });
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::RecordUpdate {
             base,
@@ -2389,8 +2393,8 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 layout: layout.clone(),
                 fields: fields.iter().map(|field| field.name.clone()).collect(),
             });
-            lower_atom_value(base, ops);
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            lower_atom_value(base, lambda_lift, ops);
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::RecordField { record, field } => {
             if let CpsAtom::Record { layout, fields } = record.as_ref() {
@@ -2403,15 +2407,15 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                     field: field.clone(),
                 });
             }
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::DynRowPackage { payload, .. } => {
-            lower_atom_value(payload, ops);
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            lower_atom_value(payload, lambda_lift, ops);
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::DynRowField { package, .. } => {
-            lower_atom_value(package, ops);
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            lower_atom_value(package, lambda_lift, ops);
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::AdtCtor {
             data,
@@ -2444,9 +2448,9 @@ fn lower_atom_value(atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 owner_namespace: CompilerIntrinsic::AdtToTuple.owner_namespace().to_string(),
                 subject: format!("{data}.{ctor}"),
             });
-            ops.push(CoreOp::ReturnValue(core_value(atom)));
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
-        _ => ops.push(CoreOp::ReturnValue(core_value(atom))),
+        _ => ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift))),
     }
 }
 

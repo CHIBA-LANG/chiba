@@ -738,6 +738,38 @@ def main(): i64 = make(7)
 }
 
 #[test]
+fn program_callable_return_calls_stored_no_capture_closure() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def make_inc(): (i64) -> i64 = (n: i64): i64 => n + 1
+def main(): i64 = make_inc()(8)
+"#,
+    )
+    .expect("compile callable return no-capture closure");
+    let bundle = output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
+#[test]
+fn program_callable_return_calls_stored_capturing_closure() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def make_adder(base: i64): (i64) -> i64 = (n: i64): i64 => base + n
+def main(): i64 = make_adder(7)(5)
+"#,
+    )
+    .expect("compile callable return capturing closure");
+    let bundle = output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "12");
+}
+
+#[test]
 fn program_dyn_row_param_builds_static_to_dyn_package_contract() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"

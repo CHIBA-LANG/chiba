@@ -42,13 +42,8 @@ fn backend_refuses_to_emit_when_core_validation_failed() {
 fn backend_emits_lifted_symbol_manifest_for_lambda_surface() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
 
-    assert_eq!(
-        output.backend.diagnostics,
-        vec![BackendDiagnostic::UnsupportedI32ReturnValue {
-            value: "lambda#x".to_string(),
-        }]
-    );
-    assert_eq!(output.backend.wat, "");
+    assert_eq!(output.backend.diagnostics, vec![]);
+    assert!(output.backend.wat.contains("(result i32)"));
 
     let entry = output
         .backend
@@ -896,11 +891,11 @@ fn backend_utf8_final_symbols_are_encoded_without_collision() {
 fn pipeline_records_backend_link_artifact() {
     let output = compile_expr(&Expr::lambda("x", Expr::var("x")));
 
-    assert_eq!(
-        output.backend_link.diagnostics,
-        vec![BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index: 0 }]
-    );
-    assert_eq!(output.backend_link.linked_wat, "");
+    assert_eq!(output.backend_link.diagnostics, vec![]);
+    assert!(output
+        .backend_link
+        .linked_wat
+        .contains("lift__0000__closure__x"));
     assert_eq!(
         output
             .backend_link
@@ -915,7 +910,7 @@ fn pipeline_records_backend_link_artifact() {
     let visual = output.render_visual();
     assert!(visual.contains("backend-link:"));
     assert!(visual.contains("backend-cache-key:"));
-    assert!(visual.contains("diagnostic artifact emit failed 0"));
+    assert!(visual.contains("diagnostics=0"));
     assert!(visual.contains("digest="));
     assert!(!output.visual.backend_link.contains("BackendLinkedBundle"));
     assert!(!output.visual.backend_cache_key.contains("BackendCacheKey"));

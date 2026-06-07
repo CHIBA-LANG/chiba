@@ -10,7 +10,7 @@ use crate::backend::{
     BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendCallableAbi,
     BackendCallableArgExpansion, BackendDiagnostic, BackendDynRowParamFieldAbi,
     BackendDynRowParamMethodAbi, BackendExternAbi, BackendExternImport, BackendLinkDiagnostic,
-    BackendLinkedBundle, BackendParamAbi, BackendValueKind,
+    BackendLinkedBundle, BackendParamAbi, BackendReturnedCallableAbi, BackendValueKind,
 };
 use crate::closure::{analyze_alpha_closures_with_params, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -1051,7 +1051,8 @@ fn refresh_program_backends_with_lifted_callables(
     interface: &InterfaceSummary,
 ) {
     let lifted = program_lifted_callable_abis(defs);
-    if lifted.is_empty() {
+    let returned = program_returned_callable_abis(defs);
+    if lifted.is_empty() && returned.is_empty() {
         return;
     }
     for def in defs {
@@ -1060,6 +1061,7 @@ fn refresh_program_backends_with_lifted_callables(
             &interface.functions,
             &interface.statics,
             lifted.clone(),
+            &returned,
         );
         let backend = emit_wasm_gc_with_param_abi(
             &def.output.core,
@@ -1108,8 +1110,45 @@ fn program_lifted_callable_abis(defs: &[ProgramDefOutput]) -> BTreeMap<String, B
                     )],
                     result: Some(BackendValueKind::I32),
                     result_ref_cell_lane: None,
+                    return_callable: None,
                 },
             ))
+        })
+        .collect()
+}
+
+fn program_returned_callable_abis(
+    defs: &[ProgramDefOutput],
+) -> BTreeMap<String, BackendReturnedCallableAbi> {
+    defs.iter()
+        .filter_map(|def| {
+            let returned = def.output.core.ops.iter().find_map(|op| {
+                let CoreOp::ReturnValue(CoreValue::LiftedFunction { symbol, .. }) = op else {
+                    return None;
+                };
+                let env = def
+                    .output
+                    .core
+                    .ops
+                    .iter()
+                    .find_map(|op| {
+                        let CoreOp::LiftedFunction {
+                            symbol: candidate,
+                            env_params,
+                            ..
+                        } = op
+                        else {
+                            return None;
+                        };
+                        (candidate == symbol).then(|| vec![BackendValueKind::I32; env_params.len()])
+                    })
+                    .unwrap_or_default();
+                Some(BackendReturnedCallableAbi {
+                    target: symbol.clone(),
+                    env,
+                })
+            })?;
+            Some((def.name.clone(), returned))
         })
         .collect()
 }
@@ -1326,7 +1365,13 @@ fn backend_param_abi(
     functions: &[crate::surface::InterfaceFunction],
     statics: &[crate::surface::InterfaceStatic],
 ) -> BackendParamAbi {
-    backend_param_abi_with_extra_functions(signature, functions, statics, BTreeMap::new())
+    backend_param_abi_with_extra_functions(
+        signature,
+        functions,
+        statics,
+        BTreeMap::new(),
+        &BTreeMap::new(),
+    )
 }
 
 fn backend_param_abi_with_extra_functions(
@@ -1334,8 +1379,9 @@ fn backend_param_abi_with_extra_functions(
     functions: &[crate::surface::InterfaceFunction],
     statics: &[crate::surface::InterfaceStatic],
     extra_functions: BTreeMap<String, BackendCallableAbi>,
+    returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
 ) -> BackendParamAbi {
-    let mut function_abis = backend_callable_abis_for_interface(functions);
+    let mut function_abis = backend_callable_abis_for_interface(functions, returned_callables);
     function_abis.extend(extra_functions);
     BackendParamAbi {
         params: signature
@@ -1387,6 +1433,7 @@ fn backend_callable_params_for_signature(
                     arg_expansions: vec![BackendCallableArgExpansion::Direct(input_kind)],
                     result: result_kind,
                     result_ref_cell_lane: None,
+                    return_callable: None,
                 },
             ))
         })
@@ -1506,6 +1553,7 @@ fn backend_static_ref_cell_lanes_for_interface(
 
 fn backend_callable_abis_for_interface(
     functions: &[crate::surface::InterfaceFunction],
+    returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
 ) -> BTreeMap<String, BackendCallableAbi> {
     functions
         .iter()
@@ -1566,6 +1614,7 @@ fn backend_callable_abis_for_interface(
                     arg_expansions,
                     result,
                     result_ref_cell_lane,
+                    return_callable: returned_callables.get(&function.source_name).cloned(),
                 },
             )
         })
