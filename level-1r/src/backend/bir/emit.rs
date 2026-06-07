@@ -673,6 +673,8 @@ fn builtin_runtime_import_name(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::VecNew => "std.vec_new",
         BuiltinMethodCall::VecPush => "std.vec_push",
         BuiltinMethodCall::VecFreeze => "std.vec_freeze",
+        BuiltinMethodCall::StringNew => "std.string_new",
+        BuiltinMethodCall::StringPushRune => "std.string_push_rune",
         BuiltinMethodCall::TextCharAt {
             kind: TextKind::Str,
         } => "std.str_char_at",
@@ -693,6 +695,8 @@ fn builtin_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::VecNew => "_to_externref",
         BuiltinMethodCall::VecPush => "externref_i64_to_externref",
         BuiltinMethodCall::VecFreeze => "externref_to_externref",
+        BuiltinMethodCall::StringNew => "_to_externref",
+        BuiltinMethodCall::StringPushRune => "externref_i64_to_externref",
         BuiltinMethodCall::TextCharAt { .. } => "externref_i64_to_i64",
         BuiltinMethodCall::RefNew => "i64_to_externref",
         BuiltinMethodCall::RefGet => "externref_to_i64",
@@ -1924,6 +1928,8 @@ fn render_core_value_i32(
                 BuiltinMethodCall::VecNew
                 | BuiltinMethodCall::VecPush
                 | BuiltinMethodCall::VecFreeze
+                | BuiltinMethodCall::StringNew
+                | BuiltinMethodCall::StringPushRune
                 | BuiltinMethodCall::RefNew
                 | BuiltinMethodCall::RefSet
                 | BuiltinMethodCall::UnsafeRefNew
@@ -2010,6 +2016,11 @@ fn render_core_value_externref(
                 BuiltinMethodCall::VecFreeze => {
                     render_core_value_externref(wat, &args[0], env)?;
                 }
+                BuiltinMethodCall::StringNew => {}
+                BuiltinMethodCall::StringPushRune => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                    render_core_value_i32(wat, &args[1], env)?;
+                }
                 BuiltinMethodCall::TextCharAt { .. } => {
                     unreachable!("text char_at returns rune/i32 and is not renderable as externref")
                 }
@@ -2055,6 +2066,10 @@ fn builtin_runtime_call_is_renderable_externref(
             core_value_is_renderable_externref(vec, env) && core_value_is_renderable_i32(item, env)
         }
         (BuiltinMethodCall::VecFreeze, [vec]) => core_value_is_renderable_externref(vec, env),
+        (BuiltinMethodCall::StringNew, []) => true,
+        (BuiltinMethodCall::StringPushRune, [text, rune]) => {
+            core_value_is_renderable_externref(text, env) && core_value_is_renderable_i32(rune, env)
+        }
         (BuiltinMethodCall::RefNew, [value]) => core_value_is_renderable_i32(value, env),
         (BuiltinMethodCall::RefSet, [cell, value]) => {
             core_value_is_renderable_externref(cell, env)

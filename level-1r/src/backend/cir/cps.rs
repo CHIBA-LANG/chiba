@@ -888,7 +888,10 @@ fn transform_builtin_method_args(
         let mut runtime_args = Vec::with_capacity(values.len() + 1);
         if !matches!(
             call,
-            BuiltinMethodCall::VecNew | BuiltinMethodCall::RefNew | BuiltinMethodCall::UnsafeRefNew
+            BuiltinMethodCall::VecNew
+                | BuiltinMethodCall::StringNew
+                | BuiltinMethodCall::RefNew
+                | BuiltinMethodCall::UnsafeRefNew
         ) {
             runtime_args.push(receiver);
         }

@@ -221,6 +221,8 @@ fn method_replay_safety(builtin: Option<BuiltinMethodCall>) -> ReplaySafety {
         Some(
             BuiltinMethodCall::VecNew
             | BuiltinMethodCall::VecPush
+            | BuiltinMethodCall::StringNew
+            | BuiltinMethodCall::StringPushRune
             | BuiltinMethodCall::RefNew
             | BuiltinMethodCall::RefSet
             | BuiltinMethodCall::UnsafeRefNew

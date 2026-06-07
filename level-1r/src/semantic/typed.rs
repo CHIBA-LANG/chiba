@@ -176,6 +176,8 @@ pub enum BuiltinMethodCall {
     VecNew,
     VecPush,
     VecFreeze,
+    StringNew,
+    StringPushRune,
     TextCharAt { kind: TextKind },
     RefNew,
     RefGet,
@@ -191,6 +193,8 @@ impl BuiltinMethodCall {
             Self::VecNew => "builtin.vec.new",
             Self::VecPush => "builtin.vec.push",
             Self::VecFreeze => "builtin.vec.freeze",
+            Self::StringNew => "builtin.string.new",
+            Self::StringPushRune => "builtin.string.push_rune",
             Self::TextCharAt { kind } => match kind {
                 TextKind::Str => "builtin.str.char_at",
                 TextKind::String => "builtin.string.char_at",
@@ -2132,6 +2136,12 @@ fn builtin_method_call(
     }
     if matches!(
         (&receiver.kind, name, args),
+        (TypedExprKind::Var(type_name), "new", []) if type_name == "String"
+    ) {
+        return Some(BuiltinMethodCall::StringNew);
+    }
+    if matches!(
+        (&receiver.kind, name, args),
         (TypedExprKind::Var(type_name), "new", [_]) if type_name == "Ref"
     ) {
         return Some(BuiltinMethodCall::RefNew);
@@ -2143,6 +2153,9 @@ fn builtin_method_call(
         return Some(BuiltinMethodCall::UnsafeRefNew);
     }
     if let Some(kind) = text_kind_for_type(&receiver.ty) {
+        if matches!((kind, name, args), (TextKind::String, "push_rune", [_])) {
+            return Some(BuiltinMethodCall::StringPushRune);
+        }
         if matches!((name, args), ("char_at", [_])) {
             return Some(BuiltinMethodCall::TextCharAt { kind });
         }
@@ -2178,6 +2191,8 @@ fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Op
         BuiltinMethodCall::VecFreeze => vec_element_type(receiver).map(|element| {
             Type::Nominal(format!("Slice[{}]", source_type_name_for_type(&element)))
         }),
+        BuiltinMethodCall::StringNew => Some(Type::Nominal("String".to_string())),
+        BuiltinMethodCall::StringPushRune => Some(receiver.clone()),
         BuiltinMethodCall::TextCharAt { .. } => Some(Type::Rune),
         BuiltinMethodCall::RefNew => Some(Type::Nominal("Ref[i64]".to_string())),
         BuiltinMethodCall::RefGet => ref_element_type(receiver),

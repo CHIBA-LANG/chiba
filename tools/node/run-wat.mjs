@@ -234,6 +234,17 @@ async function makeImports(wat, args) {
       "std.string_char_at"(text, index) {
         return runeAt(text, index);
       },
+      "std.string_new"() {
+        return new Uint8Array();
+      },
+      "std.string_push_rune"(text, rune) {
+        const left = byteArray(text);
+        const encoded = new TextEncoder().encode(String.fromCodePoint(Number(rune)));
+        const out = new Uint8Array(left.length + encoded.length);
+        out.set(left, 0);
+        out.set(encoded, left.length);
+        return out;
+      },
       "std.str_char_at"(text, index) {
         return runeAt(text, index);
       },

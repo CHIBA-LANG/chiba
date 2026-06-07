@@ -1733,6 +1733,56 @@ fn source_string_char_at_returns_rune() {
 }
 
 #[test]
+fn source_string_new_push_rune_len_lowers_to_executable_runtime_imports() {
+    let bundle = compile_source_program_bundle("def main(): i64 = String.new().push_rune('é').len")
+        .expect("compile string builder push_rune len")
+        .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(import \"env\" \"std.string_new\" (func $std_string_new (result externref)))"));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.string_push_rune\" (func $std_string_push_rune (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_new"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_push_rune"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
+fn source_string_new_push_rune_keeps_byte_index_and_char_at_semantics() {
+    let byte = compile_source_program_bundle("def main(): i64 = String.new().push_rune('é')[0]")
+        .expect("compile string builder push_rune byte index")
+        .program;
+    let rune =
+        compile_source_program_bundle("def main(): rune = String.new().push_rune('é').char_at(0)")
+            .expect("compile string builder push_rune char_at")
+            .program;
+
+    assert_eq!(byte.diagnostics, vec![]);
+    assert_eq!(rune.diagnostics, vec![]);
+    assert_backend_link_clean_all(&byte);
+    assert_backend_link_clean_all(&rune);
+    assert_eq!(byte.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(rune.defs[0].output.typed.ty, Type::Rune);
+
+    assert_eq!(run_wat_text(&byte.backend_link.linked_wat), "195");
+    assert_eq!(run_wat_text(&rune.backend_link.linked_wat), "233");
+}
+
+#[test]
 fn source_rune_literal_lowers_to_executable_scalar() {
     let bundle = compile_source_program_bundle("def main(): rune = 'é'")
         .expect("compile rune literal")
