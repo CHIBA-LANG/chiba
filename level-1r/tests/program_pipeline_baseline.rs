@@ -1768,6 +1768,51 @@ fn source_string_literal_index_keeps_utf8_byte_semantics() {
 }
 
 #[test]
+fn source_string_from_lowers_to_executable_owned_text_runtime_import() {
+    let bundle = compile_source_program_bundle("def main(): i64 = String.from(\"é\").bytes_len()")
+        .expect("compile string from bytes_len")
+        .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.str_to_string\" (func $std_str_to_string (param externref) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_str_to_string"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_len"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
+fn source_string_from_keeps_byte_index_and_char_at_semantics() {
+    let byte = compile_source_program_bundle("def main(): i64 = String.from(\"é\")[0]")
+        .expect("compile string from byte index")
+        .program;
+    let rune = compile_source_program_bundle("def main(): rune = String.from(\"é\").char_at(0)")
+        .expect("compile string from char_at")
+        .program;
+
+    assert_eq!(byte.diagnostics, vec![]);
+    assert_eq!(rune.diagnostics, vec![]);
+    assert_backend_link_clean_all(&byte);
+    assert_backend_link_clean_all(&rune);
+    assert_eq!(byte.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(rune.defs[0].output.typed.ty, Type::Rune);
+
+    assert_eq!(run_wat_text(&byte.backend_link.linked_wat), "195");
+    assert_eq!(run_wat_text(&rune.backend_link.linked_wat), "233");
+}
+
+#[test]
 fn source_string_char_at_returns_rune() {
     let bundle = compile_source_program_bundle("def main(): rune = \"é\".char_at(0)")
         .expect("compile string char_at")

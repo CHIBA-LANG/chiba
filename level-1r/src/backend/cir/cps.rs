@@ -890,6 +890,7 @@ fn transform_builtin_method_args(
             call,
             BuiltinMethodCall::VecNew
                 | BuiltinMethodCall::StringNew
+                | BuiltinMethodCall::StringFrom
                 | BuiltinMethodCall::RefNew
                 | BuiltinMethodCall::UnsafeRefNew
         ) {

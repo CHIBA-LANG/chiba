@@ -177,6 +177,7 @@ pub enum BuiltinMethodCall {
     VecPush,
     VecFreeze,
     StringNew,
+    StringFrom,
     StringPushRune,
     TextLen { kind: TextKind },
     TextCharAt { kind: TextKind },
@@ -195,6 +196,7 @@ impl BuiltinMethodCall {
             Self::VecPush => "builtin.vec.push",
             Self::VecFreeze => "builtin.vec.freeze",
             Self::StringNew => "builtin.string.new",
+            Self::StringFrom => "builtin.string.from",
             Self::StringPushRune => "builtin.string.push_rune",
             Self::TextLen { kind } => match kind {
                 TextKind::Str => "builtin.str.len",
@@ -2147,6 +2149,13 @@ fn builtin_method_call(
     }
     if matches!(
         (&receiver.kind, name, args),
+        (TypedExprKind::Var(type_name), "from", [arg])
+            if type_name == "String" && text_kind_for_type(&arg.ty).is_some()
+    ) {
+        return Some(BuiltinMethodCall::StringFrom);
+    }
+    if matches!(
+        (&receiver.kind, name, args),
         (TypedExprKind::Var(type_name), "new", [_]) if type_name == "Ref"
     ) {
         return Some(BuiltinMethodCall::RefNew);
@@ -2200,6 +2209,7 @@ fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Op
             Type::Nominal(format!("Slice[{}]", source_type_name_for_type(&element)))
         }),
         BuiltinMethodCall::StringNew => Some(Type::Nominal("String".to_string())),
+        BuiltinMethodCall::StringFrom => Some(Type::Nominal("String".to_string())),
         BuiltinMethodCall::StringPushRune => Some(receiver.clone()),
         BuiltinMethodCall::TextLen { .. } => Some(Type::I64),
         BuiltinMethodCall::TextCharAt { .. } => Some(Type::Rune),
