@@ -679,6 +679,9 @@ fn builtin_runtime_import_name(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::TextCharAt {
             kind: TextKind::String,
         } => "std.string_char_at",
+        BuiltinMethodCall::RefNew => "std.ref_new",
+        BuiltinMethodCall::RefGet => "std.ref_get",
+        BuiltinMethodCall::RefSet => "std.ref_set",
     }
 }
 
@@ -688,6 +691,9 @@ fn builtin_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::VecPush => "externref_i64_to_externref",
         BuiltinMethodCall::VecFreeze => "externref_to_externref",
         BuiltinMethodCall::TextCharAt { .. } => "externref_i64_to_i64",
+        BuiltinMethodCall::RefNew => "i64_to_externref",
+        BuiltinMethodCall::RefGet => "externref_to_i64",
+        BuiltinMethodCall::RefSet => "externref_i64_to_externref",
     }
 }
 
@@ -1903,10 +1909,15 @@ fn render_core_value_i32(
                     render_core_value_externref(wat, &args[0], env)?;
                     render_core_value_i32(wat, &args[1], env)?;
                 }
+                BuiltinMethodCall::RefGet => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                }
                 BuiltinMethodCall::VecNew
                 | BuiltinMethodCall::VecPush
-                | BuiltinMethodCall::VecFreeze => {
-                    unreachable!("vec runtime calls return externref and are not renderable as i32")
+                | BuiltinMethodCall::VecFreeze
+                | BuiltinMethodCall::RefNew
+                | BuiltinMethodCall::RefSet => {
+                    unreachable!("externref runtime calls are not renderable as i32")
                 }
             }
             wat.push_str(&format!(
@@ -1991,6 +2002,16 @@ fn render_core_value_externref(
                 BuiltinMethodCall::TextCharAt { .. } => {
                     unreachable!("text char_at returns rune/i32 and is not renderable as externref")
                 }
+                BuiltinMethodCall::RefNew => {
+                    render_core_value_i32(wat, &args[0], env)?;
+                }
+                BuiltinMethodCall::RefGet => {
+                    unreachable!("ref get returns i32 and is not renderable as externref")
+                }
+                BuiltinMethodCall::RefSet => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                    render_core_value_i32(wat, &args[1], env)?;
+                }
             }
             wat.push_str(&format!(
                 "    call ${}\n",
@@ -2013,6 +2034,11 @@ fn builtin_runtime_call_is_renderable_externref(
             core_value_is_renderable_externref(vec, env) && core_value_is_renderable_i32(item, env)
         }
         (BuiltinMethodCall::VecFreeze, [vec]) => core_value_is_renderable_externref(vec, env),
+        (BuiltinMethodCall::RefNew, [value]) => core_value_is_renderable_i32(value, env),
+        (BuiltinMethodCall::RefSet, [cell, value]) => {
+            core_value_is_renderable_externref(cell, env)
+                && core_value_is_renderable_i32(value, env)
+        }
         _ => false,
     }
 }
@@ -2027,6 +2053,7 @@ fn builtin_runtime_call_is_renderable_i32(
             core_value_is_renderable_externref(text, env)
                 && core_value_is_renderable_i32(index, env)
         }
+        (BuiltinMethodCall::RefGet, [cell]) => core_value_is_renderable_externref(cell, env),
         _ => false,
     }
 }

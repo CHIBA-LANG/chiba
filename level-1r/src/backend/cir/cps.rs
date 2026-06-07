@@ -857,7 +857,7 @@ fn transform_builtin_method_args(
 ) -> CpsTerm {
     if index == args.len() {
         let mut runtime_args = Vec::with_capacity(values.len() + 1);
-        if !matches!(call, BuiltinMethodCall::VecNew) {
+        if !matches!(call, BuiltinMethodCall::VecNew | BuiltinMethodCall::RefNew) {
             runtime_args.push(receiver);
         }
         runtime_args.extend(values);

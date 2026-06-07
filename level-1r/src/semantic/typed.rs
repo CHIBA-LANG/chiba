@@ -172,6 +172,9 @@ pub enum BuiltinMethodCall {
     VecPush,
     VecFreeze,
     TextCharAt { kind: TextKind },
+    RefNew,
+    RefGet,
+    RefSet,
 }
 
 impl BuiltinMethodCall {
@@ -184,6 +187,9 @@ impl BuiltinMethodCall {
                 TextKind::Str => "builtin.str.char_at",
                 TextKind::String => "builtin.string.char_at",
             },
+            Self::RefNew => "builtin.ref.new",
+            Self::RefGet => "builtin.ref.get",
+            Self::RefSet => "builtin.ref.set",
         }
     }
 }
@@ -2034,10 +2040,23 @@ fn builtin_method_call(
     ) {
         return Some(BuiltinMethodCall::VecNew);
     }
+    if matches!(
+        (&receiver.kind, name, args),
+        (TypedExprKind::Var(type_name), "new", [_]) if type_name == "Ref"
+    ) {
+        return Some(BuiltinMethodCall::RefNew);
+    }
     if let Some(kind) = text_kind_for_type(&receiver.ty) {
         if matches!((name, args), ("char_at", [_])) {
             return Some(BuiltinMethodCall::TextCharAt { kind });
         }
+    }
+    if ref_element_type(&receiver.ty).is_some() {
+        return match (name, args) {
+            ("get", []) => Some(BuiltinMethodCall::RefGet),
+            ("set", [_]) => Some(BuiltinMethodCall::RefSet),
+            _ => None,
+        };
     }
     if aggregate_kind_for_type(&receiver.ty) != Some(AggregateKind::Vec) {
         return None;
@@ -2057,6 +2076,9 @@ fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Op
             Type::Nominal(format!("Slice[{}]", source_type_name_for_type(&element)))
         }),
         BuiltinMethodCall::TextCharAt { .. } => Some(Type::Rune),
+        BuiltinMethodCall::RefNew => Some(Type::Nominal("Ref[i64]".to_string())),
+        BuiltinMethodCall::RefGet => ref_element_type(receiver),
+        BuiltinMethodCall::RefSet => Some(receiver.clone()),
     }
 }
 
@@ -2113,6 +2135,19 @@ fn vec_element_type(receiver: &Type) -> Option<Type> {
     };
     match (base.as_str(), args.as_slice()) {
         ("Vec", [element]) => Some(element.to_type()),
+        _ => None,
+    }
+}
+
+fn ref_element_type(receiver: &Type) -> Option<Type> {
+    let Type::Nominal(name) = receiver else {
+        return None;
+    };
+    let ParsedTypeHeader::Nominal { base, args } = parse_type_header(name)? else {
+        return None;
+    };
+    match (base.as_str(), args.as_slice()) {
+        ("Ref", [element]) => Some(element.to_type()),
         _ => None,
     }
 }

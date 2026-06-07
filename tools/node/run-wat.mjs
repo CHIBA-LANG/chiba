@@ -142,6 +142,19 @@ async function makeImports(wat, args) {
       "std.vec_freeze"(vec) {
         return asArray(vec);
       },
+      "std.ref_new"(value) {
+        return { cell: Number(value) };
+      },
+      "std.ref_get"(ref) {
+        return Number(ref && typeof ref.cell !== "undefined" ? ref.cell : 0);
+      },
+      "std.ref_set"(ref, value) {
+        if (ref && typeof ref === "object") {
+          ref.cell = Number(value);
+          return ref;
+        }
+        return { cell: Number(value) };
+      },
       "std.array_len"(array) {
         return BigInt(asArray(array).length);
       },
