@@ -6514,6 +6514,37 @@ fn global_init_lowers_adt_constructor_tag_into_global_initializer() {
 }
 
 #[test]
+fn global_init_lowers_string_static_into_executable_externref_global() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def TEXT: String = String.from("hé")
+def main(): i64 = TEXT.bytes_len()
+"#,
+    )
+    .expect("compile string static initializer")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__TEXT (mut externref)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__TEXT"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.get $global__TEXT"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_len"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn global_init_rejects_unknown_adt_constructor_instead_of_faking_tag_zero() {
     let program = SourceProgram::new(vec![
         static_value(

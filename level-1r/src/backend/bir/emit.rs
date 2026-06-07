@@ -91,6 +91,7 @@ pub enum BackendLinkDiagnostic {
 pub struct BackendParamAbi {
     pub params: BTreeMap<String, BackendValueKind>,
     pub functions: BTreeMap<String, BackendCallableAbi>,
+    pub statics: BTreeMap<String, BackendValueKind>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -246,7 +247,7 @@ fn unsupported_runtime_return_value(
 ) -> Option<BackendDiagnostic> {
     let mut env = env_with_tailcall_result_facts(
         core,
-        &RenderEnv::new(params, param_kinds).with_function_abis(param_abi.functions.clone()),
+        &RenderEnv::from_param_abi(params, param_kinds, param_abi),
     );
     let mut continuations = BTreeSet::new();
     for (index, op) in core.ops.iter().enumerate() {
@@ -431,7 +432,7 @@ fn manifest_for_core(
 ) -> BackendManifest {
     let env = env_with_tailcall_result_facts(
         core,
-        &RenderEnv::new(params, param_kinds).with_function_abis(param_abi.functions.clone()),
+        &RenderEnv::from_param_abi(params, param_kinds, param_abi),
     );
     let mut entries = Vec::new();
     for op in &core.ops {
@@ -1171,8 +1172,7 @@ fn render_wat(
         return render_continuation_wat(core, manifest, params);
     }
 
-    let mut env =
-        RenderEnv::new(params, param_kinds).with_function_abis(param_abi.functions.clone());
+    let mut env = RenderEnv::from_param_abi(params, param_kinds, param_abi);
     let mut wat = String::from("(module\n");
     for import in &manifest.imports {
         render_extern_import_wat(&mut wat, import);
@@ -2165,6 +2165,7 @@ struct RenderEnv {
     local_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     param_kinds: BTreeMap<String, WasmValueKind>,
     function_abis: BTreeMap<String, BackendCallableAbi>,
+    static_kinds: BTreeMap<String, WasmValueKind>,
     bindings: BTreeMap<String, CoreValue>,
 }
 
@@ -2176,8 +2177,19 @@ impl RenderEnv {
             local_ref_cell_lanes: BTreeMap::new(),
             param_kinds: param_kinds.clone(),
             function_abis: BTreeMap::new(),
+            static_kinds: BTreeMap::new(),
             bindings: BTreeMap::new(),
         }
+    }
+
+    fn from_param_abi(
+        params: &[String],
+        param_kinds: &BTreeMap<String, WasmValueKind>,
+        param_abi: &BackendParamAbi,
+    ) -> Self {
+        Self::new(params, param_kinds)
+            .with_function_abis(param_abi.functions.clone())
+            .with_static_kinds(param_abi.statics.clone())
     }
 
     fn with_function_abis(&self, function_abis: BTreeMap<String, BackendCallableAbi>) -> Self {
@@ -2186,8 +2198,27 @@ impl RenderEnv {
         next
     }
 
+    fn with_static_kinds(&self, static_kinds: BTreeMap<String, BackendValueKind>) -> Self {
+        let mut next = self.clone();
+        next.static_kinds = static_kinds
+            .into_iter()
+            .map(|(name, kind)| (name, WasmValueKind::from(kind)))
+            .collect();
+        next
+    }
+
     fn is_param(&self, name: &str) -> bool {
-        self.params.contains(name) || self.locals.contains_key(name)
+        self.params.contains(name)
+            || self.locals.contains_key(name)
+            || self.static_kinds.contains_key(name)
+    }
+
+    fn is_static(&self, name: &str) -> bool {
+        self.static_kinds.contains_key(name)
+    }
+
+    fn static_symbol(&self, name: &str) -> String {
+        format!("global__{}", encode_debug_symbol(name))
     }
 
     fn binding(&self, name: &str) -> Option<&CoreValue> {
@@ -2242,6 +2273,7 @@ impl RenderEnv {
             .get(name)
             .copied()
             .or_else(|| self.param_kinds.get(name).copied())
+            .or_else(|| self.static_kinds.get(name).copied())
             .unwrap_or(WasmValueKind::I32)
     }
 }
@@ -2566,6 +2598,9 @@ fn render_core_value_i32(
         CoreValue::Unit => wat.push_str("    i32.const 0\n"),
         CoreValue::I64(value) => wat.push_str(&format!("    i32.const {}\n", *value as i32)),
         CoreValue::Bool(value) => wat.push_str(&format!("    i32.const {}\n", i32::from(*value))),
+        CoreValue::Var(name) if env.is_static(name) => {
+            wat.push_str(&format!("    global.get ${}\n", env.static_symbol(name)));
+        }
         CoreValue::Var(name) if env.is_param(name) => {
             wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
         }
@@ -2719,6 +2754,12 @@ fn render_core_value_externref(
 ) -> Result<(), BackendDiagnostic> {
     let value = resolve_core_value_binding(value, env);
     match value {
+        CoreValue::Var(name)
+            if env.is_static(name) && env.param_kind(name) == WasmValueKind::ExternRef =>
+        {
+            wat.push_str(&format!("    global.get ${}\n", env.static_symbol(name)));
+            Ok(())
+        }
         CoreValue::Var(name) if env.param_kind(name) == WasmValueKind::ExternRef => {
             wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
             Ok(())

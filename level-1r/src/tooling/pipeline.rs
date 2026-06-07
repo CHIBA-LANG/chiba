@@ -28,7 +28,9 @@ use crate::debug::{
     render_callable_storage_facts, render_visual_report, visual_report, VisualReport,
 };
 use crate::frontend::{parse_source_program, FrontendError, FrontendOutput, SourceItemSpan};
-use crate::global::{analyze_global_init, GlobalInitDiagnostic, GlobalInitPlan, GlobalStaticId};
+use crate::global::{
+    analyze_global_init, GlobalInitDiagnostic, GlobalInitPlan, GlobalStatic, GlobalStaticId,
+};
 use crate::lambda_lift::{lift_lambdas, LambdaLiftFacts};
 use crate::monomorphize::{schedule_monomorphization, MonomorphizationPlan};
 use crate::nanopass::PassReport;
@@ -213,6 +215,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         "root",
         &type_aliases,
         &[],
+        &[],
         &TypeEnv::new(),
     )
 }
@@ -230,6 +233,7 @@ fn compile_expr_with_indexes_and_generics(
     current_namespace: &str,
     type_aliases: &TypeAliasIndex,
     extern_functions: &[crate::surface::InterfaceFunction],
+    interface_statics: &[crate::surface::InterfaceStatic],
     function_env: &TypeEnv,
 ) -> CompileOutput {
     let mut passes = PassReport::default();
@@ -373,7 +377,8 @@ fn compile_expr_with_indexes_and_generics(
                 .iter()
                 .map(|param| param.name.clone())
                 .collect::<Vec<_>>();
-            let param_abi = backend_param_abi(&typed_signature, extern_functions);
+            let param_abi =
+                backend_param_abi(&typed_signature, extern_functions, interface_statics);
             emit_wasm_gc_with_param_abi(&core, &core_validation, &param_names, &param_abi)
         },
     );
@@ -990,8 +995,7 @@ fn compile_program_defs(
     let type_aliases = type_aliases_from_interface(interface);
     let type_context =
         type_context_from_interface(interface, &program.data, &current_namespace, &type_aliases);
-    let function_env =
-        function_type_env_from_interface(interface, &current_namespace, &type_aliases);
+    let function_env = value_type_env_from_interface(interface, &current_namespace, &type_aliases);
     program
         .items
         .iter()
@@ -1021,6 +1025,7 @@ fn compile_program_defs(
                         &current_namespace,
                         &type_aliases,
                         &interface.functions,
+                        &interface.statics,
                         &function_env,
                     );
                     output
@@ -1081,6 +1086,28 @@ fn function_type_env_from_interface(
             )
         })
         .collect()
+}
+
+fn value_type_env_from_interface(
+    interface: &InterfaceSummary,
+    current_namespace: &str,
+    type_aliases: &TypeAliasIndex,
+) -> TypeEnv {
+    let mut env = function_type_env_from_interface(interface, current_namespace, type_aliases);
+    for static_value in &interface.statics {
+        if static_value.owner != current_namespace {
+            continue;
+        }
+        let Some(ty) = static_value.ty.as_deref() else {
+            continue;
+        };
+        let resolved = resolve_header_type(Some(ty), &None, current_namespace, type_aliases);
+        env.insert(
+            static_value.source_name.clone(),
+            source_type_name_to_type(&resolved),
+        );
+    }
+    env
 }
 
 fn function_type_from_interface(
@@ -1198,6 +1225,7 @@ fn interface_callable_storage_facts(interface: &InterfaceSummary) -> Vec<Callabl
 fn backend_param_abi(
     signature: &TypedSignature,
     functions: &[crate::surface::InterfaceFunction],
+    statics: &[crate::surface::InterfaceStatic],
 ) -> BackendParamAbi {
     BackendParamAbi {
         params: signature
@@ -1209,7 +1237,20 @@ fn backend_param_abi(
             })
             .collect(),
         functions: backend_callable_abis_for_interface(functions),
+        statics: backend_static_abis_for_interface(statics),
     }
+}
+
+fn backend_static_abis_for_interface(
+    statics: &[crate::surface::InterfaceStatic],
+) -> BTreeMap<String, BackendValueKind> {
+    statics
+        .iter()
+        .filter_map(|static_value| {
+            let ty = static_value.ty.as_deref().map(source_type_name_to_type)?;
+            backend_value_kind_for_type(&ty).map(|kind| (static_value.source_name.clone(), kind))
+        })
+        .collect()
 }
 
 fn backend_callable_abis_for_interface(
@@ -2019,15 +2060,31 @@ fn lower_global_init_into_linked_wat(
     let Some(body) = body.strip_suffix(")\n") else {
         return bundle;
     };
+    let (body_imports, body_without_imports) = split_module_imports(body);
 
     let mut wat = String::from("(module\n");
+    let global_imports = global_init_runtime_imports(global_init);
+    for import in &global_imports {
+        render_program_extern_import_wat(&mut wat, import);
+    }
+    wat.push_str(&body_imports);
     for static_value in &global_init.statics {
-        let initializer = global_storage_initializer(&static_value.body);
-        wat.push_str(&format!(
-            "  (global ${} (mut i32) (i32.const {}))\n",
-            global_symbol(&static_value.owner, &static_value.name),
-            initializer
-        ));
+        match global_static_value_kind(static_value) {
+            BackendValueKind::ExternRef => {
+                wat.push_str(&format!(
+                    "  (global ${} (mut externref) (ref.null extern))\n",
+                    global_symbol(&static_value.owner, &static_value.name)
+                ));
+            }
+            BackendValueKind::I32 => {
+                let initializer = global_storage_initializer(&static_value.body);
+                wat.push_str(&format!(
+                    "  (global ${} (mut i32) (i32.const {}))\n",
+                    global_symbol(&static_value.owner, &static_value.name),
+                    initializer
+                ));
+            }
+        }
     }
     wat.push_str("  (func $__chiba_init\n");
     for id in &global_init.init_order_ids {
@@ -2038,16 +2095,24 @@ fn lower_global_init_into_linked_wat(
         else {
             continue;
         };
-        if const_global_initializer(&static_value.body).is_some() {
+        if global_static_value_kind(static_value) == BackendValueKind::I32
+            && const_global_initializer(&static_value.body).is_some()
+        {
             continue;
         }
         wat.push_str(&format!("    ;; init static {}\n", static_value.name));
-        if let Err(diagnostic) = render_global_init_expr(
-            &mut wat,
-            &static_value.name,
-            &static_value.body,
-            global_init,
-        ) {
+        let init_result = match global_static_value_kind(static_value) {
+            BackendValueKind::ExternRef => {
+                render_global_init_expr_externref(&mut wat, &static_value.name, &static_value.body)
+            }
+            BackendValueKind::I32 => render_global_init_expr(
+                &mut wat,
+                &static_value.name,
+                &static_value.body,
+                global_init,
+            ),
+        };
+        if let Err(diagnostic) = init_result {
             bundle.diagnostics.push(diagnostic);
             return bundle;
         }
@@ -2058,10 +2123,162 @@ fn lower_global_init_into_linked_wat(
     }
     wat.push_str("  )\n");
     wat.push_str("  (start $__chiba_init)\n");
-    wat.push_str(body);
+    wat.push_str(&body_without_imports);
     wat.push_str(")\n");
     bundle.linked_wat = wat;
     bundle
+}
+
+fn split_module_imports(body: &str) -> (String, String) {
+    let mut imports = String::new();
+    let mut rest = String::new();
+    for line in body.lines() {
+        if line.trim_start().starts_with("(import ") {
+            imports.push_str(line);
+            imports.push('\n');
+        } else {
+            rest.push_str(line);
+            rest.push('\n');
+        }
+    }
+    (imports, rest)
+}
+
+fn global_static_value_kind(static_value: &GlobalStatic) -> BackendValueKind {
+    static_value
+        .ty
+        .as_deref()
+        .map(source_type_name_to_type)
+        .and_then(|ty| backend_value_kind_for_type(&ty))
+        .unwrap_or(BackendValueKind::I32)
+}
+
+fn global_init_runtime_imports(global_init: &GlobalInitPlan) -> Vec<BackendExternImport> {
+    let mut imports = Vec::new();
+    for static_value in &global_init.statics {
+        collect_global_init_runtime_imports(&static_value.body, &mut imports);
+    }
+    sort_dedup_imports(&mut imports);
+    imports
+}
+
+fn collect_global_init_runtime_imports(expr: &Expr, imports: &mut Vec<BackendExternImport>) {
+    match expr {
+        Expr::MethodCall {
+            receiver,
+            name,
+            args,
+        } if global_string_from_literal(receiver, name, args).is_some() => {
+            if let Some(text) = global_string_from_literal(receiver, name, args) {
+                imports.push(global_text_literal_import(text));
+                imports.push(global_builtin_import(
+                    "std_str_to_string",
+                    "std.str_to_string",
+                    "externref_to_externref",
+                ));
+            }
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_global_init_runtime_imports(cond, imports);
+            collect_global_init_runtime_imports(then_branch, imports);
+            collect_global_init_runtime_imports(else_branch, imports);
+        }
+        Expr::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_global_init_runtime_imports(scrutinee, imports);
+            collect_global_init_runtime_imports(then_branch, imports);
+            collect_global_init_runtime_imports(else_branch, imports);
+        }
+        Expr::Match { scrutinee, arms } => {
+            collect_global_init_runtime_imports(scrutinee, imports);
+            for arm in arms {
+                collect_global_init_runtime_imports(&arm.body, imports);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn global_text_literal_import(text: &str) -> BackendExternImport {
+    let arity = text.as_bytes().len();
+    global_builtin_import(
+        &format!("std_string_literal_{arity}"),
+        &format!("std.string_literal_{arity}"),
+        &format!(
+            "{}_to_externref",
+            std::iter::repeat("i64")
+                .take(arity)
+                .collect::<Vec<_>>()
+                .join("_")
+        ),
+    )
+}
+
+fn global_builtin_import(
+    final_symbol: &str,
+    name: &str,
+    signature_hash: &str,
+) -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: final_symbol.to_string(),
+        module: "env".to_string(),
+        name: name.to_string(),
+        signature_hash: signature_hash.to_string(),
+    }
+}
+
+fn render_program_extern_import_wat(wat: &mut String, import: &BackendExternImport) {
+    let Some((params, result)) = program_extern_import_wat_signature(&import.signature_hash) else {
+        return;
+    };
+    wat.push_str(&format!(
+        "  (import \"{}\" \"{}\" (func ${}",
+        import.module, import.name, import.final_symbol
+    ));
+    for param in params {
+        wat.push_str(&format!(" (param {param})"));
+    }
+    if let Some(result) = result {
+        wat.push_str(&format!(" (result {result})"));
+    }
+    wat.push_str("))\n");
+}
+
+fn program_extern_import_wat_signature(
+    signature: &str,
+) -> Option<(Vec<&'static str>, Option<&'static str>)> {
+    let (params, result) = signature.split_once("_to_")?;
+    let params = if params.is_empty() {
+        Vec::new()
+    } else {
+        params
+            .split('_')
+            .map(program_extern_scalar_wat_type)
+            .collect::<Option<Vec<_>>>()?
+    };
+    let result = match result {
+        "unit" | "Unit" => None,
+        "externref" => Some("externref"),
+        scalar => Some(program_extern_scalar_wat_type(scalar)?),
+    };
+    Some((params, result))
+}
+
+fn program_extern_scalar_wat_type(scalar: &str) -> Option<&'static str> {
+    match scalar {
+        "i64" | "I64" | "bool" | "Bool" => Some("i32"),
+        "externref" => Some("externref"),
+        _ => None,
+    }
 }
 
 fn global_storage_initializer(expr: &Expr) -> i32 {
@@ -2110,6 +2327,59 @@ fn render_global_init_expr(
     global_init: &GlobalInitPlan,
 ) -> Result<(), BackendLinkDiagnostic> {
     render_global_init_expr_with_bindings(wat, static_name, expr, global_init, &BTreeMap::new())
+}
+
+fn render_global_init_expr_externref(
+    wat: &mut String,
+    static_name: &str,
+    expr: &Expr,
+) -> Result<(), BackendLinkDiagnostic> {
+    match expr {
+        Expr::MethodCall {
+            receiver,
+            name,
+            args,
+        } => {
+            let Some(text) = global_string_from_literal(receiver, name, args) else {
+                return Err(
+                    BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
+                        static_name: static_name.to_string(),
+                        expr: render_source_expr(expr),
+                    },
+                );
+            };
+            for byte in text.as_bytes() {
+                wat.push_str(&format!("    i32.const {}\n", *byte as i32));
+            }
+            wat.push_str(&format!(
+                "    call $std_string_literal_{}\n",
+                text.as_bytes().len()
+            ));
+            wat.push_str("    call $std_str_to_string\n");
+            Ok(())
+        }
+        _ => Err(
+            BackendLinkDiagnostic::UnsupportedStaticInitializerLowering {
+                static_name: static_name.to_string(),
+                expr: render_source_expr(expr),
+            },
+        ),
+    }
+}
+
+fn global_string_from_literal<'a>(
+    receiver: &Expr,
+    name: &str,
+    args: &'a [Expr],
+) -> Option<&'a str> {
+    match (receiver, name, args) {
+        (Expr::Var(type_name), "from", [Expr::Lit(crate::ast::Literal::String(text))])
+            if type_name == "String" =>
+        {
+            Some(text.as_str())
+        }
+        _ => None,
+    }
 }
 
 fn render_global_init_expr_with_bindings(

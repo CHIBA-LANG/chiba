@@ -337,6 +337,11 @@ fn validate_static_initializer_expr_scoped(
             diagnostics,
             bound,
         ),
+        Expr::MethodCall {
+            receiver,
+            name,
+            args,
+        } if is_supported_static_handle_builtin(receiver, name, args) => true,
         Expr::Tuple { .. }
         | Expr::SliceLiteral(_)
         | Expr::Record { .. }
@@ -357,6 +362,17 @@ fn validate_static_initializer_expr_scoped(
             false
         }
     }
+}
+
+fn is_supported_static_handle_builtin(receiver: &Expr, name: &str, args: &[Expr]) -> bool {
+    matches!(
+        (receiver, name, args),
+        (
+            Expr::Var(type_name),
+            "from",
+            [Expr::Lit(crate::ast::Literal::String(_))]
+        ) if type_name == "String"
+    )
 }
 
 fn static_record_field_expr<'a>(
