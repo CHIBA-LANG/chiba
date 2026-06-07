@@ -850,6 +850,111 @@ def main() = resetn { match shift retry { retry(Option.Some(7)) + retry(Option.N
 }
 
 #[test]
+fn program_continuation_replays_captured_local_global_and_param_values() {
+    let local = chiba_level1r::compile_source_program_bundle(
+        r#"
+def main(): i64 = resetn { (shift retry { retry({local: 9, value: 1}) + retry({local: 9, value: 2}) }).local }
+"#,
+    )
+    .expect("compile local capture")
+    .program;
+    let global = chiba_level1r::compile_source_program_bundle(
+        r#"
+def OFFSET: i64 = 9
+def main(): i64 = resetn { OFFSET + shift retry { retry(1) + retry(2) } }
+"#,
+    )
+    .expect("compile global capture")
+    .program;
+    let param = chiba_level1r::compile_source_program_bundle(
+        r#"
+def with_param(offset: i64): i64 = resetn { offset + shift retry { retry(1) + retry(2) } }
+def main(): i64 = with_param(9)
+"#,
+    )
+    .expect("compile param capture")
+    .program;
+
+    for bundle in [&local, &global, &param] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        let main = bundle
+            .defs
+            .iter()
+            .find(|def| def.name == "main")
+            .expect("main def");
+        assert_eq!(main.output.typed.ty, Type::I64);
+    }
+
+    assert_eq!(run_wat_text(&local.backend_link.linked_wat), "18");
+    assert_eq!(run_wat_text(&global.backend_link.linked_wat), "21");
+    assert_eq!(run_wat_text(&param.backend_link.linked_wat), "21");
+}
+
+#[test]
+fn program_cont1_replays_captured_ref_and_unsafe_ref_mutations_once() {
+    let ref_cell = chiba_level1r::compile_source_program_bundle(
+        r#"
+def main(): i64 = reset { Ref.new(1).set(shift k { k(7) }).get() }
+"#,
+    )
+    .expect("compile cont1 ref mutation capture")
+    .program;
+    let unsafe_cell = chiba_level1r::compile_source_program_bundle(
+        r#"
+def main(): i64 = reset { UnsafeRef.new(1).set(shift k { k(7) }).get() }
+"#,
+    )
+    .expect("compile cont1 unsafe ref mutation capture")
+    .program;
+
+    for bundle in [&ref_cell, &unsafe_cell] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert_eq!(
+            bundle.defs[0].output.control.continuations[0].kind,
+            chiba_level1r::control::ContinuationKind::Cont1
+        );
+    }
+    assert_eq!(run_wat_text(&ref_cell.backend_link.linked_wat), "7");
+    assert_eq!(run_wat_text(&unsafe_cell.backend_link.linked_wat), "7");
+}
+
+#[test]
+fn program_contn_rejects_captured_ref_and_unsafe_ref_mutation_context() {
+    let ref_cell = chiba_level1r::compile_source_program_bundle(
+        r#"
+def main(): i64 = resetn { Ref.new(1).set(shift retry { retry(7) + retry(8) }).get() }
+"#,
+    )
+    .expect("compile contn ref mutation capture");
+    let unsafe_cell = chiba_level1r::compile_source_program_bundle(
+        r#"
+def main(): i64 = resetn { UnsafeRef.new(1).set(shift retry { retry(7) + retry(8) }).get() }
+"#,
+    )
+    .expect("compile contn unsafe ref mutation capture");
+
+    for bundle in [&ref_cell.program, &unsafe_cell.program] {
+        assert_eq!(
+            bundle.diagnostics,
+            vec![ProgramDiagnostic::UnsafeMultiResumeCapture {
+                def: "main".to_string(),
+                binder: "retry".to_string()
+            }]
+        );
+        assert_eq!(
+            bundle.defs[0].output.control.continuations[0].kind,
+            chiba_level1r::control::ContinuationKind::ContN
+        );
+        assert_eq!(
+            bundle.defs[0].output.control.continuations[0].replay_safety,
+            chiba_level1r::control::ReplaySafety::Unsafe
+        );
+    }
+}
+
+#[test]
 fn interface_type_continuation_field_enters_callable_storage() {
     let program = SourceProgram::with_surface(
         None,

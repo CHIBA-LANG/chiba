@@ -1192,7 +1192,7 @@ fn render_wat(
     param_abi: &BackendParamAbi,
 ) -> Result<String, BackendDiagnostic> {
     if core_contains_continuation_runtime(core) {
-        return render_continuation_wat(core, manifest, params);
+        return render_continuation_wat(core, manifest, params, param_kinds, param_abi);
     }
 
     let mut env = RenderEnv::from_param_abi(params, param_kinds, param_abi);
@@ -1468,10 +1468,12 @@ fn render_continuation_wat(
     core: &CoreProgram,
     manifest: &BackendManifest,
     params: &[String],
+    param_kinds: &BTreeMap<String, WasmValueKind>,
+    param_abi: &BackendParamAbi,
 ) -> Result<String, BackendDiagnostic> {
     let result_binders = collect_tailcall_result_binders(&core.ops);
-    let param_kinds = BTreeMap::new();
-    let env = RenderEnv::new(params, &param_kinds).with_locals(result_binders.clone());
+    let env = RenderEnv::from_param_abi(params, param_kinds, param_abi)
+        .with_locals(result_binders.clone());
     let mut wat = String::from("(module\n");
     for import in &manifest.imports {
         render_extern_import_wat(&mut wat, import);
@@ -1794,7 +1796,7 @@ fn render_captured_continuation_i32(
         })
         .collect::<Vec<_>>();
     let mut env = env
-        .with_locals(
+        .with_params_as_locals(
             std::iter::once(captured.param.clone())
                 .chain(captured_locals.iter().cloned())
                 .collect(),
@@ -2286,6 +2288,12 @@ impl RenderEnv {
         for name in names {
             next.locals.entry(name).or_insert(WasmValueKind::I32);
         }
+        next
+    }
+
+    fn with_params_as_locals(&self, names: Vec<String>) -> Self {
+        let mut next = self.with_locals(names.clone());
+        next.params.extend(names);
         next
     }
 
@@ -3133,7 +3141,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
                     .iter()
                     .all(|arg| core_value_is_renderable_i32(arg, env))
         }
-        CoreValue::Var(name) => env.is_param(name),
+        CoreValue::Var(name) => env.param_kind(name) == WasmValueKind::I32,
         CoreValue::TupleField {
             tuple, field_index, ..
         } => tuple_field_value(tuple, *field_index, env)

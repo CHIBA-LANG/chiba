@@ -537,11 +537,12 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         "GlobalInitPlan",
         || analyze_global_init(&normalized_program),
     );
+    let checked_interface = interface_without_invalid_static_initializers(&interface, &global_init);
     let mut defs = passes.record(
         "P5ProgramDefs",
         "SourceProgram+InterfaceSummary",
         "ProgramDefOutput",
-        || compile_program_defs(&normalized_program, &interface),
+        || compile_program_defs(&normalized_program, &checked_interface),
     );
     let entry = passes.record(
         "P6ProgramEntry",
@@ -1042,6 +1043,33 @@ fn compile_program_defs(
         .collect()
 }
 
+fn interface_without_invalid_static_initializers(
+    interface: &InterfaceSummary,
+    global_init: &GlobalInitPlan,
+) -> InterfaceSummary {
+    let invalid = global_init
+        .diagnostics
+        .iter()
+        .filter_map(|diagnostic| match diagnostic {
+            GlobalInitDiagnostic::UnsupportedStaticInitializer { static_name, .. }
+            | GlobalInitDiagnostic::InvalidStaticAdtConstructor { static_name, .. } => {
+                Some(static_name.as_str())
+            }
+            GlobalInitDiagnostic::DuplicateStatic { .. }
+            | GlobalInitDiagnostic::StaticFunctionNameConflict { .. }
+            | GlobalInitDiagnostic::StaticInitCycle { .. } => None,
+        })
+        .collect::<BTreeSet<_>>();
+    if invalid.is_empty() {
+        return interface.clone();
+    }
+    let mut filtered = interface.clone();
+    filtered
+        .statics
+        .retain(|static_value| !invalid.contains(static_value.source_name.as_str()));
+    filtered
+}
+
 impl TypedSignature {
     pub fn render(&self, name: &str) -> String {
         let params = self
@@ -1233,6 +1261,9 @@ fn backend_param_abi(
             .iter()
             .filter_map(|param| {
                 backend_value_kind_for_type(&source_type_name_to_type(&param.ty))
+                    .or_else(|| {
+                        backend_storage_value_kind_for_type(&source_type_name_to_type(&param.ty))
+                    })
                     .map(|kind| (param.name.clone(), kind))
             })
             .collect(),
@@ -1281,7 +1312,9 @@ fn backend_static_abis_for_interface(
         .iter()
         .filter_map(|static_value| {
             let ty = static_value.ty.as_deref().map(source_type_name_to_type)?;
-            backend_value_kind_for_type(&ty).map(|kind| (static_value.source_name.clone(), kind))
+            backend_value_kind_for_type(&ty)
+                .or_else(|| backend_storage_value_kind_for_type(&ty))
+                .map(|kind| (static_value.source_name.clone(), kind))
         })
         .collect()
 }
@@ -1343,6 +1376,14 @@ fn backend_value_kind_for_type(ty: &Type) -> Option<BackendValueKind> {
         | Type::Nominal(_)
         | Type::Func(_, _)
         | Type::Continuation { .. } => None,
+    }
+}
+
+fn backend_storage_value_kind_for_type(ty: &Type) -> Option<BackendValueKind> {
+    match ty {
+        Type::I64 | Type::Rune | Type::Bool => Some(BackendValueKind::I32),
+        Type::Nominal(_) if backend_nominal_is_externref(ty) => Some(BackendValueKind::ExternRef),
+        _ => None,
     }
 }
 
