@@ -1502,6 +1502,46 @@ fn source_vec_new_push_freeze_index_lowers_to_executable_runtime_imports() {
 }
 
 #[test]
+fn source_vec_new_push_preserves_bool_element_type_through_freeze_index() {
+    let bundle =
+        compile_source_program_bundle("def main(): bool = Vec.new().push(true).freeze()[0]")
+            .expect("compile bool vec new push freeze index")
+            .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::Bool);
+    assert!(matches!(
+        main.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::AggregateIndex {
+            kind: AggregateKind::Slice,
+            ..
+        })
+    ));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_vec_new"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_freeze"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
+#[test]
+fn source_vec_push_conflicting_element_type_does_not_keep_i64() {
+    let bundle =
+        compile_source_program_bundle("def main() = Vec.new().push(1).push(false).freeze()[0]")
+            .expect("compile conflicting vec push element type")
+            .program;
+
+    assert_eq!(bundle.defs[0].output.typed.ty, Type::Unknown);
+}
+
+#[test]
 fn source_vec_new_push_freeze_range_slice_lowers_to_executable_runtime_imports() {
     let bundle = compile_source_program_bundle(
         "def main(): i64 = Vec.new().push(5).push(8).freeze()[1..2][0]",

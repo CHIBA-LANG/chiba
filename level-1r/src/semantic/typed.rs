@@ -2276,8 +2276,8 @@ fn builtin_method_result_type(
     args: &[TypedExpr],
 ) -> Option<Type> {
     match builtin {
-        BuiltinMethodCall::VecNew => Some(Type::Nominal("Vec[i64]".to_string())),
-        BuiltinMethodCall::VecPush => Some(receiver.clone()),
+        BuiltinMethodCall::VecNew => Some(Type::Nominal("Vec[Unknown]".to_string())),
+        BuiltinMethodCall::VecPush => Some(vec_push_result_type(receiver, args)),
         BuiltinMethodCall::VecFreeze => vec_element_type(receiver).map(|element| {
             Type::Nominal(format!("Slice[{}]", source_type_name_for_type(&element)))
         }),
@@ -2358,6 +2358,26 @@ fn vec_element_type(receiver: &Type) -> Option<Type> {
         ("Vec", [element]) => Some(element.to_type()),
         _ => None,
     }
+}
+
+fn vec_push_result_type(receiver: &Type, args: &[TypedExpr]) -> Type {
+    let Some(item) = args.first() else {
+        return receiver.clone();
+    };
+    let Some(current) = vec_element_type(receiver) else {
+        return receiver.clone();
+    };
+    let element = if current == item.ty {
+        current
+    } else if current == Type::Unknown {
+        item.ty.clone()
+    } else {
+        Type::Unknown
+    };
+    Type::Nominal(render_source_type_application(
+        "Vec",
+        &[source_type_name_for_type(&element)],
+    ))
 }
 
 fn ref_element_type(receiver: &Type) -> Option<Type> {
@@ -2552,6 +2572,7 @@ pub(crate) fn source_type_name_to_type(name: &str) -> Type {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum ParsedTypeHeader {
+    Unknown,
     ScalarI64,
     ScalarRune,
     ScalarBool,
@@ -2576,6 +2597,7 @@ enum ParsedTypeHeader {
 impl ParsedTypeHeader {
     fn to_type(&self) -> Type {
         match self {
+            ParsedTypeHeader::Unknown => Type::Unknown,
             ParsedTypeHeader::ScalarI64 => Type::I64,
             ParsedTypeHeader::ScalarRune => Type::Rune,
             ParsedTypeHeader::ScalarBool => Type::Bool,
@@ -2608,6 +2630,7 @@ impl ParsedTypeHeader {
 fn parse_type_header(name: &str) -> Option<ParsedTypeHeader> {
     let name = name.trim();
     match name {
+        "Unknown" | "unknown" => return Some(ParsedTypeHeader::Unknown),
         "I64" | "i64" => return Some(ParsedTypeHeader::ScalarI64),
         "Rune" | "rune" => return Some(ParsedTypeHeader::ScalarRune),
         "Bool" | "bool" => return Some(ParsedTypeHeader::ScalarBool),
@@ -2752,6 +2775,7 @@ fn render_nominal_type_header(base: &str, args: &[ParsedTypeHeader]) -> String {
 
 fn render_type_header(header: &ParsedTypeHeader) -> String {
     match header {
+        ParsedTypeHeader::Unknown => "Unknown".to_string(),
         ParsedTypeHeader::ScalarI64 => "i64".to_string(),
         ParsedTypeHeader::ScalarRune => "rune".to_string(),
         ParsedTypeHeader::ScalarBool => "bool".to_string(),
