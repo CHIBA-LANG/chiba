@@ -1000,6 +1000,7 @@ fn aggregate_value_element_lane(value: &CoreValue, env: &RenderEnv) -> Option<Ru
             call: BuiltinMethodCall::VecPush,
             args,
         } => args.get(1).and_then(|item| runtime_value_lane(item, env)),
+        CoreValue::AggregateSlice { value, .. } => aggregate_value_element_lane(value, env),
         CoreValue::SliceLiteral { items } => aggregate_items_lane(items, env),
         _ => None,
     }

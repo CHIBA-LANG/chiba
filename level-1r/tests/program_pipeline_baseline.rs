@@ -2296,6 +2296,86 @@ fn source_vec_new_push_preserves_string_element_type_through_freeze_range_slice(
 }
 
 #[test]
+fn source_aggregate_externref_lanes_preserve_range_and_cstr_elements() {
+    let slice_range = compile_source_program_bundle("def main(): i64 = [1..2, 3..9][1].end")
+        .expect("compile range slice literal index")
+        .program;
+    let array_range =
+        compile_source_program_bundle("def main(ranges: Array[Range]): i64 = ranges[0..2][0].end")
+            .expect("compile range array param slice")
+            .program;
+    let vec_range = compile_source_program_bundle(
+        "def main(): i64 = Vec.new().push(1..2).push(3..9).freeze()[1..2][0].start",
+    )
+    .expect("compile range vec freeze slice")
+    .program;
+    let slice_cstr = compile_source_program_bundle("def main(): i64 = [c\"x\", c\"hé\"][1][3]")
+        .expect("compile cstr slice literal index")
+        .program;
+    let vec_cstr = compile_source_program_bundle(
+        "def main(): i64 = Vec.new().push(c\"x\").push(String.from(\"hé\").to_cstr()).freeze()[1].bytes_len()",
+    )
+    .expect("compile cstr vec freeze index")
+    .program;
+
+    for (bundle, diagnostics) in [
+        (&slice_range, vec![]),
+        (
+            &array_range,
+            vec![ProgramDiagnostic::EntryHasParams {
+                name: "main".to_string(),
+                params: vec!["ranges".to_string()],
+            }],
+        ),
+        (&vec_range, vec![]),
+        (&slice_cstr, vec![]),
+        (&vec_cstr, vec![]),
+    ] {
+        assert_eq!(bundle.diagnostics, diagnostics);
+        assert_backend_link_clean_all(bundle);
+        assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+    }
+    assert!(slice_range
+        .backend_link
+        .linked_wat
+        .contains("call $std_range_i64_end"));
+    assert!(array_range
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_i64_slice"));
+    assert!(array_range
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert!(vec_range
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push_externref"));
+    assert!(vec_range
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert!(slice_cstr
+        .backend_link
+        .linked_wat
+        .contains("call $std_cstr_i64_byte_at"));
+    assert!(vec_cstr
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push_externref"));
+    assert!(vec_cstr
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+
+    assert_eq!(run_wat_text(&slice_range.backend_link.linked_wat), "9");
+    assert_eq!(run_wat_text(&array_range.backend_link.linked_wat), "0");
+    assert_eq!(run_wat_text(&vec_range.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&slice_cstr.backend_link.linked_wat), "0");
+    assert_eq!(run_wat_text(&vec_cstr.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn source_aggregate_and_ref_builtins_can_return_executable_externref_handles() {
     let vec_i64 = compile_source_program_bundle("def main(): Vec[i64] = Vec.new().push(7)")
         .expect("compile vec i64 return")
