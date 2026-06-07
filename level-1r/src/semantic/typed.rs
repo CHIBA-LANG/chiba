@@ -2085,6 +2085,9 @@ fn index_access_kind(receiver: &Type, index: &Type) -> IndexAccessKind {
         ("String", []) => IndexAccessKind::TextByte {
             kind: TextKind::String,
         },
+        ("cstr", []) if is_range_index => IndexAccessKind::TextSlice {
+            kind: TextKind::CStr,
+        },
         ("cstr", []) => IndexAccessKind::TextByte {
             kind: TextKind::CStr,
         },
@@ -2102,7 +2105,7 @@ fn index_result_type(access: &IndexAccessKind) -> Type {
         IndexAccessKind::TextSlice { kind } => match kind {
             TextKind::Str => Type::Nominal("str".to_string()),
             TextKind::String => Type::Nominal("String".to_string()),
-            TextKind::CStr => Type::Unknown,
+            TextKind::CStr => Type::Nominal("cstr".to_string()),
         },
         IndexAccessKind::Operator => Type::Unknown,
     }

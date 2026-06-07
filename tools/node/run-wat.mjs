@@ -347,6 +347,16 @@ async function makeImports(wat, args) {
       "std.str_slice"(text, start, end) {
         return byteArray(text).slice(Number(start), Number(end));
       },
+      "std.cstr_slice"(text, start, end) {
+        const bytes = cstrByteArray(text);
+        const nul = bytes.indexOf(0);
+        const body = nul >= 0 ? bytes.slice(0, nul) : bytes;
+        const sliced = body.slice(Number(start), Number(end));
+        const out = new Uint8Array(sliced.length + 1);
+        out.set(sliced, 0);
+        out[sliced.length] = 0;
+        return { cstr: out };
+      },
       "std.str_to_string"(text) {
         return byteArray(text).slice();
       },

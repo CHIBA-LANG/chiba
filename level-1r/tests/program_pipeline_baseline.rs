@@ -2881,6 +2881,38 @@ fn source_string_param_index_lowers_to_executable_runtime_import() {
 }
 
 #[test]
+fn source_string_param_range_slice_lowers_to_executable_runtime_import() {
+    let len = compile_source_program_bundle("def main(s: String): i64 = s[1..3].bytes_len()")
+        .expect("compile string param range slice len")
+        .program;
+    let byte = compile_source_program_bundle("def main(s: String): i64 = s[1..3][0]")
+        .expect("compile string param range slice byte")
+        .program;
+
+    for bundle in [&len, &byte] {
+        assert_eq!(
+            bundle.diagnostics,
+            vec![ProgramDiagnostic::EntryHasParams {
+                name: "main".to_string(),
+                params: vec!["s".to_string()]
+            }]
+        );
+        assert_backend_link_clean(bundle, 0);
+        assert!(bundle.backend_link.linked_wat.contains(
+            "(import \"env\" \"std.string_slice\" (func $std_string_slice (param externref) (param i32) (param i32) (result externref)))"
+        ));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_string_slice"));
+    }
+    assert_eq!(len.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(byte.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(run_wat_text(&len.backend_link.linked_wat), "2");
+    assert_eq!(run_wat_text(&byte.backend_link.linked_wat), "2");
+}
+
+#[test]
 fn source_string_param_rune_methods_lower_to_executable_runtime_import() {
     let rune_len = compile_source_program_bundle("def main(s: String): i64 = s.rune_len()")
         .expect("compile string param rune_len")
@@ -3195,6 +3227,52 @@ fn source_string_to_cstr_lowers_to_executable_abi_text_runtime_import() {
     assert_eq!(nul.defs[0].output.typed.ty, Type::I64);
     assert_eq!(run_wat_text(&len.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&nul.backend_link.linked_wat), "0");
+}
+
+#[test]
+fn source_cstr_range_slice_lowers_to_executable_runtime_import() {
+    let literal_len = compile_source_program_bundle("def main(): i64 = c\"héx\"[1..3].bytes_len()")
+        .expect("compile cstr literal range slice len")
+        .program;
+    let literal_nul = compile_source_program_bundle("def main(): i64 = c\"héx\"[1..3][2]")
+        .expect("compile cstr literal range slice nul")
+        .program;
+    let converted_byte = compile_source_program_bundle(
+        "def main(): i64 = String.from(\"héx\").to_cstr()[1..3][0]",
+    )
+    .expect("compile string to cstr range slice byte")
+    .program;
+    let param_len = compile_source_program_bundle("def main(s: cstr): i64 = s[0..2].bytes_len()")
+        .expect("compile cstr param range slice len")
+        .program;
+
+    for bundle in [&literal_len, &literal_nul, &converted_byte, &param_len] {
+        if bundle.defs[0].params.is_empty() {
+            assert_eq!(bundle.diagnostics, vec![]);
+        } else {
+            assert_eq!(
+                bundle.diagnostics,
+                vec![ProgramDiagnostic::EntryHasParams {
+                    name: "main".to_string(),
+                    params: vec!["s".to_string()]
+                }]
+            );
+        }
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle.backend_link.linked_wat.contains(
+            "(import \"env\" \"std.cstr_slice\" (func $std_cstr_slice (param externref) (param i32) (param i32) (result externref)))"
+        ));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_cstr_slice"));
+    }
+    assert_eq!(literal_len.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(converted_byte.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(run_wat_text(&literal_len.backend_link.linked_wat), "2");
+    assert_eq!(run_wat_text(&literal_nul.backend_link.linked_wat), "0");
+    assert_eq!(run_wat_text(&converted_byte.backend_link.linked_wat), "195");
+    assert_eq!(run_wat_text(&param_len.backend_link.linked_wat), "2");
 }
 
 #[test]
