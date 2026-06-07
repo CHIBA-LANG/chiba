@@ -739,7 +739,7 @@ fn type_expr_with_context_and_controls(
                 .collect::<Vec<_>>();
             let builtin = builtin_method_call(&receiver, name, &args);
             let ty = builtin
-                .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty))
+                .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty, &args))
                 .unwrap_or_else(|| {
                     field_callable_result_type(&receiver.ty, name, args.len(), context)
                 });
@@ -763,7 +763,7 @@ fn type_expr_with_context_and_controls(
                 _ => None,
             };
             let ty = builtin
-                .and_then(|builtin| builtin_method_result_type(builtin, &target.ty))
+                .and_then(|builtin| builtin_method_result_type(builtin, &target.ty, &args))
                 .unwrap_or(Type::Unknown);
             typed(
                 TypedExprKind::Assign {
@@ -1091,7 +1091,7 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 .collect::<Vec<_>>();
             let builtin = builtin_method_call(&receiver, &name, &args);
             let ty = builtin
-                .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty))
+                .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty, &args))
                 .unwrap_or_else(|| {
                     field_callable_result_type(&receiver.ty, &name, args.len(), context)
                 });
@@ -1115,7 +1115,7 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 _ => None,
             };
             let ty = builtin
-                .and_then(|builtin| builtin_method_result_type(builtin, &target.ty))
+                .and_then(|builtin| builtin_method_result_type(builtin, &target.ty, &args))
                 .unwrap_or(Type::Unknown);
             typed(
                 TypedExprKind::Assign {
@@ -1454,7 +1454,7 @@ fn refine_pattern_binding_types(
                 .collect::<Vec<_>>();
             let builtin = builtin_method_call(&receiver, &name, &args);
             let ty = builtin
-                .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty))
+                .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty, &args))
                 .unwrap_or_else(|| {
                     field_callable_result_type(&receiver.ty, &name, args.len(), context)
                 });
@@ -1478,7 +1478,7 @@ fn refine_pattern_binding_types(
                 _ => None,
             };
             let ty = builtin
-                .and_then(|builtin| builtin_method_result_type(builtin, &target.ty))
+                .and_then(|builtin| builtin_method_result_type(builtin, &target.ty, &args))
                 .unwrap_or(Type::Unknown);
             typed(
                 TypedExprKind::Assign {
@@ -2270,7 +2270,11 @@ fn builtin_method_call(
     }
 }
 
-fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Option<Type> {
+fn builtin_method_result_type(
+    builtin: BuiltinMethodCall,
+    receiver: &Type,
+    args: &[TypedExpr],
+) -> Option<Type> {
     match builtin {
         BuiltinMethodCall::VecNew => Some(Type::Nominal("Vec[i64]".to_string())),
         BuiltinMethodCall::VecPush => Some(receiver.clone()),
@@ -2286,10 +2290,14 @@ fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Op
         BuiltinMethodCall::TextLen { .. } => Some(Type::I64),
         BuiltinMethodCall::TextRuneLen { .. } => Some(Type::I64),
         BuiltinMethodCall::TextCharAt { .. } => Some(Type::Rune),
-        BuiltinMethodCall::RefNew => Some(Type::Nominal("Ref[i64]".to_string())),
+        BuiltinMethodCall::RefNew => args
+            .first()
+            .map(|arg| Type::Nominal(format!("Ref[{}]", source_type_name_for_type(&arg.ty)))),
         BuiltinMethodCall::RefGet => ref_element_type(receiver),
         BuiltinMethodCall::RefSet => Some(receiver.clone()),
-        BuiltinMethodCall::UnsafeRefNew => Some(Type::Nominal("UnsafeRef[i64]".to_string())),
+        BuiltinMethodCall::UnsafeRefNew => args
+            .first()
+            .map(|arg| Type::Nominal(format!("UnsafeRef[{}]", source_type_name_for_type(&arg.ty)))),
         BuiltinMethodCall::UnsafeRefGet => unsafe_ref_element_type(receiver),
         BuiltinMethodCall::UnsafeRefSet => Some(receiver.clone()),
     }

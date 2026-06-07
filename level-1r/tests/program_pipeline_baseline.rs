@@ -1614,6 +1614,27 @@ fn source_ref_assignment_sugar_lowers_to_executable_set_runtime_import() {
 }
 
 #[test]
+fn source_ref_new_preserves_bool_element_type_through_get_and_set() {
+    let get = compile_source_program_bundle("def main(): bool = Ref.new(true).get()")
+        .expect("compile bool ref get")
+        .program;
+    let set = compile_source_program_bundle("def main(): bool = (Ref.new(false) := true).*")
+        .expect("compile bool ref set")
+        .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        let main = &bundle.defs[0].output;
+        assert_eq!(main.typed.ty, Type::Bool);
+        assert!(bundle.backend_link.linked_wat.contains("call $std_ref_new"));
+        assert!(bundle.backend_link.linked_wat.contains("call $std_ref_get"));
+    }
+    assert!(set.backend_link.linked_wat.contains("call $std_ref_set"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "1");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "1");
+}
+
+#[test]
 fn source_assignment_to_non_ref_is_program_diagnostic() {
     let bundle = compile_source_program_bundle("def main(): i64 = 1 := 4")
         .expect("compile invalid assignment target")
@@ -1660,6 +1681,36 @@ fn source_unsafe_ref_new_set_get_lowers_to_executable_runtime_imports() {
         .contains("call $std_unsafe_ref_get"));
 
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "8");
+}
+
+#[test]
+fn source_unsafe_ref_new_preserves_bool_element_type_through_get_and_set() {
+    let get = compile_source_program_bundle("def main(): bool = UnsafeRef.new(true).get()")
+        .expect("compile bool unsafe ref get")
+        .program;
+    let set = compile_source_program_bundle("def main(): bool = (UnsafeRef.new(false) := true).*")
+        .expect("compile bool unsafe ref set")
+        .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        let main = &bundle.defs[0].output;
+        assert_eq!(main.typed.ty, Type::Bool);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_new"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_get"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_set"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "1");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "1");
 }
 
 #[test]
