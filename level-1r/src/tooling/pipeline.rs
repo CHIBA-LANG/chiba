@@ -7,7 +7,8 @@ use crate::ast::{
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_param_abi, link_backend_artifacts, sort_dedup_imports,
-    BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendCallableAbi, BackendDiagnostic,
+    BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendCallableAbi,
+    BackendCallableArgExpansion, BackendDiagnostic, BackendDynRowParamFieldAbi,
     BackendDynRowParamMethodAbi, BackendExternAbi, BackendExternImport, BackendLinkDiagnostic,
     BackendLinkedBundle, BackendParamAbi, BackendValueKind,
 };
@@ -1271,6 +1272,7 @@ fn backend_param_abi(
         functions: backend_callable_abis_for_interface(functions),
         statics: backend_static_abis_for_interface(statics),
         static_ref_cell_lanes: backend_static_ref_cell_lanes_for_interface(statics),
+        dyn_row_param_fields: backend_dyn_row_param_fields_for_signature(signature),
         dyn_row_param_methods: backend_dyn_row_param_methods_for_signature(signature, functions),
         aggregate_element_lanes: backend_aggregate_element_lanes_for_signature(signature)
             .into_iter()
@@ -1279,6 +1281,34 @@ fn backend_param_abi(
             ))
             .collect(),
     }
+}
+
+fn backend_dyn_row_param_fields_for_signature(
+    signature: &TypedSignature,
+) -> BTreeMap<String, Vec<BackendDynRowParamFieldAbi>> {
+    signature
+        .params
+        .iter()
+        .filter_map(|param| {
+            let Type::DynRow(fields) = source_type_name_to_type(&param.ty) else {
+                return None;
+            };
+            let fields = backend_dyn_row_field_abis(&fields);
+            (!fields.is_empty()).then_some((param.name.clone(), fields))
+        })
+        .collect()
+}
+
+fn backend_dyn_row_field_abis(fields: &[RecordTypeField]) -> Vec<BackendDynRowParamFieldAbi> {
+    fields
+        .iter()
+        .filter_map(|field| {
+            backend_storage_value_kind_for_type(&field.ty).map(|kind| BackendDynRowParamFieldAbi {
+                field: field.name.clone(),
+                kind,
+            })
+        })
+        .collect()
 }
 
 fn backend_dyn_row_param_methods_for_signature(
@@ -1370,15 +1400,31 @@ fn backend_callable_abis_for_interface(
     functions
         .iter()
         .map(|function| {
-            let params = function
+            let arg_expansions = function
                 .param_types
                 .iter()
                 .map(|param| {
-                    param
-                        .as_deref()
-                        .map(source_type_name_to_type)
-                        .and_then(|ty| backend_value_kind_for_type(&ty))
-                        .unwrap_or(BackendValueKind::I32)
+                    let ty = param.as_deref().map(source_type_name_to_type);
+                    match ty {
+                        Some(Type::DynRow(fields)) => BackendCallableArgExpansion::DynRowFields(
+                            backend_dyn_row_field_abis(&fields),
+                        ),
+                        Some(ty) => BackendCallableArgExpansion::Direct(
+                            backend_value_kind_for_type(&ty)
+                                .or_else(|| backend_storage_value_kind_for_type(&ty))
+                                .unwrap_or(BackendValueKind::I32),
+                        ),
+                        None => BackendCallableArgExpansion::Direct(BackendValueKind::I32),
+                    }
+                })
+                .collect::<Vec<_>>();
+            let params = arg_expansions
+                .iter()
+                .flat_map(|expansion| match expansion {
+                    BackendCallableArgExpansion::Direct(kind) => vec![*kind],
+                    BackendCallableArgExpansion::DynRowFields(fields) => {
+                        fields.iter().map(|field| field.kind).collect()
+                    }
                 })
                 .collect();
             let result_type = function
@@ -1391,6 +1437,7 @@ fn backend_callable_abis_for_interface(
                 function.source_name.clone(),
                 BackendCallableAbi {
                     params,
+                    arg_expansions,
                     result,
                     result_ref_cell_lane,
                 },

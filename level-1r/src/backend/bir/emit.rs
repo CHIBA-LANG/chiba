@@ -94,14 +94,28 @@ pub struct BackendParamAbi {
     pub statics: BTreeMap<String, BackendValueKind>,
     pub static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     pub aggregate_element_lanes: BTreeMap<String, BackendValueKind>,
+    pub dyn_row_param_fields: BTreeMap<String, Vec<BackendDynRowParamFieldAbi>>,
     pub dyn_row_param_methods: BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BackendCallableAbi {
     pub params: Vec<BackendValueKind>,
+    pub arg_expansions: Vec<BackendCallableArgExpansion>,
     pub result: Option<BackendValueKind>,
     pub result_ref_cell_lane: Option<CoreRefCellLane>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BackendCallableArgExpansion {
+    Direct(BackendValueKind),
+    DynRowFields(Vec<BackendDynRowParamFieldAbi>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackendDynRowParamFieldAbi {
+    pub field: String,
+    pub kind: BackendValueKind,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -381,6 +395,17 @@ fn unsupported_tailcall_args(
     args: &[CoreValue],
     env: &RenderEnv,
 ) -> Option<BackendDiagnostic> {
+    if let Some(expansions) = callable_arg_expansions_for_target(func, env) {
+        if expansions.len() != args.len() {
+            return Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: format!("{} /{}", final_symbol(func), args.len()),
+            });
+        }
+        return expansions
+            .iter()
+            .zip(args)
+            .find_map(|(expansion, arg)| unsupported_expanded_tailcall_arg(expansion, arg, env));
+    }
     let Some((params, _)) = callable_signature_for_target(core, func, env) else {
         return args.iter().find_map(|arg| unsupported_i32_value(arg, env));
     };
@@ -398,6 +423,38 @@ fn unsupported_tailcall_args(
             value: arg.debug_name(),
         })
     })
+}
+
+fn unsupported_expanded_tailcall_arg(
+    expansion: &BackendCallableArgExpansion,
+    arg: &CoreValue,
+    env: &RenderEnv,
+) -> Option<BackendDiagnostic> {
+    match expansion {
+        BackendCallableArgExpansion::Direct(kind) => {
+            let renderable = match WasmValueKind::from(*kind) {
+                WasmValueKind::I32 => core_value_is_renderable_i32(arg, env),
+                WasmValueKind::ExternRef => core_value_is_renderable_externref(arg, env),
+            };
+            (!renderable).then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: arg.debug_name(),
+            })
+        }
+        BackendCallableArgExpansion::DynRowFields(fields) => fields.iter().find_map(|field| {
+            let Some(value) = dyn_row_data_field_value(arg, &field.field, env) else {
+                return Some(BackendDiagnostic::UnsupportedI32ReturnValue {
+                    value: format!("{}.{}", arg.debug_name(), field.field),
+                });
+            };
+            let renderable = match WasmValueKind::from(field.kind) {
+                WasmValueKind::I32 => core_value_is_renderable_i32(value, env),
+                WasmValueKind::ExternRef => core_value_is_renderable_externref(value, env),
+            };
+            (!renderable).then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: value.debug_name(),
+            })
+        }),
+    }
 }
 
 fn unsupported_i32_match(
@@ -2200,6 +2257,15 @@ fn callable_signature_for_target(
     })
 }
 
+fn callable_arg_expansions_for_target<'a>(
+    target: &str,
+    env: &'a RenderEnv,
+) -> Option<&'a [BackendCallableArgExpansion]> {
+    env.function_abis
+        .get(target)
+        .map(|abi| abi.arg_expansions.as_slice())
+}
+
 fn wasm_value_kind_from_wat(wat: &str) -> Option<WasmValueKind> {
     match wat {
         "i32" => Some(WasmValueKind::I32),
@@ -2366,6 +2432,7 @@ struct RenderEnv {
     static_kinds: BTreeMap<String, WasmValueKind>,
     static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     aggregate_element_lanes: BTreeMap<String, WasmValueKind>,
+    dyn_row_param_fields: BTreeMap<String, Vec<BackendDynRowParamFieldAbi>>,
     dyn_row_param_methods: BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>,
     bindings: BTreeMap<String, CoreValue>,
 }
@@ -2381,6 +2448,7 @@ impl RenderEnv {
             static_kinds: BTreeMap::new(),
             static_ref_cell_lanes: BTreeMap::new(),
             aggregate_element_lanes: BTreeMap::new(),
+            dyn_row_param_fields: BTreeMap::new(),
             dyn_row_param_methods: BTreeMap::new(),
             bindings: BTreeMap::new(),
         }
@@ -2396,6 +2464,7 @@ impl RenderEnv {
             .with_static_kinds(param_abi.statics.clone())
             .with_static_ref_cell_lanes(param_abi.static_ref_cell_lanes.clone())
             .with_aggregate_element_lanes(param_abi.aggregate_element_lanes.clone())
+            .with_dyn_row_param_fields(param_abi.dyn_row_param_fields.clone())
             .with_dyn_row_param_methods(param_abi.dyn_row_param_methods.clone())
     }
 
@@ -2435,6 +2504,15 @@ impl RenderEnv {
         next
     }
 
+    fn with_dyn_row_param_fields(
+        &self,
+        dyn_row_param_fields: BTreeMap<String, Vec<BackendDynRowParamFieldAbi>>,
+    ) -> Self {
+        let mut next = self.clone();
+        next.dyn_row_param_fields = dyn_row_param_fields;
+        next
+    }
+
     fn with_dyn_row_param_methods(
         &self,
         dyn_row_param_methods: BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>,
@@ -2450,6 +2528,30 @@ impl RenderEnv {
             .iter()
             .find(|method| method.field == field)
             .map(|method| method.target.as_str())
+    }
+
+    fn dyn_row_param_field(&self, param: &str, field: &str) -> Option<&BackendDynRowParamFieldAbi> {
+        self.dyn_row_param_fields
+            .get(param)?
+            .iter()
+            .find(|candidate| candidate.field == field)
+    }
+
+    fn dyn_row_param_field_lane(&self, param: &str, field: &str) -> Option<String> {
+        self.dyn_row_param_field(param, field)
+            .map(|field| dyn_row_param_field_lane(param, &field.field))
+    }
+
+    fn has_dyn_row_param_fields(&self, param: &str) -> bool {
+        self.dyn_row_param_fields.contains_key(param)
+    }
+
+    fn dyn_row_param_single_data_field_lane(&self, param: &str) -> Option<String> {
+        let fields = self.dyn_row_param_fields.get(param)?;
+        let [field] = fields.as_slice() else {
+            return None;
+        };
+        Some(dyn_row_param_field_lane(param, &field.field))
     }
 
     fn is_param(&self, name: &str) -> bool {
@@ -2520,16 +2622,25 @@ impl RenderEnv {
     }
 
     fn signature(&self) -> String {
-        self.params
-            .iter()
-            .map(|param| {
-                format!(
+        let mut out = String::new();
+        for param in &self.params {
+            if let Some(fields) = self.dyn_row_param_fields.get(param) {
+                for field in fields {
+                    out.push_str(&format!(
+                        " (param ${} {})",
+                        encode_debug_symbol(&dyn_row_param_field_lane(param, &field.field)),
+                        WasmValueKind::from(field.kind).wat_type()
+                    ));
+                }
+            } else {
+                out.push_str(&format!(
                     " (param ${} {})",
                     encode_debug_symbol(param),
                     self.param_kind(param).wat_type()
-                )
-            })
-            .collect()
+                ));
+            }
+        }
+        out
     }
 
     fn param_kind(&self, name: &str) -> WasmValueKind {
@@ -2749,6 +2860,30 @@ fn tailcall_args_are_renderable(
     args: &[CoreValue],
     env: &RenderEnv,
 ) -> bool {
+    if let Some(expansions) = callable_arg_expansions_for_target(func, env) {
+        return expansions.len() == args.len()
+            && expansions
+                .iter()
+                .zip(args)
+                .all(|(expansion, arg)| match expansion {
+                    BackendCallableArgExpansion::Direct(kind) => match WasmValueKind::from(*kind) {
+                        WasmValueKind::I32 => core_value_is_renderable_i32(arg, env),
+                        WasmValueKind::ExternRef => core_value_is_renderable_externref(arg, env),
+                    },
+                    BackendCallableArgExpansion::DynRowFields(fields) => {
+                        fields.iter().all(|field| {
+                            dyn_row_data_field_value(arg, &field.field, env)
+                                .map(|value| match WasmValueKind::from(field.kind) {
+                                    WasmValueKind::I32 => core_value_is_renderable_i32(value, env),
+                                    WasmValueKind::ExternRef => {
+                                        core_value_is_renderable_externref(value, env)
+                                    }
+                                })
+                                .unwrap_or(false)
+                        })
+                    }
+                });
+    }
     let Some((params, _)) = callable_signature_for_target(core, func, env) else {
         return args
             .iter()
@@ -2813,6 +2948,38 @@ fn render_tailcall_args(
     args: &[CoreValue],
     env: &RenderEnv,
 ) -> Result<(), BackendDiagnostic> {
+    if let Some(expansions) = callable_arg_expansions_for_target(func, env) {
+        if expansions.len() != args.len() {
+            return Err(BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: format!("{} /{}", final_symbol(func), args.len()),
+            });
+        }
+        for (expansion, arg) in expansions.iter().zip(args) {
+            match expansion {
+                BackendCallableArgExpansion::Direct(kind) => match WasmValueKind::from(*kind) {
+                    WasmValueKind::I32 => render_core_value_i32(wat, arg, env)?,
+                    WasmValueKind::ExternRef => render_core_value_externref(wat, arg, env)?,
+                },
+                BackendCallableArgExpansion::DynRowFields(fields) => {
+                    for field in fields {
+                        let value =
+                            dyn_row_data_field_value(arg, &field.field, env).ok_or_else(|| {
+                                BackendDiagnostic::UnsupportedI32ReturnValue {
+                                    value: format!("{}.{}", arg.debug_name(), field.field),
+                                }
+                            })?;
+                        match WasmValueKind::from(field.kind) {
+                            WasmValueKind::I32 => render_core_value_i32(wat, value, env)?,
+                            WasmValueKind::ExternRef => {
+                                render_core_value_externref(wat, value, env)?
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return Ok(());
+    }
     let Some((params, _)) = callable_signature_for_target(core, func, env) else {
         for arg in args {
             render_core_value_i32(wat, arg, env)?;
@@ -2831,6 +2998,10 @@ fn render_tailcall_args(
         }
     }
     Ok(())
+}
+
+fn dyn_row_param_field_lane(param: &str, field: &str) -> String {
+    format!("{param}__{field}")
 }
 
 fn render_externref_func_header(
@@ -2926,7 +3097,13 @@ fn render_core_value_i32(
         CoreValue::Var(name) if env.is_static(name) => {
             wat.push_str(&format!("    global.get ${}\n", env.static_symbol(name)));
         }
-        CoreValue::Var(name) if env.is_param(name) => {
+        CoreValue::Var(name) if env.dyn_row_param_single_data_field_lane(name).is_some() => {
+            let lane = env
+                .dyn_row_param_single_data_field_lane(name)
+                .expect("checked single data lane");
+            wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(&lane)));
+        }
+        CoreValue::Var(name) if env.is_param(name) && !env.has_dyn_row_param_fields(name) => {
             wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
         }
         CoreValue::TupleField {
@@ -3571,11 +3748,34 @@ fn dyn_row_field_value<'a>(
     }
 }
 
+fn dyn_row_data_field_value<'a>(
+    package: &'a CoreValue,
+    field: &str,
+    env: &'a RenderEnv,
+) -> Option<&'a CoreValue> {
+    let package = resolve_core_value_binding(package, env);
+    match package {
+        CoreValue::DynRowPackage { payload, fields } => {
+            let adapter = fields.iter().find(|candidate| candidate.name == field)?;
+            match adapter.source {
+                crate::core::CoreDynRowFieldSource::Field => {
+                    record_field_value(payload, field, env)
+                }
+                crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 fn single_field_dyn_row_param(package: &CoreValue, field: &str, env: &RenderEnv) -> Option<String> {
     let package = resolve_core_value_binding(package, env);
     let CoreValue::Var(name) = package else {
         return None;
     };
+    if let Some(lane) = env.dyn_row_param_field_lane(name, field) {
+        return Some(lane);
+    }
     if field.is_empty() || env.param_kind(name) != WasmValueKind::I32 {
         return None;
     }

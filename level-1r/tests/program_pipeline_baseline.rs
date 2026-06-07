@@ -950,6 +950,22 @@ fn program_dyn_row_receiver_method_adapter_call_lowers_to_executable_wat() {
 }
 
 #[test]
+fn program_dyn_row_param_wraps_multi_field_record_value_and_reads_fields() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def use_dyn(v: dyn {x: i64, z: i64}): i64 = v.x + v.z
+def main(): i64 = use_dyn({x: 41, z: 1})
+"#,
+    )
+    .expect("compile source");
+    let bundle = output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "42");
+}
+
+#[test]
 fn program_contn_storage_field_call_can_resume_multiple_times() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"
