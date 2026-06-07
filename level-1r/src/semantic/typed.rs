@@ -313,6 +313,7 @@ pub struct TypeContext {
     generic_nominal_rows: BTreeMap<String, NominalRowDecl>,
     data_generics: BTreeMap<String, Vec<String>>,
     constructors: BTreeMap<(String, String), Vec<Type>>,
+    receiver_methods: BTreeMap<(String, String), ReceiverMethodSummary>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -320,6 +321,15 @@ pub struct NominalRowDecl {
     pub name: String,
     pub generics: Vec<String>,
     pub fields: Vec<RecordTypeField>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReceiverMethodSummary {
+    pub receiver: String,
+    pub name: String,
+    pub symbol: String,
+    pub param_tys: Vec<Type>,
+    pub result_ty: Type,
 }
 
 impl TypeContext {
@@ -383,6 +393,11 @@ impl TypeContext {
         self.constructors.insert((data, ctor.into()), payloads);
     }
 
+    pub fn insert_receiver_method(&mut self, method: ReceiverMethodSummary) {
+        self.receiver_methods
+            .insert((method.receiver.clone(), method.name.clone()), method);
+    }
+
     pub fn nominal_field_type(&self, receiver: &Type, name: &str) -> Option<Type> {
         let Type::Nominal(nominal) = receiver else {
             return None;
@@ -391,6 +406,19 @@ impl TypeContext {
             .get(nominal)
             .and_then(|fields| field_type(fields, name))
             .or_else(|| self.generic_nominal_field_type(nominal, name))
+    }
+
+    pub fn receiver_method(&self, receiver: &Type, name: &str) -> Option<&ReceiverMethodSummary> {
+        let Type::Nominal(nominal) = receiver else {
+            return None;
+        };
+        self.receiver_methods
+            .get(&(nominal.clone(), name.to_string()))
+            .or_else(|| {
+                let base = nominal_base_name(nominal);
+                self.receiver_methods
+                    .get(&(base.to_string(), name.to_string()))
+            })
     }
 
     fn generic_nominal_field_type(&self, nominal: &str, field: &str) -> Option<Type> {
@@ -2288,20 +2316,46 @@ fn dyn_row_adapter_fields(
 ) -> Option<Vec<TypedDynRowField>> {
     let mut adapters = Vec::new();
     for field in fields {
-        let Some(field_ty) = record_field_type(payload, &field.name)
+        let adapter = if let Some(field_ty) = record_field_type(payload, &field.name)
             .or_else(|| context.nominal_field_type(payload, &field.name))
-        else {
-            return None;
+        {
+            if field_ty != field.ty && field.ty != Type::Unknown {
+                return None;
+            }
+            DynRowFieldSource::Field
+        } else {
+            let method = context.receiver_method(payload, &field.name)?;
+            let method_ty = bound_method_type(method);
+            if method_ty != field.ty && field.ty != Type::Unknown {
+                return None;
+            }
+            DynRowFieldSource::ReceiverMethod {
+                symbol: method.symbol.clone(),
+                param_ty: bound_method_param_type(method),
+                result_ty: method.result_ty.clone(),
+            }
         };
-        if field_ty != field.ty && field.ty != Type::Unknown {
-            return None;
-        }
         adapters.push(TypedDynRowField {
             name: field.name.clone(),
-            source: DynRowFieldSource::Field,
+            source: adapter,
         });
     }
     Some(adapters)
+}
+
+fn bound_method_type(method: &ReceiverMethodSummary) -> Type {
+    Type::Func(
+        Box::new(bound_method_param_type(method)),
+        Box::new(method.result_ty.clone()),
+    )
+}
+
+fn bound_method_param_type(method: &ReceiverMethodSummary) -> Type {
+    match method.param_tys.as_slice() {
+        [] => Type::Nominal("Unit".to_string()),
+        [single] => single.clone(),
+        params => Type::Tuple(params.to_vec()),
+    }
 }
 
 fn dyn_row_field_type(receiver: &Type, name: &str) -> Option<Type> {

@@ -50,7 +50,8 @@ use crate::template::{analyze_template_with_source, TemplateDiagnostic, Template
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
     nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_to_type,
-    type_expr_with_context, RecordTypeField, Type, TypeContext, TypeEnv, TypedExpr,
+    type_expr_with_context, ReceiverMethodSummary, RecordTypeField, Type, TypeContext, TypeEnv,
+    TypedExpr,
 };
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -1556,7 +1557,74 @@ fn type_context_from_interface(
                 .collect(),
         );
     }
+    for method in visible_receiver_methods(interface, current_namespace) {
+        let Some(receiver) = &method.receiver else {
+            continue;
+        };
+        let param_tys = method
+            .param_types
+            .iter()
+            .skip(1)
+            .map(|param| {
+                param
+                    .as_deref()
+                    .map(|ty| {
+                        resolve_header_type(Some(ty), &method.receiver, &method.owner, type_aliases)
+                    })
+                    .map(|ty| header_type_to_type(&ty))
+                    .unwrap_or(Type::Unknown)
+            })
+            .collect::<Vec<_>>();
+        let result_ty = method
+            .return_type
+            .as_deref()
+            .map(|ty| resolve_header_type(Some(ty), &method.receiver, &method.owner, type_aliases))
+            .map(|ty| header_type_to_type(&ty))
+            .unwrap_or(Type::Unknown);
+        context.insert_receiver_method(ReceiverMethodSummary {
+            receiver: receiver.display_name(),
+            name: method.source_name.clone(),
+            symbol: method.symbol.clone(),
+            param_tys,
+            result_ty,
+        });
+    }
     context
+}
+
+fn visible_receiver_methods<'a>(
+    interface: &'a InterfaceSummary,
+    current_namespace: &str,
+) -> Vec<&'a crate::surface::InterfaceFunction> {
+    let mut by_receiver_name =
+        BTreeMap::<(String, String), Vec<&crate::surface::InterfaceFunction>>::new();
+    for function in &interface.functions {
+        let Some(receiver) = &function.receiver else {
+            continue;
+        };
+        if function.visibility == Visibility::Private && function.owner != current_namespace {
+            continue;
+        }
+        by_receiver_name
+            .entry((receiver.display_name(), function.source_name.clone()))
+            .or_default()
+            .push(function);
+    }
+    by_receiver_name
+        .into_values()
+        .flat_map(|candidates| {
+            let local = candidates
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.owner == current_namespace)
+                .collect::<Vec<_>>();
+            if local.is_empty() {
+                candidates
+            } else {
+                local
+            }
+        })
+        .collect()
 }
 
 fn visible_constructors<'a>(

@@ -535,7 +535,7 @@ fn render_core_value(value: &CoreValue) -> String {
             render_core_value(payload),
             fields
                 .iter()
-                .map(|field| field.name.as_str())
+                .map(render_core_dyn_row_field)
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
@@ -618,6 +618,15 @@ fn render_core_value(value: &CoreValue) -> String {
 
 fn render_core_record_value_field(field: &CoreRecordValueField) -> String {
     format!("{}={}", field.name, render_core_value(&field.value))
+}
+
+fn render_core_dyn_row_field(field: &crate::core::CoreDynRowField) -> String {
+    match &field.source {
+        crate::core::CoreDynRowFieldSource::Field => field.name.clone(),
+        crate::core::CoreDynRowFieldSource::ReceiverMethod { symbol, .. } => {
+            format!("{}=receiver-method({symbol})", field.name)
+        }
+    }
 }
 
 fn render_layout_kind(kind: &LayoutKind) -> String {
@@ -1342,7 +1351,7 @@ fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
                 "{indent}  dyn fields=[{}]",
                 fields
                     .iter()
-                    .map(|field| field.name.as_str())
+                    .map(render_typed_dyn_row_field)
                     .collect::<Vec<_>>()
                     .join(", ")
             )
@@ -1483,6 +1492,15 @@ fn render_typed_child(label: &str, expr: &TypedExpr, depth: usize, out: &mut Str
     let indent = "  ".repeat(depth);
     writeln!(out, "{indent}  {label}:").unwrap();
     render_typed_expr_into(expr, depth + 2, out);
+}
+
+fn render_typed_dyn_row_field(field: &crate::typed::TypedDynRowField) -> String {
+    match &field.source {
+        crate::typed::DynRowFieldSource::Field => field.name.clone(),
+        crate::typed::DynRowFieldSource::ReceiverMethod { symbol, .. } => {
+            format!("{}=receiver-method({symbol})", field.name)
+        }
+    }
 }
 
 fn render_typed_expr_kind(kind: &TypedExprKind) -> &'static str {

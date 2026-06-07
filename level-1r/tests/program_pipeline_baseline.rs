@@ -720,6 +720,101 @@ def main(): i64 = use_dyn({x: 41})
 }
 
 #[test]
+fn program_dyn_row_param_wraps_nominal_value_and_extracts_receiver_method_adapter() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "y",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                Some("i64".to_string()),
+                Expr::field(Expr::var("self"), "x"),
+            ),
+            SourceItem::def(
+                "use_dyn",
+                Vec::new(),
+                vec![ParamDecl::new(
+                    "v",
+                    Some("dyn {x: i64, y: (Unit) -> i64}".to_string()),
+                )],
+                Some("i64".to_string()),
+                Expr::field(Expr::var("v"), "x"),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("use_dyn"),
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(7))])),
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(main
+        .output
+        .visual
+        .typed
+        .contains("y=receiver-method(root::X.y)"));
+    assert!(main
+        .output
+        .visual
+        .core
+        .contains("y=receiver-method(root::X.y)"));
+    match &main.output.typed.kind {
+        TypedExprKind::Call { args, .. } => match &args[0].kind {
+            TypedExprKind::DynRowPackage { payload, fields } => {
+                assert_eq!(payload.ty, Type::Nominal("X".to_string()));
+                assert_eq!(fields.len(), 2);
+                assert!(fields.iter().any(|field| {
+                    field.name == "x"
+                        && matches!(field.source, chiba_level1r::typed::DynRowFieldSource::Field)
+                }));
+                assert!(fields.iter().any(|field| {
+                    matches!(
+                        &field.source,
+                        chiba_level1r::typed::DynRowFieldSource::ReceiverMethod {
+                            symbol,
+                            param_ty,
+                            result_ty,
+                        } if field.name == "y"
+                            && symbol == "root::X.y"
+                            && param_ty == &Type::Nominal("Unit".to_string())
+                            && result_ty == &Type::I64
+                    )
+                }));
+            }
+            other => panic!(
+                "expected dyn row package argument, got {}",
+                typed_expr_kind_name(other)
+            ),
+        },
+        other => panic!(
+            "expected call main body, got {}",
+            typed_expr_kind_name(other)
+        ),
+    }
+}
+
+#[test]
 fn program_contn_storage_field_call_can_resume_multiple_times() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"
