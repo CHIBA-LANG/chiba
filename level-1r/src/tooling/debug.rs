@@ -722,6 +722,7 @@ fn render_alpha_expr_kind(kind: &AlphaExprKind) -> &'static str {
         AlphaExprKind::AdtCtor { .. } => "adt-ctor",
         AlphaExprKind::Field { .. } => "field",
         AlphaExprKind::MethodCall { .. } => "method-call",
+        AlphaExprKind::Assign { .. } => "assign",
         AlphaExprKind::Index { .. } => "index",
         AlphaExprKind::Range { .. } => "range",
         AlphaExprKind::Binary { .. } => "binary",
@@ -1305,6 +1306,19 @@ fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
                 render_typed_child(&format!("arg {index}"), arg, depth, out);
             }
         }
+        TypedExprKind::Assign {
+            target,
+            value,
+            builtin,
+        } => {
+            if let Some(builtin) = builtin {
+                writeln!(out, "{indent}  assign builtin={}", builtin.debug_name()).unwrap();
+            } else {
+                writeln!(out, "{indent}  assign").unwrap();
+            }
+            render_typed_child("target", target, depth, out);
+            render_typed_child("value", value, depth, out);
+        }
         TypedExprKind::Index {
             receiver, index, ..
         } => {
@@ -1387,6 +1401,7 @@ fn render_typed_expr_kind(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",
+        TypedExprKind::Assign { .. } => "assign",
         TypedExprKind::Index { .. } => "index",
         TypedExprKind::Range { .. } => "range",
         TypedExprKind::Binary { .. } => "binary",

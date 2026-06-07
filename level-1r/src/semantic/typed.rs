@@ -56,6 +56,11 @@ pub enum TypedExprKind {
         args: Vec<TypedExpr>,
         builtin: Option<BuiltinMethodCall>,
     },
+    Assign {
+        target: Box<TypedExpr>,
+        value: Box<TypedExpr>,
+        builtin: Option<BuiltinMethodCall>,
+    },
     Index {
         receiver: Box<TypedExpr>,
         index: Box<TypedExpr>,
@@ -716,6 +721,27 @@ fn type_expr_with_context_and_controls(
                 ty,
             )
         }
+        Expr::Assign { target, value } => {
+            let target = type_expr_with_context_and_controls(target, env, context, controls);
+            let value = type_expr_with_context_and_controls(value, env, context, controls);
+            let args = [value.clone()];
+            let builtin = match builtin_method_call(&target, "set", &args) {
+                Some(BuiltinMethodCall::RefSet) => Some(BuiltinMethodCall::RefSet),
+                Some(BuiltinMethodCall::UnsafeRefSet) => Some(BuiltinMethodCall::UnsafeRefSet),
+                _ => None,
+            };
+            let ty = builtin
+                .and_then(|builtin| builtin_method_result_type(builtin, &target.ty))
+                .unwrap_or(Type::Unknown);
+            typed(
+                TypedExprKind::Assign {
+                    target: Box::new(target),
+                    value: Box::new(value),
+                    builtin,
+                },
+                ty,
+            )
+        }
         Expr::Index { receiver, index } => {
             let receiver = type_expr_with_context_and_controls(receiver, env, context, controls);
             let index = type_expr_with_context_and_controls(index, env, context, controls);
@@ -1042,6 +1068,27 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                     receiver: Box::new(receiver),
                     name,
                     args,
+                    builtin,
+                },
+                ty,
+            )
+        }
+        TypedExprKind::Assign { target, value, .. } => {
+            let target = refine_continuation_types(*target, context);
+            let value = refine_continuation_types(*value, context);
+            let args = [value.clone()];
+            let builtin = match builtin_method_call(&target, "set", &args) {
+                Some(BuiltinMethodCall::RefSet) => Some(BuiltinMethodCall::RefSet),
+                Some(BuiltinMethodCall::UnsafeRefSet) => Some(BuiltinMethodCall::UnsafeRefSet),
+                _ => None,
+            };
+            let ty = builtin
+                .and_then(|builtin| builtin_method_result_type(builtin, &target.ty))
+                .unwrap_or(Type::Unknown);
+            typed(
+                TypedExprKind::Assign {
+                    target: Box::new(target),
+                    value: Box::new(value),
                     builtin,
                 },
                 ty,
@@ -1389,6 +1436,27 @@ fn refine_pattern_binding_types(
                 ty,
             )
         }
+        TypedExprKind::Assign { target, value, .. } => {
+            let target = refine_pattern_binding_types(*target, bindings, context);
+            let value = refine_pattern_binding_types(*value, bindings, context);
+            let args = [value.clone()];
+            let builtin = match builtin_method_call(&target, "set", &args) {
+                Some(BuiltinMethodCall::RefSet) => Some(BuiltinMethodCall::RefSet),
+                Some(BuiltinMethodCall::UnsafeRefSet) => Some(BuiltinMethodCall::UnsafeRefSet),
+                _ => None,
+            };
+            let ty = builtin
+                .and_then(|builtin| builtin_method_result_type(builtin, &target.ty))
+                .unwrap_or(Type::Unknown);
+            typed(
+                TypedExprKind::Assign {
+                    target: Box::new(target),
+                    value: Box::new(value),
+                    builtin,
+                },
+                ty,
+            )
+        }
         TypedExprKind::Index {
             receiver,
             index,
@@ -1578,6 +1646,10 @@ fn collect_typed_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<
                 collect_typed_resume_inputs(binder, arg, inputs);
             }
         }
+        TypedExprKind::Assign { target, value, .. } => {
+            collect_typed_resume_inputs(binder, target, inputs);
+            collect_typed_resume_inputs(binder, value, inputs);
+        }
         TypedExprKind::Index {
             receiver, index, ..
         } => {
@@ -1762,6 +1834,18 @@ fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type
                 expr.ty,
             )
         }
+        TypedExprKind::Assign {
+            target,
+            value,
+            builtin,
+        } => typed(
+            TypedExprKind::Assign {
+                target: Box::new(rewrite_continuation_callee_input(*target, binder, input)),
+                value: Box::new(rewrite_continuation_callee_input(*value, binder, input)),
+                builtin,
+            },
+            expr.ty,
+        ),
         TypedExprKind::Index {
             receiver,
             index,

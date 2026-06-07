@@ -51,6 +51,10 @@ pub enum AlphaExprKind {
         name: String,
         args: Vec<AlphaExpr>,
     },
+    Assign {
+        target: Box<AlphaExpr>,
+        value: Box<AlphaExpr>,
+    },
     Index {
         receiver: Box<AlphaExpr>,
         index: Box<AlphaExpr>,
@@ -283,6 +287,12 @@ impl AlphaCtx {
                     receiver: Box::new(self.alpha(receiver)),
                     name: name.clone(),
                     args: args.iter().map(|arg| self.alpha(arg)).collect(),
+                },
+            },
+            Expr::Assign { target, value } => AlphaExpr {
+                kind: AlphaExprKind::Assign {
+                    target: Box::new(self.alpha(target)),
+                    value: Box::new(self.alpha(value)),
                 },
             },
             Expr::Index { receiver, index } => AlphaExpr {

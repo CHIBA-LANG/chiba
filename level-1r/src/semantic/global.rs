@@ -346,6 +346,7 @@ fn validate_static_initializer_expr_scoped(
         | Expr::Call { .. }
         | Expr::Instantiate { .. }
         | Expr::MethodCall { .. }
+        | Expr::Assign { .. }
         | Expr::Index { .. }
         | Expr::Reset { .. }
         | Expr::Shift { .. } => {
@@ -485,6 +486,10 @@ fn collect_expr_vars_scoped(expr: &Expr, refs: &mut BTreeSet<String>, bound: &BT
         Expr::MethodCall { receiver, args, .. } => {
             collect_expr_vars_scoped(receiver, refs, bound);
             collect_exprs(args, refs, bound);
+        }
+        Expr::Assign { target, value } => {
+            collect_expr_vars_scoped(target, refs, bound);
+            collect_expr_vars_scoped(value, refs, bound);
         }
         Expr::Index { receiver, index } => {
             collect_expr_vars_scoped(receiver, refs, bound);

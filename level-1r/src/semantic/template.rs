@@ -194,6 +194,7 @@ fn source_needs_auto_return_param(source: &Expr, source_params: &[ParamDecl]) ->
         | Expr::AdtCtor { .. }
         | Expr::Field { .. }
         | Expr::MethodCall { .. }
+        | Expr::Assign { .. }
         | Expr::Index { .. }
         | Expr::Range { .. }
         | Expr::Binary { .. }
@@ -298,6 +299,10 @@ fn collect_source_instantiations(expr: &Expr, facts: &mut TemplateFacts) {
                 collect_source_instantiations(arg, facts);
             }
         }
+        Expr::Assign { target, value } => {
+            collect_source_instantiations(target, facts);
+            collect_source_instantiations(value, facts);
+        }
         Expr::Index { receiver, index } => {
             collect_source_instantiations(receiver, facts);
             collect_source_instantiations(index, facts);
@@ -347,6 +352,9 @@ fn source_callee_name(expr: &Expr) -> String {
         Expr::Var(name) => name.clone(),
         Expr::Field { receiver, name, .. } | Expr::MethodCall { receiver, name, .. } => {
             format!("{}.{}", source_callee_name(receiver), name)
+        }
+        Expr::Assign { target, .. } => {
+            format!("{}.:=", source_callee_name(target))
         }
         Expr::Instantiate { callee, type_args } => {
             format!("{}[{}]", source_callee_name(callee), type_args.join(","))
@@ -503,6 +511,10 @@ fn collect_expr_obligations(expr: &AlphaExpr, facts: &mut TemplateFacts) {
             for arg in args {
                 collect_expr_obligations(arg, facts);
             }
+        }
+        AlphaExprKind::Assign { target, value } => {
+            collect_expr_obligations(target, facts);
+            collect_expr_obligations(value, facts);
         }
         AlphaExprKind::Index { receiver, index } => {
             collect_expr_obligations(receiver, facts);

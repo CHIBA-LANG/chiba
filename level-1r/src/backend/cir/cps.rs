@@ -312,6 +312,35 @@ fn transform(
                 ctx,
             )
         }
+        TypedExprKind::Assign {
+            target,
+            value,
+            builtin,
+        } => {
+            let target_controls = controls.clone();
+            transform(
+                target,
+                Box::new(|target, ctx| {
+                    let args = std::slice::from_ref(value.as_ref());
+                    if let Some(builtin) = builtin {
+                        return transform_builtin_method_args(
+                            *builtin,
+                            target,
+                            args,
+                            0,
+                            Vec::new(),
+                            k,
+                            controls,
+                            ctx,
+                        );
+                    }
+                    let func = CpsAtom::Var(format!("{target}.:="));
+                    transform_call_args(args, 0, Vec::new(), func, k, controls, ctx)
+                }),
+                target_controls,
+                ctx,
+            )
+        }
         TypedExprKind::Index {
             receiver,
             index,

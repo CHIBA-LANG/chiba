@@ -96,6 +96,7 @@ fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",
+        TypedExprKind::Assign { .. } => "assign",
         TypedExprKind::Index { .. } => "index",
         TypedExprKind::Range { .. } => "range",
         TypedExprKind::Binary { .. } => "binary",
@@ -1430,6 +1431,21 @@ fn source_ref_assignment_sugar_lowers_to_executable_set_runtime_import() {
     assert!(bundle.backend_link.linked_wat.contains("call $std_ref_get"));
 
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "4");
+}
+
+#[test]
+fn source_assignment_to_non_ref_is_program_diagnostic() {
+    let bundle = compile_source_program_bundle("def main(): i64 = 1 := 4")
+        .expect("compile invalid assignment target")
+        .program;
+
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::InvalidAssignmentTarget {
+            def: "main".to_string(),
+            target_type: "i64".to_string(),
+        }));
+    assert_eq!(bundle.defs[0].output.typed.ty, Type::Unknown);
 }
 
 #[test]

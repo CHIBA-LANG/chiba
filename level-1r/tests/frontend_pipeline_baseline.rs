@@ -36,6 +36,7 @@ fn expr_kind_name(expr: &Expr) -> &'static str {
         Expr::AdtCtor { .. } => "adt-ctor",
         Expr::Field { .. } => "field",
         Expr::MethodCall { .. } => "method-call",
+        Expr::Assign { .. } => "assign",
         Expr::Index { .. } => "index",
         Expr::Range { .. } => "range",
         Expr::Binary { .. } => "binary",
@@ -1381,9 +1382,8 @@ fn frontend_ref_assignment_sugar_parses_as_set_method_call() {
         SourceItem::Def { body, .. } => {
             assert_eq!(
                 body,
-                &Expr::method_call(
+                &Expr::assign(
                     Expr::method_call(Expr::var("Ref"), "new", Expr::i64(1)),
-                    "set",
                     Expr::i64(4)
                 )
             );

@@ -544,6 +544,10 @@ fn visit(expr: &AlphaExpr, facts: &mut ResolveFacts) {
                 visit(arg, facts);
             }
         }
+        AlphaExprKind::Assign { target, value } => {
+            visit(target, facts);
+            visit(value, facts);
+        }
         AlphaExprKind::Index { receiver, index } => {
             let op = if matches!(&index.kind, AlphaExprKind::Range { .. }) {
                 OperatorSurface::IndexSlice

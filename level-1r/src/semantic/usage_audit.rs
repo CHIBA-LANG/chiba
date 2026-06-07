@@ -290,6 +290,9 @@ fn type_for_var(expr: &TypedExpr, name: &str) -> Option<Type> {
             type_for_var(receiver, name)
                 .or_else(|| args.iter().find_map(|arg| type_for_var(arg, name)))
         }
+        crate::typed::TypedExprKind::Assign { target, value, .. } => {
+            type_for_var(target, name).or_else(|| type_for_var(value, name))
+        }
         crate::typed::TypedExprKind::Index {
             receiver, index, ..
         } => type_for_var(receiver, name).or_else(|| type_for_var(index, name)),

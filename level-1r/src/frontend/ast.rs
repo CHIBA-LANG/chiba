@@ -415,6 +415,10 @@ pub enum Expr {
         name: String,
         args: Vec<Expr>,
     },
+    Assign {
+        target: Box<Expr>,
+        value: Box<Expr>,
+    },
     Index {
         receiver: Box<Expr>,
         index: Box<Expr>,
@@ -579,6 +583,13 @@ pub fn render_source_expr(expr: &Expr) -> String {
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("{}.{}({args})", render_source_expr(receiver), name)
+        }
+        Expr::Assign { target, value } => {
+            format!(
+                "{} := {}",
+                render_source_expr(target),
+                render_source_expr(value)
+            )
         }
         Expr::Index { receiver, index } => {
             format!(
@@ -808,6 +819,13 @@ impl Expr {
             receiver: Box::new(receiver),
             name: name.into(),
             args,
+        }
+    }
+
+    pub fn assign(target: Expr, value: Expr) -> Self {
+        Self::Assign {
+            target: Box::new(target),
+            value: Box::new(value),
         }
     }
 

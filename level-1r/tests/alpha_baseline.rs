@@ -17,6 +17,7 @@ fn alpha_expr_kind_name(kind: &AlphaExprKind) -> &'static str {
         AlphaExprKind::AdtCtor { .. } => "adt-ctor",
         AlphaExprKind::Field { .. } => "field",
         AlphaExprKind::MethodCall { .. } => "method-call",
+        AlphaExprKind::Assign { .. } => "assign",
         AlphaExprKind::Index { .. } => "index",
         AlphaExprKind::Range { .. } => "range",
         AlphaExprKind::Binary { .. } => "binary",

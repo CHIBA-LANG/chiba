@@ -186,6 +186,10 @@ pub enum ProgramDiagnostic {
         def: String,
         binder: String,
     },
+    InvalidAssignmentTarget {
+        def: String,
+        target_type: String,
+    },
     MissingEntry,
     EntryHasParams {
         name: String,
@@ -541,6 +545,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     all_diagnostics.extend(template_diagnostics(&defs));
     all_diagnostics.extend(control_diagnostics(&defs));
     all_diagnostics.extend(cps_usage_diagnostics(&defs));
+    all_diagnostics.extend(assignment_diagnostics(&defs));
     apply_program_backend_gates(&mut defs);
     if entry.is_none() {
         all_diagnostics.push(ProgramDiagnostic::MissingEntry);
@@ -1489,6 +1494,170 @@ fn cps_usage_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
                 })
         })
         .collect()
+}
+
+fn assignment_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
+    let mut diagnostics = Vec::new();
+    for def in defs {
+        collect_assignment_diagnostics(&def.name, &def.output.typed, &mut diagnostics);
+    }
+    diagnostics
+}
+
+fn collect_assignment_diagnostics(
+    def: &str,
+    expr: &TypedExpr,
+    diagnostics: &mut Vec<ProgramDiagnostic>,
+) {
+    match &expr.kind {
+        crate::typed::TypedExprKind::Assign {
+            target,
+            value,
+            builtin,
+        } => {
+            if !matches!(
+                builtin,
+                Some(crate::typed::BuiltinMethodCall::RefSet)
+                    | Some(crate::typed::BuiltinMethodCall::UnsafeRefSet)
+            ) {
+                diagnostics.push(ProgramDiagnostic::InvalidAssignmentTarget {
+                    def: def.to_string(),
+                    target_type: program_type_name(&target.ty),
+                });
+            }
+            collect_assignment_diagnostics(def, target, diagnostics);
+            collect_assignment_diagnostics(def, value, diagnostics);
+        }
+        crate::typed::TypedExprKind::Lambda { body, .. }
+        | crate::typed::TypedExprKind::Nominal { expr: body, .. }
+        | crate::typed::TypedExprKind::Reset { body, .. }
+        | crate::typed::TypedExprKind::Shift { body, .. } => {
+            collect_assignment_diagnostics(def, body, diagnostics);
+        }
+        crate::typed::TypedExprKind::Call { callee, args } => {
+            collect_assignment_diagnostics(def, callee, diagnostics);
+            for arg in args {
+                collect_assignment_diagnostics(def, arg, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::Tuple { fields, .. } => {
+            for field in fields {
+                collect_assignment_diagnostics(def, field, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::SliceLiteral { items, .. } => {
+            for item in items {
+                collect_assignment_diagnostics(def, item, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::Record { fields } => {
+            for field in fields {
+                collect_assignment_diagnostics(def, &field.value, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::RecordUpdate { base, fields } => {
+            collect_assignment_diagnostics(def, base, diagnostics);
+            for field in fields {
+                collect_assignment_diagnostics(def, &field.value, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_assignment_diagnostics(def, arg, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::Field { receiver, .. } => {
+            collect_assignment_diagnostics(def, receiver, diagnostics);
+        }
+        crate::typed::TypedExprKind::MethodCall { receiver, args, .. } => {
+            collect_assignment_diagnostics(def, receiver, diagnostics);
+            for arg in args {
+                collect_assignment_diagnostics(def, arg, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::Index {
+            receiver, index, ..
+        } => {
+            collect_assignment_diagnostics(def, receiver, diagnostics);
+            collect_assignment_diagnostics(def, index, diagnostics);
+        }
+        crate::typed::TypedExprKind::Range { start, end } => {
+            collect_assignment_diagnostics(def, start, diagnostics);
+            collect_assignment_diagnostics(def, end, diagnostics);
+        }
+        crate::typed::TypedExprKind::Binary { lhs, rhs, .. } => {
+            collect_assignment_diagnostics(def, lhs, diagnostics);
+            collect_assignment_diagnostics(def, rhs, diagnostics);
+        }
+        crate::typed::TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_assignment_diagnostics(def, cond, diagnostics);
+            collect_assignment_diagnostics(def, then_branch, diagnostics);
+            collect_assignment_diagnostics(def, else_branch, diagnostics);
+        }
+        crate::typed::TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_assignment_diagnostics(def, scrutinee, diagnostics);
+            collect_assignment_diagnostics(def, then_branch, diagnostics);
+            collect_assignment_diagnostics(def, else_branch, diagnostics);
+        }
+        crate::typed::TypedExprKind::Match { scrutinee, arms } => {
+            collect_assignment_diagnostics(def, scrutinee, diagnostics);
+            for arm in arms {
+                collect_assignment_diagnostics(def, &arm.body, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::Var(_) | crate::typed::TypedExprKind::Lit(_) => {}
+    }
+}
+
+fn program_type_name(ty: &Type) -> String {
+    match ty {
+        Type::Unknown => "Unknown".to_string(),
+        Type::I64 => "i64".to_string(),
+        Type::Rune => "rune".to_string(),
+        Type::Bool => "bool".to_string(),
+        Type::Nominal(name) => name.clone(),
+        Type::Adt { name, .. } => name.clone(),
+        Type::Tuple(fields) => format!(
+            "Tuple[{}]",
+            fields
+                .iter()
+                .map(program_type_name)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Type::Record(fields) => format!(
+            "{{{}}}",
+            fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, program_type_name(&field.ty)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Type::Func(arg, ret) => {
+            format!("({}) -> {}", program_type_name(arg), program_type_name(ret))
+        }
+        Type::Continuation {
+            multi,
+            input,
+            answer,
+        } => {
+            let kind = if *multi { "contN" } else { "cont1" };
+            format!(
+                "{kind} ({}) -> {}",
+                program_type_name(input),
+                program_type_name(answer)
+            )
+        }
+    }
 }
 
 fn apply_program_backend_gates(defs: &mut [ProgramDefOutput]) {
@@ -2628,6 +2797,9 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
         }
         ProgramDiagnostic::Cont1ResumedMoreThanOnce { def, binder } => {
             format!("cont1 resumed more than once {def}: {binder}")
+        }
+        ProgramDiagnostic::InvalidAssignmentTarget { def, target_type } => {
+            format!("invalid assignment target {def}: {target_type}")
         }
         ProgramDiagnostic::MissingEntry => "missing entry".to_string(),
         ProgramDiagnostic::EntryHasParams { name, params } => {

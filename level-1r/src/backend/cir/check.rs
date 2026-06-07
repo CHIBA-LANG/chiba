@@ -97,6 +97,11 @@ fn visit(
                 visit(arg, stack, facts, child_context);
             }
         }
+        TypedExprKind::Assign { target, value, .. } => {
+            let child_context = replay_context.join(ReplaySafety::Unsafe);
+            visit(target, stack, facts, child_context);
+            visit(value, stack, facts, child_context);
+        }
         TypedExprKind::Index {
             receiver, index, ..
         } => {
@@ -257,6 +262,10 @@ fn collect_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<Type>)
             for arg in args {
                 collect_resume_inputs(binder, arg, inputs);
             }
+        }
+        TypedExprKind::Assign { target, value, .. } => {
+            collect_resume_inputs(binder, target, inputs);
+            collect_resume_inputs(binder, value, inputs);
         }
         TypedExprKind::Index {
             receiver, index, ..

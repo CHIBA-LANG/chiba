@@ -84,6 +84,10 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
                 collect(arg, scope, facts);
             }
         }
+        TypedExprKind::Assign { target, value, .. } => {
+            collect(target, scope, facts);
+            collect(value, scope, facts);
+        }
         TypedExprKind::Index {
             receiver, index, ..
         } => {
@@ -198,6 +202,10 @@ fn collect_alpha(expr: &AlphaExpr, scope: &mut BTreeSet<BinderId>, facts: &mut C
             for arg in args {
                 collect_alpha(arg, scope, facts);
             }
+        }
+        AlphaExprKind::Assign { target, value } => {
+            collect_alpha(target, scope, facts);
+            collect_alpha(value, scope, facts);
         }
         AlphaExprKind::Index { receiver, index } => {
             collect_alpha(receiver, scope, facts);
@@ -323,6 +331,10 @@ fn collect_alpha_free_vars(
                 collect_alpha_free_vars(arg, locals, free);
             }
         }
+        AlphaExprKind::Assign { target, value } => {
+            collect_alpha_free_vars(target, locals, free);
+            collect_alpha_free_vars(value, locals, free);
+        }
         AlphaExprKind::Index { receiver, index } => {
             collect_alpha_free_vars(receiver, locals, free);
             collect_alpha_free_vars(index, locals, free);
@@ -418,6 +430,10 @@ fn collect_free_vars(expr: &TypedExpr, locals: &mut BTreeSet<String>, free: &mut
             for arg in args {
                 collect_free_vars(arg, locals, free);
             }
+        }
+        TypedExprKind::Assign { target, value, .. } => {
+            collect_free_vars(target, locals, free);
+            collect_free_vars(value, locals, free);
         }
         TypedExprKind::Index {
             receiver, index, ..

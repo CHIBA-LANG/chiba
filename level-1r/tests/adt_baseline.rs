@@ -17,6 +17,7 @@ fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",
+        TypedExprKind::Assign { .. } => "assign",
         TypedExprKind::Index { .. } => "index",
         TypedExprKind::Range { .. } => "range",
         TypedExprKind::Binary { .. } => "binary",

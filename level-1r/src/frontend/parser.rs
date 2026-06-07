@@ -718,7 +718,7 @@ impl FrontendParser {
                 }
                 self.pos += 1;
                 let rhs = self.parse_expr_bp(rbp)?;
-                lhs = Expr::method_call(lhs, "set", rhs);
+                lhs = Expr::assign(lhs, rhs);
                 continue;
             }
             if self.peek_name() == Some("PipeForward") {
@@ -1546,6 +1546,11 @@ fn replace_pipe_placeholders(expr: Expr, input: &Expr) -> (Expr, bool) {
                 receiver_used || args_used,
             )
         }
+        Expr::Assign { target, value } => {
+            let (target, target_used) = replace_pipe_placeholders(*target, input);
+            let (value, value_used) = replace_pipe_placeholders(*value, input);
+            (Expr::assign(target, value), target_used || value_used)
+        }
         Expr::Index { receiver, index } => {
             let (receiver, receiver_used) = replace_pipe_placeholders(*receiver, input);
             let (index, index_used) = replace_pipe_placeholders(*index, input);
@@ -1889,6 +1894,10 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
                 receiver => Expr::method_call_args(receiver, name, args),
             }
         }
+        Expr::Assign { target, value } => Expr::assign(
+            enrich_expr_with_data_variants(*target, variants),
+            enrich_expr_with_data_variants(*value, variants),
+        ),
         Expr::Index { receiver, index } => Expr::index(
             enrich_expr_with_data_variants(*receiver, variants),
             enrich_expr_with_data_variants(*index, variants),
