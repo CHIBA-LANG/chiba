@@ -653,7 +653,7 @@ fn type_expr_with_context_and_controls(
                 .map(|arg| type_expr_with_context_and_controls(arg, env, context, controls))
                 .collect::<Vec<_>>();
             let args = coerce_call_args(&callee.ty, args, context);
-            let ty = call_result_type(&callee.ty, args.len());
+            let ty = dyn_row_method_call_result_type(&callee.ty, args.len());
             typed(
                 TypedExprKind::Call {
                     callee: Box::new(callee),
@@ -807,6 +807,24 @@ fn type_expr_with_context_and_controls(
                 .iter()
                 .map(|arg| type_expr_with_context_and_controls(arg, env, context, controls))
                 .collect::<Vec<_>>();
+            if matches!(receiver.ty, Type::DynRow(_)) {
+                let field_ty = dyn_row_field_type(&receiver.ty, name).unwrap_or(Type::Unknown);
+                let callee = typed(
+                    TypedExprKind::DynRowField {
+                        package: Box::new(receiver),
+                        name: name.clone(),
+                    },
+                    field_ty,
+                );
+                let ty = dyn_row_method_call_result_type(&callee.ty, args.len());
+                return typed(
+                    TypedExprKind::Call {
+                        callee: Box::new(callee),
+                        args,
+                    },
+                    ty,
+                );
+            }
             let builtin = builtin_method_call(&receiver, name, &args);
             let ty = builtin
                 .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty, &args))
@@ -1026,7 +1044,7 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 .into_iter()
                 .map(|arg| refine_continuation_types(arg, context))
                 .collect::<Vec<_>>();
-            let ty = call_result_type(&callee.ty, args.len());
+            let ty = dyn_row_method_call_result_type(&callee.ty, args.len());
             typed(
                 TypedExprKind::Call {
                     callee: Box::new(callee),
@@ -1410,7 +1428,7 @@ fn refine_pattern_binding_types(
                 .into_iter()
                 .map(|arg| refine_pattern_binding_types(arg, bindings, context))
                 .collect::<Vec<_>>();
-            let ty = call_result_type(&callee.ty, args.len());
+            let ty = dyn_row_method_call_result_type(&callee.ty, args.len());
             typed(
                 TypedExprKind::Call {
                     callee: Box::new(callee),
@@ -2259,6 +2277,15 @@ fn call_result_type(callee: &Type, arity: usize) -> Type {
         }
     }
     current.clone()
+}
+
+fn dyn_row_method_call_result_type(callee: &Type, arity: usize) -> Type {
+    match (callee, arity) {
+        (Type::Func(param, result), 0) if matches!(param.as_ref(), Type::Nominal(name) if name == "Unit") => {
+            result.as_ref().clone()
+        }
+        _ => call_result_type(callee, arity),
+    }
 }
 
 fn coerce_call_args(callee: &Type, args: Vec<TypedExpr>, context: &TypeContext) -> Vec<TypedExpr> {

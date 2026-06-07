@@ -815,6 +815,90 @@ fn program_dyn_row_param_wraps_nominal_value_and_extracts_receiver_method_adapte
 }
 
 #[test]
+fn program_dyn_row_receiver_method_adapter_call_enters_dyn_field_callee() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "y",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                Some("i64".to_string()),
+                Expr::field(Expr::var("self"), "x"),
+            ),
+            SourceItem::def(
+                "use_dyn",
+                Vec::new(),
+                vec![ParamDecl::new(
+                    "v",
+                    Some("dyn {x: i64, y: (Unit) -> i64}".to_string()),
+                )],
+                Some("i64".to_string()),
+                Expr::method_call_args(Expr::var("v"), "y", Vec::new()),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("use_dyn"),
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(7))])),
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let use_dyn = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "use_dyn")
+        .expect("use_dyn def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_eq!(use_dyn.output.typed.ty, Type::I64);
+    match &use_dyn.output.typed.kind {
+        TypedExprKind::Call { callee, args } => {
+            assert!(args.is_empty());
+            match &callee.kind {
+                TypedExprKind::DynRowField { package, name } => {
+                    assert!(matches!(
+                        &package.ty,
+                        Type::DynRow(fields)
+                            if fields.iter().any(|field| field.name == "x")
+                                && fields.iter().any(|field| field.name == "y")
+                    ));
+                    assert_eq!(name, "y");
+                    assert_eq!(
+                        callee.ty,
+                        Type::Func(
+                            Box::new(Type::Nominal("Unit".to_string())),
+                            Box::new(Type::I64)
+                        )
+                    );
+                }
+                other => panic!(
+                    "expected dyn row field callee, got {}",
+                    typed_expr_kind_name(other)
+                ),
+            }
+        }
+        other => panic!(
+            "expected dyn field call, got {}",
+            typed_expr_kind_name(other)
+        ),
+    }
+}
+
+#[test]
 fn program_contn_storage_field_call_can_resume_multiple_times() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"
