@@ -2528,6 +2528,78 @@ fn source_vec_unsafe_ref_index_assignment_lowers_to_executable_ref_set() {
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
 }
 
+fn assert_aggregate_string_ref_assignment(source: &str, aggregate_get: &str, ref_set: &str) {
+    let bundle = compile_source_program_bundle(source)
+        .expect("compile aggregate string ref index assignment")
+        .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains(aggregate_get));
+    assert!(bundle.backend_link.linked_wat.contains(ref_set));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_len"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_array_ref_string_index_assignment_lowers_to_executable_externref_set() {
+    assert_aggregate_string_ref_assignment(
+        "def main(cells: Array[Ref[String]]): i64 = (cells[0] := String.from(\"hé\")).*.bytes_len()",
+        "(import \"env\" \"std.array_get\" (func $std_array_get (param externref) (param i32) (result externref)))",
+        "(import \"env\" \"std.ref_set_externref\" (func $std_ref_set_externref (param externref) (param externref) (result externref)))",
+    );
+}
+
+#[test]
+fn source_slice_ref_string_index_assignment_lowers_to_executable_externref_set() {
+    assert_aggregate_string_ref_assignment(
+        "def main(cells: Slice[Ref[String]]): i64 = (cells[0] := String.from(\"hé\")).*.bytes_len()",
+        "(import \"env\" \"std.slice_get\" (func $std_slice_get (param externref) (param i32) (result externref)))",
+        "(import \"env\" \"std.ref_set_externref\" (func $std_ref_set_externref (param externref) (param externref) (result externref)))",
+    );
+}
+
+#[test]
+fn source_vec_ref_string_index_assignment_lowers_to_executable_externref_set() {
+    assert_aggregate_string_ref_assignment(
+        "def main(cells: Vec[Ref[String]]): i64 = (cells[0] := String.from(\"hé\")).*.bytes_len()",
+        "(import \"env\" \"std.vec_get\" (func $std_vec_get (param externref) (param i32) (result externref)))",
+        "(import \"env\" \"std.ref_set_externref\" (func $std_ref_set_externref (param externref) (param externref) (result externref)))",
+    );
+}
+
+#[test]
+fn source_array_unsafe_ref_string_index_assignment_lowers_to_executable_externref_set() {
+    assert_aggregate_string_ref_assignment(
+        "def main(cells: Array[UnsafeRef[String]]): i64 = (cells[0] := String.from(\"hé\")).*.bytes_len()",
+        "(import \"env\" \"std.array_get\" (func $std_array_get (param externref) (param i32) (result externref)))",
+        "(import \"env\" \"std.unsafe_ref_set_externref\" (func $std_unsafe_ref_set_externref (param externref) (param externref) (result externref)))",
+    );
+}
+
+#[test]
+fn source_slice_unsafe_ref_string_index_assignment_lowers_to_executable_externref_set() {
+    assert_aggregate_string_ref_assignment(
+        "def main(cells: Slice[UnsafeRef[String]]): i64 = (cells[0] := String.from(\"hé\")).*.bytes_len()",
+        "(import \"env\" \"std.slice_get\" (func $std_slice_get (param externref) (param i32) (result externref)))",
+        "(import \"env\" \"std.unsafe_ref_set_externref\" (func $std_unsafe_ref_set_externref (param externref) (param externref) (result externref)))",
+    );
+}
+
+#[test]
+fn source_vec_unsafe_ref_string_index_assignment_lowers_to_executable_externref_set() {
+    assert_aggregate_string_ref_assignment(
+        "def main(cells: Vec[UnsafeRef[String]]): i64 = (cells[0] := String.from(\"hé\")).*.bytes_len()",
+        "(import \"env\" \"std.vec_get\" (func $std_vec_get (param externref) (param i32) (result externref)))",
+        "(import \"env\" \"std.unsafe_ref_set_externref\" (func $std_unsafe_ref_set_externref (param externref) (param externref) (result externref)))",
+    );
+}
+
 #[test]
 fn source_ref_array_index_assignment_is_program_diagnostic() {
     assert_invalid_assignment_target(
