@@ -7393,8 +7393,26 @@ def main(): i64 = CELL.get().end
     )
     .expect("compile unsafe ref range static initializer")
     .program;
+    let array_cell = compile_source_program_bundle(
+        r#"
+def NAMES: Array[String] = [String.from("hé")]
+def CELL: Ref[Array[String]] = Ref.new(NAMES)
+def main(): i64 = CELL.get()[0].bytes_len()
+"#,
+    )
+    .expect("compile ref array string static initializer")
+    .program;
+    let unsafe_array_cell = compile_source_program_bundle(
+        r#"
+def ABI: Array[cstr] = [String.from("hé").to_cstr()]
+def CELL: UnsafeRef[Array[cstr]] = UnsafeRef.new(ABI)
+def main(): rune = CELL.get()[0].char_at(0)
+"#,
+    )
+    .expect("compile unsafe ref array cstr static initializer")
+    .program;
 
-    for bundle in [&cell, &unsafe_cell] {
+    for bundle in [&cell, &unsafe_cell, &array_cell, &unsafe_array_cell] {
         assert_eq!(bundle.diagnostics, vec![]);
         assert_backend_link_clean_all(bundle);
         assert!(bundle
@@ -7418,9 +7436,38 @@ def main(): i64 = CELL.get().end
         .backend_link
         .linked_wat
         .contains("call $std_unsafe_ref_get_externref"));
+    assert!(array_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_new_externref"));
+    assert!(array_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_get_externref"));
+    assert!(array_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_get"));
+    assert!(unsafe_array_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_new_externref"));
+    assert!(unsafe_array_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_get_externref"));
+    assert!(unsafe_array_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_get"));
 
     assert_eq!(run_wat_text(&cell.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&unsafe_cell.backend_link.linked_wat), "9");
+    assert_eq!(run_wat_text(&array_cell.backend_link.linked_wat), "3");
+    assert_eq!(
+        run_wat_text(&unsafe_array_cell.backend_link.linked_wat),
+        "104"
+    );
 }
 
 #[test]
