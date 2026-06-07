@@ -63,6 +63,7 @@ function summarizeResult(value) {
   }
   if (value instanceof Uint8Array) return `bytes/${value.length}`;
   if (value && value.bytes instanceof Uint8Array) return `bytes/${value.bytes.length}`;
+  if (value && value.cstr instanceof Uint8Array) return `cstr/${value.cstr.length}`;
   return String(value || 0);
 }
 

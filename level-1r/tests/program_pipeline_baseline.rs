@@ -3034,6 +3034,86 @@ fn source_string_from_lowers_to_executable_owned_text_runtime_import() {
 }
 
 #[test]
+fn source_text_builtins_can_return_executable_externref_handles() {
+    let owned = compile_source_program_bundle("def main(): String = String.from(\"hé\")")
+        .expect("compile owned string return")
+        .program;
+    let concat = compile_source_program_bundle("def main(): String = \"h\".concat(\"é\")")
+        .expect("compile string concat return")
+        .program;
+    let built = compile_source_program_bundle("def main(): String = String.new().push_rune('é')")
+        .expect("compile string builder return")
+        .program;
+    let view = compile_source_program_bundle("def main(): str = String.from(\"hé\").as_str()")
+        .expect("compile str view return")
+        .program;
+    let string_slice = compile_source_program_bundle("def main(): String = \"héx\"[1..3]")
+        .expect("compile string slice return")
+        .program;
+    let cstr = compile_source_program_bundle("def main(): cstr = String.from(\"hé\").to_cstr()")
+        .expect("compile cstr return")
+        .program;
+    let cstr_slice = compile_source_program_bundle("def main(): cstr = c\"héx\"[1..3]")
+        .expect("compile cstr slice return")
+        .program;
+
+    for bundle in [&owned, &concat, &built, &view, &string_slice, &cstr, &cstr_slice] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("(func $main (export \"main\") (result externref)"));
+    }
+    assert_eq!(owned.defs[0].output.typed.ty, Type::Nominal("String".to_string()));
+    assert_eq!(concat.defs[0].output.typed.ty, Type::Nominal("String".to_string()));
+    assert_eq!(built.defs[0].output.typed.ty, Type::Nominal("String".to_string()));
+    assert_eq!(view.defs[0].output.typed.ty, Type::Nominal("str".to_string()));
+    assert_eq!(
+        string_slice.defs[0].output.typed.ty,
+        Type::Nominal("String".to_string())
+    );
+    assert_eq!(cstr.defs[0].output.typed.ty, Type::Nominal("cstr".to_string()));
+    assert_eq!(
+        cstr_slice.defs[0].output.typed.ty,
+        Type::Nominal("cstr".to_string())
+    );
+    assert!(owned.backend_link.linked_wat.contains("call $std_str_to_string"));
+    assert!(concat
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_concat"));
+    assert!(built
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_push_rune"));
+    assert!(view
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_as_str"));
+    assert!(string_slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_slice"));
+    assert!(cstr
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_to_cstr"));
+    assert!(cstr_slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_cstr_slice"));
+
+    assert_eq!(run_wat_text(&owned.backend_link.linked_wat), "bytes/3");
+    assert_eq!(run_wat_text(&concat.backend_link.linked_wat), "bytes/3");
+    assert_eq!(run_wat_text(&built.backend_link.linked_wat), "bytes/2");
+    assert_eq!(run_wat_text(&view.backend_link.linked_wat), "bytes/3");
+    assert_eq!(run_wat_text(&string_slice.backend_link.linked_wat), "bytes/2");
+    assert_eq!(run_wat_text(&cstr.backend_link.linked_wat), "cstr/4");
+    assert_eq!(run_wat_text(&cstr_slice.backend_link.linked_wat), "cstr/3");
+}
+
+#[test]
 fn source_string_as_str_lowers_to_executable_view_runtime_import() {
     let len =
         compile_source_program_bundle("def main(): i64 = String.from(\"hé\").as_str().bytes_len()")
