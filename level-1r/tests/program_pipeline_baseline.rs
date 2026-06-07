@@ -7403,6 +7403,14 @@ def main(): i64 = LIMITS.freeze()[1].start
     )
     .expect("compile range vec static initializer")
     .program;
+    let range_array = compile_source_program_bundle(
+        r#"
+def LIMITS: Array[Range] = [1..2, 3..9]
+def main(): i64 = LIMITS[0].start + LIMITS[1].end
+"#,
+    )
+    .expect("compile range array static initializer")
+    .program;
     let cstr_slice = compile_source_program_bundle(
         r#"
 def ABI: Slice[cstr] = [c"x", String.from("hé").to_cstr()]
@@ -7419,8 +7427,23 @@ def main(): i64 = ABI.freeze()[1].bytes_len()
     )
     .expect("compile cstr vec static initializer")
     .program;
+    let cstr_array = compile_source_program_bundle(
+        r#"
+def ABI: Array[cstr] = [c"x", String.from("hé").to_cstr()]
+def main(): i64 = ABI[1].bytes_len()
+"#,
+    )
+    .expect("compile cstr array static initializer")
+    .program;
 
-    for bundle in [&range_slice, &range_vec, &cstr_slice, &cstr_vec] {
+    for bundle in [
+        &range_slice,
+        &range_vec,
+        &range_array,
+        &cstr_slice,
+        &cstr_vec,
+        &cstr_array,
+    ] {
         assert_eq!(bundle.diagnostics, vec![]);
         assert_backend_link_clean_all(bundle);
         assert!(bundle.backend_link.linked_wat.contains("(mut externref)"));
@@ -7441,6 +7464,14 @@ def main(): i64 = ABI.freeze()[1].bytes_len()
         .backend_link
         .linked_wat
         .contains("call $std_vec_push_externref"));
+    assert!(range_array
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_externref_literal_2"));
+    assert!(range_array
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_get"));
     assert!(cstr_slice
         .backend_link
         .linked_wat
@@ -7449,11 +7480,21 @@ def main(): i64 = ABI.freeze()[1].bytes_len()
         .backend_link
         .linked_wat
         .contains("call $std_vec_push_externref"));
+    assert!(cstr_array
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_externref_literal_2"));
+    assert!(cstr_array
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_get"));
 
     assert_eq!(run_wat_text(&range_slice.backend_link.linked_wat), "9");
     assert_eq!(run_wat_text(&range_vec.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&range_array.backend_link.linked_wat), "10");
     assert_eq!(run_wat_text(&cstr_slice.backend_link.linked_wat), "0");
     assert_eq!(run_wat_text(&cstr_vec.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&cstr_array.backend_link.linked_wat), "3");
 }
 
 #[test]
