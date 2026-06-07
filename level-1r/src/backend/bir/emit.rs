@@ -675,6 +675,12 @@ fn builtin_runtime_import_name(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::VecFreeze => "std.vec_freeze",
         BuiltinMethodCall::StringNew => "std.string_new",
         BuiltinMethodCall::StringPushRune => "std.string_push_rune",
+        BuiltinMethodCall::TextLen {
+            kind: TextKind::Str,
+        } => "std.str_i64_len",
+        BuiltinMethodCall::TextLen {
+            kind: TextKind::String,
+        } => "std.string_i64_len",
         BuiltinMethodCall::TextCharAt {
             kind: TextKind::Str,
         } => "std.str_char_at",
@@ -697,6 +703,7 @@ fn builtin_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::VecFreeze => "externref_to_externref",
         BuiltinMethodCall::StringNew => "_to_externref",
         BuiltinMethodCall::StringPushRune => "externref_i64_to_externref",
+        BuiltinMethodCall::TextLen { .. } => "externref_to_i64",
         BuiltinMethodCall::TextCharAt { .. } => "externref_i64_to_i64",
         BuiltinMethodCall::RefNew => "i64_to_externref",
         BuiltinMethodCall::RefGet => "externref_to_i64",
@@ -1915,6 +1922,9 @@ fn render_core_value_i32(
             if builtin_runtime_call_is_renderable_i32(*call, args, env) =>
         {
             match call {
+                BuiltinMethodCall::TextLen { .. } => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                }
                 BuiltinMethodCall::TextCharAt { .. } => {
                     render_core_value_externref(wat, &args[0], env)?;
                     render_core_value_i32(wat, &args[1], env)?;
@@ -2021,6 +2031,9 @@ fn render_core_value_externref(
                     render_core_value_externref(wat, &args[0], env)?;
                     render_core_value_i32(wat, &args[1], env)?;
                 }
+                BuiltinMethodCall::TextLen { .. } => {
+                    unreachable!("text len returns i32 and is not renderable as externref")
+                }
                 BuiltinMethodCall::TextCharAt { .. } => {
                     unreachable!("text char_at returns rune/i32 and is not renderable as externref")
                 }
@@ -2090,6 +2103,9 @@ fn builtin_runtime_call_is_renderable_i32(
     env: &RenderEnv,
 ) -> bool {
     match (call, args) {
+        (BuiltinMethodCall::TextLen { .. }, [text]) => {
+            core_value_is_renderable_externref(text, env)
+        }
         (BuiltinMethodCall::TextCharAt { .. }, [text, index]) => {
             core_value_is_renderable_externref(text, env)
                 && core_value_is_renderable_i32(index, env)

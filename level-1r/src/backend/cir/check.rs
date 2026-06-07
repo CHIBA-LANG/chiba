@@ -214,7 +214,8 @@ fn replay_safety_for(kind: ContinuationKind, context: ReplaySafety) -> ReplaySaf
 fn method_replay_safety(builtin: Option<BuiltinMethodCall>) -> ReplaySafety {
     match builtin {
         Some(
-            BuiltinMethodCall::TextCharAt { .. }
+            BuiltinMethodCall::TextLen { .. }
+            | BuiltinMethodCall::TextCharAt { .. }
             | BuiltinMethodCall::VecFreeze
             | BuiltinMethodCall::RefGet,
         ) => ReplaySafety::Safe,
