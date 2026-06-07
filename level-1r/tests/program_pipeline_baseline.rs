@@ -3072,6 +3072,49 @@ fn source_ref_new_preserves_slice_string_value_through_get_and_set() {
 }
 
 #[test]
+fn source_ref_new_preserves_array_string_value_through_get_and_set() {
+    let get = compile_source_program_bundle(
+        r#"
+def make(): Array[String] = [String.from("hé")]
+def main(): i64 = Ref.new(make()).get()[0].bytes_len()
+"#,
+    )
+    .expect("compile string array ref get")
+    .program;
+    let set = compile_source_program_bundle(
+        r#"
+def initial(): Array[String] = [String.from("x")]
+def next(): Array[String] = [String.from("hi")]
+def main(): rune = (Ref.new(initial()) := next()).*[0].char_at(0)
+"#,
+    )
+    .expect("compile string array ref set")
+    .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_get_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_array_get"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_set_externref"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "104");
+}
+
+#[test]
 fn source_ref_new_preserves_range_value_through_get_and_set() {
     let get = compile_source_program_bundle("def main(): i64 = Ref.new(3..9).get().end")
         .expect("compile range ref get")
@@ -3313,6 +3356,49 @@ fn source_unsafe_ref_new_preserves_slice_string_value_through_get_and_set() {
             .backend_link
             .linked_wat
             .contains("call $std_slice_get"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_set_externref"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "104");
+}
+
+#[test]
+fn source_unsafe_ref_new_preserves_array_cstr_value_through_get_and_set() {
+    let get = compile_source_program_bundle(
+        r#"
+def make(): Array[cstr] = [String.from("hé").to_cstr()]
+def main(): i64 = UnsafeRef.new(make()).get()[0].bytes_len()
+"#,
+    )
+    .expect("compile cstr array unsafe ref get")
+    .program;
+    let set = compile_source_program_bundle(
+        r#"
+def initial(): Array[cstr] = [c"x"]
+def next(): Array[cstr] = [String.from("hi").to_cstr()]
+def main(): rune = (UnsafeRef.new(initial()) := next()).*[0].char_at(0)
+"#,
+    )
+    .expect("compile cstr array unsafe ref set")
+    .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_get_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_array_get"));
     }
     assert!(set
         .backend_link
