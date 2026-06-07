@@ -342,11 +342,40 @@ fn validate_static_initializer_expr_scoped(
             name,
             args,
         } if is_supported_static_handle_builtin(receiver, name, args) => true,
+        Expr::Range { start, end } => {
+            validate_static_initializer_expr_scoped(
+                start,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+                bound,
+            ) & validate_static_initializer_expr_scoped(
+                end,
+                static_name,
+                statics,
+                static_names,
+                diagnostics,
+                bound,
+            )
+        }
+        Expr::SliceLiteral(items) => {
+            let mut supported = true;
+            for item in items {
+                supported &= validate_static_initializer_expr_scoped(
+                    item,
+                    static_name,
+                    statics,
+                    static_names,
+                    diagnostics,
+                    bound,
+                );
+            }
+            supported
+        }
         Expr::Tuple { .. }
-        | Expr::SliceLiteral(_)
         | Expr::Record { .. }
         | Expr::RecordUpdate { .. }
-        | Expr::Range { .. }
         | Expr::Lambda { .. }
         | Expr::Call { .. }
         | Expr::Instantiate { .. }

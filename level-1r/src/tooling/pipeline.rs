@@ -2178,6 +2178,21 @@ fn collect_global_init_runtime_imports(expr: &Expr, imports: &mut Vec<BackendExt
                 ));
             }
         }
+        Expr::Range { start, end } => {
+            collect_global_init_runtime_imports(start, imports);
+            collect_global_init_runtime_imports(end, imports);
+            imports.push(global_builtin_import(
+                "std_range_i64_new",
+                "std.range_i64_new",
+                "i64_i64_to_externref",
+            ));
+        }
+        Expr::SliceLiteral(items) => {
+            for item in items {
+                collect_global_init_runtime_imports(item, imports);
+            }
+            imports.push(global_slice_literal_import(items));
+        }
         Expr::If {
             cond,
             then_branch,
@@ -2219,6 +2234,39 @@ fn global_text_literal_import(text: &str) -> BackendExternImport {
                 .collect::<Vec<_>>()
                 .join("_")
         ),
+    )
+}
+
+fn global_slice_literal_import(items: &[Expr]) -> BackendExternImport {
+    let lane = if items.iter().all(global_static_expr_is_i32) {
+        "i64"
+    } else {
+        "externref"
+    };
+    let arity = items.len();
+    global_builtin_import(
+        &format!(
+            "std_slice_{}_literal_{arity}",
+            if lane == "i64" { "i64" } else { "externref" }
+        ),
+        &format!(
+            "std.slice_{}_literal_{arity}",
+            if lane == "i64" { "i64" } else { "externref" }
+        ),
+        &format!(
+            "{}_to_externref",
+            std::iter::repeat(lane)
+                .take(arity)
+                .collect::<Vec<_>>()
+                .join("_")
+        ),
+    )
+}
+
+fn global_static_expr_is_i32(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Lit(crate::ast::Literal::I64(_) | crate::ast::Literal::Bool(_))
     )
 }
 
@@ -2356,6 +2404,46 @@ fn render_global_init_expr_externref(
                 text.as_bytes().len()
             ));
             wat.push_str("    call $std_str_to_string\n");
+            Ok(())
+        }
+        Expr::Range { start, end } => {
+            render_global_init_expr_with_bindings(
+                wat,
+                static_name,
+                start,
+                &GlobalInitPlan::default(),
+                &BTreeMap::new(),
+            )?;
+            render_global_init_expr_with_bindings(
+                wat,
+                static_name,
+                end,
+                &GlobalInitPlan::default(),
+                &BTreeMap::new(),
+            )?;
+            wat.push_str("    call $std_range_i64_new\n");
+            Ok(())
+        }
+        Expr::SliceLiteral(items) => {
+            let i32_lane = items.iter().all(global_static_expr_is_i32);
+            for item in items {
+                if i32_lane {
+                    render_global_init_expr_with_bindings(
+                        wat,
+                        static_name,
+                        item,
+                        &GlobalInitPlan::default(),
+                        &BTreeMap::new(),
+                    )?;
+                } else {
+                    render_global_init_expr_externref(wat, static_name, item)?;
+                }
+            }
+            wat.push_str(&format!(
+                "    call $std_slice_{}_literal_{}\n",
+                if i32_lane { "i64" } else { "externref" },
+                items.len()
+            ));
             Ok(())
         }
         _ => Err(

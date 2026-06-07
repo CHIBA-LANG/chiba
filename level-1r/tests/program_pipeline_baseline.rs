@@ -6545,6 +6545,68 @@ def main(): i64 = TEXT.bytes_len()
 }
 
 #[test]
+fn global_init_lowers_range_static_into_executable_externref_global() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def LIMITS: Range = 3..9
+def main(): i64 = LIMITS.end
+"#,
+    )
+    .expect("compile range static initializer")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__LIMITS (mut externref)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__LIMITS"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.get $global__LIMITS"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_range_i64_end"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
+#[test]
+fn global_init_lowers_string_slice_static_into_executable_externref_global() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def NAMES: Slice[String] = [String.from("hé")]
+def main(): i64 = NAMES[0].bytes_len()
+"#,
+    )
+    .expect("compile string slice static initializer")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("(global $global__NAMES (mut externref)"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.set $global__NAMES"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.get $global__NAMES"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn global_init_rejects_unknown_adt_constructor_instead_of_faking_tag_zero() {
     let program = SourceProgram::new(vec![
         static_value(
