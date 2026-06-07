@@ -40,6 +40,10 @@ pub enum CoreOp {
         func: String,
         args: Vec<CoreValue>,
     },
+    CallableAlias {
+        target: String,
+        value: CoreValue,
+    },
     TailCallResult {
         binder: String,
     },
@@ -902,10 +906,31 @@ fn lower_callable_target(target: &str, atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
             target: target.to_string(),
             intrinsic: operator_intrinsic(*kind),
         }),
+        CpsAtom::RecordField { record, field } => {
+            if let Some(value) = static_cps_record_field_value(record, field) {
+                ops.push(CoreOp::CallableAlias {
+                    target: target.to_string(),
+                    value: core_value(value),
+                });
+            }
+            ops.push(CoreOp::DynamicCallableTarget {
+                target: target.to_string(),
+            });
+        }
         _ => ops.push(CoreOp::DynamicCallableTarget {
             target: target.to_string(),
         }),
     }
+}
+
+fn static_cps_record_field_value<'a>(record: &'a CpsAtom, name: &str) -> Option<&'a CpsAtom> {
+    let CpsAtom::Record { fields, .. } = record else {
+        return None;
+    };
+    fields
+        .iter()
+        .find(|field| field.name == name)
+        .map(|field| &field.value)
 }
 
 fn direct_return_value(term: &CpsTerm) -> Option<CoreValue> {
@@ -1158,6 +1183,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
 fn op_has_tail_target(op: &CoreOp, func: &str) -> bool {
     match op {
         CoreOp::DynamicCallableTarget { target } => target == func,
+        CoreOp::CallableAlias { target, .. } => target == func,
         CoreOp::ExternFunctionTarget { target, .. } => target == func,
         CoreOp::DirectMethodTarget { target, .. } => target == func,
         CoreOp::OperatorTarget { target, .. } => target == func,

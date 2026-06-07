@@ -293,6 +293,9 @@ fn render_core_op(op: &CoreOp) -> String {
         CoreOp::DynamicCallableTarget { target } => {
             format!("dynamic-callable-target {target}")
         }
+        CoreOp::CallableAlias { target, value } => {
+            format!("callable-alias {target} = {}", render_core_value(value))
+        }
         CoreOp::ExternFunctionTarget {
             target,
             owner,

@@ -2,7 +2,7 @@ use chiba_level1r::ast::{
     DataDecl, DataVariant, ExternAbi, ExternDecl, MethodReceiver, NamespaceDecl, ParamDecl,
     SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
 };
-use chiba_level1r::core::CoreOp;
+use chiba_level1r::core::{CoreOp, CoreValue};
 use chiba_level1r::pattern::PatternDiagnostic;
 use chiba_level1r::typed::{AggregateKind, Type, TypedExprKind};
 use chiba_level1r::{
@@ -605,6 +605,94 @@ fn program_cont1_repeated_resume_is_rejected_before_program_backend_link() {
             chiba_level1r::backend::BackendLinkDiagnostic::ArtifactEmitFailed { artifact_index: 0 }
         ]
     );
+    assert_eq!(bundle.backend_link.linked_wat, "");
+}
+
+#[test]
+fn program_callable_storage_field_calls_stored_function() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def inc(x: i64): i64 = x + 1
+def main(): i64 = ({f: inc}).f(8)
+"#,
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(main.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::CallableAlias {
+                value: CoreValue::Var(name),
+                ..
+            } if name == "inc"
+        )
+    }));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
+#[test]
+fn program_contn_storage_field_call_can_resume_multiple_times() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def main(): i64 = resetn { 10 + shift retry { ({f: retry}).f(1) + ({f: retry}).f(2) } }
+"#,
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(
+        main.cps_usage.continuations["retry"].kind,
+        chiba_level1r::control::ContinuationKind::ContN
+    );
+    assert_eq!(
+        main.backend
+            .wat
+            .matches(";; resume-cont binder=retry kind=contn result=")
+            .count(),
+        2
+    );
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "23");
+}
+
+#[test]
+fn program_cont1_storage_field_call_repeated_use_is_compile_diagnostic() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def main(): i64 = reset { 10 + shift k { ({f: k}).f(1) + ({f: k}).f(2) } }
+"#,
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = &bundle.defs[0].output;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::Cont1ResumedMoreThanOnce {
+            def: "main".to_string(),
+            binder: "k".to_string()
+        }]
+    );
+    assert_eq!(
+        main.cps_usage.diagnostics,
+        vec![
+            chiba_level1r::cps_usage::CpsUsageDiagnostic::Cont1ResumedMoreThanOnce {
+                binder: "k".to_string(),
+                count: chiba_level1r::usage::UseCount::Many
+            }
+        ]
+    );
+    assert_eq!(main.backend.wat, "");
     assert_eq!(bundle.backend_link.linked_wat, "");
 }
 

@@ -339,7 +339,7 @@ fn return_value_is_tailcall_result(
     };
     if matches!(
         index.checked_sub(1).and_then(|previous| core.ops.get(previous)),
-        Some(CoreOp::TailCall { func, args }) if tailcall_args_are_renderable(core, func, args, env)
+        Some(CoreOp::TailCall { func, args }) if tailcall_args_are_renderable(core, tailcall_runtime_target(core, func), args, env)
     ) {
         return true;
     }
@@ -349,7 +349,7 @@ fn return_value_is_tailcall_result(
             [
                 CoreOp::TailCall { func, args },
                 CoreOp::TailCallResult { binder },
-            ] if binder == name && tailcall_args_are_renderable(core, func, args, env)
+            ] if binder == name && tailcall_args_are_renderable(core, tailcall_runtime_target(core, func), args, env)
         )
     })
 }
@@ -492,6 +492,7 @@ fn collect_manifest_entries(
         | CoreOp::ReturnBranch { .. }
         | CoreOp::ReturnMatch { .. }
         | CoreOp::DynamicCallableTarget { .. }
+        | CoreOp::CallableAlias { .. }
         | CoreOp::ExternFunctionTarget { .. }
         | CoreOp::TupleConstruct { .. }
         | CoreOp::TupleFieldGet { .. }
@@ -1301,32 +1302,41 @@ fn render_wat(
                 return_index += 1;
             }
             CoreOp::TailCall { func, args } => {
+                let runtime_func = tailcall_runtime_target(core, func);
                 wat.push_str(&format!(
                     "  ;; tailcall {} args=[{}]\n",
-                    final_symbol(func),
+                    final_symbol(runtime_func),
                     args.iter()
                         .map(CoreValue::debug_name)
                         .map(|arg| escape_wat_comment(&arg))
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                if tailcall_args_are_renderable(core, func, args, &env) {
+                if tailcall_args_are_renderable(core, runtime_func, args, &env) {
                     let symbol = if tailcall_index == 0 {
                         "main".to_string()
                     } else {
                         format!("chiba_tailcall_{tailcall_index}")
                     };
                     let export = (tailcall_index == 0).then_some(symbol.as_str());
-                    render_tailcall_func_header(&mut wat, core, func, &symbol, export, &env);
-                    render_tailcall_args(&mut wat, core, func, args, &env)?;
-                    wat.push_str(&format!("    call ${}\n", final_symbol(func)));
+                    render_tailcall_func_header(
+                        &mut wat,
+                        core,
+                        runtime_func,
+                        &symbol,
+                        export,
+                        &env,
+                    );
+                    render_tailcall_args(&mut wat, core, runtime_func, args, &env)?;
+                    wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
                     wat.push_str("  )\n");
                     tailcall_index += 1;
                 }
                 if let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) {
                     env = env.with_local_kind(
                         binder,
-                        tailcall_result_kind(core, func, &env).unwrap_or(WasmValueKind::I32),
+                        tailcall_result_kind(core, runtime_func, &env)
+                            .unwrap_or(WasmValueKind::I32),
                     );
                 }
             }
@@ -1456,6 +1466,7 @@ fn render_wat(
             }
             CoreOp::DirectMethodTarget { .. }
             | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::CallableAlias { .. }
             | CoreOp::ExternFunctionTarget { .. }
             | CoreOp::TailCallResult { .. }
             | CoreOp::TargetSpecificTerm { .. }
@@ -1558,33 +1569,38 @@ fn render_continuation_wat(
                 ));
                 render_runtime_let_value(&mut wat, binder, value, &env)?;
             }
-            CoreOp::TailCall { func, args } if continuations.contains_key(func) => {
+            CoreOp::TailCall { func, args }
+                if continuations.contains_key(tailcall_runtime_target(core, func)) =>
+            {
+                let runtime_func = tailcall_runtime_target(core, func);
                 let (kind, captured) = continuations
-                    .get(func)
+                    .get(runtime_func)
                     .expect("checked continuation binder")
                     .clone();
-                if kind == ContinuationKind::Cont1 && !cont1_consumed.insert(func.clone()) {
+                if kind == ContinuationKind::Cont1
+                    && !cont1_consumed.insert(runtime_func.to_string())
+                {
                     return Err(BackendDiagnostic::Cont1ResumedMoreThanOnce {
-                        binder: func.clone(),
+                        binder: runtime_func.to_string(),
                     });
                 }
                 let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
                     return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
                         op: "resume-without-result".to_string(),
                         kind,
-                        binder: Some(func.clone()),
+                        binder: Some(runtime_func.to_string()),
                     });
                 };
                 let [arg] = args.as_slice() else {
                     return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
                         op: "resume-arity".to_string(),
                         kind,
-                        binder: Some(func.clone()),
+                        binder: Some(runtime_func.to_string()),
                     });
                 };
                 wat.push_str(&format!(
                     "    ;; resume-cont binder={} kind={} result={}\n",
-                    escape_wat_comment(func),
+                    escape_wat_comment(runtime_func),
                     render_continuation_kind(kind),
                     escape_wat_comment(binder)
                 ));
@@ -1592,20 +1608,21 @@ fn render_continuation_wat(
                 wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
             }
             CoreOp::TailCall { func, args } => {
+                let runtime_func = tailcall_runtime_target(core, func);
                 let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
                     continue;
                 };
                 wat.push_str(&format!(
                     "    ;; tailcall {} args=[{}]\n",
-                    final_symbol(func),
+                    final_symbol(runtime_func),
                     args.iter()
                         .map(CoreValue::debug_name)
                         .map(|arg| escape_wat_comment(&arg))
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                render_tailcall_args(&mut wat, core, func, args, &env)?;
-                wat.push_str(&format!("    call ${}\n", final_symbol(func)));
+                render_tailcall_args(&mut wat, core, runtime_func, args, &env)?;
+                wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
                 wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
             }
             CoreOp::ReturnValue(value) => {
@@ -1631,6 +1648,7 @@ fn render_continuation_wat(
             }
             CoreOp::DirectMethodTarget { .. }
             | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::CallableAlias { .. }
             | CoreOp::ExternFunctionTarget { .. }
             | CoreOp::TailCallResult { .. }
             | CoreOp::OperatorTarget { .. }
@@ -2199,20 +2217,21 @@ fn render_tailcall_result_chain(
 
     for (index, op) in core.ops.iter().enumerate() {
         if let CoreOp::TailCall { func, args } = op {
+            let runtime_func = tailcall_runtime_target(core, func);
             let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
                 continue;
             };
             wat.push_str(&format!(
                 "    ;; tailcall {} args=[{}]\n",
-                final_symbol(func),
+                final_symbol(runtime_func),
                 args.iter()
                     .map(CoreValue::debug_name)
                     .map(|arg| escape_wat_comment(&arg))
                     .collect::<Vec<_>>()
                     .join(", ")
             ));
-            render_tailcall_args(wat, core, func, args, &chain_env)?;
-            wat.push_str(&format!("    call ${}\n", final_symbol(func)));
+            render_tailcall_args(wat, core, runtime_func, args, &chain_env)?;
+            wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
             wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
         }
     }
@@ -2246,7 +2265,7 @@ fn tailcall_result_kinds(core: &CoreProgram, env: &RenderEnv) -> BTreeMap<String
         let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
             continue;
         };
-        if let Some(kind) = tailcall_result_kind(core, func, env) {
+        if let Some(kind) = tailcall_result_kind(core, tailcall_runtime_target(core, func), env) {
             kinds.insert(binder.clone(), kind);
         }
     }
@@ -2265,7 +2284,9 @@ fn tailcall_result_ref_cell_lanes(
         let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
             continue;
         };
-        if let Some(lane) = tailcall_result_ref_cell_lane(core, func, env) {
+        if let Some(lane) =
+            tailcall_result_ref_cell_lane(core, tailcall_runtime_target(core, func), env)
+        {
             lanes.insert(binder.clone(), lane);
         }
     }
@@ -2686,6 +2707,24 @@ fn tailcall_args_are_renderable(
             WasmValueKind::I32 => core_value_is_renderable_i32(arg, env),
             WasmValueKind::ExternRef => core_value_is_renderable_externref(arg, env),
         })
+}
+
+fn tailcall_runtime_target<'a>(core: &'a CoreProgram, func: &'a str) -> &'a str {
+    core.ops
+        .iter()
+        .find_map(|op| {
+            let CoreOp::CallableAlias { target, value } = op else {
+                return None;
+            };
+            if target != func {
+                return None;
+            }
+            match value {
+                CoreValue::Var(name) => Some(name.as_str()),
+                _ => None,
+            }
+        })
+        .unwrap_or(func)
 }
 
 fn render_tailcall_args(

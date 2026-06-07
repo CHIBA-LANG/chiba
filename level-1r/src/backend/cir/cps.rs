@@ -304,6 +304,7 @@ fn transform(
             args,
             builtin,
         } => {
+            let receiver_has_callable_field = type_has_callable_record_field(&receiver.ty, name);
             let receiver_controls = controls.clone();
             transform(
                 receiver,
@@ -320,7 +321,14 @@ fn transform(
                             ctx,
                         );
                     }
-                    let func = CpsAtom::Var(format!("{receiver}.{name}"));
+                    let func = if receiver_has_callable_field {
+                        CpsAtom::RecordField {
+                            record: Box::new(receiver),
+                            field: name.clone(),
+                        }
+                    } else {
+                        CpsAtom::Var(format!("{receiver}.{name}"))
+                    };
                     transform_call_args(args, 0, Vec::new(), func, k, controls, ctx)
                 }),
                 receiver_controls,
@@ -1048,6 +1056,15 @@ fn nominal_atom_type(expr: &TypedExpr) -> Option<&String> {
         Type::Nominal(name) => Some(name),
         _ => None,
     }
+}
+
+fn type_has_callable_record_field(receiver: &Type, name: &str) -> bool {
+    let Type::Record(fields) = receiver else {
+        return false;
+    };
+    fields.iter().any(|field| {
+        field.name == name && matches!(field.ty, Type::Func(_, _) | Type::Continuation { .. })
+    })
 }
 
 impl CpsProgram {
