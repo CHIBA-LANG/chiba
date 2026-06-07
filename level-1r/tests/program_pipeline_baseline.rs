@@ -1987,6 +1987,43 @@ fn source_string_from_keeps_byte_index_and_char_at_semantics() {
 }
 
 #[test]
+fn source_text_rune_len_lowers_to_executable_runtime_import() {
+    let string_runes = compile_source_program_bundle("def main(): i64 = \"éx\".rune_len()")
+        .expect("compile string rune_len")
+        .program;
+    let string_bytes = compile_source_program_bundle("def main(): i64 = \"éx\".bytes_len()")
+        .expect("compile string bytes_len")
+        .program;
+    let owned_runes =
+        compile_source_program_bundle("def main(): i64 = String.from(\"你好a\").rune_len()")
+            .expect("compile owned string rune_len")
+            .program;
+    let cstr_runes = compile_source_program_bundle("def main(): i64 = c\"hé\".rune_len()")
+        .expect("compile cstr rune_len")
+        .program;
+
+    for bundle in [&string_runes, &owned_runes, &cstr_runes] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+    }
+    assert!(string_runes.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.string_rune_len\" (func $std_string_rune_len (param externref) (result i32)))"
+    ));
+    assert!(owned_runes.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.string_rune_len\" (func $std_string_rune_len (param externref) (result i32)))"
+    ));
+    assert!(cstr_runes.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.cstr_rune_len\" (func $std_cstr_rune_len (param externref) (result i32)))"
+    ));
+
+    assert_eq!(run_wat_text(&string_runes.backend_link.linked_wat), "2");
+    assert_eq!(run_wat_text(&string_bytes.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&owned_runes.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&cstr_runes.backend_link.linked_wat), "2");
+}
+
+#[test]
 fn source_string_to_cstr_lowers_to_executable_abi_text_runtime_import() {
     let len = compile_source_program_bundle(
         "def main(): i64 = String.from(\"hé\").to_cstr().bytes_len()",

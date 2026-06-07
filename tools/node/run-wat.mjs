@@ -96,6 +96,18 @@ async function makeImports(wat, args) {
     return rune ? rune.codePointAt(0) : 0;
   }
 
+  function runeLen(value) {
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(byteArray(value));
+    return Array.from(text).length;
+  }
+
+  function cstrRuneLen(value) {
+    const bytes = cstrByteArray(value);
+    const nul = bytes.indexOf(0);
+    const textBytes = nul >= 0 ? bytes.slice(0, nul) : bytes;
+    return runeLen(textBytes);
+  }
+
   const env = new Proxy(
     {
       js_log(value) {
@@ -265,6 +277,15 @@ async function makeImports(wat, args) {
       },
       "std.string_char_at"(text, index) {
         return runeAt(text, index);
+      },
+      "std.string_rune_len"(text) {
+        return runeLen(text);
+      },
+      "std.str_rune_len"(text) {
+        return runeLen(text);
+      },
+      "std.cstr_rune_len"(text) {
+        return cstrRuneLen(text);
       },
       "std.string_new"() {
         return new Uint8Array();

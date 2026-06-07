@@ -185,6 +185,7 @@ pub enum BuiltinMethodCall {
     StringToCStr,
     StringPushRune,
     TextLen { kind: TextKind },
+    TextRuneLen { kind: TextKind },
     TextCharAt { kind: TextKind },
     RefNew,
     RefGet,
@@ -209,6 +210,11 @@ impl BuiltinMethodCall {
                 TextKind::Str => "builtin.str.len",
                 TextKind::String => "builtin.string.len",
                 TextKind::CStr => "builtin.cstr.len",
+            },
+            Self::TextRuneLen { kind } => match kind {
+                TextKind::Str => "builtin.str.rune_len",
+                TextKind::String => "builtin.string.rune_len",
+                TextKind::CStr => "builtin.cstr.rune_len",
             },
             Self::TextCharAt { kind } => match kind {
                 TextKind::Str => "builtin.str.char_at",
@@ -2228,6 +2234,9 @@ fn builtin_method_call(
         if matches!((name, args), ("len" | "bytes_len", [])) {
             return Some(BuiltinMethodCall::TextLen { kind });
         }
+        if matches!((name, args), ("rune_len", [])) {
+            return Some(BuiltinMethodCall::TextRuneLen { kind });
+        }
         if matches!((name, args), ("char_at", [_])) {
             return Some(BuiltinMethodCall::TextCharAt { kind });
         }
@@ -2269,6 +2278,7 @@ fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Op
         BuiltinMethodCall::StringToCStr => Some(Type::Nominal("cstr".to_string())),
         BuiltinMethodCall::StringPushRune => Some(receiver.clone()),
         BuiltinMethodCall::TextLen { .. } => Some(Type::I64),
+        BuiltinMethodCall::TextRuneLen { .. } => Some(Type::I64),
         BuiltinMethodCall::TextCharAt { .. } => Some(Type::Rune),
         BuiltinMethodCall::RefNew => Some(Type::Nominal("Ref[i64]".to_string())),
         BuiltinMethodCall::RefGet => ref_element_type(receiver),

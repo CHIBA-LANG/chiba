@@ -215,6 +215,7 @@ fn method_replay_safety(builtin: Option<BuiltinMethodCall>) -> ReplaySafety {
     match builtin {
         Some(
             BuiltinMethodCall::TextLen { .. }
+            | BuiltinMethodCall::TextRuneLen { .. }
             | BuiltinMethodCall::TextCharAt { .. }
             | BuiltinMethodCall::StringConcat
             | BuiltinMethodCall::VecFreeze
