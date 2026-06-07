@@ -50,6 +50,11 @@ pub enum CoreOp {
     DynamicCallableTarget {
         target: String,
     },
+    DynRowParamMethodTarget {
+        target: String,
+        param: String,
+        field: String,
+    },
     ExternFunctionTarget {
         target: String,
         owner: String,
@@ -346,6 +351,7 @@ pub enum CoreDynRowFieldSource {
     Field,
     ReceiverMethod {
         symbol: String,
+        runtime_target: String,
         param_ty: Type,
         result_ty: Type,
     },
@@ -930,6 +936,14 @@ fn lower_call_args(func: &CpsAtom, args: &[CpsAtom]) -> Vec<CoreValue> {
         CpsAtom::OperatorCallee { receiver, .. } => std::iter::once(core_value(receiver))
             .chain(args.iter().map(core_value))
             .collect(),
+        CpsAtom::DynRowField { package, field } => {
+            if let Some((payload, _)) = static_cps_dyn_receiver_method(package, field) {
+                return std::iter::once(core_value(payload))
+                    .chain(args.iter().map(core_value))
+                    .collect();
+            }
+            args.iter().map(core_value).collect()
+        }
         _ => args.iter().map(core_value).collect(),
     }
 }
@@ -952,6 +966,23 @@ fn lower_callable_target(target: &str, atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 target: target.to_string(),
             });
         }
+        CpsAtom::DynRowField { package, field } => {
+            if let Some((_, runtime_target)) = static_cps_dyn_receiver_method(package, field) {
+                ops.push(CoreOp::CallableAlias {
+                    target: target.to_string(),
+                    value: CoreValue::Var(runtime_target.to_string()),
+                });
+            } else if let CpsAtom::Var(param) = package.as_ref() {
+                ops.push(CoreOp::DynRowParamMethodTarget {
+                    target: target.to_string(),
+                    param: param.clone(),
+                    field: field.clone(),
+                });
+            }
+            ops.push(CoreOp::DynamicCallableTarget {
+                target: target.to_string(),
+            });
+        }
         _ => ops.push(CoreOp::DynamicCallableTarget {
             target: target.to_string(),
         }),
@@ -966,6 +997,24 @@ fn static_cps_record_field_value<'a>(record: &'a CpsAtom, name: &str) -> Option<
         .iter()
         .find(|field| field.name == name)
         .map(|field| &field.value)
+}
+
+fn static_cps_dyn_receiver_method<'a>(
+    package: &'a CpsAtom,
+    name: &str,
+) -> Option<(&'a CpsAtom, &'a str)> {
+    let CpsAtom::DynRowPackage { payload, fields } = package else {
+        return None;
+    };
+    fields
+        .iter()
+        .find(|field| field.name == name)
+        .and_then(|field| match &field.source {
+            crate::cps::CpsDynRowFieldSource::ReceiverMethod { runtime_target, .. } => {
+                Some((payload.as_ref(), runtime_target.as_str()))
+            }
+            crate::cps::CpsDynRowFieldSource::Field => None,
+        })
 }
 
 fn direct_return_value(term: &CpsTerm) -> Option<CoreValue> {
@@ -1218,6 +1267,7 @@ fn is_known_tail_target(program: &CoreProgram, func: &str) -> bool {
 fn op_has_tail_target(op: &CoreOp, func: &str) -> bool {
     match op {
         CoreOp::DynamicCallableTarget { target } => target == func,
+        CoreOp::DynRowParamMethodTarget { target, .. } => target == func,
         CoreOp::CallableAlias { target, .. } => target == func,
         CoreOp::ExternFunctionTarget { target, .. } => target == func,
         CoreOp::DirectMethodTarget { target, .. } => target == func,
@@ -1676,10 +1726,12 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
                         crate::cps::CpsDynRowFieldSource::Field => CoreDynRowFieldSource::Field,
                         crate::cps::CpsDynRowFieldSource::ReceiverMethod {
                             symbol,
+                            runtime_target,
                             param_ty,
                             result_ty,
                         } => CoreDynRowFieldSource::ReceiverMethod {
                             symbol: symbol.clone(),
+                            runtime_target: runtime_target.clone(),
                             param_ty: param_ty.clone(),
                             result_ty: result_ty.clone(),
                         },

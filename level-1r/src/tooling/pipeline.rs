@@ -8,8 +8,8 @@ use crate::ast::{
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_param_abi, link_backend_artifacts, sort_dedup_imports,
     BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendCallableAbi, BackendDiagnostic,
-    BackendExternAbi, BackendExternImport, BackendLinkDiagnostic, BackendLinkedBundle,
-    BackendParamAbi, BackendValueKind,
+    BackendDynRowParamMethodAbi, BackendExternAbi, BackendExternImport, BackendLinkDiagnostic,
+    BackendLinkedBundle, BackendParamAbi, BackendValueKind,
 };
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -1271,6 +1271,7 @@ fn backend_param_abi(
         functions: backend_callable_abis_for_interface(functions),
         statics: backend_static_abis_for_interface(statics),
         static_ref_cell_lanes: backend_static_ref_cell_lanes_for_interface(statics),
+        dyn_row_param_methods: backend_dyn_row_param_methods_for_signature(signature, functions),
         aggregate_element_lanes: backend_aggregate_element_lanes_for_signature(signature)
             .into_iter()
             .chain(backend_static_aggregate_element_lanes_for_interface(
@@ -1278,6 +1279,37 @@ fn backend_param_abi(
             ))
             .collect(),
     }
+}
+
+fn backend_dyn_row_param_methods_for_signature(
+    signature: &TypedSignature,
+    functions: &[crate::surface::InterfaceFunction],
+) -> BTreeMap<String, Vec<BackendDynRowParamMethodAbi>> {
+    signature
+        .params
+        .iter()
+        .filter_map(|param| {
+            let Type::DynRow(fields) = source_type_name_to_type(&param.ty) else {
+                return None;
+            };
+            let methods = fields
+                .iter()
+                .filter_map(|field| {
+                    let Type::Func(_, _) = field.ty else {
+                        return None;
+                    };
+                    functions
+                        .iter()
+                        .find(|function| function.source_name == field.name)
+                        .map(|function| BackendDynRowParamMethodAbi {
+                            field: field.name.clone(),
+                            target: function.source_name.clone(),
+                        })
+                })
+                .collect::<Vec<_>>();
+            (!methods.is_empty()).then_some((param.name.clone(), methods))
+        })
+        .collect()
 }
 
 fn backend_aggregate_element_lanes_for_signature(
@@ -1585,6 +1617,7 @@ fn type_context_from_interface(
             receiver: receiver.display_name(),
             name: method.source_name.clone(),
             symbol: method.symbol.clone(),
+            runtime_target: method.source_name.clone(),
             param_tys,
             result_ty,
         });

@@ -135,6 +135,7 @@ pub enum DynRowFieldSource {
     Field,
     ReceiverMethod {
         symbol: String,
+        runtime_target: String,
         param_ty: Type,
         result_ty: Type,
     },
@@ -328,6 +329,7 @@ pub struct ReceiverMethodSummary {
     pub receiver: String,
     pub name: String,
     pub symbol: String,
+    pub runtime_target: String,
     pub param_tys: Vec<Type>,
     pub result_ty: Type,
 }
@@ -2358,6 +2360,7 @@ fn dyn_row_adapter_fields(
             }
             DynRowFieldSource::ReceiverMethod {
                 symbol: method.symbol.clone(),
+                runtime_target: method.runtime_target.clone(),
                 param_ty: bound_method_param_type(method),
                 result_ty: method.result_ty.clone(),
             }

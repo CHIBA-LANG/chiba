@@ -293,6 +293,13 @@ fn render_core_op(op: &CoreOp) -> String {
         CoreOp::DynamicCallableTarget { target } => {
             format!("dynamic-callable-target {target}")
         }
+        CoreOp::DynRowParamMethodTarget {
+            target,
+            param,
+            field,
+        } => {
+            format!("dyn-row-param-method-target {target} param={param} field={field}")
+        }
         CoreOp::CallableAlias { target, value } => {
             format!("callable-alias {target} = {}", render_core_value(value))
         }

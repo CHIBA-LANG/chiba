@@ -94,6 +94,7 @@ pub struct BackendParamAbi {
     pub statics: BTreeMap<String, BackendValueKind>,
     pub static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     pub aggregate_element_lanes: BTreeMap<String, BackendValueKind>,
+    pub dyn_row_param_methods: BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -101,6 +102,12 @@ pub struct BackendCallableAbi {
     pub params: Vec<BackendValueKind>,
     pub result: Option<BackendValueKind>,
     pub result_ref_cell_lane: Option<CoreRefCellLane>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackendDynRowParamMethodAbi {
+    pub field: String,
+    pub target: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -339,7 +346,10 @@ fn return_value_is_tailcall_result(
     };
     if matches!(
         index.checked_sub(1).and_then(|previous| core.ops.get(previous)),
-        Some(CoreOp::TailCall { func, args }) if tailcall_args_are_renderable(core, tailcall_runtime_target(core, func), args, env)
+        Some(CoreOp::TailCall { func, args }) if {
+            let (runtime_func, runtime_args) = effective_tailcall(core, func, args, env);
+            tailcall_args_are_renderable(core, runtime_func, &runtime_args, env)
+        }
     ) {
         return true;
     }
@@ -349,7 +359,10 @@ fn return_value_is_tailcall_result(
             [
                 CoreOp::TailCall { func, args },
                 CoreOp::TailCallResult { binder },
-            ] if binder == name && tailcall_args_are_renderable(core, tailcall_runtime_target(core, func), args, env)
+            ] if binder == name && {
+                let (runtime_func, runtime_args) = effective_tailcall(core, func, args, env);
+                tailcall_args_are_renderable(core, runtime_func, &runtime_args, env)
+            }
         )
     })
 }
@@ -492,6 +505,7 @@ fn collect_manifest_entries(
         | CoreOp::ReturnBranch { .. }
         | CoreOp::ReturnMatch { .. }
         | CoreOp::DynamicCallableTarget { .. }
+        | CoreOp::DynRowParamMethodTarget { .. }
         | CoreOp::CallableAlias { .. }
         | CoreOp::ExternFunctionTarget { .. }
         | CoreOp::TupleConstruct { .. }
@@ -1308,17 +1322,18 @@ fn render_wat(
                 return_index += 1;
             }
             CoreOp::TailCall { func, args } => {
-                let runtime_func = tailcall_runtime_target(core, func);
+                let (runtime_func, runtime_args) = effective_tailcall(core, func, args, &env);
                 wat.push_str(&format!(
                     "  ;; tailcall {} args=[{}]\n",
                     final_symbol(runtime_func),
-                    args.iter()
+                    runtime_args
+                        .iter()
                         .map(CoreValue::debug_name)
                         .map(|arg| escape_wat_comment(&arg))
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                if tailcall_args_are_renderable(core, runtime_func, args, &env) {
+                if tailcall_args_are_renderable(core, runtime_func, &runtime_args, &env) {
                     let symbol = if tailcall_index == 0 {
                         "main".to_string()
                     } else {
@@ -1333,7 +1348,7 @@ fn render_wat(
                         export,
                         &env,
                     );
-                    render_tailcall_args(&mut wat, core, runtime_func, args, &env)?;
+                    render_tailcall_args(&mut wat, core, runtime_func, &runtime_args, &env)?;
                     wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
                     wat.push_str("  )\n");
                     tailcall_index += 1;
@@ -1472,6 +1487,7 @@ fn render_wat(
             }
             CoreOp::DirectMethodTarget { .. }
             | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::DynRowParamMethodTarget { .. }
             | CoreOp::CallableAlias { .. }
             | CoreOp::ExternFunctionTarget { .. }
             | CoreOp::TailCallResult { .. }
@@ -1614,20 +1630,21 @@ fn render_continuation_wat(
                 wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
             }
             CoreOp::TailCall { func, args } => {
-                let runtime_func = tailcall_runtime_target(core, func);
+                let (runtime_func, runtime_args) = effective_tailcall(core, func, args, &env);
                 let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
                     continue;
                 };
                 wat.push_str(&format!(
                     "    ;; tailcall {} args=[{}]\n",
                     final_symbol(runtime_func),
-                    args.iter()
+                    runtime_args
+                        .iter()
                         .map(CoreValue::debug_name)
                         .map(|arg| escape_wat_comment(&arg))
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
-                render_tailcall_args(&mut wat, core, runtime_func, args, &env)?;
+                render_tailcall_args(&mut wat, core, runtime_func, &runtime_args, &env)?;
                 wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
                 wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
             }
@@ -1654,6 +1671,7 @@ fn render_continuation_wat(
             }
             CoreOp::DirectMethodTarget { .. }
             | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::DynRowParamMethodTarget { .. }
             | CoreOp::CallableAlias { .. }
             | CoreOp::ExternFunctionTarget { .. }
             | CoreOp::TailCallResult { .. }
@@ -2003,6 +2021,7 @@ fn render_captured_continuation_i32(
             }
             CoreOp::OperatorTarget { .. }
             | CoreOp::DynamicCallableTarget { .. }
+            | CoreOp::DynRowParamMethodTarget { .. }
             | CoreOp::ExternFunctionTarget { .. } => {}
             _ => {
                 return Err(BackendDiagnostic::UnsupportedContinuationRuntime {
@@ -2223,20 +2242,21 @@ fn render_tailcall_result_chain(
 
     for (index, op) in core.ops.iter().enumerate() {
         if let CoreOp::TailCall { func, args } = op {
-            let runtime_func = tailcall_runtime_target(core, func);
+            let (runtime_func, runtime_args) = effective_tailcall(core, func, args, &chain_env);
             let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
                 continue;
             };
             wat.push_str(&format!(
                 "    ;; tailcall {} args=[{}]\n",
                 final_symbol(runtime_func),
-                args.iter()
+                runtime_args
+                    .iter()
                     .map(CoreValue::debug_name)
                     .map(|arg| escape_wat_comment(&arg))
                     .collect::<Vec<_>>()
                     .join(", ")
             ));
-            render_tailcall_args(wat, core, runtime_func, args, &chain_env)?;
+            render_tailcall_args(wat, core, runtime_func, &runtime_args, &chain_env)?;
             wat.push_str(&format!("    call ${}\n", final_symbol(runtime_func)));
             wat.push_str(&format!("    local.set ${}\n", encode_debug_symbol(binder)));
         }
@@ -2271,7 +2291,8 @@ fn tailcall_result_kinds(core: &CoreProgram, env: &RenderEnv) -> BTreeMap<String
         let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
             continue;
         };
-        if let Some(kind) = tailcall_result_kind(core, tailcall_runtime_target(core, func), env) {
+        let (runtime_func, _) = effective_tailcall(core, func, &[], env);
+        if let Some(kind) = tailcall_result_kind(core, runtime_func, env) {
             kinds.insert(binder.clone(), kind);
         }
     }
@@ -2290,9 +2311,8 @@ fn tailcall_result_ref_cell_lanes(
         let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
             continue;
         };
-        if let Some(lane) =
-            tailcall_result_ref_cell_lane(core, tailcall_runtime_target(core, func), env)
-        {
+        let (runtime_func, _) = effective_tailcall(core, func, &[], env);
+        if let Some(lane) = tailcall_result_ref_cell_lane(core, runtime_func, env) {
             lanes.insert(binder.clone(), lane);
         }
     }
@@ -2346,6 +2366,7 @@ struct RenderEnv {
     static_kinds: BTreeMap<String, WasmValueKind>,
     static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     aggregate_element_lanes: BTreeMap<String, WasmValueKind>,
+    dyn_row_param_methods: BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>,
     bindings: BTreeMap<String, CoreValue>,
 }
 
@@ -2360,6 +2381,7 @@ impl RenderEnv {
             static_kinds: BTreeMap::new(),
             static_ref_cell_lanes: BTreeMap::new(),
             aggregate_element_lanes: BTreeMap::new(),
+            dyn_row_param_methods: BTreeMap::new(),
             bindings: BTreeMap::new(),
         }
     }
@@ -2374,6 +2396,7 @@ impl RenderEnv {
             .with_static_kinds(param_abi.statics.clone())
             .with_static_ref_cell_lanes(param_abi.static_ref_cell_lanes.clone())
             .with_aggregate_element_lanes(param_abi.aggregate_element_lanes.clone())
+            .with_dyn_row_param_methods(param_abi.dyn_row_param_methods.clone())
     }
 
     fn with_function_abis(&self, function_abis: BTreeMap<String, BackendCallableAbi>) -> Self {
@@ -2410,6 +2433,23 @@ impl RenderEnv {
             .map(|(name, kind)| (name, WasmValueKind::from(kind)))
             .collect();
         next
+    }
+
+    fn with_dyn_row_param_methods(
+        &self,
+        dyn_row_param_methods: BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>,
+    ) -> Self {
+        let mut next = self.clone();
+        next.dyn_row_param_methods = dyn_row_param_methods;
+        next
+    }
+
+    fn dyn_row_param_method_target(&self, param: &str, field: &str) -> Option<&str> {
+        self.dyn_row_param_methods
+            .get(param)?
+            .iter()
+            .find(|method| method.field == field)
+            .map(|method| method.target.as_str())
     }
 
     fn is_param(&self, name: &str) -> bool {
@@ -2739,6 +2779,33 @@ fn tailcall_runtime_target<'a>(core: &'a CoreProgram, func: &'a str) -> &'a str 
         .unwrap_or(func)
 }
 
+fn effective_tailcall<'a>(
+    core: &'a CoreProgram,
+    func: &'a str,
+    args: &'a [CoreValue],
+    env: &'a RenderEnv,
+) -> (&'a str, Vec<CoreValue>) {
+    if let Some((param, field)) = core.ops.iter().find_map(|op| {
+        let CoreOp::DynRowParamMethodTarget {
+            target,
+            param,
+            field,
+        } = op
+        else {
+            return None;
+        };
+        (target == func).then_some((param.as_str(), field.as_str()))
+    }) {
+        if let Some(target) = env.dyn_row_param_method_target(param, field) {
+            let mut effective_args = Vec::with_capacity(args.len() + 1);
+            effective_args.push(CoreValue::Var(param.to_string()));
+            effective_args.extend(args.iter().cloned());
+            return (target, effective_args);
+        }
+    }
+    (tailcall_runtime_target(core, func), args.to_vec())
+}
+
 fn render_tailcall_args(
     wat: &mut String,
     core: &CoreProgram,
@@ -2885,7 +2952,7 @@ fn render_core_value_i32(
             }
         }
         CoreValue::DynRowPackage { .. } => {
-            if let Some(value) = single_field_dyn_row_package_i32_value(value, env) {
+            if let Some(value) = single_data_lane_dyn_row_package_i32_value(value, env) {
                 render_core_value_i32(wat, value, env)?;
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
@@ -3391,7 +3458,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
             builtin_runtime_call_is_renderable_i32(*call, args, env)
         }
         CoreValue::DynRowPackage { .. } => {
-            single_field_dyn_row_package_i32_value(value, env)
+            single_data_lane_dyn_row_package_i32_value(value, env)
                 .map(|value| core_value_is_renderable_i32(value, env))
                 .unwrap_or(false)
         }
@@ -3515,7 +3582,7 @@ fn single_field_dyn_row_param(package: &CoreValue, field: &str, env: &RenderEnv)
     Some(name.clone())
 }
 
-fn single_field_dyn_row_package_i32_value<'a>(
+fn single_data_lane_dyn_row_package_i32_value<'a>(
     value: &'a CoreValue,
     env: &'a RenderEnv,
 ) -> Option<&'a CoreValue> {
@@ -3523,13 +3590,14 @@ fn single_field_dyn_row_package_i32_value<'a>(
     else {
         return None;
     };
-    let [field] = fields.as_slice() else {
+    let mut data_fields = fields
+        .iter()
+        .filter(|field| matches!(field.source, crate::core::CoreDynRowFieldSource::Field));
+    let field = data_fields.next()?;
+    if data_fields.next().is_some() {
         return None;
-    };
-    match field.source {
-        crate::core::CoreDynRowFieldSource::Field => record_field_value(payload, &field.name, env),
-        crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
     }
+    record_field_value(payload, &field.name, env)
 }
 
 fn range_field_value<'a>(

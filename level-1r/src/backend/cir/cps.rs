@@ -130,6 +130,7 @@ pub enum CpsDynRowFieldSource {
     Field,
     ReceiverMethod {
         symbol: String,
+        runtime_target: String,
         param_ty: Type,
         result_ty: Type,
     },
@@ -833,10 +834,12 @@ fn transform_dyn_row_package(
                                 }
                                 crate::typed::DynRowFieldSource::ReceiverMethod {
                                     symbol,
+                                    runtime_target,
                                     param_ty,
                                     result_ty,
                                 } => CpsDynRowFieldSource::ReceiverMethod {
                                     symbol: symbol.clone(),
+                                    runtime_target: runtime_target.clone(),
                                     param_ty: param_ty.clone(),
                                     result_ty: result_ty.clone(),
                                 },
