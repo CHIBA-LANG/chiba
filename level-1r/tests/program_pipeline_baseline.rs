@@ -2252,6 +2252,80 @@ fn source_ref_new_preserves_string_element_type_through_get_and_set() {
 }
 
 #[test]
+fn source_ref_new_preserves_text_views_through_get_and_set() {
+    let str_view = compile_source_program_bundle(
+        "def main(): rune = Ref.new(String.from(\"hé\").as_str()).get().char_at(0)",
+    )
+    .expect("compile str view ref get")
+    .program;
+    let cstr_get = compile_source_program_bundle(
+        "def main(): i64 = Ref.new(String.from(\"hé\").to_cstr()).get()[3]",
+    )
+    .expect("compile cstr ref get")
+    .program;
+    let cstr_set = compile_source_program_bundle(
+        "def main(): i64 = (Ref.new(c\"x\") := String.from(\"hé\").to_cstr()).*.bytes_len()",
+    )
+    .expect("compile cstr ref set")
+    .program;
+
+    for bundle in [&str_view, &cstr_get, &cstr_set] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_get_externref"));
+    }
+    assert!(cstr_set
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_set_externref"));
+    assert_eq!(run_wat_text(&str_view.backend_link.linked_wat), "104");
+    assert_eq!(run_wat_text(&cstr_get.backend_link.linked_wat), "0");
+    assert_eq!(run_wat_text(&cstr_set.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_ref_new_preserves_vec_string_value_through_get_and_set() {
+    let get = compile_source_program_bundle(
+        "def main(): i64 = Ref.new(Vec.new().push(String.from(\"x\"))).get().push(String.from(\"hé\")).freeze()[1].bytes_len()",
+    )
+    .expect("compile string vec ref get")
+    .program;
+    let set = compile_source_program_bundle(
+        "def main(): rune = (Ref.new(Vec.new().push(String.from(\"x\"))) := Vec.new().push(String.from(\"hi\"))).*.freeze()[0].char_at(0)",
+    )
+    .expect("compile string vec ref set")
+    .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_ref_get_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_vec_push_externref"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_ref_set_externref"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "104");
+}
+
+#[test]
 fn source_ref_new_preserves_slice_string_value_through_get_and_set() {
     let get = compile_source_program_bundle(
         "def main(): i64 = Ref.new([String.from(\"hé\")]).get()[0].bytes_len()",
@@ -2426,6 +2500,80 @@ fn source_unsafe_ref_new_preserves_string_element_type_through_get_and_set() {
         .contains("call $std_unsafe_ref_set_externref"));
     assert_eq!(run_wat_text(&get.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&set.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_unsafe_ref_new_preserves_text_views_through_get_and_set() {
+    let str_view = compile_source_program_bundle(
+        "def main(): rune = UnsafeRef.new(String.from(\"hé\").as_str()).get().char_at(0)",
+    )
+    .expect("compile str view unsafe ref get")
+    .program;
+    let cstr_get = compile_source_program_bundle(
+        "def main(): i64 = UnsafeRef.new(String.from(\"hé\").to_cstr()).get()[3]",
+    )
+    .expect("compile cstr unsafe ref get")
+    .program;
+    let cstr_set = compile_source_program_bundle(
+        "def main(): i64 = (UnsafeRef.new(c\"x\") := String.from(\"hé\").to_cstr()).*.bytes_len()",
+    )
+    .expect("compile cstr unsafe ref set")
+    .program;
+
+    for bundle in [&str_view, &cstr_get, &cstr_set] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_get_externref"));
+    }
+    assert!(cstr_set
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_set_externref"));
+    assert_eq!(run_wat_text(&str_view.backend_link.linked_wat), "104");
+    assert_eq!(run_wat_text(&cstr_get.backend_link.linked_wat), "0");
+    assert_eq!(run_wat_text(&cstr_set.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_unsafe_ref_new_preserves_vec_string_value_through_get_and_set() {
+    let get = compile_source_program_bundle(
+        "def main(): i64 = UnsafeRef.new(Vec.new().push(String.from(\"x\"))).get().push(String.from(\"hé\")).freeze()[1].bytes_len()",
+    )
+    .expect("compile string vec unsafe ref get")
+    .program;
+    let set = compile_source_program_bundle(
+        "def main(): rune = (UnsafeRef.new(Vec.new().push(String.from(\"x\"))) := Vec.new().push(String.from(\"hi\"))).*.freeze()[0].char_at(0)",
+    )
+    .expect("compile string vec unsafe ref set")
+    .program;
+
+    for bundle in [&get, &set] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_new_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_unsafe_ref_get_externref"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_vec_push_externref"));
+    }
+    assert!(set
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_set_externref"));
+    assert_eq!(run_wat_text(&get.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&set.backend_link.linked_wat), "104");
 }
 
 #[test]
