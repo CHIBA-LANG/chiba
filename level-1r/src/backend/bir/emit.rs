@@ -502,7 +502,12 @@ fn collect_runtime_value_imports(
 ) {
     match value {
         CoreValue::SliceLiteral { items } => {
-            imports.push(slice_literal_import(items.len()));
+            if let Some(lane) = aggregate_items_lane(items, env) {
+                imports.push(slice_literal_import(items.len(), lane));
+            }
+            for item in items {
+                collect_runtime_value_imports(item, env, imports);
+            }
         }
         CoreValue::Range { start, end } => {
             imports.push(range_import());
@@ -518,7 +523,13 @@ fn collect_runtime_value_imports(
             collect_runtime_value_imports(value, env, imports);
         }
         CoreValue::AggregateIndex { kind, value, index } => {
-            imports.push(aggregate_index_import(*kind));
+            match aggregate_index_lane(value, index, env) {
+                Some(lane) => imports.push(aggregate_index_import(*kind, lane)),
+                None => {
+                    imports.push(aggregate_index_import(*kind, RuntimeValueLane::I32));
+                    imports.push(aggregate_index_import(*kind, RuntimeValueLane::ExternRef));
+                }
+            }
             collect_runtime_value_imports(value, env, imports);
             collect_runtime_value_imports(index, env, imports);
         }
@@ -580,22 +591,29 @@ fn collect_runtime_value_imports(
     }
 }
 
-fn slice_literal_import(arity: usize) -> BackendExternImport {
+fn slice_literal_import(arity: usize, lane: RuntimeValueLane) -> BackendExternImport {
     BackendExternImport {
         abi: BackendExternAbi::C,
-        final_symbol: slice_literal_import_symbol(arity),
+        final_symbol: slice_literal_import_symbol(arity, lane),
         module: "env".to_string(),
-        name: format!("std.slice_i64_literal_{arity}"),
-        signature_hash: slice_literal_import_signature(arity),
+        name: slice_literal_import_name(arity, lane),
+        signature_hash: slice_literal_import_signature(arity, lane),
     }
 }
 
-fn slice_literal_import_symbol(arity: usize) -> String {
-    format!("std_slice_i64_literal_{arity}")
+fn slice_literal_import_name(arity: usize, lane: RuntimeValueLane) -> String {
+    match lane {
+        RuntimeValueLane::I32 => format!("std.slice_i64_literal_{arity}"),
+        RuntimeValueLane::ExternRef => format!("std.slice_externref_literal_{arity}"),
+    }
 }
 
-fn slice_literal_import_signature(arity: usize) -> String {
-    let params = std::iter::repeat("i64")
+fn slice_literal_import_symbol(arity: usize, lane: RuntimeValueLane) -> String {
+    slice_literal_import_name(arity, lane).replace('.', "_")
+}
+
+fn slice_literal_import_signature(arity: usize, lane: RuntimeValueLane) -> String {
+    let params = std::iter::repeat(lane.signature_atom())
         .take(arity)
         .collect::<Vec<_>>()
         .join("_");
@@ -634,18 +652,28 @@ fn aggregate_field_import_symbol(kind: AggregateKind, field: SliceField) -> Stri
     }
 }
 
-fn aggregate_index_import(kind: AggregateKind) -> BackendExternImport {
+fn aggregate_index_import(kind: AggregateKind, lane: RuntimeValueLane) -> BackendExternImport {
     BackendExternImport {
         abi: BackendExternAbi::C,
-        final_symbol: aggregate_index_import_symbol(kind),
+        final_symbol: aggregate_index_import_symbol(kind, lane),
         module: "env".to_string(),
-        name: format!("std.{}_i64_get", kind.runtime_prefix()),
-        signature_hash: "externref_i64_to_i64".to_string(),
+        name: aggregate_index_import_name(kind, lane),
+        signature_hash: match lane {
+            RuntimeValueLane::I32 => "externref_i64_to_i64".to_string(),
+            RuntimeValueLane::ExternRef => "externref_i64_to_externref".to_string(),
+        },
     }
 }
 
-fn aggregate_index_import_symbol(kind: AggregateKind) -> String {
-    format!("std_{}_i64_get", kind.runtime_prefix())
+fn aggregate_index_import_name(kind: AggregateKind, lane: RuntimeValueLane) -> String {
+    match lane {
+        RuntimeValueLane::I32 => format!("std.{}_i64_get", kind.runtime_prefix()),
+        RuntimeValueLane::ExternRef => format!("std.{}_get", kind.runtime_prefix()),
+    }
+}
+
+fn aggregate_index_import_symbol(kind: AggregateKind, lane: RuntimeValueLane) -> String {
+    aggregate_index_import_name(kind, lane).replace('.', "_")
 }
 
 fn aggregate_slice_import(kind: AggregateKind) -> BackendExternImport {
@@ -748,6 +776,9 @@ fn builtin_runtime_import_for_call(
     if let Some(lane) = ref_runtime_lane(call, args, env) {
         return ref_runtime_import(call, lane);
     }
+    if let Some(lane) = vec_runtime_lane(call, args, env) {
+        return vec_runtime_import(call, lane);
+    }
     builtin_runtime_import(call)
 }
 
@@ -826,6 +857,73 @@ fn builtin_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuntimeValueLane {
+    I32,
+    ExternRef,
+}
+
+impl RuntimeValueLane {
+    fn signature_atom(self) -> &'static str {
+        match self {
+            Self::I32 => "i64",
+            Self::ExternRef => "externref",
+        }
+    }
+}
+
+fn runtime_value_lane(value: &CoreValue, env: &RenderEnv) -> Option<RuntimeValueLane> {
+    if core_value_is_renderable_externref(value, env) {
+        Some(RuntimeValueLane::ExternRef)
+    } else if core_value_is_renderable_i32(value, env) {
+        Some(RuntimeValueLane::I32)
+    } else {
+        None
+    }
+}
+
+fn aggregate_items_lane(items: &[CoreValue], env: &RenderEnv) -> Option<RuntimeValueLane> {
+    let mut lane = None;
+    for item in items {
+        let item_lane = runtime_value_lane(item, env)?;
+        lane = Some(match (lane, item_lane) {
+            (None, item_lane) => item_lane,
+            (Some(previous), item_lane) if previous == item_lane => previous,
+            _ => return None,
+        });
+    }
+    lane.or(Some(RuntimeValueLane::I32))
+}
+
+fn aggregate_index_lane(
+    value: &CoreValue,
+    index: &CoreValue,
+    env: &RenderEnv,
+) -> Option<RuntimeValueLane> {
+    if let Some(item) = slice_index_value(value, index, env) {
+        return runtime_value_lane(item, env);
+    }
+    None
+}
+
+fn render_runtime_lane_value(
+    wat: &mut String,
+    value: &CoreValue,
+    env: &RenderEnv,
+) -> Result<RuntimeValueLane, BackendDiagnostic> {
+    match runtime_value_lane(value, env) {
+        Some(RuntimeValueLane::ExternRef) => {
+            render_core_value_externref(wat, value, env)?;
+            Ok(RuntimeValueLane::ExternRef)
+        }
+        Some(RuntimeValueLane::I32) => {
+            render_core_value_i32(wat, value, env)?;
+            Ok(RuntimeValueLane::I32)
+        }
+        None => Err(unsupported_i32_render_diagnostic(value)),
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RefRuntimeLane {
     I32,
     ExternRef,
@@ -849,12 +947,9 @@ fn ref_runtime_lane(
 }
 
 fn ref_value_lane(value: &CoreValue, env: &RenderEnv) -> Option<RefRuntimeLane> {
-    if core_value_is_renderable_externref(value, env) {
-        Some(RefRuntimeLane::ExternRef)
-    } else if core_value_is_renderable_i32(value, env) {
-        Some(RefRuntimeLane::I32)
-    } else {
-        None
+    match runtime_value_lane(value, env)? {
+        RuntimeValueLane::I32 => Some(RefRuntimeLane::I32),
+        RuntimeValueLane::ExternRef => Some(RefRuntimeLane::ExternRef),
     }
 }
 
@@ -915,6 +1010,55 @@ fn ref_runtime_import_signature(call: BuiltinMethodCall, lane: RefRuntimeLane) -
             BuiltinMethodCall::RefSet | BuiltinMethodCall::UnsafeRefSet,
             RefRuntimeLane::ExternRef,
         ) => "externref_externref_to_externref".to_string(),
+        _ => builtin_runtime_import_signature(call).to_string(),
+    }
+}
+
+fn vec_runtime_lane(
+    call: BuiltinMethodCall,
+    args: &[CoreValue],
+    env: &RenderEnv,
+) -> Option<RuntimeValueLane> {
+    match (call, args) {
+        (BuiltinMethodCall::VecPush, [_, item]) => runtime_value_lane(item, env),
+        _ => None,
+    }
+}
+
+fn vec_runtime_import(call: BuiltinMethodCall, lane: RuntimeValueLane) -> BackendExternImport {
+    BackendExternImport {
+        abi: BackendExternAbi::C,
+        final_symbol: vec_runtime_import_symbol(call, lane),
+        module: "env".to_string(),
+        name: vec_runtime_import_name(call, lane),
+        signature_hash: vec_runtime_import_signature(call, lane),
+    }
+}
+
+fn vec_runtime_import_symbol(call: BuiltinMethodCall, lane: RuntimeValueLane) -> String {
+    vec_runtime_import_name(call, lane).replace('.', "_")
+}
+
+fn vec_runtime_import_name(call: BuiltinMethodCall, lane: RuntimeValueLane) -> String {
+    match (call, lane) {
+        (BuiltinMethodCall::VecPush, RuntimeValueLane::I32) => {
+            builtin_runtime_import_name(call).to_string()
+        }
+        (BuiltinMethodCall::VecPush, RuntimeValueLane::ExternRef) => {
+            "std.vec_push_externref".to_string()
+        }
+        _ => builtin_runtime_import_name(call).to_string(),
+    }
+}
+
+fn vec_runtime_import_signature(call: BuiltinMethodCall, lane: RuntimeValueLane) -> String {
+    match (call, lane) {
+        (BuiltinMethodCall::VecPush, RuntimeValueLane::I32) => {
+            "externref_i64_to_externref".to_string()
+        }
+        (BuiltinMethodCall::VecPush, RuntimeValueLane::ExternRef) => {
+            "externref_externref_to_externref".to_string()
+        }
         _ => builtin_runtime_import_signature(call).to_string(),
     }
 }
@@ -2189,7 +2333,7 @@ fn render_core_value_i32(
                 render_core_value_i32(wat, index, env)?;
                 wat.push_str(&format!(
                     "    call ${}\n",
-                    aggregate_index_import_symbol(*kind)
+                    aggregate_index_import_symbol(*kind, RuntimeValueLane::I32)
                 ));
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
@@ -2214,10 +2358,10 @@ fn render_core_value_i32(
         {
             match call {
                 BuiltinMethodCall::TextLen { .. } | BuiltinMethodCall::TextRuneLen { .. } => {
-                    render_core_value_externref(wat, &args[0], env)?;
+                    render_core_value_externref_operand(wat, &args[0], env)?;
                 }
                 BuiltinMethodCall::TextCharAt { .. } => {
-                    render_core_value_externref(wat, &args[0], env)?;
+                    render_core_value_externref_operand(wat, &args[0], env)?;
                     render_core_value_i32(wat, &args[1], env)?;
                 }
                 BuiltinMethodCall::RefGet => {
@@ -2280,15 +2424,40 @@ fn render_core_value_externref(
             wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
             Ok(())
         }
-        CoreValue::SliceLiteral { items } if slice_literal_items_are_i32(items, env) => {
+        CoreValue::SliceLiteral { items } if aggregate_items_lane(items, env).is_some() => {
+            let Some(lane) = aggregate_items_lane(items, env) else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            };
             for item in items {
-                render_core_value_i32(wat, item, env)?;
+                let item_lane = render_runtime_lane_value(wat, item, env)?;
+                if item_lane != lane {
+                    return Err(unsupported_i32_render_diagnostic(value));
+                }
             }
             wat.push_str(&format!(
                 "    call ${}\n",
-                slice_literal_import_symbol(items.len())
+                slice_literal_import_symbol(items.len(), lane)
             ));
             Ok(())
+        }
+        CoreValue::AggregateIndex { kind, value, index } => {
+            if let Some(item) = slice_index_value(value, index, env) {
+                render_core_value_externref(wat, item, env)?;
+                return Ok(());
+            }
+            if core_value_is_renderable_externref(value, env)
+                && core_value_is_renderable_i32(index, env)
+            {
+                render_core_value_externref(wat, value, env)?;
+                render_core_value_i32(wat, index, env)?;
+                wat.push_str(&format!(
+                    "    call ${}\n",
+                    aggregate_index_import_symbol(*kind, RuntimeValueLane::ExternRef)
+                ));
+                Ok(())
+            } else {
+                Err(unsupported_i32_render_diagnostic(value))
+            }
         }
         CoreValue::TextLiteral { kind, value } => {
             for byte in value.as_bytes() {
@@ -2353,7 +2522,7 @@ fn render_core_value_externref(
                 BuiltinMethodCall::VecNew => {}
                 BuiltinMethodCall::VecPush => {
                     render_core_value_externref(wat, &args[0], env)?;
-                    render_core_value_i32(wat, &args[1], env)?;
+                    render_runtime_lane_value(wat, &args[1], env)?;
                 }
                 BuiltinMethodCall::VecFreeze => {
                     render_core_value_externref(wat, &args[0], env)?;
@@ -2413,6 +2582,35 @@ fn render_core_value_externref(
     }
 }
 
+fn render_core_value_externref_operand(
+    wat: &mut String,
+    value: &CoreValue,
+    env: &RenderEnv,
+) -> Result<(), BackendDiagnostic> {
+    let value = resolve_core_value_binding(value, env);
+    match value {
+        CoreValue::AggregateIndex { kind, value, index } => {
+            if let Some(item) = slice_index_value(value, index, env) {
+                return render_core_value_externref_operand(wat, item, env);
+            }
+            if core_value_is_renderable_externref(value, env)
+                && core_value_is_renderable_i32(index, env)
+            {
+                render_core_value_externref(wat, value, env)?;
+                render_core_value_i32(wat, index, env)?;
+                wat.push_str(&format!(
+                    "    call ${}\n",
+                    aggregate_index_import_symbol(*kind, RuntimeValueLane::ExternRef)
+                ));
+                Ok(())
+            } else {
+                Err(unsupported_i32_render_diagnostic(value))
+            }
+        }
+        _ => render_core_value_externref(wat, value, env),
+    }
+}
+
 fn render_ref_lane_value(
     wat: &mut String,
     value: &CoreValue,
@@ -2433,7 +2631,7 @@ fn builtin_runtime_call_is_renderable_externref(
     match (call, args) {
         (BuiltinMethodCall::VecNew, []) => true,
         (BuiltinMethodCall::VecPush, [vec, item]) => {
-            core_value_is_renderable_externref(vec, env) && core_value_is_renderable_i32(item, env)
+            core_value_is_renderable_externref(vec, env) && runtime_value_lane(item, env).is_some()
         }
         (BuiltinMethodCall::VecFreeze, [vec]) => core_value_is_renderable_externref(vec, env),
         (BuiltinMethodCall::StringNew, []) => true,
@@ -2474,10 +2672,10 @@ fn builtin_runtime_call_is_renderable_i32(
 ) -> bool {
     match (call, args) {
         (BuiltinMethodCall::TextLen { .. } | BuiltinMethodCall::TextRuneLen { .. }, [text]) => {
-            core_value_is_renderable_externref(text, env)
+            core_value_is_renderable_externref_operand(text, env)
         }
         (BuiltinMethodCall::TextCharAt { .. }, [text, index]) => {
-            core_value_is_renderable_externref(text, env)
+            core_value_is_renderable_externref_operand(text, env)
                 && core_value_is_renderable_i32(index, env)
         }
         (BuiltinMethodCall::RefGet, [cell]) => {
@@ -2499,6 +2697,8 @@ fn builtin_runtime_call_symbol(
 ) -> String {
     if let Some(lane) = ref_runtime_lane(call, args, env) {
         ref_runtime_import_symbol(call, lane)
+    } else if let Some(lane) = vec_runtime_lane(call, args, env) {
+        vec_runtime_import_symbol(call, lane)
     } else {
         builtin_runtime_import_symbol(call)
     }
@@ -2577,7 +2777,10 @@ fn core_value_is_renderable_externref(value: &CoreValue, env: &RenderEnv) -> boo
     match value {
         CoreValue::Var(name) => env.param_kind(name) == WasmValueKind::ExternRef,
         CoreValue::TextLiteral { .. } => true,
-        CoreValue::SliceLiteral { items } => slice_literal_items_are_i32(items, env),
+        CoreValue::SliceLiteral { items } => aggregate_items_lane(items, env).is_some(),
+        CoreValue::AggregateIndex { value, index, .. } => slice_index_value(value, index, env)
+            .map(|value| core_value_is_renderable_externref(value, env))
+            .unwrap_or(false),
         CoreValue::Range { start, end } => {
             core_value_is_renderable_i32(start, env) && core_value_is_renderable_i32(end, env)
         }
@@ -2596,10 +2799,17 @@ fn core_value_is_renderable_externref(value: &CoreValue, env: &RenderEnv) -> boo
     }
 }
 
-fn slice_literal_items_are_i32(items: &[CoreValue], env: &RenderEnv) -> bool {
-    items
-        .iter()
-        .all(|item| core_value_is_renderable_i32(item, env))
+fn core_value_is_renderable_externref_operand(value: &CoreValue, env: &RenderEnv) -> bool {
+    let value = resolve_core_value_binding(value, env);
+    match value {
+        CoreValue::AggregateIndex { value, index, .. } => slice_index_value(value, index, env)
+            .map(|value| core_value_is_renderable_externref_operand(value, env))
+            .unwrap_or_else(|| {
+                core_value_is_renderable_externref(value, env)
+                    && core_value_is_renderable_i32(index, env)
+            }),
+        _ => core_value_is_renderable_externref(value, env),
+    }
 }
 
 fn resolve_core_value_binding<'a>(value: &'a CoreValue, env: &'a RenderEnv) -> &'a CoreValue {

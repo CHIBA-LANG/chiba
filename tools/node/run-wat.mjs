@@ -169,6 +169,11 @@ async function makeImports(wat, args) {
         array.push(item);
         return array;
       },
+      "std.vec_push_externref"(vec, item) {
+        const array = asArray(vec);
+        array.push(item);
+        return array;
+      },
       "std.vec_freeze"(vec) {
         return asArray(vec);
       },
@@ -365,6 +370,11 @@ async function makeImports(wat, args) {
         if (sliceLiteral) {
           const arity = Number(sliceLiteral[1]);
           return (...items) => items.slice(0, arity).map(Number);
+        }
+        const externrefSliceLiteral = /^std\.slice_externref_literal_(\d+)$/.exec(String(prop));
+        if (externrefSliceLiteral) {
+          const arity = Number(externrefSliceLiteral[1]);
+          return (...items) => items.slice(0, arity);
         }
         const textLiteral = /^std\.(string|str|cstr)_literal_(\d+)$/.exec(String(prop));
         if (textLiteral) {

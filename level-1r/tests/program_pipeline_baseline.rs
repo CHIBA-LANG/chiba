@@ -1244,6 +1244,31 @@ fn program_bool_slice_literal_lowers_to_executable_values() {
 }
 
 #[test]
+fn program_string_slice_literal_lowers_to_executable_values() {
+    let len =
+        compile_source_program_bundle("def main(): i64 = [String.from(\"hé\")][0].bytes_len()")
+            .expect("compile string slice literal element len")
+            .program;
+    let returned = compile_source_program_bundle("def main() = [String.from(\"hé\")]")
+        .expect("compile string slice literal return")
+        .program;
+
+    for bundle in [&len, &returned] {
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle.backend_link.linked_wat.contains(
+            "(import \"env\" \"std.slice_externref_literal_1\" (func $std_slice_externref_literal_1 (param externref) (result externref)))"
+        ));
+    }
+    assert_eq!(
+        returned.defs[0].output.typed.ty,
+        Type::Nominal("Slice[String]".to_string())
+    );
+    assert_eq!(len.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(run_wat_text(&len.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&returned.backend_link.linked_wat), "slice/1");
+}
+
+#[test]
 fn source_slice_param_len_lowers_to_executable_runtime_import() {
     let bundle = compile_source_program_bundle("def main(s: Slice[i64]): i64 = s.len")
         .expect("compile slice param len")
@@ -1725,6 +1750,59 @@ fn source_vec_new_push_preserves_bool_element_type_through_freeze_range_slice() 
         .contains("call $std_slice_i64_slice"));
 
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
+#[test]
+fn source_vec_new_push_preserves_string_element_type_through_freeze_index() {
+    let bundle = compile_source_program_bundle(
+        "def main(): i64 = Vec.new().push(String.from(\"hé\")).freeze()[0].bytes_len()",
+    )
+    .expect("compile string vec new push freeze index")
+    .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.vec_push_externref\" (func $std_vec_push_externref (param externref) (param externref) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push_externref"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_vec_new_push_preserves_string_element_type_through_freeze_range_slice() {
+    let bundle = compile_source_program_bundle(
+        "def main(): i64 = Vec.new().push(String.from(\"x\")).push(String.from(\"hé\")).freeze()[1..2][0].bytes_len()",
+    )
+    .expect("compile string vec new push freeze range slice")
+    .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push_externref"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_slice"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
 }
 
 fn assert_invalid_assignment_target(source: &str, target_type: &str) {
