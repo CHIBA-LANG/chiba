@@ -182,6 +182,7 @@ pub enum BuiltinMethodCall {
     StringNew,
     StringFrom,
     StringConcat,
+    StringAsStr,
     StringToCStr,
     StringPushRune,
     TextLen { kind: TextKind },
@@ -204,6 +205,7 @@ impl BuiltinMethodCall {
             Self::StringNew => "builtin.string.new",
             Self::StringFrom => "builtin.string.from",
             Self::StringConcat => "builtin.string.concat",
+            Self::StringAsStr => "builtin.string.as_str",
             Self::StringToCStr => "builtin.string.to_cstr",
             Self::StringPushRune => "builtin.string.push_rune",
             Self::TextLen { kind } => match kind {
@@ -2228,6 +2230,9 @@ fn builtin_method_call(
         if matches!((kind, name, args), (TextKind::String, "to_cstr", [])) {
             return Some(BuiltinMethodCall::StringToCStr);
         }
+        if matches!((kind, name, args), (TextKind::String, "as_str", [])) {
+            return Some(BuiltinMethodCall::StringAsStr);
+        }
         if matches!((kind, name, args), (TextKind::String, "push_rune", [_])) {
             return Some(BuiltinMethodCall::StringPushRune);
         }
@@ -2275,6 +2280,7 @@ fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Op
         BuiltinMethodCall::StringNew => Some(Type::Nominal("String".to_string())),
         BuiltinMethodCall::StringFrom => Some(Type::Nominal("String".to_string())),
         BuiltinMethodCall::StringConcat => Some(Type::Nominal("String".to_string())),
+        BuiltinMethodCall::StringAsStr => Some(Type::Nominal("str".to_string())),
         BuiltinMethodCall::StringToCStr => Some(Type::Nominal("cstr".to_string())),
         BuiltinMethodCall::StringPushRune => Some(receiver.clone()),
         BuiltinMethodCall::TextLen { .. } => Some(Type::I64),

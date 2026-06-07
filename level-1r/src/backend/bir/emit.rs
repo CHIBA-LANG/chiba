@@ -741,6 +741,7 @@ fn builtin_runtime_import_name(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::StringNew => "std.string_new",
         BuiltinMethodCall::StringFrom => "std.str_to_string",
         BuiltinMethodCall::StringConcat => "std.string_concat",
+        BuiltinMethodCall::StringAsStr => "std.string_as_str",
         BuiltinMethodCall::StringToCStr => "std.string_to_cstr",
         BuiltinMethodCall::StringPushRune => "std.string_push_rune",
         BuiltinMethodCall::TextLen {
@@ -787,6 +788,7 @@ fn builtin_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::StringNew => "_to_externref",
         BuiltinMethodCall::StringFrom => "externref_to_externref",
         BuiltinMethodCall::StringConcat => "externref_externref_to_externref",
+        BuiltinMethodCall::StringAsStr => "externref_to_externref",
         BuiltinMethodCall::StringToCStr => "externref_to_externref",
         BuiltinMethodCall::StringPushRune => "externref_i64_to_externref",
         BuiltinMethodCall::TextLen { .. } => "externref_to_i64",
@@ -2114,6 +2116,7 @@ fn render_core_value_i32(
                 | BuiltinMethodCall::StringNew
                 | BuiltinMethodCall::StringFrom
                 | BuiltinMethodCall::StringConcat
+                | BuiltinMethodCall::StringAsStr
                 | BuiltinMethodCall::StringToCStr
                 | BuiltinMethodCall::StringPushRune
                 | BuiltinMethodCall::RefNew
@@ -2247,6 +2250,9 @@ fn render_core_value_externref(
                     render_core_value_externref(wat, &args[0], env)?;
                     render_core_value_externref(wat, &args[1], env)?;
                 }
+                BuiltinMethodCall::StringAsStr => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                }
                 BuiltinMethodCall::StringToCStr => {
                     render_core_value_externref(wat, &args[0], env)?;
                 }
@@ -2308,6 +2314,7 @@ fn builtin_runtime_call_is_renderable_externref(
             core_value_is_renderable_externref(left, env)
                 && core_value_is_renderable_externref(right, env)
         }
+        (BuiltinMethodCall::StringAsStr, [text]) => core_value_is_renderable_externref(text, env),
         (BuiltinMethodCall::StringToCStr, [text]) => core_value_is_renderable_externref(text, env),
         (BuiltinMethodCall::StringPushRune, [text, rune]) => {
             core_value_is_renderable_externref(text, env) && core_value_is_renderable_i32(rune, env)

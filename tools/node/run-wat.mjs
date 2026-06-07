@@ -328,6 +328,9 @@ async function makeImports(wat, args) {
         out.set(right, left.length);
         return out;
       },
+      "std.string_as_str"(text) {
+        return byteArray(text).slice();
+      },
     },
     {
       get(target, prop) {

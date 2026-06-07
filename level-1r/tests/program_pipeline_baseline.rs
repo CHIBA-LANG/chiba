@@ -1936,6 +1936,47 @@ fn source_string_from_lowers_to_executable_owned_text_runtime_import() {
 }
 
 #[test]
+fn source_string_as_str_lowers_to_executable_view_runtime_import() {
+    let len =
+        compile_source_program_bundle("def main(): i64 = String.from(\"hé\").as_str().bytes_len()")
+            .expect("compile string as_str len")
+            .program;
+    let byte = compile_source_program_bundle("def main(): i64 = String.from(\"hé\").as_str()[1]")
+        .expect("compile string as_str byte")
+        .program;
+    let runes =
+        compile_source_program_bundle("def main(): i64 = String.from(\"hé\").as_str().rune_len()")
+            .expect("compile string as_str rune_len")
+            .program;
+
+    for bundle in [&len, &byte, &runes] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+        assert!(bundle.backend_link.linked_wat.contains(
+            "(import \"env\" \"std.string_as_str\" (func $std_string_as_str (param externref) (result externref)))"
+        ));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_string_as_str"));
+    }
+    assert!(len.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.str_i64_len\" (func $std_str_i64_len (param externref) (result i32)))"
+    ));
+    assert!(byte.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.str_i64_byte_at\" (func $std_str_i64_byte_at (param externref) (param i32) (result i32)))"
+    ));
+    assert!(runes.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.str_rune_len\" (func $std_str_rune_len (param externref) (result i32)))"
+    ));
+
+    assert_eq!(run_wat_text(&len.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&byte.backend_link.linked_wat), "195");
+    assert_eq!(run_wat_text(&runes.backend_link.linked_wat), "2");
+}
+
+#[test]
 fn source_string_concat_lowers_to_executable_runtime_import() {
     let len = compile_source_program_bundle("def main(): i64 = \"a\".concat(\"é\").bytes_len()")
         .expect("compile string concat len")
