@@ -432,8 +432,24 @@ function paramTypesFromFuncHeader(header) {
   return Array.from(header.matchAll(/\(param(?:\s+\$[^\s)]+)?\s+([^\s)]+)\)/g), (match) => match[1]);
 }
 
+function defaultExternrefArg() {
+  function item(value, bytes) {
+    return {
+      bytes: Uint8Array.from(bytes),
+      valueOf() {
+        return value;
+      },
+    };
+  }
+  return [
+    item(1, [104, 105, 33]),
+    item(2, [120]),
+    item(3, [121]),
+  ];
+}
+
 function defaultArgForType(type) {
-  if (type === "externref") return [1, 2, 3];
+  if (type === "externref") return defaultExternrefArg();
   return 0n;
 }
 

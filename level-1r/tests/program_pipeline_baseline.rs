@@ -1420,6 +1420,81 @@ fn source_slice_param_bool_range_slice_lowers_to_executable_runtime_import() {
 }
 
 #[test]
+fn source_slice_param_string_index_lowers_to_executable_externref_runtime_import() {
+    let bundle =
+        compile_source_program_bundle("def main(s: Slice[String]): i64 = s[0].bytes_len()")
+            .expect("compile string slice param index")
+            .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["s".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(matches!(
+        main.backend.return_value,
+        Some(chiba_level1r::core::CoreValue::BuiltinRuntimeCall { .. })
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.slice_get\" (func $std_slice_get (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_slice_param_string_range_slice_lowers_to_executable_externref_runtime_import() {
+    let bundle =
+        compile_source_program_bundle("def main(s: Slice[String]): i64 = s[0..2][0].char_at(0)")
+            .expect("compile string slice param range slice")
+            .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["s".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::Rune);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.slice_i64_slice\" (func $std_slice_i64_slice (param externref) (param i32) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.slice_get\" (func $std_slice_get (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_slice"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "104");
+}
+
+#[test]
 fn source_array_param_len_lowers_to_executable_runtime_import() {
     let bundle = compile_source_program_bundle("def main(a: Array[i64]): i64 = a.len")
         .expect("compile array param len")
@@ -1564,6 +1639,77 @@ fn source_array_param_bool_range_slice_lowers_to_executable_runtime_import() {
         .contains("call $std_array_i64_slice"));
 
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "1");
+}
+
+#[test]
+fn source_array_param_string_index_lowers_to_executable_externref_runtime_import() {
+    let bundle =
+        compile_source_program_bundle("def main(a: Array[String]): i64 = a[0].bytes_len()")
+            .expect("compile string array param index")
+            .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["a".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.array_get\" (func $std_array_get (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_get"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_i64_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_array_param_string_range_slice_lowers_to_executable_externref_runtime_import() {
+    let bundle =
+        compile_source_program_bundle("def main(a: Array[String]): i64 = a[0..2][0].char_at(0)")
+            .expect("compile string array param range slice")
+            .program;
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["a".to_string()]
+        }]
+    );
+    assert_backend_link_clean(&bundle, 0);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::Rune);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.array_i64_slice\" (func $std_array_i64_slice (param externref) (param i32) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.slice_get\" (func $std_slice_get (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_i64_slice"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert!(!bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "104");
 }
 
 #[test]
