@@ -93,6 +93,7 @@ pub struct BackendParamAbi {
     pub functions: BTreeMap<String, BackendCallableAbi>,
     pub statics: BTreeMap<String, BackendValueKind>,
     pub static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
+    pub aggregate_element_lanes: BTreeMap<String, BackendValueKind>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -979,6 +980,11 @@ fn aggregate_index_lane(
 ) -> Option<RuntimeValueLane> {
     if let Some(item) = slice_index_value(value, index, env) {
         return runtime_value_lane(item, env);
+    }
+    if core_value_is_renderable_i32(index, env) {
+        if let CoreValue::Var(name) = resolve_core_value_binding(value, env) {
+            return env.aggregate_element_lane(name).map(RuntimeValueLane::from);
+        }
     }
     None
 }
@@ -2168,6 +2174,7 @@ struct RenderEnv {
     function_abis: BTreeMap<String, BackendCallableAbi>,
     static_kinds: BTreeMap<String, WasmValueKind>,
     static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
+    aggregate_element_lanes: BTreeMap<String, WasmValueKind>,
     bindings: BTreeMap<String, CoreValue>,
 }
 
@@ -2181,6 +2188,7 @@ impl RenderEnv {
             function_abis: BTreeMap::new(),
             static_kinds: BTreeMap::new(),
             static_ref_cell_lanes: BTreeMap::new(),
+            aggregate_element_lanes: BTreeMap::new(),
             bindings: BTreeMap::new(),
         }
     }
@@ -2194,6 +2202,7 @@ impl RenderEnv {
             .with_function_abis(param_abi.functions.clone())
             .with_static_kinds(param_abi.statics.clone())
             .with_static_ref_cell_lanes(param_abi.static_ref_cell_lanes.clone())
+            .with_aggregate_element_lanes(param_abi.aggregate_element_lanes.clone())
     }
 
     fn with_function_abis(&self, function_abis: BTreeMap<String, BackendCallableAbi>) -> Self {
@@ -2217,6 +2226,18 @@ impl RenderEnv {
     ) -> Self {
         let mut next = self.clone();
         next.static_ref_cell_lanes = static_ref_cell_lanes;
+        next
+    }
+
+    fn with_aggregate_element_lanes(
+        &self,
+        aggregate_element_lanes: BTreeMap<String, BackendValueKind>,
+    ) -> Self {
+        let mut next = self.clone();
+        next.aggregate_element_lanes = aggregate_element_lanes
+            .into_iter()
+            .map(|(name, kind)| (name, WasmValueKind::from(kind)))
+            .collect();
         next
     }
 
@@ -2271,6 +2292,10 @@ impl RenderEnv {
             .or_else(|| self.static_ref_cell_lanes.get(name).copied())
     }
 
+    fn aggregate_element_lane(&self, name: &str) -> Option<WasmValueKind> {
+        self.aggregate_element_lanes.get(name).copied()
+    }
+
     fn signature(&self) -> String {
         self.params
             .iter()
@@ -2305,6 +2330,15 @@ impl From<BackendValueKind> for WasmValueKind {
         match value {
             BackendValueKind::I32 => Self::I32,
             BackendValueKind::ExternRef => Self::ExternRef,
+        }
+    }
+}
+
+impl From<WasmValueKind> for RuntimeValueLane {
+    fn from(value: WasmValueKind) -> Self {
+        match value {
+            WasmValueKind::I32 => Self::I32,
+            WasmValueKind::ExternRef => Self::ExternRef,
         }
     }
 }
@@ -3136,7 +3170,11 @@ fn core_value_is_renderable_externref(value: &CoreValue, env: &RenderEnv) -> boo
         CoreValue::SliceLiteral { items } => aggregate_items_lane(items, env).is_some(),
         CoreValue::AggregateIndex { value, index, .. } => slice_index_value(value, index, env)
             .map(|value| core_value_is_renderable_externref(value, env))
-            .unwrap_or(false),
+            .unwrap_or_else(|| {
+                core_value_is_renderable_externref(value, env)
+                    && core_value_is_renderable_i32(index, env)
+                    && aggregate_index_lane(value, index, env) == Some(RuntimeValueLane::ExternRef)
+            }),
         CoreValue::Range { start, end } => {
             core_value_is_renderable_i32(start, env) && core_value_is_renderable_i32(end, env)
         }

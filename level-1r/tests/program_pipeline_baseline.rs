@@ -2355,6 +2355,43 @@ fn source_assignment_to_builtin_index_results_is_program_diagnostic() {
 }
 
 #[test]
+fn source_array_ref_index_assignment_lowers_to_executable_ref_set() {
+    let bundle =
+        compile_source_program_bundle("def main(cells: Array[Ref[i64]]): i64 = (cells[0] := 9).*")
+            .expect("compile array ref index assignment")
+            .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.array_get\" (func $std_array_get (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.ref_set\" (func $std_ref_set (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.ref_get\" (func $std_ref_get (param externref) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_get"));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_ref_set"));
+    assert!(bundle.backend_link.linked_wat.contains("call $std_ref_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "9");
+}
+
+#[test]
+fn source_ref_array_index_assignment_is_program_diagnostic() {
+    assert_invalid_assignment_target(
+        "def main(cell: Ref[Array[i64]]): i64 = cell[0] := 9",
+        "Unknown",
+    );
+}
+
+#[test]
 fn source_ref_new_set_get_lowers_to_executable_runtime_imports() {
     let bundle = compile_source_program_bundle("def main(): i64 = Ref.new(1).set(4).get()")
         .expect("compile ref new set get")

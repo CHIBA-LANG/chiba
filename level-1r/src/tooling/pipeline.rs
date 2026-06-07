@@ -1239,7 +1239,21 @@ fn backend_param_abi(
         functions: backend_callable_abis_for_interface(functions),
         statics: backend_static_abis_for_interface(statics),
         static_ref_cell_lanes: backend_static_ref_cell_lanes_for_interface(statics),
+        aggregate_element_lanes: backend_aggregate_element_lanes_for_signature(signature),
     }
+}
+
+fn backend_aggregate_element_lanes_for_signature(
+    signature: &TypedSignature,
+) -> BTreeMap<String, BackendValueKind> {
+    signature
+        .params
+        .iter()
+        .filter_map(|param| {
+            let ty = source_type_name_to_type(&param.ty);
+            aggregate_element_lane_for_type(&ty).map(|lane| (param.name.clone(), lane))
+        })
+        .collect()
 }
 
 fn backend_static_abis_for_interface(
@@ -1332,6 +1346,20 @@ fn core_ref_cell_lane_for_type(ty: &Type) -> Option<crate::core::CoreRefCellLane
             } else {
                 Some(crate::core::CoreRefCellLane::I32)
             }
+        }
+        _ => None,
+    }
+}
+
+fn aggregate_element_lane_for_type(ty: &Type) -> Option<BackendValueKind> {
+    match nominal_base_name_for_type(ty) {
+        Some("Slice" | "Array" | "Vec") => {
+            let element = nominal_type_args_for_type(ty)?.into_iter().next()?;
+            Some(
+                backend_value_kind_for_type(&element)
+                    .filter(|kind| *kind == BackendValueKind::ExternRef)
+                    .unwrap_or(BackendValueKind::I32),
+            )
         }
         _ => None,
     }
