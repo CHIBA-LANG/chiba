@@ -651,6 +651,43 @@ def main(): i64 = ({f: inc}).f(8)
 }
 
 #[test]
+fn program_callable_storage_field_calls_capturing_closure() {
+    let program = SourceProgram::new(vec![def(
+        "main",
+        vec![],
+        Expr::call(
+            Expr::lambda(
+                "base",
+                Expr::method_call(
+                    Expr::record(vec![(
+                        "f",
+                        Expr::lambda(
+                            "n",
+                            Expr::binary(BinaryOp::Add, Expr::var("base"), Expr::var("n")),
+                        ),
+                    )]),
+                    "f",
+                    Expr::i64(5),
+                ),
+            ),
+            Expr::i64(7),
+        ),
+    )]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(!bundle.defs[0]
+        .output
+        .core
+        .ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::TailCall { func, .. } if func.contains("record__"))));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "12");
+}
+
+#[test]
 fn program_dyn_row_param_builds_static_to_dyn_package_contract() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"

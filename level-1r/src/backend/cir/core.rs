@@ -824,6 +824,12 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
                 lower_term(&inlined, continuations, ops);
                 return;
             }
+            if let Some(value) = static_cps_callable_value(func) {
+                if let Some(inlined) = inline_fun_lambda_call(value, args, kont) {
+                    lower_term(&inlined, continuations, ops);
+                    return;
+                }
+            }
             let target = render_atom(func);
             lower_callable_target(&target, func, ops);
             let args = lower_call_args(func, args);
@@ -1277,6 +1283,13 @@ fn static_cps_record_field_value<'a>(record: &'a CpsAtom, name: &str) -> Option<
         .iter()
         .find(|field| field.name == name)
         .map(|field| &field.value)
+}
+
+fn static_cps_callable_value(atom: &CpsAtom) -> Option<&CpsAtom> {
+    match atom {
+        CpsAtom::RecordField { record, field } => static_cps_record_field_value(record, field),
+        _ => None,
+    }
 }
 
 fn static_cps_dyn_receiver_method<'a>(
