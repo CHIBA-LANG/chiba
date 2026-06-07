@@ -175,6 +175,9 @@ pub enum BuiltinMethodCall {
     RefNew,
     RefGet,
     RefSet,
+    UnsafeRefNew,
+    UnsafeRefGet,
+    UnsafeRefSet,
 }
 
 impl BuiltinMethodCall {
@@ -190,6 +193,9 @@ impl BuiltinMethodCall {
             Self::RefNew => "builtin.ref.new",
             Self::RefGet => "builtin.ref.get",
             Self::RefSet => "builtin.ref.set",
+            Self::UnsafeRefNew => "builtin.unsafe_ref.new",
+            Self::UnsafeRefGet => "builtin.unsafe_ref.get",
+            Self::UnsafeRefSet => "builtin.unsafe_ref.set",
         }
     }
 }
@@ -2046,6 +2052,12 @@ fn builtin_method_call(
     ) {
         return Some(BuiltinMethodCall::RefNew);
     }
+    if matches!(
+        (&receiver.kind, name, args),
+        (TypedExprKind::Var(type_name), "new", [_]) if type_name == "UnsafeRef"
+    ) {
+        return Some(BuiltinMethodCall::UnsafeRefNew);
+    }
     if let Some(kind) = text_kind_for_type(&receiver.ty) {
         if matches!((name, args), ("char_at", [_])) {
             return Some(BuiltinMethodCall::TextCharAt { kind });
@@ -2055,6 +2067,13 @@ fn builtin_method_call(
         return match (name, args) {
             ("get", []) => Some(BuiltinMethodCall::RefGet),
             ("set", [_]) => Some(BuiltinMethodCall::RefSet),
+            _ => None,
+        };
+    }
+    if unsafe_ref_element_type(&receiver.ty).is_some() {
+        return match (name, args) {
+            ("get", []) => Some(BuiltinMethodCall::UnsafeRefGet),
+            ("set", [_]) => Some(BuiltinMethodCall::UnsafeRefSet),
             _ => None,
         };
     }
@@ -2079,6 +2098,9 @@ fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Op
         BuiltinMethodCall::RefNew => Some(Type::Nominal("Ref[i64]".to_string())),
         BuiltinMethodCall::RefGet => ref_element_type(receiver),
         BuiltinMethodCall::RefSet => Some(receiver.clone()),
+        BuiltinMethodCall::UnsafeRefNew => Some(Type::Nominal("UnsafeRef[i64]".to_string())),
+        BuiltinMethodCall::UnsafeRefGet => unsafe_ref_element_type(receiver),
+        BuiltinMethodCall::UnsafeRefSet => Some(receiver.clone()),
     }
 }
 
@@ -2148,6 +2170,19 @@ fn ref_element_type(receiver: &Type) -> Option<Type> {
     };
     match (base.as_str(), args.as_slice()) {
         ("Ref", [element]) => Some(element.to_type()),
+        _ => None,
+    }
+}
+
+fn unsafe_ref_element_type(receiver: &Type) -> Option<Type> {
+    let Type::Nominal(name) = receiver else {
+        return None;
+    };
+    let ParsedTypeHeader::Nominal { base, args } = parse_type_header(name)? else {
+        return None;
+    };
+    match (base.as_str(), args.as_slice()) {
+        ("UnsafeRef", [element]) => Some(element.to_type()),
         _ => None,
     }
 }

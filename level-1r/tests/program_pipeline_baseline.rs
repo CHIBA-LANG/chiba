@@ -1433,6 +1433,40 @@ fn source_ref_assignment_sugar_lowers_to_executable_set_runtime_import() {
 }
 
 #[test]
+fn source_unsafe_ref_new_set_get_lowers_to_executable_runtime_imports() {
+    let bundle = compile_source_program_bundle("def main(): i64 = (UnsafeRef.new(2) := 8).*")
+        .expect("compile unsafe ref new set get")
+        .program;
+
+    assert_backend_link_clean_all(&bundle);
+    let main = &bundle.defs[0].output;
+    assert_eq!(main.typed.ty, Type::I64);
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.unsafe_ref_new\" (func $std_unsafe_ref_new (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.unsafe_ref_set\" (func $std_unsafe_ref_set (param externref) (param i32) (result externref)))"
+    ));
+    assert!(bundle.backend_link.linked_wat.contains(
+        "(import \"env\" \"std.unsafe_ref_get\" (func $std_unsafe_ref_get (param externref) (result i32)))"
+    ));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_new"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_set"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_get"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "8");
+}
+
+#[test]
 fn source_str_param_len_lowers_to_executable_runtime_import() {
     let bundle = compile_source_program_bundle("def main(s: str): i64 = s.len")
         .expect("compile str param len")

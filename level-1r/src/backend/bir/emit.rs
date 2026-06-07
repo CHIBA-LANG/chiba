@@ -682,6 +682,9 @@ fn builtin_runtime_import_name(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::RefNew => "std.ref_new",
         BuiltinMethodCall::RefGet => "std.ref_get",
         BuiltinMethodCall::RefSet => "std.ref_set",
+        BuiltinMethodCall::UnsafeRefNew => "std.unsafe_ref_new",
+        BuiltinMethodCall::UnsafeRefGet => "std.unsafe_ref_get",
+        BuiltinMethodCall::UnsafeRefSet => "std.unsafe_ref_set",
     }
 }
 
@@ -694,6 +697,9 @@ fn builtin_runtime_import_signature(call: BuiltinMethodCall) -> &'static str {
         BuiltinMethodCall::RefNew => "i64_to_externref",
         BuiltinMethodCall::RefGet => "externref_to_i64",
         BuiltinMethodCall::RefSet => "externref_i64_to_externref",
+        BuiltinMethodCall::UnsafeRefNew => "i64_to_externref",
+        BuiltinMethodCall::UnsafeRefGet => "externref_to_i64",
+        BuiltinMethodCall::UnsafeRefSet => "externref_i64_to_externref",
     }
 }
 
@@ -1912,11 +1918,16 @@ fn render_core_value_i32(
                 BuiltinMethodCall::RefGet => {
                     render_core_value_externref(wat, &args[0], env)?;
                 }
+                BuiltinMethodCall::UnsafeRefGet => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                }
                 BuiltinMethodCall::VecNew
                 | BuiltinMethodCall::VecPush
                 | BuiltinMethodCall::VecFreeze
                 | BuiltinMethodCall::RefNew
-                | BuiltinMethodCall::RefSet => {
+                | BuiltinMethodCall::RefSet
+                | BuiltinMethodCall::UnsafeRefNew
+                | BuiltinMethodCall::UnsafeRefSet => {
                     unreachable!("externref runtime calls are not renderable as i32")
                 }
             }
@@ -2012,6 +2023,16 @@ fn render_core_value_externref(
                     render_core_value_externref(wat, &args[0], env)?;
                     render_core_value_i32(wat, &args[1], env)?;
                 }
+                BuiltinMethodCall::UnsafeRefNew => {
+                    render_core_value_i32(wat, &args[0], env)?;
+                }
+                BuiltinMethodCall::UnsafeRefGet => {
+                    unreachable!("unsafe ref get returns i32 and is not renderable as externref")
+                }
+                BuiltinMethodCall::UnsafeRefSet => {
+                    render_core_value_externref(wat, &args[0], env)?;
+                    render_core_value_i32(wat, &args[1], env)?;
+                }
             }
             wat.push_str(&format!(
                 "    call ${}\n",
@@ -2039,6 +2060,11 @@ fn builtin_runtime_call_is_renderable_externref(
             core_value_is_renderable_externref(cell, env)
                 && core_value_is_renderable_i32(value, env)
         }
+        (BuiltinMethodCall::UnsafeRefNew, [value]) => core_value_is_renderable_i32(value, env),
+        (BuiltinMethodCall::UnsafeRefSet, [cell, value]) => {
+            core_value_is_renderable_externref(cell, env)
+                && core_value_is_renderable_i32(value, env)
+        }
         _ => false,
     }
 }
@@ -2054,6 +2080,7 @@ fn builtin_runtime_call_is_renderable_i32(
                 && core_value_is_renderable_i32(index, env)
         }
         (BuiltinMethodCall::RefGet, [cell]) => core_value_is_renderable_externref(cell, env),
+        (BuiltinMethodCall::UnsafeRefGet, [cell]) => core_value_is_renderable_externref(cell, env),
         _ => false,
     }
 }
