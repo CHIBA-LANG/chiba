@@ -2312,28 +2312,54 @@ fn source_aggregate_externref_lanes_preserve_range_and_cstr_elements() {
     let slice_cstr = compile_source_program_bundle("def main(): i64 = [c\"x\", c\"hé\"][1][3]")
         .expect("compile cstr slice literal index")
         .program;
+    let array_cstr =
+        compile_source_program_bundle("def main(values: Array[cstr]): i64 = values[1].bytes_len()")
+            .expect("compile cstr array param index")
+            .program;
+    let array_cstr_slice = compile_source_program_bundle(
+        "def main(values: Array[cstr]): rune = values[0..2][1].char_at(0)",
+    )
+    .expect("compile cstr array param slice")
+    .program;
     let vec_cstr = compile_source_program_bundle(
         "def main(): i64 = Vec.new().push(c\"x\").push(String.from(\"hé\").to_cstr()).freeze()[1].bytes_len()",
     )
     .expect("compile cstr vec freeze index")
     .program;
 
-    for (bundle, diagnostics) in [
-        (&slice_range, vec![]),
+    for (bundle, diagnostics, ty) in [
+        (&slice_range, vec![], Type::I64),
         (
             &array_range,
             vec![ProgramDiagnostic::EntryHasParams {
                 name: "main".to_string(),
                 params: vec!["ranges".to_string()],
             }],
+            Type::I64,
         ),
-        (&vec_range, vec![]),
-        (&slice_cstr, vec![]),
-        (&vec_cstr, vec![]),
+        (&vec_range, vec![], Type::I64),
+        (&slice_cstr, vec![], Type::I64),
+        (
+            &array_cstr,
+            vec![ProgramDiagnostic::EntryHasParams {
+                name: "main".to_string(),
+                params: vec!["values".to_string()],
+            }],
+            Type::I64,
+        ),
+        (
+            &array_cstr_slice,
+            vec![ProgramDiagnostic::EntryHasParams {
+                name: "main".to_string(),
+                params: vec!["values".to_string()],
+            }],
+            Type::Rune,
+        ),
+        (&vec_cstr, vec![], Type::I64),
     ] {
         assert_eq!(bundle.diagnostics, diagnostics);
         assert_backend_link_clean_all(bundle);
-        assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+        assert_eq!(bundle.defs[0].output.typed.ty, ty);
     }
     assert!(slice_range
         .backend_link
@@ -2359,6 +2385,34 @@ fn source_aggregate_externref_lanes_preserve_range_and_cstr_elements() {
         .backend_link
         .linked_wat
         .contains("call $std_cstr_i64_byte_at"));
+    assert!(array_cstr
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_get"));
+    assert!(array_cstr
+        .backend_link
+        .linked_wat
+        .contains("call $std_cstr_i64_len"));
+    assert!(array_cstr_slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_i64_slice"));
+    assert!(array_cstr_slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_get"));
+    assert!(array_cstr_slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_cstr_char_at"));
+    assert!(!array_cstr
+        .backend_link
+        .linked_wat
+        .contains("call $std_array_i64_get"));
+    assert!(!array_cstr_slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_get"));
     assert!(vec_cstr
         .backend_link
         .linked_wat
@@ -2372,6 +2426,11 @@ fn source_aggregate_externref_lanes_preserve_range_and_cstr_elements() {
     assert_eq!(run_wat_text(&array_range.backend_link.linked_wat), "0");
     assert_eq!(run_wat_text(&vec_range.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&slice_cstr.backend_link.linked_wat), "0");
+    assert_eq!(run_wat_text(&array_cstr.backend_link.linked_wat), "1");
+    assert_eq!(
+        run_wat_text(&array_cstr_slice.backend_link.linked_wat),
+        "120"
+    );
     assert_eq!(run_wat_text(&vec_cstr.backend_link.linked_wat), "3");
 }
 
