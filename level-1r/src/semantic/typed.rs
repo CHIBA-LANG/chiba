@@ -155,6 +155,7 @@ pub enum AggregateKind {
 pub enum TextKind {
     Str,
     String,
+    CStr,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -181,6 +182,7 @@ pub enum BuiltinMethodCall {
     StringNew,
     StringFrom,
     StringConcat,
+    StringToCStr,
     StringPushRune,
     TextLen { kind: TextKind },
     TextCharAt { kind: TextKind },
@@ -201,14 +203,17 @@ impl BuiltinMethodCall {
             Self::StringNew => "builtin.string.new",
             Self::StringFrom => "builtin.string.from",
             Self::StringConcat => "builtin.string.concat",
+            Self::StringToCStr => "builtin.string.to_cstr",
             Self::StringPushRune => "builtin.string.push_rune",
             Self::TextLen { kind } => match kind {
                 TextKind::Str => "builtin.str.len",
                 TextKind::String => "builtin.string.len",
+                TextKind::CStr => "builtin.cstr.len",
             },
             Self::TextCharAt { kind } => match kind {
                 TextKind::Str => "builtin.str.char_at",
                 TextKind::String => "builtin.string.char_at",
+                TextKind::CStr => "builtin.cstr.char_at",
             },
             Self::RefNew => "builtin.ref.new",
             Self::RefGet => "builtin.ref.get",
@@ -2068,6 +2073,9 @@ fn index_access_kind(receiver: &Type, index: &Type) -> IndexAccessKind {
         ("String", []) => IndexAccessKind::TextByte {
             kind: TextKind::String,
         },
+        ("cstr", []) => IndexAccessKind::TextByte {
+            kind: TextKind::CStr,
+        },
         _ => IndexAccessKind::Operator,
     }
 }
@@ -2082,6 +2090,7 @@ fn index_result_type(access: &IndexAccessKind) -> Type {
         IndexAccessKind::TextSlice { kind } => match kind {
             TextKind::Str => Type::Nominal("str".to_string()),
             TextKind::String => Type::Nominal("String".to_string()),
+            TextKind::CStr => Type::Unknown,
         },
         IndexAccessKind::Operator => Type::Unknown,
     }
@@ -2206,6 +2215,9 @@ fn builtin_method_call(
         {
             return Some(BuiltinMethodCall::StringConcat);
         }
+        if matches!((kind, name, args), (TextKind::String, "to_cstr", [])) {
+            return Some(BuiltinMethodCall::StringToCStr);
+        }
         if matches!((kind, name, args), (TextKind::String, "push_rune", [_])) {
             return Some(BuiltinMethodCall::StringPushRune);
         }
@@ -2250,6 +2262,7 @@ fn builtin_method_result_type(builtin: BuiltinMethodCall, receiver: &Type) -> Op
         BuiltinMethodCall::StringNew => Some(Type::Nominal("String".to_string())),
         BuiltinMethodCall::StringFrom => Some(Type::Nominal("String".to_string())),
         BuiltinMethodCall::StringConcat => Some(Type::Nominal("String".to_string())),
+        BuiltinMethodCall::StringToCStr => Some(Type::Nominal("cstr".to_string())),
         BuiltinMethodCall::StringPushRune => Some(receiver.clone()),
         BuiltinMethodCall::TextLen { .. } => Some(Type::I64),
         BuiltinMethodCall::TextCharAt { .. } => Some(Type::Rune),
@@ -2350,6 +2363,7 @@ impl TextKind {
         match self {
             Self::Str => "str",
             Self::String => "String",
+            Self::CStr => "cstr",
         }
     }
 
@@ -2357,6 +2371,7 @@ impl TextKind {
         match self {
             Self::Str => "str",
             Self::String => "string",
+            Self::CStr => "cstr",
         }
     }
 }
@@ -2365,6 +2380,7 @@ fn text_kind_for_type(receiver: &Type) -> Option<TextKind> {
     match nominal_base_name_for_type(receiver)? {
         "str" => Some(TextKind::Str),
         "String" => Some(TextKind::String),
+        "cstr" => Some(TextKind::CStr),
         _ => None,
     }
 }

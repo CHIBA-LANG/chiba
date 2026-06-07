@@ -1987,6 +1987,34 @@ fn source_string_from_keeps_byte_index_and_char_at_semantics() {
 }
 
 #[test]
+fn source_string_to_cstr_lowers_to_executable_abi_text_runtime_import() {
+    let len = compile_source_program_bundle(
+        "def main(): i64 = String.from(\"hé\").to_cstr().bytes_len()",
+    )
+    .expect("compile string to_cstr len")
+    .program;
+    let nul = compile_source_program_bundle("def main(): i64 = String.from(\"hé\").to_cstr()[3]")
+        .expect("compile string to_cstr nul byte")
+        .program;
+
+    for bundle in [&len, &nul] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle.backend_link.linked_wat.contains(
+            "(import \"env\" \"std.string_to_cstr\" (func $std_string_to_cstr (param externref) (result externref)))"
+        ));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("call $std_string_to_cstr"));
+    }
+    assert_eq!(len.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(nul.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(run_wat_text(&len.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&nul.backend_link.linked_wat), "0");
+}
+
+#[test]
 fn source_string_char_at_returns_rune() {
     let bundle = compile_source_program_bundle("def main(): rune = \"é\".char_at(0)")
         .expect("compile string char_at")

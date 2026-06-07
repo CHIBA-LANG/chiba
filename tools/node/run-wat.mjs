@@ -81,7 +81,13 @@ async function makeImports(wat, args) {
     if (value instanceof Uint8Array) return value;
     if (Array.isArray(value)) return Uint8Array.from(value);
     if (value && value.bytes instanceof Uint8Array) return value.bytes;
+    if (value && value.cstr instanceof Uint8Array) return value.cstr;
     return new Uint8Array();
+  }
+
+  function cstrByteArray(value) {
+    if (value && value.cstr instanceof Uint8Array) return value.cstr;
+    return byteArray(value);
   }
 
   function runeAt(value, index) {
@@ -232,6 +238,11 @@ async function makeImports(wat, args) {
       "std.str_i64_len"(text) {
         return byteArray(text).length;
       },
+      "std.cstr_i64_len"(text) {
+        const bytes = cstrByteArray(text);
+        const nul = bytes.indexOf(0);
+        return nul >= 0 ? nul : bytes.length;
+      },
       "std.string_byte_at"(text, index) {
         return BigInt(byteArray(text)[Number(index)] ?? 0);
       },
@@ -243,6 +254,9 @@ async function makeImports(wat, args) {
       },
       "std.str_i64_byte_at"(text, index) {
         return Number(byteArray(text)[Number(index)] ?? 0);
+      },
+      "std.cstr_i64_byte_at"(text, index) {
+        return Number(cstrByteArray(text)[Number(index)] ?? 0);
       },
       "std.string_char_at"(text, index) {
         return runeAt(text, index);
@@ -261,6 +275,9 @@ async function makeImports(wat, args) {
       "std.str_char_at"(text, index) {
         return runeAt(text, index);
       },
+      "std.cstr_char_at"(text, index) {
+        return runeAt({ bytes: cstrByteArray(text) }, index);
+      },
       "std.string_slice"(text, start, end) {
         return byteArray(text).slice(Number(start), Number(end));
       },
@@ -269,6 +286,13 @@ async function makeImports(wat, args) {
       },
       "std.str_to_string"(text) {
         return byteArray(text).slice();
+      },
+      "std.string_to_cstr"(text) {
+        const bytes = byteArray(text);
+        const out = new Uint8Array(bytes.length + 1);
+        out.set(bytes, 0);
+        out[bytes.length] = 0;
+        return { cstr: out };
       },
       "std.string_concat"(leftText, rightText) {
         const left = byteArray(leftText);

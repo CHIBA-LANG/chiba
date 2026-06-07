@@ -225,6 +225,7 @@ fn method_replay_safety(builtin: Option<BuiltinMethodCall>) -> ReplaySafety {
             | BuiltinMethodCall::VecPush
             | BuiltinMethodCall::StringNew
             | BuiltinMethodCall::StringFrom
+            | BuiltinMethodCall::StringToCStr
             | BuiltinMethodCall::StringPushRune
             | BuiltinMethodCall::RefNew
             | BuiltinMethodCall::RefSet
