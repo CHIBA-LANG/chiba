@@ -6676,6 +6676,50 @@ def main(): i64 = BUILT.bytes_len()
 }
 
 #[test]
+fn global_init_lowers_i64_slice_static_into_executable_externref_global() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def NUMBERS: Slice[i64] = [2, 3, 5]
+def main(): i64 = NUMBERS[1]
+"#,
+    )
+    .expect("compile i64 slice static initializer")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_i64_literal_3"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("global.get $global__NUMBERS"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn global_init_lowers_string_concat_static_into_executable_externref_global() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def TEXT: String = String.from("h").concat("é")
+def main(): i64 = TEXT.bytes_len()
+"#,
+    )
+    .expect("compile string concat static initializer")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_concat"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn global_init_lowers_vec_string_static_into_executable_externref_global() {
     let bundle = compile_source_program_bundle(
         r#"
@@ -6697,6 +6741,26 @@ def main(): i64 = NAMES.freeze()[0].bytes_len()
         .backend_link
         .linked_wat
         .contains("global.get $global__NAMES"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn global_init_lowers_vec_i64_static_into_executable_externref_global() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def NUMBERS: Vec[i64] = Vec.new().push(2).push(3)
+def main(): i64 = NUMBERS.freeze()[1]
+"#,
+    )
+    .expect("compile i64 vec static initializer")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push"));
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
 }
 
@@ -6748,6 +6812,64 @@ def main(): i64 = CELL.get().end
 
     assert_eq!(run_wat_text(&cell.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&unsafe_cell.backend_link.linked_wat), "9");
+}
+
+#[test]
+fn global_init_lowers_scalar_ref_statics_into_executable_externref_globals() {
+    let cell = compile_source_program_bundle(
+        r#"
+def CELL: Ref[i64] = Ref.new(8)
+def main(): i64 = CELL.get()
+"#,
+    )
+    .expect("compile scalar ref static initializer")
+    .program;
+    let unsafe_cell = compile_source_program_bundle(
+        r#"
+def CELL: UnsafeRef[bool] = UnsafeRef.new(true)
+def main(): i64 = if CELL.get() { 1 } else { 0 }
+"#,
+    )
+    .expect("compile scalar unsafe ref static initializer")
+    .program;
+
+    for bundle in [&cell, &unsafe_cell] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+    }
+    assert!(cell.backend_link.linked_wat.contains("call $std_ref_new"));
+    assert!(cell.backend_link.linked_wat.contains("call $std_ref_get"));
+    assert!(unsafe_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_new"));
+    assert!(unsafe_cell
+        .backend_link
+        .linked_wat
+        .contains("call $std_unsafe_ref_get"));
+
+    assert_eq!(run_wat_text(&cell.backend_link.linked_wat), "8");
+    assert_eq!(run_wat_text(&unsafe_cell.backend_link.linked_wat), "1");
+}
+
+#[test]
+fn global_init_lowers_cstr_literal_static_into_executable_externref_global() {
+    let bundle = compile_source_program_bundle(
+        r#"
+def ABI: cstr = c"hé"
+def main(): i64 = ABI[3]
+"#,
+    )
+    .expect("compile cstr literal static initializer")
+    .program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_cstr_literal_4"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "0");
 }
 
 #[test]
