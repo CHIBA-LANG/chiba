@@ -3,11 +3,11 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() {
-    println!("cargo:rerun-if-changed=../level0/src/regex/xiddata.chiba");
-    let input = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join("../level0/src/regex/xiddata.chiba");
+    println!("cargo:rerun-if-changed=../src/regex/xiddata.chiba");
+    let input =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../src/regex/xiddata.chiba");
     let output = PathBuf::from(env::var("OUT_DIR").unwrap()).join("xiddata.rs");
-    let source = fs::read_to_string(&input).expect("read level0 xid data");
+    let source = fs::read_to_string(&input).expect("read shared xid data");
     let generated = generate(&source);
     fs::write(&output, generated).expect("write xiddata.rs");
 }
@@ -41,7 +41,7 @@ fn generate(source: &str) -> String {
     }
 
     let mut out = String::new();
-    out.push_str("// Auto-generated from level0/src/regex/xiddata.chiba\n");
+    out.push_str("// Auto-generated from src/regex/xiddata.chiba\n");
     out.push_str("#[allow(dead_code)]\n");
     out.push_str("pub const XID_START_RANGES: &[(u32, u32)] = &[\n");
     for (lo, hi) in &start {

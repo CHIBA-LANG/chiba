@@ -957,10 +957,8 @@ fn frontend_parses_callable_type_annotations() {
 
 #[test]
 fn frontend_parses_dyn_row_type_annotations() {
-    let parsed = parse_source_program(
-        "def use_dyn(v: dyn {x: i64, y: (Unit) -> i64}): i64 = 0",
-    )
-    .expect("parse");
+    let parsed = parse_source_program("def use_dyn(v: dyn {x: i64, y: (Unit) -> i64}): i64 = 0")
+        .expect("parse");
 
     match &parsed.program.items[0] {
         SourceItem::Def { params, .. } => {

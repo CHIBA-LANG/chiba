@@ -186,7 +186,12 @@ fn collect_dyn_row_contract_from_type(ty: &Type, facts: &mut TemplateFacts) {
             collect_dyn_row_contract_from_type(input, facts);
             collect_dyn_row_contract_from_type(answer, facts);
         }
-        Type::Unknown | Type::I64 | Type::Rune | Type::Bool | Type::Adt { .. } | Type::Nominal(_) => {}
+        Type::Unknown
+        | Type::I64
+        | Type::Rune
+        | Type::Bool
+        | Type::Adt { .. }
+        | Type::Nominal(_) => {}
     }
 }
 
