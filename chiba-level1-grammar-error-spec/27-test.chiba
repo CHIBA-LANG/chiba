@@ -1,8 +1,0 @@
-namespace parser.error.kwif.extra.rparen
-
-def if_extra_rparen(n: i64): i64 = {
-    if (n > 0)) {
-        return n
-    }
-    return 0
-}

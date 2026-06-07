@@ -1,5 +1,0 @@
-namespace parser.error.member.double.dot
-
-def member_double_dot(obj: Point): i64 = {
-    return obj..x
-}

@@ -1,8 +1,0 @@
-namespace parser.error.kwdata.missing.rbrace
-
-data Pair[T] {
-    Pair(T, T)
-
-def after_bad_data(): i64 = {
-    return 0
-}

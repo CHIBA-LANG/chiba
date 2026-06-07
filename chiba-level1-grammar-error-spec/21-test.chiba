@@ -1,5 +1,0 @@
-namespace parser.error.index.missing.rbracket
-
-def index_missing_rbracket(text: String): i64 = {
-    return text[0.codepoint_at(0)
-}

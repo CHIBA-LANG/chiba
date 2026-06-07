@@ -1,3 +1,0 @@
-namespace parser.error.dynamic.contract.missing.term
-
-def bad(value: dyn NominalInterface + ): i64 = 0

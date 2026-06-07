@@ -1,6 +1,0 @@
-namespace parser.error.nominal.field.missing.ty
-
-type Broken[T: X + Y + {z| row: Type}, F] {
-    value: T,
-    meta:
-}

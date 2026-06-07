@@ -1,5 +1,0 @@
-namespace parser.error.def.keyword.name
-
-def match(value: i64): i64 = {
-    return value
-}

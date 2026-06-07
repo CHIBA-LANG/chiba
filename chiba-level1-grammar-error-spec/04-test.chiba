@@ -1,9 +1,0 @@
-namespace parser.error.kwif.missing.condition
-
-def if_missing_condition(): i64 = {
-    if {
-        return 1
-    } else {
-        return 0
-    }
-}

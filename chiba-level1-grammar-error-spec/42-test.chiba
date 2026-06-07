@@ -1,7 +1,0 @@
-namespace parser.error.kwfor.extra.semicolon
-
-def for_extra_semicolon(): i64 = {
-    for ; ; {
-        return 0
-    }
-}

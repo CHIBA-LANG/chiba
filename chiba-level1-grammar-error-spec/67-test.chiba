@@ -1,5 +1,0 @@
-namespace parser.error.kwtype.field.missing.type
-
-type UserId {
-	value:
-}

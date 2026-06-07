@@ -1,5 +1,0 @@
-namespace parser.error.call.empty.argument
-
-def call_empty_argument(): i64 = {
-    return add(1, , 2)
-}

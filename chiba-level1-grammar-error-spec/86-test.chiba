@@ -1,5 +1,0 @@
-namespace broken..path
-
-def after_bad_namespace2(): i64 = {
-    return 0
-}

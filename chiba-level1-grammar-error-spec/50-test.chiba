@@ -1,5 +1,0 @@
-namespace parser.error.record.update.missing.pipe
-
-def record_update_missing_pipe(base: Point): Point = {
-    return {base x: 1, y: 2}
-}

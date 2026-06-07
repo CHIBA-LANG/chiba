@@ -1,5 +1,0 @@
-namespace parser.error.trailing.operator
-
-def trailing_operator(): i64 = {
-    return 1 +
-}

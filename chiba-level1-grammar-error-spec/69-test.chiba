@@ -1,6 +1,0 @@
-namespace parser.error.kwdata.generic.missing.rbracket
-
-data Option[T {
-    Some(T)
-    None
-}

@@ -1,8 +1,0 @@
-namespace parser.error.kwcontinue.extra.token
-
-def continue_extra(): i64 = {
-    for {
-        continue loop again
-    }
-    return 0
-}

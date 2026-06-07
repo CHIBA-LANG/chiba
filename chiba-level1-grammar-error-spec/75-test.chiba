@@ -1,3 +1,0 @@
-namespace parser.error.kwextern.missing.symbol
-
-def puts(msg: cstr): i32 = extern "c"

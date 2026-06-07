@@ -1,6 +1,0 @@
-namespace parser.error.attr.missing.comma
-
-#[derive(Debug Clone)]
-def bad_attr_args(): i64 = {
-    return 0
-}

@@ -1,7 +1,0 @@
-namespace parser.error.kwuse.missing.rbrace
-
-use demo.io.{print, println
-
-def after_bad_use(): i64 = {
-    return 0
-}

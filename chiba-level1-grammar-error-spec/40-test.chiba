@@ -1,8 +1,0 @@
-namespace parser.error.kwif.kwlet.missing.eq
-
-def if_let_missing_eq(value: Option[i64]): i64 = {
-    if let Some(x) value {
-        return x
-    }
-    return 0
-}

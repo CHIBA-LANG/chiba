@@ -1,6 +1,0 @@
-namespace parser.error.record.double.colon
-
-def record_double_colon(): i64 = {
-    let value = { x:: 1 }
-    return 0
-}

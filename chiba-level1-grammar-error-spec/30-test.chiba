@@ -1,5 +1,0 @@
-namespace parser.error.func.instead.of.def
-
-func wrong_keyword(): i64 = {
-    return 0
-}

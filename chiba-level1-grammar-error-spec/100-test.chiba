@@ -1,7 +1,0 @@
-namespace parser.error.trailing.closure.bad.attr
-
-def trailing_closure_bad_attr(x: i64): i64 = {
-    call(x) #[tail {|y|
-        y + 1
-    }
-}

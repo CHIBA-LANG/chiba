@@ -1,7 +1,0 @@
-namespace parser.error.kwuse.extra.dot.before.star
-
-use demo.prelude..*
-
-def after_bad_star_use(): i64 = {
-    return 0
-}

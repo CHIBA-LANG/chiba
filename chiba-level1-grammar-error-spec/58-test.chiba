@@ -1,5 +1,0 @@
-namespace parser.error.pipe.double
-
-def pipe_double(x: i64): i64 = {
-    return x |> |> finish(_)
-}

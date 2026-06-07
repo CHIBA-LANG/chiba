@@ -1,8 +1,0 @@
-namespace parser.error.kwmatch.missing.arrow
-
-def match_missing_arrow(value: Option[i64]): i64 = {
-    match value {
-        Some(x) x
-        None => 0
-    }
-}

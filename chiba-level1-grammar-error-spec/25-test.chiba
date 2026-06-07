@@ -1,5 +1,0 @@
-namespace parser.error.record.update.missing.comma
-
-def record_update_missing_comma(base: Point): Point = {
-    return {base | x: 1 y: 2}
-}

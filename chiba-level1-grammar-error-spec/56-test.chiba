@@ -1,8 +1,0 @@
-namespace parser.error.record.pattern.missing.value
-
-def record_pattern_missing_value(value: Point): i64 = {
-    match value {
-        { x:, y } => y
-        _ => 0
-    }
-}

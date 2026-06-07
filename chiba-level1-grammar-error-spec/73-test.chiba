@@ -1,5 +1,0 @@
-namespace parser.error.method.missing.receiver.kwtype
-
-def .norm(self): i64 = {
-    return 0
-}

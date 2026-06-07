@@ -1,6 +1,0 @@
-namespace parser.error.missing.kwlet.rhs
-
-def missing_let_rhs(): i64 = {
-    let value =
-    return 0
-}

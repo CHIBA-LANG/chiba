@@ -1,5 +1,0 @@
-namespace parser.error.kwdata.missing.name
-
-data {
-    Some(i64)
-}

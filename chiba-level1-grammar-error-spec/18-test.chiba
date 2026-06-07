@@ -1,8 +1,0 @@
-namespace parser.error.pattern.missing.comma
-
-def pattern_missing_comma(value: Option[(i64, i64)]): i64 = {
-    match value {
-        Some((x y)) => x
-        None => 0
-    }
-}

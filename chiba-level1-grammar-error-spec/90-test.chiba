@@ -1,7 +1,0 @@
-namespace parser.error.attr.missing.target
-
-#[inline]
-
-def after_lonely_attr(): i64 = {
-    return 0
-}

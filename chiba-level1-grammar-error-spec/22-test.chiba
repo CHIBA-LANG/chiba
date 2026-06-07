@@ -1,5 +1,0 @@
-namespace parser.error.extra.generic.rbracket
-
-def extra_generic_rbracket(xs: Vec[Option[i64]]]): i64 = {
-    return 0
-}

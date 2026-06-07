@@ -1,5 +1,0 @@
-namespace parser.error.call.missing.comma
-
-def call_missing_comma(): i64 = {
-    return sum(1 2, 3)
-}

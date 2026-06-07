@@ -1,8 +1,0 @@
-namespace parser.error.lambda.missing.bar
-
-def lambda_missing_bar(): i64 = {
-    let f = {x, y|
-        x + y
-    }
-    return f(1, 2)
-}

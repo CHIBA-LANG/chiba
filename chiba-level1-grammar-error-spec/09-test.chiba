@@ -1,7 +1,0 @@
-namespace parser.error.def.missing.body
-
-def missing_body(x: i64): i64 =
-
-def after_missing_body(): i64 = {
-    return x
-}

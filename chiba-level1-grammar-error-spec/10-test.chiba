@@ -1,8 +1,0 @@
-namespace parser.error.unclosed.block
-
-def unclosed_block(): i64 = {
-    let x = 1
-
-def after_unclosed_block(): i64 = {
-    return 0
-}

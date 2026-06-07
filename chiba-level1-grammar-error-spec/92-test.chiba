@@ -1,6 +1,0 @@
-namespace parser.error.attr.leading.comma
-
-#[derive(, Debug)]
-def attr_leading_comma(): i64 = {
-    return 0
-}

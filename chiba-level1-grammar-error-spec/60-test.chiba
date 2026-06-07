@@ -1,5 +1,0 @@
-namespace parser.error.call.chain.double.dot
-
-def call_chain_double_dot(obj: Builder): i64 = {
-    return obj..build()
-}

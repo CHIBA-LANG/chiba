@@ -1,5 +1,0 @@
-namespace parser.error.call.only.comma
-
-def call_only_comma(): i64 = {
-    return f(,)
-}

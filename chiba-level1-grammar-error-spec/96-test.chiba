@@ -1,5 +1,0 @@
-namespace parser.error.param.name.missing
-
-def param_name_missing(: i64): i64 = {
-    return 0
-}

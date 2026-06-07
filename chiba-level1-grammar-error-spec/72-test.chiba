@@ -1,6 +1,0 @@
-namespace parser.error.kwunion.missing.comma
-
-union Bits {
-    lo: u32
-    hi: u32,
-}

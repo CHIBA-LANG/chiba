@@ -1,8 +1,0 @@
-namespace parser.error.kwreset.bad.label.position
-
-def reset_bad_label(): i64 = {
-    let value = reset { :parse
-        1
-    }
-    return value
-}

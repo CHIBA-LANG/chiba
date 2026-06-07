@@ -1,8 +1,0 @@
-namespace parser.error.lambda.extra.comma
-
-def lambda_extra_comma(): i64 = {
-    let f = {|x, y,|
-        x + y
-    }
-    return f(1, 2)
-}

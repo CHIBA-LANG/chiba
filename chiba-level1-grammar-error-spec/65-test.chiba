@@ -1,5 +1,0 @@
-namespace parser.error.generic.call.missing.rbracket
-
-def generic_call_missing_rbracket(): i64 = {
-    return make[Option[i64)(0)
-}

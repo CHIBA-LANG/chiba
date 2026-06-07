@@ -1,7 +1,0 @@
-namespace parser.error.kwuse.group.leading.comma
-
-use demo.io.{, print}
-
-def after_bad_group_use(): i64 = {
-    return 0
-}

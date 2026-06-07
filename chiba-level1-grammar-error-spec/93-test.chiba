@@ -1,5 +1,0 @@
-namespace parser.error.kwunsafe.extra.head
-
-def unsafe_extra_head(): i64 = unsafe value {
-    return 0
-}

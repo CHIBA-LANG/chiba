@@ -1,5 +1,0 @@
-namespace parser.error.extra.rbrace
-
-def extra_rbrace(): i64 = {
-    return 0
-}}

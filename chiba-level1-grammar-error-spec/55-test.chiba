@@ -1,8 +1,0 @@
-namespace parser.error.pattern.double.bind
-
-def pattern_double_bind(value: Option[i64]): i64 = {
-    match value {
-        whole @ @ Some(x) => x
-        _ => 0
-    }
-}

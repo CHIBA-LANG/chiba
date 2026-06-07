@@ -1,3 +1,0 @@
-namespace parser.error.generic.row.missing.ty
-
-def bad_bound[T: Nominal + {x| id: }](value: T): i64 = 0

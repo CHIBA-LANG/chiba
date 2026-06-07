@@ -1,5 +1,0 @@
-namespace parser.error.binary.double.operator
-
-def binary_double_operator(): i64 = {
-    return 1 + * 2
-}

@@ -1,7 +1,0 @@
-namespace parser.error.iflet.missing.branch
-
-def if_let_missing_else(value: Option[i64]): i64 = {
-    if let Some(x) = value {
-        x
-    }
-}

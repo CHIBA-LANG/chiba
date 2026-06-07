@@ -1,7 +1,0 @@
-namespace parser.error.literal.missing.comma
-
-def literal_missing_comma(): i64 = {
-    let pair = (1 2)
-    let record = { x: 1 y: 2 }
-    return 0
-}

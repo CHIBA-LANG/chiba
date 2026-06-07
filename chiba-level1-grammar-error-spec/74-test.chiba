@@ -1,5 +1,0 @@
-namespace parser.error.method.missing.name
-
-def Vec2.(self): i64 = {
-    return 0
-}

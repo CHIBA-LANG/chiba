@@ -1,8 +1,0 @@
-namespace parser.error.kwif.kwlet.missing.expr
-
-def if_let_missing_expr(value: Option[i64]): i64 = {
-    if let Some(x) = {
-        return x
-    }
-    return 0
-}

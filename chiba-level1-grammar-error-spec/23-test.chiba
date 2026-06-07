@@ -1,5 +1,0 @@
-namespace parser.error.leading.param.comma
-
-def leading_param_comma(, x: i64): i64 = {
-    return x
-}

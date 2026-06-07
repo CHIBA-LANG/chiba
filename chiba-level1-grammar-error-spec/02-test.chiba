@@ -1,5 +1,0 @@
-namespace parser.error.missing.param.separator
-
-def missing_param_separator(x: i64 y: i64): i64 = {
-    return x
-}

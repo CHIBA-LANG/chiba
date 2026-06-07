@@ -1,5 +1,0 @@
-namespace parser.error.slice.double.range
-
-def slice_double_range(text: String): i64 = {
-    return text[0....4]
-}

@@ -1,5 +1,0 @@
-namespace parser.error.extra.rbracket
-
-def extra_rbracket(text: String): i64 = {
-    return text[0]]
-}

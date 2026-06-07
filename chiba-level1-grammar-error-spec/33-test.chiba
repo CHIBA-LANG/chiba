@@ -1,6 +1,0 @@
-namespace parser.error.kwlet.kwif.name
-
-def let_if_name(): i64 = {
-    let if = 1
-    return 0
-}

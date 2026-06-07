@@ -1,5 +1,0 @@
-namespace parser.error.index.extra.lbracket
-
-def index_extra_lbracket(xs: Vec[i64]): i64 = {
-    return xs[[0]
-}

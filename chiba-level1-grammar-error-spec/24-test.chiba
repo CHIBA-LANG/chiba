@@ -1,5 +1,0 @@
-namespace parser.error.trailing.param.comma.before.more
-
-def trailing_param_comma_before_more(x: i64, y: i64, z: i64 w: i64): i64 = {
-    return x
-}

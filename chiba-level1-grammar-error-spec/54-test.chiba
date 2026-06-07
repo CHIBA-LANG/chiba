@@ -1,8 +1,0 @@
-namespace parser.error.pattern.empty.slot
-
-def pattern_empty_slot(value: Option[(i64, i64)]): i64 = {
-    match value {
-        Some((,)) => 0
-        _ => 1
-    }
-}

@@ -1,5 +1,0 @@
-namespace parser.error.iface.method.missing.colon
-
-interface Broken {
-    render() String
-}

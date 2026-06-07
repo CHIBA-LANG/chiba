@@ -1,8 +1,0 @@
-namespace parser.error.kwbreak.label.no.colon
-
-def break_label_no_colon(): i64 = {
-    for :outer true {
-        break outer
-    }
-    return 0
-}

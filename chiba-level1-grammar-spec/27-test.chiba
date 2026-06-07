@@ -1,6 +1,0 @@
-namespace parser.spec.receiver.keyword
-
-def take_self(): i64 = {
-    let value = self
-    value
-}

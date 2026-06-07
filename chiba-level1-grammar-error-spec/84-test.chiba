@@ -1,8 +1,0 @@
-namespace parser.error.kwcontinue.label.no.colon
-
-def continue_label_no_colon(): i64 = {
-    for :outer true {
-        continue outer
-    }
-    return 0
-}

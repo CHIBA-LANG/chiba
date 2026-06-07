@@ -1,6 +1,0 @@
-namespace parser.error.kwmatch.missing.lbrace
-
-def match_missing_lbrace(value: i64): i64 = {
-    match value
-        _ => 0
-}

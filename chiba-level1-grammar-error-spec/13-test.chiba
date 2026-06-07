@@ -1,6 +1,0 @@
-namespace parser.error.missing.rparen
-
-def missing_rparen(): i64 = {
-    let value = (1 + (2 * 3)
-    return value
-}

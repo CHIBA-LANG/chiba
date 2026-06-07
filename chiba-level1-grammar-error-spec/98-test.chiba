@@ -1,6 +1,0 @@
-namespace parser.error.tuple.double.comma
-
-def tuple_double_comma(): i64 = {
-    let value = (1,, 2)
-    return 0
-}

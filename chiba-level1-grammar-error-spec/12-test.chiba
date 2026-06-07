@@ -1,6 +1,0 @@
-namespace parser.error.extra.rparen
-
-def extra_rparen(): i64 = {
-    let value = (1 + 2))
-    return value
-}

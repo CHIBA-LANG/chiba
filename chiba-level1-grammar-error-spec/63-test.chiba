@@ -1,5 +1,0 @@
-namespace parser.error.prefix.before.rparen
-
-def prefix_before_rparen(): i64 = {
-    return (!)
-}

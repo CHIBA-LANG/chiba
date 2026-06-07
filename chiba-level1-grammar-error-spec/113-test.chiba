@@ -1,5 +1,0 @@
-namespace parser.error.continuation.contn.missing.input.parens
-
-def bad_type(k: contN i64 -> i64): i64 = {
-    k(1)
-}

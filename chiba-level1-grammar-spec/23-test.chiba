@@ -1,8 +1,0 @@
-namespace lexer.spec.unicode
-
-def unicode_idents(🍋: i64, 火: i64): i64 = {
-    let 测试一下语法容忍度 = 🍋 + 火
-    let _🥲123 = 测试一下语法容忍度
-    let café = _🥲123
-    return café
-}

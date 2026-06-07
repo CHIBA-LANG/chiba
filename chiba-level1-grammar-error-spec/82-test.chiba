@@ -1,9 +1,0 @@
-namespace parser.error.kwshift.bad.label.order
-
-def shift_bad_label_order(): i64 = {
-    return reset :parse {
-        shift k :parse {
-            k(1)
-        }
-    }
-}

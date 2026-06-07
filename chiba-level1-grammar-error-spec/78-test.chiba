@@ -1,8 +1,0 @@
-namespace parser.error.kwasm.input.missing.reg
-
-def bad_asm_input(ptr: Ptr[u8]): i64 = unsafe {
-    let v = asm (ptr:, idx: rsi) : (rax) => {
-        "xor rax, rax"
-    }
-    return v
-}

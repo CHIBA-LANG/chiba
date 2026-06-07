@@ -1,5 +1,0 @@
-namespace parser.error.missing.generic.rbracket
-
-def missing_generic_rbracket(xs: Vec[Option[i64]): i64 = {
-    return 0
-}

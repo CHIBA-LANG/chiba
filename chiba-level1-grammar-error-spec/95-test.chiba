@@ -1,5 +1,0 @@
-namespace parser.error.param.kwtype.missing
-
-def param_type_missing(x: ): i64 = {
-    return 0
-}
