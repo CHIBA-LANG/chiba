@@ -140,6 +140,7 @@ fn program_typed_binary_i64_result_is_not_unknown() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "5");
 }
 
 #[test]
@@ -153,6 +154,15 @@ fn program_typed_lambda_call_uses_function_return_type() {
     let bundle = compile_program_bundle(&program);
 
     assert_eq!(bundle.defs[0].output.typed.ty, Type::I64);
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(!bundle.defs[0]
+        .output
+        .core
+        .ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::TailCall { func, .. } if func.contains("lambda#"))));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
 }
 
 #[test]

@@ -820,6 +820,10 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
         }
         CpsTerm::AppCont { value, .. } => lower_atom_value(value, ops),
         CpsTerm::AppFun { func, args, kont } => {
+            if let Some(inlined) = inline_fun_lambda_call(func, args, kont) {
+                lower_term(&inlined, continuations, ops);
+                return;
+            }
             let target = render_atom(func);
             lower_callable_target(&target, func, ops);
             let args = lower_call_args(func, args);
@@ -901,6 +905,282 @@ fn lower_term(term: &CpsTerm, continuations: &[ContinuationFact], ops: &mut Vec<
             }
         }
     }
+}
+
+fn inline_fun_lambda_call(func: &CpsAtom, args: &[CpsAtom], kont: &CpsAtom) -> Option<CpsTerm> {
+    let CpsAtom::FunLambda {
+        param,
+        k_param,
+        body,
+    } = func
+    else {
+        return None;
+    };
+    let [arg] = args else {
+        return None;
+    };
+    Some(substitute_cps_term(
+        body,
+        &[(param.as_str(), arg), (k_param.as_str(), kont)],
+    ))
+}
+
+fn substitute_cps_term(term: &CpsTerm, bindings: &[(&str, &CpsAtom)]) -> CpsTerm {
+    match term {
+        CpsTerm::Halt(atom) => CpsTerm::Halt(substitute_cps_atom(atom, bindings)),
+        CpsTerm::LetRuntime {
+            binder,
+            value,
+            body,
+        } => {
+            let body_bindings = without_cps_binding(bindings, binder);
+            CpsTerm::LetRuntime {
+                binder: binder.clone(),
+                value: substitute_cps_atom(value, bindings),
+                body: Box::new(substitute_cps_term(body, &body_bindings)),
+            }
+        }
+        CpsTerm::AppFun { func, args, kont } => CpsTerm::AppFun {
+            func: substitute_cps_atom(func, bindings),
+            args: args
+                .iter()
+                .map(|arg| substitute_cps_atom(arg, bindings))
+                .collect(),
+            kont: substitute_cps_atom(kont, bindings),
+        },
+        CpsTerm::AppCont { kont, value } => CpsTerm::AppCont {
+            kont: substitute_cps_atom(kont, bindings),
+            value: substitute_cps_atom(value, bindings),
+        },
+        CpsTerm::Prompt { multi, body } => CpsTerm::Prompt {
+            multi: *multi,
+            body: Box::new(substitute_cps_term(body, bindings)),
+        },
+        CpsTerm::Capture {
+            multi,
+            binder,
+            captured,
+            body,
+        } => {
+            let body_bindings = without_cps_binding(bindings, binder);
+            CpsTerm::Capture {
+                multi: *multi,
+                binder: binder.clone(),
+                captured: substitute_cps_atom(captured, bindings),
+                body: Box::new(substitute_cps_term(body, &body_bindings)),
+            }
+        }
+        CpsTerm::Branch {
+            cond,
+            then_term,
+            else_term,
+            join,
+        } => CpsTerm::Branch {
+            cond: substitute_cps_atom(cond, bindings),
+            then_term: Box::new(substitute_cps_term(then_term, bindings)),
+            else_term: Box::new(substitute_cps_term(else_term, bindings)),
+            join: substitute_cps_atom(join, bindings),
+        },
+        CpsTerm::Match {
+            scrutinee,
+            arms,
+            join,
+        } => CpsTerm::Match {
+            scrutinee: substitute_cps_atom(scrutinee, bindings),
+            arms: arms
+                .iter()
+                .map(|arm| crate::cps::CpsMatchArm {
+                    pattern: arm.pattern.clone(),
+                    body: substitute_cps_term(&arm.body, bindings),
+                })
+                .collect(),
+            join: substitute_cps_atom(join, bindings),
+        },
+    }
+}
+
+fn substitute_cps_atom(atom: &CpsAtom, bindings: &[(&str, &CpsAtom)]) -> CpsAtom {
+    if let CpsAtom::Var(name) = atom {
+        if let Some((_, value)) = bindings.iter().find(|(binding, _)| *binding == name) {
+            return (*value).clone();
+        }
+    }
+    match atom {
+        CpsAtom::Var(_) | CpsAtom::Lit(_) => atom.clone(),
+        CpsAtom::OperatorCallee {
+            kind,
+            protocol,
+            receiver,
+        } => CpsAtom::OperatorCallee {
+            kind: *kind,
+            protocol: protocol.clone(),
+            receiver: Box::new(substitute_cps_atom(receiver, bindings)),
+        },
+        CpsAtom::FunLambda {
+            param,
+            k_param,
+            body,
+        } => {
+            let body_bindings = without_cps_bindings(bindings, &[param.as_str(), k_param.as_str()]);
+            CpsAtom::FunLambda {
+                param: param.clone(),
+                k_param: k_param.clone(),
+                body: Box::new(substitute_cps_term(body, &body_bindings)),
+            }
+        }
+        CpsAtom::ContLambda { param, body } => {
+            let body_bindings = without_cps_binding(bindings, param);
+            CpsAtom::ContLambda {
+                param: param.clone(),
+                body: Box::new(substitute_cps_term(body, &body_bindings)),
+            }
+        }
+        CpsAtom::Tuple { nominal, fields } => CpsAtom::Tuple {
+            nominal: nominal.clone(),
+            fields: fields
+                .iter()
+                .map(|field| substitute_cps_atom(field, bindings))
+                .collect(),
+        },
+        CpsAtom::SliceLiteral { items } => CpsAtom::SliceLiteral {
+            items: items
+                .iter()
+                .map(|item| substitute_cps_atom(item, bindings))
+                .collect(),
+        },
+        CpsAtom::TupleField {
+            tuple,
+            field,
+            field_index,
+        } => CpsAtom::TupleField {
+            tuple: Box::new(substitute_cps_atom(tuple, bindings)),
+            field: field.clone(),
+            field_index: *field_index,
+        },
+        CpsAtom::RecordField { record, field } => CpsAtom::RecordField {
+            record: Box::new(substitute_cps_atom(record, bindings)),
+            field: field.clone(),
+        },
+        CpsAtom::DynRowPackage { payload, fields } => CpsAtom::DynRowPackage {
+            payload: Box::new(substitute_cps_atom(payload, bindings)),
+            fields: fields.clone(),
+        },
+        CpsAtom::DynRowField { package, field } => CpsAtom::DynRowField {
+            package: Box::new(substitute_cps_atom(package, bindings)),
+            field: field.clone(),
+        },
+        CpsAtom::Range { start, end } => CpsAtom::Range {
+            start: Box::new(substitute_cps_atom(start, bindings)),
+            end: Box::new(substitute_cps_atom(end, bindings)),
+        },
+        CpsAtom::RangeField { range, boundary } => CpsAtom::RangeField {
+            range: Box::new(substitute_cps_atom(range, bindings)),
+            boundary: *boundary,
+        },
+        CpsAtom::AggregateField {
+            kind,
+            value,
+            boundary,
+        } => CpsAtom::AggregateField {
+            kind: *kind,
+            value: Box::new(substitute_cps_atom(value, bindings)),
+            boundary: *boundary,
+        },
+        CpsAtom::TextField {
+            kind,
+            value,
+            boundary,
+        } => CpsAtom::TextField {
+            kind: *kind,
+            value: Box::new(substitute_cps_atom(value, bindings)),
+            boundary: *boundary,
+        },
+        CpsAtom::AggregateIndex { kind, value, index } => CpsAtom::AggregateIndex {
+            kind: *kind,
+            value: Box::new(substitute_cps_atom(value, bindings)),
+            index: Box::new(substitute_cps_atom(index, bindings)),
+        },
+        CpsAtom::AggregateSlice { kind, value, range } => CpsAtom::AggregateSlice {
+            kind: *kind,
+            value: Box::new(substitute_cps_atom(value, bindings)),
+            range: Box::new(substitute_cps_atom(range, bindings)),
+        },
+        CpsAtom::TextIndex { kind, value, index } => CpsAtom::TextIndex {
+            kind: *kind,
+            value: Box::new(substitute_cps_atom(value, bindings)),
+            index: Box::new(substitute_cps_atom(index, bindings)),
+        },
+        CpsAtom::TextSlice { kind, value, range } => CpsAtom::TextSlice {
+            kind: *kind,
+            value: Box::new(substitute_cps_atom(value, bindings)),
+            range: Box::new(substitute_cps_atom(range, bindings)),
+        },
+        CpsAtom::BuiltinRuntimeCall { call, args } => CpsAtom::BuiltinRuntimeCall {
+            call: *call,
+            args: args
+                .iter()
+                .map(|arg| substitute_cps_atom(arg, bindings))
+                .collect(),
+        },
+        CpsAtom::RecordUpdate {
+            base,
+            layout,
+            fields,
+        } => CpsAtom::RecordUpdate {
+            base: Box::new(substitute_cps_atom(base, bindings)),
+            layout: layout.clone(),
+            fields: substitute_cps_record_fields(fields, bindings),
+        },
+        CpsAtom::Record { layout, fields } => CpsAtom::Record {
+            layout: layout.clone(),
+            fields: substitute_cps_record_fields(fields, bindings),
+        },
+        CpsAtom::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => CpsAtom::AdtCtor {
+            data: data.clone(),
+            ctor: ctor.clone(),
+            variants: variants.clone(),
+            args: args
+                .iter()
+                .map(|arg| substitute_cps_atom(arg, bindings))
+                .collect(),
+        },
+    }
+}
+
+fn without_cps_binding<'a>(
+    bindings: &[(&'a str, &'a CpsAtom)],
+    shadowed: &str,
+) -> Vec<(&'a str, &'a CpsAtom)> {
+    without_cps_bindings(bindings, &[shadowed])
+}
+
+fn without_cps_bindings<'a>(
+    bindings: &[(&'a str, &'a CpsAtom)],
+    shadowed: &[&str],
+) -> Vec<(&'a str, &'a CpsAtom)> {
+    bindings
+        .iter()
+        .copied()
+        .filter(|(binding, _)| !shadowed.iter().any(|candidate| candidate == binding))
+        .collect()
+}
+
+fn substitute_cps_record_fields(
+    fields: &[crate::cps::CpsRecordField],
+    bindings: &[(&str, &CpsAtom)],
+) -> Vec<crate::cps::CpsRecordField> {
+    fields
+        .iter()
+        .map(|field| crate::cps::CpsRecordField {
+            name: field.name.clone(),
+            value: substitute_cps_atom(&field.value, bindings),
+        })
+        .collect()
 }
 
 fn lower_captured_continuation(
