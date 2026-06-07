@@ -1931,6 +1931,90 @@ fn source_vec_param_string_range_slice_lowers_to_executable_externref_runtime_im
 }
 
 #[test]
+fn source_builtin_externref_params_can_return_executable_handles() {
+    let slice = compile_source_program_bundle("def main(s: Slice[i64]): Slice[i64] = s")
+        .expect("compile slice param passthrough")
+        .program;
+    let array = compile_source_program_bundle("def main(a: Array[i64]): Array[i64] = a")
+        .expect("compile array param passthrough")
+        .program;
+    let vec = compile_source_program_bundle("def main(v: Vec[String]): Vec[String] = v")
+        .expect("compile vec param passthrough")
+        .program;
+    let string = compile_source_program_bundle("def main(s: String): String = s")
+        .expect("compile string param passthrough")
+        .program;
+    let str_view = compile_source_program_bundle("def main(s: str): str = s")
+        .expect("compile str param passthrough")
+        .program;
+    let cstr = compile_source_program_bundle("def main(s: cstr): cstr = s")
+        .expect("compile cstr param passthrough")
+        .program;
+    let range = compile_source_program_bundle("def main(r: Range): Range = r")
+        .expect("compile range param passthrough")
+        .program;
+
+    for (bundle, param) in [
+        (&slice, "s"),
+        (&array, "a"),
+        (&vec, "v"),
+        (&string, "s"),
+        (&str_view, "s"),
+        (&cstr, "s"),
+        (&range, "r"),
+    ] {
+        assert_eq!(
+            bundle.diagnostics,
+            vec![ProgramDiagnostic::EntryHasParams {
+                name: "main".to_string(),
+                params: vec![param.to_string()]
+            }]
+        );
+        assert_backend_link_clean(bundle, 0);
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("(result externref)"));
+    }
+    assert_eq!(
+        slice.defs[0].output.typed.ty,
+        Type::Nominal("Slice[i64]".to_string())
+    );
+    assert_eq!(
+        array.defs[0].output.typed.ty,
+        Type::Nominal("Array[i64]".to_string())
+    );
+    assert_eq!(
+        vec.defs[0].output.typed.ty,
+        Type::Nominal("Vec[String]".to_string())
+    );
+    assert_eq!(
+        string.defs[0].output.typed.ty,
+        Type::Nominal("String".to_string())
+    );
+    assert_eq!(
+        str_view.defs[0].output.typed.ty,
+        Type::Nominal("str".to_string())
+    );
+    assert_eq!(
+        cstr.defs[0].output.typed.ty,
+        Type::Nominal("cstr".to_string())
+    );
+    assert_eq!(
+        range.defs[0].output.typed.ty,
+        Type::Nominal("Range".to_string())
+    );
+
+    assert_eq!(run_wat_text(&slice.backend_link.linked_wat), "slice/3");
+    assert_eq!(run_wat_text(&array.backend_link.linked_wat), "slice/3");
+    assert_eq!(run_wat_text(&vec.backend_link.linked_wat), "slice/3");
+    assert_eq!(run_wat_text(&string.backend_link.linked_wat), "slice/3");
+    assert_eq!(run_wat_text(&str_view.backend_link.linked_wat), "slice/3");
+    assert_eq!(run_wat_text(&cstr.backend_link.linked_wat), "slice/3");
+    assert_eq!(run_wat_text(&range.backend_link.linked_wat), "slice/3");
+}
+
+#[test]
 fn source_vec_new_push_freeze_index_lowers_to_executable_runtime_imports() {
     let bundle = compile_source_program_bundle("def main(): i64 = Vec.new().push(7).freeze()[0]")
         .expect("compile vec new push freeze index")
@@ -2111,10 +2195,11 @@ fn source_aggregate_and_ref_builtins_can_return_executable_externref_handles() {
     let vec_i64 = compile_source_program_bundle("def main(): Vec[i64] = Vec.new().push(7)")
         .expect("compile vec i64 return")
         .program;
-    let vec_string =
-        compile_source_program_bundle("def main(): Vec[String] = Vec.new().push(String.from(\"hé\"))")
-            .expect("compile vec string return")
-            .program;
+    let vec_string = compile_source_program_bundle(
+        "def main(): Vec[String] = Vec.new().push(String.from(\"hé\"))",
+    )
+    .expect("compile vec string return")
+    .program;
     let frozen_string = compile_source_program_bundle(
         "def main(): Slice[String] = Vec.new().push(String.from(\"hé\")).freeze()",
     )
@@ -2180,7 +2265,10 @@ fn source_aggregate_and_ref_builtins_can_return_executable_externref_handles() {
         unsafe_ref_range.defs[0].output.typed.ty,
         Type::Nominal("UnsafeRef[Range]".to_string())
     );
-    assert!(vec_i64.backend_link.linked_wat.contains("call $std_vec_push"));
+    assert!(vec_i64
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push"));
     assert!(vec_string
         .backend_link
         .linked_wat
@@ -2212,9 +2300,18 @@ fn source_aggregate_and_ref_builtins_can_return_executable_externref_handles() {
         run_wat_text(&frozen_string.backend_link.linked_wat),
         "slice/1"
     );
-    assert_eq!(run_wat_text(&slice_slice.backend_link.linked_wat), "slice/2");
-    assert_eq!(run_wat_text(&ref_string.backend_link.linked_wat), "ref/bytes/3");
-    assert_eq!(run_wat_text(&ref_slice.backend_link.linked_wat), "ref/slice/3");
+    assert_eq!(
+        run_wat_text(&slice_slice.backend_link.linked_wat),
+        "slice/2"
+    );
+    assert_eq!(
+        run_wat_text(&ref_string.backend_link.linked_wat),
+        "ref/bytes/3"
+    );
+    assert_eq!(
+        run_wat_text(&ref_slice.backend_link.linked_wat),
+        "ref/slice/3"
+    );
     assert_eq!(
         run_wat_text(&unsafe_ref_range.backend_link.linked_wat),
         "ref/range/3/9"
@@ -3172,7 +3269,15 @@ fn source_text_builtins_can_return_executable_externref_handles() {
         .expect("compile cstr slice return")
         .program;
 
-    for bundle in [&owned, &concat, &built, &view, &string_slice, &cstr, &cstr_slice] {
+    for bundle in [
+        &owned,
+        &concat,
+        &built,
+        &view,
+        &string_slice,
+        &cstr,
+        &cstr_slice,
+    ] {
         assert_eq!(bundle.diagnostics, vec![]);
         assert_backend_link_clean_all(bundle);
         assert!(bundle
@@ -3180,20 +3285,38 @@ fn source_text_builtins_can_return_executable_externref_handles() {
             .linked_wat
             .contains("(func $main (export \"main\") (result externref)"));
     }
-    assert_eq!(owned.defs[0].output.typed.ty, Type::Nominal("String".to_string()));
-    assert_eq!(concat.defs[0].output.typed.ty, Type::Nominal("String".to_string()));
-    assert_eq!(built.defs[0].output.typed.ty, Type::Nominal("String".to_string()));
-    assert_eq!(view.defs[0].output.typed.ty, Type::Nominal("str".to_string()));
+    assert_eq!(
+        owned.defs[0].output.typed.ty,
+        Type::Nominal("String".to_string())
+    );
+    assert_eq!(
+        concat.defs[0].output.typed.ty,
+        Type::Nominal("String".to_string())
+    );
+    assert_eq!(
+        built.defs[0].output.typed.ty,
+        Type::Nominal("String".to_string())
+    );
+    assert_eq!(
+        view.defs[0].output.typed.ty,
+        Type::Nominal("str".to_string())
+    );
     assert_eq!(
         string_slice.defs[0].output.typed.ty,
         Type::Nominal("String".to_string())
     );
-    assert_eq!(cstr.defs[0].output.typed.ty, Type::Nominal("cstr".to_string()));
+    assert_eq!(
+        cstr.defs[0].output.typed.ty,
+        Type::Nominal("cstr".to_string())
+    );
     assert_eq!(
         cstr_slice.defs[0].output.typed.ty,
         Type::Nominal("cstr".to_string())
     );
-    assert!(owned.backend_link.linked_wat.contains("call $std_str_to_string"));
+    assert!(owned
+        .backend_link
+        .linked_wat
+        .contains("call $std_str_to_string"));
     assert!(concat
         .backend_link
         .linked_wat
@@ -3223,7 +3346,10 @@ fn source_text_builtins_can_return_executable_externref_handles() {
     assert_eq!(run_wat_text(&concat.backend_link.linked_wat), "bytes/3");
     assert_eq!(run_wat_text(&built.backend_link.linked_wat), "bytes/2");
     assert_eq!(run_wat_text(&view.backend_link.linked_wat), "bytes/3");
-    assert_eq!(run_wat_text(&string_slice.backend_link.linked_wat), "bytes/2");
+    assert_eq!(
+        run_wat_text(&string_slice.backend_link.linked_wat),
+        "bytes/2"
+    );
     assert_eq!(run_wat_text(&cstr.backend_link.linked_wat), "cstr/4");
     assert_eq!(run_wat_text(&cstr_slice.backend_link.linked_wat), "cstr/3");
 }
@@ -3432,11 +3558,10 @@ fn source_cstr_range_slice_lowers_to_executable_runtime_import() {
     let literal_nul = compile_source_program_bundle("def main(): i64 = c\"héx\"[1..3][2]")
         .expect("compile cstr literal range slice nul")
         .program;
-    let converted_byte = compile_source_program_bundle(
-        "def main(): i64 = String.from(\"héx\").to_cstr()[1..3][0]",
-    )
-    .expect("compile string to cstr range slice byte")
-    .program;
+    let converted_byte =
+        compile_source_program_bundle("def main(): i64 = String.from(\"héx\").to_cstr()[1..3][0]")
+            .expect("compile string to cstr range slice byte")
+            .program;
     let param_len = compile_source_program_bundle("def main(s: cstr): i64 = s[0..2].bytes_len()")
         .expect("compile cstr param range slice len")
         .program;

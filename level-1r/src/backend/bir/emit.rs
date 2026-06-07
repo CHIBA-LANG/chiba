@@ -87,6 +87,17 @@ pub enum BackendLinkDiagnostic {
     },
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BackendParamAbi {
+    pub params: BTreeMap<String, BackendValueKind>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BackendValueKind {
+    I32,
+    ExternRef,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BackendCacheConfig {
     pub compiler_version: String,
@@ -153,6 +164,15 @@ pub fn emit_wasm_gc_with_params(
     validation: &CoreValidation,
     params: &[String],
 ) -> BackendArtifact {
+    emit_wasm_gc_with_param_abi(core, validation, params, &BackendParamAbi::default())
+}
+
+pub fn emit_wasm_gc_with_param_abi(
+    core: &CoreProgram,
+    validation: &CoreValidation,
+    params: &[String],
+    param_abi: &BackendParamAbi,
+) -> BackendArtifact {
     if !validation.is_ok() {
         return BackendArtifact {
             target: BackendTarget::WasmGc,
@@ -165,7 +185,7 @@ pub fn emit_wasm_gc_with_params(
         };
     }
 
-    let param_kinds = infer_param_kinds(core, params);
+    let param_kinds = infer_param_kinds(core, params, param_abi);
     let manifest = manifest_for_core(core, params, &param_kinds);
     if let Some(diagnostic) = unsupported_extern_import_signature(&manifest) {
         return BackendArtifact {
@@ -2053,6 +2073,15 @@ enum WasmValueKind {
     ExternRef,
 }
 
+impl From<BackendValueKind> for WasmValueKind {
+    fn from(value: BackendValueKind) -> Self {
+        match value {
+            BackendValueKind::I32 => Self::I32,
+            BackendValueKind::ExternRef => Self::ExternRef,
+        }
+    }
+}
+
 impl WasmValueKind {
     fn wat_type(self) -> &'static str {
         match self {
@@ -2062,9 +2091,18 @@ impl WasmValueKind {
     }
 }
 
-fn infer_param_kinds(core: &CoreProgram, params: &[String]) -> BTreeMap<String, WasmValueKind> {
+fn infer_param_kinds(
+    core: &CoreProgram,
+    params: &[String],
+    param_abi: &BackendParamAbi,
+) -> BTreeMap<String, WasmValueKind> {
     let param_names = params.iter().cloned().collect::<BTreeSet<_>>();
-    let mut kinds = BTreeMap::new();
+    let mut kinds = param_abi
+        .params
+        .iter()
+        .filter(|(name, _)| param_names.contains(*name))
+        .map(|(name, kind)| (name.clone(), WasmValueKind::from(*kind)))
+        .collect::<BTreeMap<_, _>>();
     for op in &core.ops {
         infer_param_kinds_from_op(op, &param_names, &mut kinds);
     }
@@ -2259,12 +2297,21 @@ fn render_tailcall_args(
     Ok(())
 }
 
-fn render_externref_func_header(wat: &mut String, symbol: &str, export: Option<&str>) {
+fn render_externref_func_header(
+    wat: &mut String,
+    symbol: &str,
+    export: Option<&str>,
+    env: &RenderEnv,
+) {
     match export {
         Some(export) => wat.push_str(&format!(
-            "  (func ${symbol} (export \"{export}\") (result externref)\n"
+            "  (func ${symbol} (export \"{export}\"){} (result externref)\n",
+            env.signature()
         )),
-        None => wat.push_str(&format!("  (func ${symbol} (result externref)\n")),
+        None => wat.push_str(&format!(
+            "  (func ${symbol}{} (result externref)\n",
+            env.signature()
+        )),
     }
 }
 
@@ -2276,7 +2323,7 @@ fn render_return_value_wat(
     env: &RenderEnv,
 ) -> Result<(), BackendDiagnostic> {
     if core_value_is_renderable_externref(value, env) {
-        render_externref_func_header(wat, symbol, export);
+        render_externref_func_header(wat, symbol, export, env);
         render_core_value_externref(wat, value, env)?;
         wat.push_str("  )\n");
     } else {

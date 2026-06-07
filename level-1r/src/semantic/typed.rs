@@ -2466,7 +2466,7 @@ impl TextBoundary {
     }
 }
 
-fn nominal_base_name_for_type(ty: &Type) -> Option<&str> {
+pub(crate) fn nominal_base_name_for_type(ty: &Type) -> Option<&str> {
     let Type::Nominal(name) = ty else {
         return None;
     };

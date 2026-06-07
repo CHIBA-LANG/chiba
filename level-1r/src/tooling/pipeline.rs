@@ -6,9 +6,10 @@ use crate::ast::{
     Pattern, SourceItem, SourceProgram, UseDecl, Visibility,
 };
 use crate::backend::{
-    backend_cache_key, emit_wasm_gc_with_params, link_backend_artifacts, sort_dedup_imports,
+    backend_cache_key, emit_wasm_gc_with_param_abi, link_backend_artifacts, sort_dedup_imports,
     BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendDiagnostic, BackendExternAbi,
-    BackendExternImport, BackendLinkDiagnostic, BackendLinkedBundle,
+    BackendExternImport, BackendLinkDiagnostic, BackendLinkedBundle, BackendParamAbi,
+    BackendValueKind,
 };
 use crate::closure::{analyze_alpha_closures, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -46,8 +47,8 @@ use crate::symbol::encode_debug_symbol;
 use crate::template::{analyze_template_with_source, TemplateDiagnostic, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
-    source_type_name_to_type, type_expr_with_context, RecordTypeField, Type, TypeContext, TypeEnv,
-    TypedExpr,
+    nominal_base_name_for_type, source_type_name_to_type, type_expr_with_context, RecordTypeField,
+    Type, TypeContext, TypeEnv, TypedExpr,
 };
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -370,7 +371,8 @@ fn compile_expr_with_indexes_and_generics(
                 .iter()
                 .map(|param| param.name.clone())
                 .collect::<Vec<_>>();
-            emit_wasm_gc_with_params(&core, &core_validation, &param_names)
+            let param_abi = backend_param_abi(&typed_signature);
+            emit_wasm_gc_with_param_abi(&core, &core_validation, &param_names, &param_abi)
         },
     );
     let backend_link = passes.record(
@@ -1117,6 +1119,39 @@ fn interface_callable_storage_facts(interface: &InterfaceSummary) -> Vec<Callabl
                 })
         })
         .collect()
+}
+
+fn backend_param_abi(signature: &TypedSignature) -> BackendParamAbi {
+    BackendParamAbi {
+        params: signature
+            .params
+            .iter()
+            .filter_map(|param| {
+                backend_value_kind_for_type(&source_type_name_to_type(&param.ty))
+                    .map(|kind| (param.name.clone(), kind))
+            })
+            .collect(),
+    }
+}
+
+fn backend_value_kind_for_type(ty: &Type) -> Option<BackendValueKind> {
+    match ty {
+        Type::Unknown | Type::I64 | Type::Rune | Type::Bool => None,
+        Type::Nominal(_) if backend_nominal_is_externref(ty) => Some(BackendValueKind::ExternRef),
+        Type::Tuple(_)
+        | Type::Record(_)
+        | Type::Adt { .. }
+        | Type::Nominal(_)
+        | Type::Func(_, _)
+        | Type::Continuation { .. } => None,
+    }
+}
+
+fn backend_nominal_is_externref(ty: &Type) -> bool {
+    matches!(
+        nominal_base_name_for_type(ty),
+        Some("Slice" | "Array" | "Vec" | "str" | "String" | "cstr" | "Range" | "Ref" | "UnsafeRef")
+    )
 }
 
 fn typed_signature(
