@@ -3905,6 +3905,22 @@ def main(): i64 = id(String.from("hé")).bytes_len()
     )
     .expect("compile chiba handle param return builtin chain")
     .program;
+    let str_view = compile_source_program_bundle(
+        r#"
+def make(): str = String.from("hé").as_str()
+def main(): rune = make().char_at(0)
+"#,
+    )
+    .expect("compile chiba str return builtin chain")
+    .program;
+    let cstr = compile_source_program_bundle(
+        r#"
+def id(value: cstr): cstr = value
+def main(): i64 = id(String.from("hé").to_cstr())[3]
+"#,
+    )
+    .expect("compile chiba cstr return builtin chain")
+    .program;
     let slice = compile_source_program_bundle(
         r#"
 def make(): Slice[String] = [String.from("hé")]
@@ -3950,6 +3966,8 @@ def main(): i64 = id(3..9).end
         &string,
         &cell,
         &identity,
+        &str_view,
+        &cstr,
         &slice,
         &vec,
         &array,
@@ -3975,6 +3993,14 @@ def main(): i64 = id(3..9).end
         .backend_link
         .linked_wat
         .contains("call $std_string_i64_len"));
+    assert!(str_view
+        .backend_link
+        .linked_wat
+        .contains("call $std_str_char_at"));
+    assert!(cstr
+        .backend_link
+        .linked_wat
+        .contains("call $std_cstr_i64_byte_at"));
     assert!(slice
         .backend_link
         .linked_wat
@@ -3999,6 +4025,8 @@ def main(): i64 = id(3..9).end
     assert_eq!(run_wat_text(&string.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&cell.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&identity.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&str_view.backend_link.linked_wat), "104");
+    assert_eq!(run_wat_text(&cstr.backend_link.linked_wat), "0");
     assert_eq!(run_wat_text(&slice.backend_link.linked_wat), "3");
     assert_eq!(run_wat_text(&vec.backend_link.linked_wat), "104");
     assert_eq!(run_wat_text(&array.backend_link.linked_wat), "3");
