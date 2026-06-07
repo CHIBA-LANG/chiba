@@ -1,6 +1,6 @@
 use chiba_level1r::ast::{
-    DataDecl, DataVariant, ExternAbi, ExternDecl, MethodReceiver, NamespaceDecl, ParamDecl,
-    SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
+    BinaryOp, DataDecl, DataVariant, ExternAbi, ExternDecl, MethodReceiver, NamespaceDecl,
+    ParamDecl, SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
 };
 use chiba_level1r::core::{CoreOp, CoreValue};
 use chiba_level1r::pattern::PatternDiagnostic;
@@ -947,6 +947,62 @@ fn program_dyn_row_receiver_method_adapter_call_lowers_to_executable_wat() {
     assert_eq!(bundle.diagnostics, vec![]);
     assert_backend_link_clean_all(&bundle);
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
+}
+
+#[test]
+fn program_dyn_row_receiver_method_adapter_call_passes_explicit_args() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "add",
+                vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("n", Some("i64".to_string())),
+                ],
+                Some("i64".to_string()),
+                Expr::binary(
+                    BinaryOp::Add,
+                    Expr::field(Expr::var("self"), "x"),
+                    Expr::var("n"),
+                ),
+            ),
+            SourceItem::def(
+                "use_dyn",
+                Vec::new(),
+                vec![ParamDecl::new(
+                    "v",
+                    Some("dyn {x: i64, add: (i64) -> i64}".to_string()),
+                )],
+                Some("i64".to_string()),
+                Expr::method_call_args(Expr::var("v"), "add", vec![Expr::i64(5)]),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("use_dyn"),
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(7))])),
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "12");
 }
 
 #[test]
