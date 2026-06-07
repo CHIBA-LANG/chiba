@@ -853,7 +853,7 @@ impl FrontendParser {
             }
             Some("StringLit") => {
                 let token = self.expect("StringLit")?;
-                Ok(Expr::string(unquote_string_literal(&token.lexeme)))
+                parse_string_literal_expr(&token.lexeme)
             }
             Some("CStrLit") => {
                 let token = self.expect("CStrLit")?;
@@ -1699,6 +1699,149 @@ fn unquote_string_literal(lexeme: &str) -> String {
         }
     }
     out
+}
+
+fn parse_string_literal_expr(lexeme: &str) -> Result<Expr, FrontendError> {
+    let Some(body) = lexeme
+        .strip_prefix('"')
+        .and_then(|text| text.strip_suffix('"'))
+    else {
+        return Ok(Expr::string(unquote_string_literal(lexeme)));
+    };
+    let Some(parts) = interpolation_parts(body)? else {
+        return Ok(Expr::string(unquote_string_literal(lexeme)));
+    };
+    Ok(desugar_string_interpolation(parts))
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum StringInterpolationPart {
+    Text(String),
+    Expr(Expr),
+}
+
+fn interpolation_parts(body: &str) -> Result<Option<Vec<StringInterpolationPart>>, FrontendError> {
+    let chars = body.chars().collect::<Vec<_>>();
+    let mut parts = Vec::new();
+    let mut text = String::new();
+    let mut index = 0;
+    let mut saw_expr = false;
+    while index < chars.len() {
+        if chars[index] == '\\' {
+            if let Some(next) = chars.get(index + 1).copied() {
+                text.push('\\');
+                text.push(next);
+                index += 2;
+            } else {
+                text.push('\\');
+                index += 1;
+            }
+            continue;
+        }
+        if chars[index] == '$' && chars.get(index + 1) == Some(&'{') {
+            if !text.is_empty() {
+                parts.push(StringInterpolationPart::Text(unescape_string_body(&text)));
+                text.clear();
+            }
+            let Some((expr_text, next_index)) = interpolation_expr_text(&chars, index + 2) else {
+                return Err(FrontendError::UnexpectedEof {
+                    expected: vec!["}".to_string()],
+                });
+            };
+            let expr = parse_interpolation_expr(&expr_text)?;
+            parts.push(StringInterpolationPart::Expr(expr));
+            saw_expr = true;
+            index = next_index;
+            continue;
+        }
+        text.push(chars[index]);
+        index += 1;
+    }
+    if !text.is_empty() {
+        parts.push(StringInterpolationPart::Text(unescape_string_body(&text)));
+    }
+    Ok(saw_expr.then_some(parts))
+}
+
+fn interpolation_expr_text(chars: &[char], mut index: usize) -> Option<(String, usize)> {
+    let start = index;
+    let mut depth = 1usize;
+    while index < chars.len() {
+        match chars[index] {
+            '{' => depth += 1,
+            '}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some((chars[start..index].iter().collect(), index + 1));
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    None
+}
+
+fn parse_interpolation_expr(source: &str) -> Result<Expr, FrontendError> {
+    let lexer = compile_lexer(chiba_lexer_spec()).map_err(|_| FrontendError::UnexpectedEof {
+        expected: vec!["interpolation expression".to_string()],
+    })?;
+    let tokens = lexer
+        .lex(source)
+        .map_err(|_| FrontendError::UnexpectedToken {
+            found: "InvalidInterpolation".to_string(),
+            lexeme: source.to_string(),
+            expected: vec!["expression".to_string()],
+            offset: 0,
+        })?;
+    let mut parser = FrontendParser::new(tokens, source);
+    let expr = parser.parse_expr_bp(0)?;
+    if parser.is_eof() {
+        Ok(expr)
+    } else {
+        let token = parser.tokens.get(parser.pos);
+        Err(FrontendError::UnexpectedToken {
+            found: parser.peek_name().unwrap_or("Eof").to_string(),
+            lexeme: token.map(|token| token.lexeme.clone()).unwrap_or_default(),
+            expected: vec!["end of interpolation expression".to_string()],
+            offset: token.map(|token| token.start).unwrap_or(source.len()),
+        })
+    }
+}
+
+fn unescape_string_body(body: &str) -> String {
+    let mut out = String::new();
+    let mut chars = body.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('t') => out.push('\t'),
+            Some('"') => out.push('"'),
+            Some('\\') => out.push('\\'),
+            Some(other) => out.push(other),
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
+fn desugar_string_interpolation(parts: Vec<StringInterpolationPart>) -> Expr {
+    let mut expr = Expr::string("");
+    for part in parts {
+        let segment = match part {
+            StringInterpolationPart::Text(text) => Expr::string(text),
+            StringInterpolationPart::Expr(expr) => {
+                Expr::method_call_args(Expr::var("String"), "from", vec![expr])
+            }
+        };
+        expr = Expr::method_call(expr, "concat", segment);
+    }
+    expr
 }
 
 fn is_instantiable_callee(expr: &Expr) -> bool {

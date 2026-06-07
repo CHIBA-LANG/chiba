@@ -149,6 +149,24 @@ fn frontend_parses_cstr_literal_as_builtin_literal_not_ident_prefix() {
 }
 
 #[test]
+fn frontend_desugars_string_interpolation_to_string_concat_ast() {
+    let output = parse_source_program("def main() = \"a ${name} b\"").expect("frontend parse");
+
+    match &output.program.items[0] {
+        SourceItem::Def { body, .. } => {
+            let rendered = chiba_level1r::ast::render_source_expr(body);
+            assert!(rendered.contains("String.from(name)"));
+            assert!(rendered.contains(".concat("));
+            assert!(!matches!(body, Expr::Lit(_)));
+        }
+        other => panic!(
+            "expected function def, got {}",
+            source_item_kind_name(other)
+        ),
+    }
+}
+
+#[test]
 fn frontend_parses_method_style_def_with_generic_receiver_and_self_type() {
     let output = parse_source_program("def Box[T].update(self: Self, value: T): Self = self")
         .expect("frontend parse");
