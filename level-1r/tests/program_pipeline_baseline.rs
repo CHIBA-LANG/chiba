@@ -7327,6 +7327,77 @@ def main(): i64 = (CELLS.freeze()[0] := String.from("hé")).*.bytes_len()
 }
 
 #[test]
+fn global_init_lowers_aggregate_range_and_cstr_statics_into_executable_globals() {
+    let range_slice = compile_source_program_bundle(
+        r#"
+def LIMITS: Slice[Range] = [1..2, 3..9]
+def main(): i64 = LIMITS[1].end
+"#,
+    )
+    .expect("compile range slice static initializer")
+    .program;
+    let range_vec = compile_source_program_bundle(
+        r#"
+def LIMITS: Vec[Range] = Vec.new().push(1..2).push(3..9)
+def main(): i64 = LIMITS.freeze()[1].start
+"#,
+    )
+    .expect("compile range vec static initializer")
+    .program;
+    let cstr_slice = compile_source_program_bundle(
+        r#"
+def ABI: Slice[cstr] = [c"x", String.from("hé").to_cstr()]
+def main(): i64 = ABI[1][3]
+"#,
+    )
+    .expect("compile cstr slice static initializer")
+    .program;
+    let cstr_vec = compile_source_program_bundle(
+        r#"
+def ABI: Vec[cstr] = Vec.new().push(c"x").push(String.from("hé").to_cstr())
+def main(): i64 = ABI.freeze()[1].bytes_len()
+"#,
+    )
+    .expect("compile cstr vec static initializer")
+    .program;
+
+    for bundle in [&range_slice, &range_vec, &cstr_slice, &cstr_vec] {
+        assert_eq!(bundle.diagnostics, vec![]);
+        assert_backend_link_clean_all(bundle);
+        assert!(bundle.backend_link.linked_wat.contains("(mut externref)"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("global.set $global__"));
+        assert!(bundle
+            .backend_link
+            .linked_wat
+            .contains("global.get $global__"));
+    }
+    assert!(range_slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_externref_literal_2"));
+    assert!(range_vec
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push_externref"));
+    assert!(cstr_slice
+        .backend_link
+        .linked_wat
+        .contains("call $std_slice_externref_literal_2"));
+    assert!(cstr_vec
+        .backend_link
+        .linked_wat
+        .contains("call $std_vec_push_externref"));
+
+    assert_eq!(run_wat_text(&range_slice.backend_link.linked_wat), "9");
+    assert_eq!(run_wat_text(&range_vec.backend_link.linked_wat), "3");
+    assert_eq!(run_wat_text(&cstr_slice.backend_link.linked_wat), "0");
+    assert_eq!(run_wat_text(&cstr_vec.backend_link.linked_wat), "3");
+}
+
+#[test]
 fn global_init_lowers_scalar_ref_statics_into_executable_externref_globals() {
     let cell = compile_source_program_bundle(
         r#"
