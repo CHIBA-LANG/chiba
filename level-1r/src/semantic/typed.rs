@@ -133,6 +133,9 @@ pub struct TypedDynRowField {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DynRowFieldSource {
     Field,
+    ContractObligation {
+        ty: Type,
+    },
     ReceiverMethod {
         symbol: String,
         runtime_target: String,
@@ -2365,6 +2368,19 @@ fn dyn_row_adapter_fields(
     fields: &[RecordTypeField],
     context: &TypeContext,
 ) -> Option<Vec<TypedDynRowField>> {
+    if matches!(payload, Type::Unknown) {
+        return Some(
+            fields
+                .iter()
+                .map(|field| TypedDynRowField {
+                    name: field.name.clone(),
+                    source: DynRowFieldSource::ContractObligation {
+                        ty: field.ty.clone(),
+                    },
+                })
+                .collect(),
+        );
+    }
     let mut adapters = Vec::new();
     for field in fields {
         let adapter = if let Some(field_ty) = record_field_type(payload, &field.name)

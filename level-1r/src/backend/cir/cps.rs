@@ -128,6 +128,9 @@ pub struct CpsDynRowField {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CpsDynRowFieldSource {
     Field,
+    ContractObligation {
+        ty: Type,
+    },
     ReceiverMethod {
         symbol: String,
         runtime_target: String,
@@ -831,6 +834,9 @@ fn transform_dyn_row_package(
                             source: match &field.source {
                                 crate::typed::DynRowFieldSource::Field => {
                                     CpsDynRowFieldSource::Field
+                                }
+                                crate::typed::DynRowFieldSource::ContractObligation { ty } => {
+                                    CpsDynRowFieldSource::ContractObligation { ty: ty.clone() }
                                 }
                                 crate::typed::DynRowFieldSource::ReceiverMethod {
                                     symbol,

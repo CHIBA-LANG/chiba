@@ -4438,7 +4438,8 @@ fn dyn_row_field_value<'a>(
     let adapter = fields.iter().find(|candidate| candidate.name == field)?;
     match &adapter.source {
         crate::core::CoreDynRowFieldSource::Field => record_field_value(payload, field, env),
-        crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
+        crate::core::CoreDynRowFieldSource::ContractObligation { .. }
+        | crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
     }
 }
 
@@ -4455,7 +4456,8 @@ fn dyn_row_data_field_value<'a>(
                 crate::core::CoreDynRowFieldSource::Field => {
                     record_field_value(payload, field, env)
                 }
-                crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
+                crate::core::CoreDynRowFieldSource::ContractObligation { .. }
+                | crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
             }
         }
         _ => None,

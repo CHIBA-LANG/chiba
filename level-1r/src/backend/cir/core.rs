@@ -355,6 +355,9 @@ pub struct CoreDynRowField {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoreDynRowFieldSource {
     Field,
+    ContractObligation {
+        ty: Type,
+    },
     ReceiverMethod {
         symbol: String,
         runtime_target: String,
@@ -1346,7 +1349,8 @@ fn static_cps_dyn_receiver_method<'a>(
             crate::cps::CpsDynRowFieldSource::ReceiverMethod { runtime_target, .. } => {
                 Some((payload.as_ref(), runtime_target.as_str()))
             }
-            crate::cps::CpsDynRowFieldSource::Field => None,
+            crate::cps::CpsDynRowFieldSource::Field
+            | crate::cps::CpsDynRowFieldSource::ContractObligation { .. } => None,
         })
 }
 
@@ -2273,6 +2277,9 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
                     name: field.name.clone(),
                     source: match &field.source {
                         crate::cps::CpsDynRowFieldSource::Field => CoreDynRowFieldSource::Field,
+                        crate::cps::CpsDynRowFieldSource::ContractObligation { ty } => {
+                            CoreDynRowFieldSource::ContractObligation { ty: ty.clone() }
+                        }
                         crate::cps::CpsDynRowFieldSource::ReceiverMethod {
                             symbol,
                             runtime_target,

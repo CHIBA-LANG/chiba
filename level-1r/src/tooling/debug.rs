@@ -634,6 +634,9 @@ fn render_core_record_value_field(field: &CoreRecordValueField) -> String {
 fn render_core_dyn_row_field(field: &crate::core::CoreDynRowField) -> String {
     match &field.source {
         crate::core::CoreDynRowFieldSource::Field => field.name.clone(),
+        crate::core::CoreDynRowFieldSource::ContractObligation { ty } => {
+            format!("{}=contract-obligation({})", field.name, render_type(ty))
+        }
         crate::core::CoreDynRowFieldSource::ReceiverMethod { symbol, .. } => {
             format!("{}=receiver-method({symbol})", field.name)
         }
@@ -1511,6 +1514,9 @@ fn render_typed_child(label: &str, expr: &TypedExpr, depth: usize, out: &mut Str
 fn render_typed_dyn_row_field(field: &crate::typed::TypedDynRowField) -> String {
     match &field.source {
         crate::typed::DynRowFieldSource::Field => field.name.clone(),
+        crate::typed::DynRowFieldSource::ContractObligation { ty } => {
+            format!("{}=contract-obligation({})", field.name, render_type(ty))
+        }
         crate::typed::DynRowFieldSource::ReceiverMethod { symbol, .. } => {
             format!("{}=receiver-method({symbol})", field.name)
         }

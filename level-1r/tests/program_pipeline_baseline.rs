@@ -1285,6 +1285,89 @@ fn program_dyn_row_receiver_method_adapter_call_passes_explicit_args() {
 }
 
 #[test]
+fn program_auto_generic_dyn_row_param_instantiates_nominal_method_adapter() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "add",
+                vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("n", Some("i64".to_string())),
+                ],
+                Some("i64".to_string()),
+                Expr::binary(
+                    BinaryOp::Add,
+                    Expr::field(Expr::var("self"), "x"),
+                    Expr::var("n"),
+                ),
+            ),
+            SourceItem::def(
+                "apply_dyn",
+                Vec::new(),
+                vec![ParamDecl::new(
+                    "v",
+                    Some("dyn {x: i64, add: (i64) -> i64}".to_string()),
+                )],
+                Some("i64".to_string()),
+                Expr::method_call_args(Expr::var("v"), "add", vec![Expr::i64(5)]),
+            ),
+            SourceItem::def(
+                "apply_auto",
+                Vec::new(),
+                vec![ParamDecl::untyped("value")],
+                Some("i64".to_string()),
+                Expr::call(Expr::var("apply_dyn"), Expr::var("value")),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::i64(0),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let apply_auto = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "apply_auto")
+        .expect("apply_auto def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(apply_auto
+        .output
+        .visual
+        .template
+        .contains("param T_value source=synthetic-auto-generic"));
+    assert!(apply_auto
+        .output
+        .visual
+        .typed
+        .contains("node kind=dyn-row-package type=dyn {add: (i64) -> i64, x: i64}"));
+    assert!(apply_auto
+        .output
+        .visual
+        .typed
+        .contains("add=contract-obligation((i64) -> i64)"));
+    assert!(apply_auto
+        .output
+        .visual
+        .typed
+        .contains("x=contract-obligation(i64)"));
+}
+
+#[test]
 fn program_dyn_row_param_wraps_multi_field_record_value_and_reads_fields() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"
