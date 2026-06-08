@@ -474,6 +474,14 @@ fn render_core_pattern(pattern: &CorePattern) -> String {
         CorePattern::Bind(name) => name.clone(),
         CorePattern::I64(value) => value.to_string(),
         CorePattern::Bool(value) => value.to_string(),
+        CorePattern::Tuple(fields) => format!(
+            "({})",
+            fields
+                .iter()
+                .map(render_core_pattern)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         CorePattern::Constructor { data, ctor, args } => {
             let args = args
                 .iter()

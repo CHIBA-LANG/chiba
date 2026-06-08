@@ -238,6 +238,7 @@ pub enum CorePattern {
     Bind(String),
     I64(i64),
     Bool(bool),
+    Tuple(Vec<CorePattern>),
     Constructor {
         data: Option<String>,
         ctor: String,
@@ -1500,6 +1501,12 @@ fn core_pattern(pattern: &crate::ast::Pattern) -> Option<CorePattern> {
         crate::ast::Pattern::Lit(crate::ast::Literal::Bool(value)) => {
             Some(CorePattern::Bool(*value))
         }
+        crate::ast::Pattern::Tuple(fields) => Some(CorePattern::Tuple(
+            fields
+                .iter()
+                .map(core_pattern)
+                .collect::<Option<Vec<_>>>()?,
+        )),
         crate::ast::Pattern::Constructor { data, ctor, args } => Some(CorePattern::Constructor {
             data: data.clone(),
             ctor: ctor.clone(),

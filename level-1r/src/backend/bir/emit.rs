@@ -634,8 +634,17 @@ fn unsupported_i32_match(
     arms: &[CoreMatchArm],
     env: &RenderEnv,
 ) -> Option<BackendDiagnostic> {
-    unsupported_i32_value(scrutinee, env)
-        .or_else(|| unsupported_i32_match_arms(scrutinee, arms, env))
+    if match_uses_structural_patterns(arms) {
+        unsupported_i32_match_arms(scrutinee, arms, env)
+    } else {
+        unsupported_i32_value(scrutinee, env)
+            .or_else(|| unsupported_i32_match_arms(scrutinee, arms, env))
+    }
+}
+
+fn match_uses_structural_patterns(arms: &[CoreMatchArm]) -> bool {
+    arms.iter()
+        .any(|arm| matches!(arm.pattern, CorePattern::Tuple(_)))
 }
 
 fn unsupported_i32_match_arms(
@@ -654,6 +663,14 @@ fn unsupported_i32_match_arms(
         }
         CorePattern::I64(_) | CorePattern::Bool(_) => unsupported_i32_value(&first.value, env)
             .or_else(|| unsupported_i32_match_arms(scrutinee, rest, env)),
+        CorePattern::Tuple(fields) => {
+            if let Some(arm_env) = tuple_pattern_env(scrutinee, fields, env) {
+                unsupported_i32_value(&first.value, &arm_env)
+                    .or_else(|| unsupported_i32_match_arms(scrutinee, rest, env))
+            } else {
+                unsupported_i32_match_arms(scrutinee, rest, env)
+            }
+        }
         CorePattern::Constructor { data, ctor, args } => {
             if let Some((_, arm_env)) =
                 constructor_match_env(scrutinee, data.as_deref(), ctor, args, env)
@@ -5037,6 +5054,13 @@ fn render_match_arm_i32(
             push_indent(wat, indent);
             wat.push_str("end\n");
         }
+        CorePattern::Tuple(fields) => {
+            if let Some(arm_env) = tuple_pattern_env(scrutinee, fields, env) {
+                render_core_value_i32_indented(wat, &arm.value, &arm_env, indent)?;
+            } else {
+                render_match_arms_i32(wat, scrutinee, rest, env, indent)?;
+            }
+        }
         CorePattern::Constructor { data, ctor, args } => {
             if let Some((tag, arm_env)) =
                 constructor_match_env(scrutinee, data.as_deref(), ctor, args, env)
@@ -5084,6 +5108,25 @@ fn constructor_match_env(
     Some((tag, next))
 }
 
+fn tuple_pattern_env(
+    scrutinee: &CoreValue,
+    fields: &[CorePattern],
+    env: &RenderEnv,
+) -> Option<RenderEnv> {
+    let scrutinee = resolve_core_value_binding(scrutinee, env);
+    let CoreValue::Tuple { fields: values, .. } = scrutinee else {
+        return None;
+    };
+    if fields.len() != values.len() {
+        return None;
+    }
+    let mut next = env.clone();
+    for (pattern, value) in fields.iter().zip(values) {
+        bind_core_pattern(pattern, value, &mut next)?;
+    }
+    Some(next)
+}
+
 fn bind_core_pattern(pattern: &CorePattern, value: &CoreValue, env: &mut RenderEnv) -> Option<()> {
     match pattern {
         CorePattern::Wildcard => Some(()),
@@ -5098,15 +5141,27 @@ fn bind_core_pattern(pattern: &CorePattern, value: &CoreValue, env: &mut RenderE
                 *env = next;
             })
         }
+        CorePattern::Tuple(fields) => tuple_pattern_env(value, fields, env).map(|next| {
+            *env = next;
+        }),
         _ => None,
     }
 }
 
 fn constructor_tag(scrutinee: &CoreValue, pattern_data: Option<&str>, ctor: &str) -> Option<usize> {
-    let CoreValue::Adt { data, variants, .. } = scrutinee else {
+    let CoreValue::Adt {
+        data,
+        ctor: scrutinee_ctor,
+        variants,
+        ..
+    } = scrutinee
+    else {
         return None;
     };
     if pattern_data.is_some_and(|pattern_data| pattern_data != data) {
+        return None;
+    }
+    if scrutinee_ctor != ctor {
         return None;
     }
     variants.iter().position(|variant| variant == ctor)

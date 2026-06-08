@@ -9007,6 +9007,72 @@ def unwrap_or_zero(other: Option[i64]): i64 = 0",
 }
 
 #[test]
+fn source_tuple_constructor_match_dispatches_structural_patterns_to_executable_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "data Bit = { On, Off }
+def main(): i64 = match (Bit.On, Bit.Off) { (Bit.On, Bit.On) => 11, (Bit.On, Bit.Off) => 12, (Bit.Off, Bit.On) => 21, (_, _) => 22 }",
+    )
+    .expect("compile source tuple constructor match");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(main.output.pattern.matches.len(), 1);
+    assert!(main
+        .output
+        .pattern
+        .matches
+        .iter()
+        .all(|fact| fact.exhaustive));
+    assert!(main.output.core.ops.iter().any(|op| {
+        match op {
+            CoreOp::ReturnMatch {
+                scrutinee: CoreValue::Tuple { fields },
+                arms,
+            } => {
+                fields
+                    == &vec![
+                        CoreValue::Adt {
+                            data: "Bit".to_string(),
+                            ctor: "On".to_string(),
+                            variants: vec!["Off".to_string(), "On".to_string()],
+                            args: Vec::new(),
+                        },
+                        CoreValue::Adt {
+                            data: "Bit".to_string(),
+                            ctor: "Off".to_string(),
+                            variants: vec!["Off".to_string(), "On".to_string()],
+                            args: Vec::new(),
+                        },
+                    ]
+                    && arms.len() == 4
+            }
+            CoreOp::Match {
+                scrutinee,
+                patterns,
+            } => {
+                scrutinee.contains("value")
+                    && scrutinee.contains("value2")
+                    && patterns
+                        == &vec![
+                            "(On(), On())".to_string(),
+                            "(On(), Off())".to_string(),
+                            "(Off(), On())".to_string(),
+                            "(_, _)".to_string(),
+                        ]
+            }
+            _ => false,
+        }
+    }));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "12");
+}
+
+#[test]
 fn program_surface_and_interface_summary_preserve_owner_namespace() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec![

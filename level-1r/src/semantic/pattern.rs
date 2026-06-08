@@ -219,8 +219,8 @@ fn exhaustiveness(
     let mut has_wildcard = false;
     for arm in arms {
         match coverage_pattern(&arm.pattern) {
-            Pattern::Wildcard => has_wildcard = true,
-            Pattern::Bind(_) => has_wildcard = true,
+            pattern if pattern_covers_all(pattern) => has_wildcard = true,
+            Pattern::Wildcard | Pattern::Bind(_) => unreachable!("covered by pattern_covers_all"),
             Pattern::Tuple(_) => {}
             Pattern::Record(_) => {}
             Pattern::Constructor { ctor, .. } if !covered_constructors.contains(ctor) => {
@@ -263,6 +263,18 @@ fn coverage_pattern(pattern: &Pattern) -> &Pattern {
     match pattern {
         Pattern::At { pattern, .. } => coverage_pattern(pattern),
         _ => pattern,
+    }
+}
+
+fn pattern_covers_all(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Wildcard | Pattern::Bind(_) => true,
+        Pattern::At { pattern, .. } => pattern_covers_all(pattern),
+        Pattern::Tuple(fields) => fields.iter().all(pattern_covers_all),
+        Pattern::Record(fields) => fields
+            .iter()
+            .all(|field| pattern_covers_all(&field.pattern)),
+        Pattern::Constructor { .. } | Pattern::Lit(_) => false,
     }
 }
 
