@@ -191,6 +191,11 @@ pub enum ProgramDiagnostic {
         def: String,
         binder: String,
     },
+    NonSendCallablePassedToSendCallable {
+        def: String,
+        callee: String,
+        arg: String,
+    },
     InvalidAssignmentTarget {
         def: String,
         target_type: String,
@@ -563,8 +568,10 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     all_diagnostics.extend(template_diagnostics(&defs));
     all_diagnostics.extend(control_diagnostics(&defs));
     all_diagnostics.extend(cps_usage_diagnostics(&defs));
+    let send_diagnostics = send_callable_diagnostics(&normalized_program, &defs);
+    all_diagnostics.extend(send_diagnostics.iter().cloned());
     all_diagnostics.extend(assignment_diagnostics(&defs));
-    apply_program_backend_gates(&mut defs);
+    apply_program_backend_gates(&mut defs, &send_diagnostics);
     if entry.is_none() {
         all_diagnostics.push(ProgramDiagnostic::MissingEntry);
     }
@@ -2221,6 +2228,317 @@ fn cps_usage_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
         .collect()
 }
 
+fn send_callable_diagnostics(
+    program: &SourceProgram,
+    defs: &[ProgramDefOutput],
+) -> Vec<ProgramDiagnostic> {
+    let signatures = send_callable_signatures(program);
+    if signatures.is_empty() {
+        return Vec::new();
+    }
+    let mut diagnostics = Vec::new();
+    for def in defs {
+        collect_send_callable_diagnostics(
+            &def.name,
+            &def.output.typed,
+            &signatures,
+            &mut diagnostics,
+        );
+    }
+    diagnostics
+}
+
+fn send_callable_signatures(program: &SourceProgram) -> BTreeMap<String, Vec<bool>> {
+    program
+        .items
+        .iter()
+        .filter_map(|item| {
+            let SourceItem::Def {
+                name,
+                receiver: None,
+                params,
+                ..
+            } = item
+            else {
+                return None;
+            };
+            let send_params = params
+                .iter()
+                .map(|param| {
+                    param.ty.as_deref().map(source_type_name_send_color)
+                        == Some(crate::typed::SendColor::Send)
+                })
+                .collect::<Vec<_>>();
+            send_params
+                .iter()
+                .any(|send| *send)
+                .then_some((name.clone(), send_params))
+        })
+        .collect()
+}
+
+fn collect_send_callable_diagnostics(
+    def: &str,
+    expr: &TypedExpr,
+    signatures: &BTreeMap<String, Vec<bool>>,
+    diagnostics: &mut Vec<ProgramDiagnostic>,
+) {
+    match &expr.kind {
+        crate::typed::TypedExprKind::Call { callee, args } => {
+            if let crate::typed::TypedExprKind::Var(callee_name) = &callee.kind {
+                if let Some(send_params) = signatures.get(callee_name) {
+                    for (index, arg) in args.iter().enumerate() {
+                        if send_params.get(index).copied().unwrap_or(false)
+                            && !callable_arg_is_sendable(arg)
+                        {
+                            diagnostics.push(
+                                ProgramDiagnostic::NonSendCallablePassedToSendCallable {
+                                    def: def.to_string(),
+                                    callee: callee_name.clone(),
+                                    arg: send_callable_arg_name(arg),
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+            collect_send_callable_diagnostics(def, callee, signatures, diagnostics);
+            for arg in args {
+                collect_send_callable_diagnostics(def, arg, signatures, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::Lambda { body, .. }
+        | crate::typed::TypedExprKind::Nominal { expr: body, .. }
+        | crate::typed::TypedExprKind::Reset { body, .. }
+        | crate::typed::TypedExprKind::Shift { body, .. } => {
+            collect_send_callable_diagnostics(def, body, signatures, diagnostics);
+        }
+        crate::typed::TypedExprKind::Tuple { fields, .. } => {
+            for field in fields {
+                collect_send_callable_diagnostics(def, field, signatures, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::SliceLiteral { items, .. } => {
+            for item in items {
+                collect_send_callable_diagnostics(def, item, signatures, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::Record { fields } => {
+            for field in fields {
+                collect_send_callable_diagnostics(def, &field.value, signatures, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::RecordUpdate { base, fields } => {
+            collect_send_callable_diagnostics(def, base, signatures, diagnostics);
+            for field in fields {
+                collect_send_callable_diagnostics(def, &field.value, signatures, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::DynRowPackage { payload, .. } => {
+            collect_send_callable_diagnostics(def, payload, signatures, diagnostics);
+        }
+        crate::typed::TypedExprKind::DynRowField { package, .. } => {
+            collect_send_callable_diagnostics(def, package, signatures, diagnostics);
+        }
+        crate::typed::TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_send_callable_diagnostics(def, arg, signatures, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::Field { receiver, .. } => {
+            collect_send_callable_diagnostics(def, receiver, signatures, diagnostics);
+        }
+        crate::typed::TypedExprKind::MethodCall { receiver, args, .. } => {
+            collect_send_callable_diagnostics(def, receiver, signatures, diagnostics);
+            for arg in args {
+                collect_send_callable_diagnostics(def, arg, signatures, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::Assign { target, value, .. } => {
+            collect_send_callable_diagnostics(def, target, signatures, diagnostics);
+            collect_send_callable_diagnostics(def, value, signatures, diagnostics);
+        }
+        crate::typed::TypedExprKind::Index {
+            receiver, index, ..
+        } => {
+            collect_send_callable_diagnostics(def, receiver, signatures, diagnostics);
+            collect_send_callable_diagnostics(def, index, signatures, diagnostics);
+        }
+        crate::typed::TypedExprKind::Range { start, end } => {
+            collect_send_callable_diagnostics(def, start, signatures, diagnostics);
+            collect_send_callable_diagnostics(def, end, signatures, diagnostics);
+        }
+        crate::typed::TypedExprKind::Binary { lhs, rhs, .. } => {
+            collect_send_callable_diagnostics(def, lhs, signatures, diagnostics);
+            collect_send_callable_diagnostics(def, rhs, signatures, diagnostics);
+        }
+        crate::typed::TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_send_callable_diagnostics(def, cond, signatures, diagnostics);
+            collect_send_callable_diagnostics(def, then_branch, signatures, diagnostics);
+            collect_send_callable_diagnostics(def, else_branch, signatures, diagnostics);
+        }
+        crate::typed::TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_send_callable_diagnostics(def, scrutinee, signatures, diagnostics);
+            collect_send_callable_diagnostics(def, then_branch, signatures, diagnostics);
+            collect_send_callable_diagnostics(def, else_branch, signatures, diagnostics);
+        }
+        crate::typed::TypedExprKind::Match { scrutinee, arms } => {
+            collect_send_callable_diagnostics(def, scrutinee, signatures, diagnostics);
+            for arm in arms {
+                collect_send_callable_diagnostics(def, &arm.body, signatures, diagnostics);
+            }
+        }
+        crate::typed::TypedExprKind::Var(_) | crate::typed::TypedExprKind::Lit(_) => {}
+    }
+}
+
+fn callable_arg_is_sendable(arg: &TypedExpr) -> bool {
+    match &arg.kind {
+        crate::typed::TypedExprKind::Lambda { body, .. } => !typed_expr_has_capture(body),
+        crate::typed::TypedExprKind::Shift { .. } => false,
+        _ => !matches!(arg.ty, Type::Continuation { .. }),
+    }
+}
+
+fn typed_expr_has_capture(expr: &TypedExpr) -> bool {
+    let mut free = BTreeSet::new();
+    collect_typed_free_vars(expr, &mut BTreeSet::new(), &mut free);
+    !free.is_empty()
+}
+
+fn collect_typed_free_vars(
+    expr: &TypedExpr,
+    locals: &mut BTreeSet<String>,
+    free: &mut BTreeSet<String>,
+) {
+    match &expr.kind {
+        crate::typed::TypedExprKind::Var(name) => {
+            if !locals.contains(name) {
+                free.insert(name.clone());
+            }
+        }
+        crate::typed::TypedExprKind::Lambda { param, body, .. } => {
+            locals.insert(param.clone());
+            collect_typed_free_vars(body, locals, free);
+            locals.remove(param);
+        }
+        crate::typed::TypedExprKind::Call { callee, args } => {
+            collect_typed_free_vars(callee, locals, free);
+            for arg in args {
+                collect_typed_free_vars(arg, locals, free);
+            }
+        }
+        crate::typed::TypedExprKind::Tuple { fields, .. } => {
+            for field in fields {
+                collect_typed_free_vars(field, locals, free);
+            }
+        }
+        crate::typed::TypedExprKind::SliceLiteral { items, .. } => {
+            for item in items {
+                collect_typed_free_vars(item, locals, free);
+            }
+        }
+        crate::typed::TypedExprKind::Record { fields } => {
+            for field in fields {
+                collect_typed_free_vars(&field.value, locals, free);
+            }
+        }
+        crate::typed::TypedExprKind::RecordUpdate { base, fields } => {
+            collect_typed_free_vars(base, locals, free);
+            for field in fields {
+                collect_typed_free_vars(&field.value, locals, free);
+            }
+        }
+        crate::typed::TypedExprKind::DynRowPackage { payload, .. } => {
+            collect_typed_free_vars(payload, locals, free);
+        }
+        crate::typed::TypedExprKind::DynRowField { package, .. } => {
+            collect_typed_free_vars(package, locals, free);
+        }
+        crate::typed::TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_typed_free_vars(arg, locals, free);
+            }
+        }
+        crate::typed::TypedExprKind::Field { receiver, .. } => {
+            collect_typed_free_vars(receiver, locals, free);
+        }
+        crate::typed::TypedExprKind::MethodCall { receiver, args, .. } => {
+            collect_typed_free_vars(receiver, locals, free);
+            for arg in args {
+                collect_typed_free_vars(arg, locals, free);
+            }
+        }
+        crate::typed::TypedExprKind::Assign { target, value, .. } => {
+            collect_typed_free_vars(target, locals, free);
+            collect_typed_free_vars(value, locals, free);
+        }
+        crate::typed::TypedExprKind::Index {
+            receiver, index, ..
+        } => {
+            collect_typed_free_vars(receiver, locals, free);
+            collect_typed_free_vars(index, locals, free);
+        }
+        crate::typed::TypedExprKind::Range { start, end } => {
+            collect_typed_free_vars(start, locals, free);
+            collect_typed_free_vars(end, locals, free);
+        }
+        crate::typed::TypedExprKind::Binary { lhs, rhs, .. } => {
+            collect_typed_free_vars(lhs, locals, free);
+            collect_typed_free_vars(rhs, locals, free);
+        }
+        crate::typed::TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_typed_free_vars(cond, locals, free);
+            collect_typed_free_vars(then_branch, locals, free);
+            collect_typed_free_vars(else_branch, locals, free);
+        }
+        crate::typed::TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_typed_free_vars(scrutinee, locals, free);
+            collect_typed_free_vars(then_branch, locals, free);
+            collect_typed_free_vars(else_branch, locals, free);
+        }
+        crate::typed::TypedExprKind::Match { scrutinee, arms } => {
+            collect_typed_free_vars(scrutinee, locals, free);
+            for arm in arms {
+                collect_typed_free_vars(&arm.body, locals, free);
+            }
+        }
+        crate::typed::TypedExprKind::Nominal { expr, .. }
+        | crate::typed::TypedExprKind::Reset { body: expr, .. }
+        | crate::typed::TypedExprKind::Shift { body: expr, .. } => {
+            collect_typed_free_vars(expr, locals, free);
+        }
+        crate::typed::TypedExprKind::Lit(_) => {}
+    }
+}
+
+fn send_callable_arg_name(arg: &TypedExpr) -> String {
+    match &arg.kind {
+        crate::typed::TypedExprKind::Var(name) => name.clone(),
+        crate::typed::TypedExprKind::Lambda { .. } => "lambda".to_string(),
+        crate::typed::TypedExprKind::Shift { binder, .. } => binder.clone(),
+        _ => program_type_name(&arg.ty),
+    }
+}
+
 fn assignment_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
     let mut diagnostics = Vec::new();
     for def in defs {
@@ -2399,8 +2717,27 @@ fn program_type_name(ty: &Type) -> String {
     }
 }
 
-fn apply_program_backend_gates(defs: &mut [ProgramDefOutput]) {
+fn apply_program_backend_gates(defs: &mut [ProgramDefOutput], diagnostics: &[ProgramDiagnostic]) {
     for def in defs {
+        if diagnostics.iter().any(|diagnostic| {
+            matches!(
+                diagnostic,
+                ProgramDiagnostic::NonSendCallablePassedToSendCallable { def: name, .. }
+                    if name == &def.name
+            )
+        }) {
+            def.output.backend.wat.clear();
+            def.output
+                .backend
+                .diagnostics
+                .push(BackendDiagnostic::CoreValidationFailed { diagnostics: 1 });
+            def.output.backend_link = link_backend_artifacts(vec![def.output.backend.clone()]);
+            def.output.backend_cache_key =
+                backend_cache_key(&def.output.backend_link, &BackendCacheConfig::default());
+            def.output.visual.backend = crate::debug::render_backend_artifact(&def.output.backend);
+            def.output.visual.backend_link =
+                crate::debug::render_backend_link(&def.output.backend_link);
+        }
         for diagnostic in &def.output.cps_usage.diagnostics {
             match diagnostic {
                 CpsUsageDiagnostic::Cont1ResumedMoreThanOnce { binder, .. } => {
@@ -4135,6 +4472,9 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
         }
         ProgramDiagnostic::Cont1ResumedMoreThanOnce { def, binder } => {
             format!("cont1 resumed more than once {def}: {binder}")
+        }
+        ProgramDiagnostic::NonSendCallablePassedToSendCallable { def, callee, arg } => {
+            format!("non-send callable passed to send callable {def}: {callee}({arg})")
         }
         ProgramDiagnostic::InvalidAssignmentTarget { def, target_type } => {
             format!("invalid assignment target {def}: {target_type}")

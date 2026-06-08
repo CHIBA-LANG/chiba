@@ -738,6 +738,63 @@ def main(): i64 = make(7)
 }
 
 #[test]
+fn program_send_callable_param_rejects_continuation_argument() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def apply(f: ((i64) -> i64) send, x: i64): i64 = f(x)
+def main(): i64 = resetn { shift retry { apply(retry, 1) } }
+"#,
+    )
+    .expect("compile send callable continuation");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::NonSendCallablePassedToSendCallable {
+            def: "main".to_string(),
+            callee: "apply".to_string(),
+            arg: "retry".to_string(),
+        }]
+    );
+    assert_eq!(main.output.backend.wat, "");
+    assert_eq!(bundle.backend_link.linked_wat, "");
+}
+
+#[test]
+fn program_send_callable_param_rejects_capturing_closure_argument() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def apply(f: ((i64) -> i64) send, x: i64): i64 = f(x)
+def make(base: i64): i64 = apply((n: i64): i64 => base + n, 5)
+def main(): i64 = make(7)
+"#,
+    )
+    .expect("compile send callable closure");
+    let bundle = output.program;
+    let make = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "make")
+        .expect("make def");
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![ProgramDiagnostic::NonSendCallablePassedToSendCallable {
+            def: "make".to_string(),
+            callee: "apply".to_string(),
+            arg: "lambda".to_string(),
+        }]
+    );
+    assert_eq!(make.output.backend.wat, "");
+    assert_eq!(bundle.backend_link.linked_wat, "");
+}
+
+#[test]
 fn program_callable_return_calls_stored_no_capture_closure() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"
