@@ -1461,10 +1461,21 @@ fn program_dyn_row_callable_field_reports_non_callable_or_mismatched_adapters_qu
         Vec::new(),
         vec![
             TypeDecl::new("Z", Vec::new(), vec![TypeField::new("f", "i64")]),
+            TypeDecl::new("X", Vec::new(), vec![TypeField::new("f", "i64")]),
             TypeDecl::new("M", Vec::new(), vec![TypeField::new("x", "i64")]),
         ],
         Vec::new(),
         vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "f",
+                vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("n", Some("i64".to_string())),
+                ],
+                Some("i64".to_string()),
+                Expr::var("n"),
+            ),
             SourceItem::method_def(
                 MethodReceiver::new("M", Vec::new()),
                 "f",
@@ -1505,6 +1516,16 @@ fn program_dyn_row_callable_field_reports_non_callable_or_mismatched_adapters_qu
                     Expr::nominal("M", Expr::record(vec![("x", Expr::i64(1))])),
                 ),
             ),
+            SourceItem::def(
+                "bad_field_over_method",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("call_dyn"),
+                    Expr::nominal("X", Expr::record(vec![("f", Expr::i64(1))])),
+                ),
+            ),
         ],
     );
 
@@ -1524,6 +1545,13 @@ fn program_dyn_row_callable_field_reports_non_callable_or_mismatched_adapters_qu
         diagnostic,
         ProgramDiagnostic::DynRowCoercionFailed { def, expected, actual }
             if def == "bad_method" && expected == "dyn {f: (i64) -> i64}" && actual == "M"
+    )));
+    assert!(bundle.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic,
+        ProgramDiagnostic::DynRowCoercionFailed { def, expected, actual }
+            if def == "bad_field_over_method"
+                && expected == "dyn {f: (i64) -> i64}"
+                && actual == "X"
     )));
 }
 
