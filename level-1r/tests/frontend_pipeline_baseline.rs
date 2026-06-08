@@ -2613,7 +2613,15 @@ fn frontend_parses_lambda_closure_surface_to_lifted_function() {
 
     match &output.frontend.program.items[0] {
         SourceItem::Def { body, .. } => {
-            assert_eq!(body, &Expr::lambda("x", Expr::var("x")));
+            assert_eq!(
+                body,
+                &Expr::typed_lambda(
+                    "x",
+                    Some("I64".to_string()),
+                    Some("I64".to_string()),
+                    Expr::var("x")
+                )
+            );
         }
         other => panic!(
             "expected function def, got {}",
@@ -2621,6 +2629,20 @@ fn frontend_parses_lambda_closure_surface_to_lifted_function() {
         ),
     }
 
+    match &main.typed.kind {
+        chiba_level1r::typed::TypedExprKind::Lambda { param_ty, .. } => {
+            assert_eq!(param_ty, &Type::I64);
+            assert_eq!(
+                main.typed.ty,
+                Type::Func(
+                    Box::new(Type::I64),
+                    Box::new(Type::I64),
+                    chiba_level1r::typed::SendColor::Obligation,
+                )
+            );
+        }
+        other => panic!("expected typed lambda, got {other:?}"),
+    }
     assert_eq!(main.closure.closures.len(), 1);
     assert_eq!(main.closure.closures[0].captures, vec![]);
     assert_eq!(main.lambda_lift.functions.len(), 1);
@@ -2642,9 +2664,16 @@ fn frontend_parses_nested_lambda_and_preserves_capture_env() {
         SourceItem::Def { body, .. } => {
             assert_eq!(
                 body,
-                &Expr::lambda(
+                &Expr::typed_lambda(
                     "x",
-                    Expr::lambda("y", Expr::call(Expr::var("x"), Expr::var("y"))),
+                    Some("Unknown".to_string()),
+                    Some("Unknown".to_string()),
+                    Expr::typed_lambda(
+                        "y",
+                        Some("Unknown".to_string()),
+                        Some("Unknown".to_string()),
+                        Expr::call(Expr::var("x"), Expr::var("y")),
+                    ),
                 )
             );
         }

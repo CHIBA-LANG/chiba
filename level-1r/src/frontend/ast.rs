@@ -510,6 +510,8 @@ pub enum Expr {
     Lit(Literal),
     Lambda {
         param: String,
+        param_ty: Option<String>,
+        return_ty: Option<String>,
         body: Box<Expr>,
     },
     Call {
@@ -645,7 +647,20 @@ pub fn render_source_expr(expr: &Expr) -> String {
     match expr {
         Expr::Var(name) => name.clone(),
         Expr::Lit(literal) => render_source_literal(literal),
-        Expr::Lambda { param, body } => format!("fn {param} => {}", render_source_expr(body)),
+        Expr::Lambda {
+            param,
+            param_ty,
+            return_ty,
+            body,
+        } => match (param_ty, return_ty) {
+            (Some(param_ty), Some(return_ty)) => {
+                format!(
+                    "({param}: {param_ty}): {return_ty} => {}",
+                    render_source_expr(body)
+                )
+            }
+            _ => format!("fn {param} => {}", render_source_expr(body)),
+        },
         Expr::Call { callee, args } => {
             let args = args
                 .iter()
@@ -865,8 +880,19 @@ impl Expr {
     }
 
     pub fn lambda(param: impl Into<String>, body: Expr) -> Self {
+        Self::typed_lambda(param, None, None, body)
+    }
+
+    pub fn typed_lambda(
+        param: impl Into<String>,
+        param_ty: Option<String>,
+        return_ty: Option<String>,
+        body: Expr,
+    ) -> Self {
         Self::Lambda {
             param: param.into(),
+            param_ty,
+            return_ty,
             body: Box::new(body),
         }
     }

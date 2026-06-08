@@ -212,7 +212,7 @@ impl AlphaCtx {
             Expr::Lit(lit) => AlphaExpr {
                 kind: AlphaExprKind::Lit(lit.clone()),
             },
-            Expr::Lambda { param, body } => {
+            Expr::Lambda { param, body, .. } => {
                 self.push_scope();
                 let param = self.bind(param);
                 let body = Box::new(self.alpha(body));

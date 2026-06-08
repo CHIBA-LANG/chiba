@@ -1220,6 +1220,7 @@ type M = {x: i64}
 def M.f(self: Self, bad: bool): i64 = 0
 def call_f[F, T: {r | f: F}](v: T): i64 = v.f(1)
 def bad_field(): i64 = call_f(Z({f: 1}))
+def bad_record(): i64 = call_f({f: (bad: bool): i64 => 0})
 def bad_method(): i64 = call_f(M({x: 1}))
 def main(): i64 = 0
 "#,
@@ -1239,6 +1240,14 @@ def main(): i64 = 0
             callee: "call_f".to_string(),
             field: "f".to_string(),
             actual: "Z({f: 1})".to_string(),
+        }));
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::RowMemberCallableUnsatisfied {
+            def: "bad_record".to_string(),
+            callee: "call_f".to_string(),
+            field: "f".to_string(),
+            actual: "{f: (bad: bool): i64 => 0}".to_string(),
         }));
     assert!(bundle
         .diagnostics

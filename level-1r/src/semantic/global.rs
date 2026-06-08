@@ -569,7 +569,7 @@ fn collect_expr_vars_scoped(expr: &Expr, refs: &mut BTreeSet<String>, bound: &BT
             }
         }
         Expr::Lit(_) => {}
-        Expr::Lambda { param, body } => {
+        Expr::Lambda { param, body, .. } => {
             let next_bound = with_bound_names(bound, std::iter::once(param.clone()));
             collect_expr_vars_scoped(body, refs, &next_bound);
         }

@@ -945,8 +945,15 @@ fn specialize_row_callable_expr(
 
     match expr {
         Expr::Var(_) | Expr::Lit(_) => expr.clone(),
-        Expr::Lambda { param, body } => Expr::Lambda {
+        Expr::Lambda {
+            param,
+            param_ty,
+            return_ty,
+            body,
+        } => Expr::Lambda {
             param: param.clone(),
+            param_ty: param_ty.clone(),
+            return_ty: return_ty.clone(),
             body: Box::new(specialize_row_callable_expr(
                 body,
                 row_callables,
@@ -1200,16 +1207,24 @@ fn substitute_row_callable_param(
         }
         Expr::Lambda {
             param: lambda_param,
+            param_ty,
+            return_ty,
             body,
         } if lambda_param == param => Expr::Lambda {
             param: lambda_param.clone(),
+            param_ty: param_ty.clone(),
+            return_ty: return_ty.clone(),
             body: body.clone(),
         },
         Expr::Lambda {
             param: lambda_param,
+            param_ty,
+            return_ty,
             body,
         } => Expr::Lambda {
             param: lambda_param.clone(),
+            param_ty: param_ty.clone(),
+            return_ty: return_ty.clone(),
             body: Box::new(substitute_row_callable_param(
                 body,
                 param,
@@ -1562,7 +1577,8 @@ fn row_callable_arg_has_callable_field(
 ) -> bool {
     match arg {
         Expr::Record(fields) => fields.iter().any(|candidate| {
-            candidate.name == row_callable.field && expr_is_callable_value(&candidate.value)
+            candidate.name == row_callable.field
+                && expr_accepts_row_callable_args(&candidate.value, &row_callable.args)
         }),
         Expr::Nominal { name, .. } => member_records
             .fields
@@ -1584,6 +1600,25 @@ fn row_callable_arg_has_callable_field(
 
 fn expr_is_callable_value(expr: &Expr) -> bool {
     matches!(expr, Expr::Lambda { .. } | Expr::Var(_))
+}
+
+fn expr_accepts_row_callable_args(expr: &Expr, args: &[Expr]) -> bool {
+    if !expr_is_callable_value(expr) {
+        return false;
+    }
+    callable_expr_param_types(expr)
+        .map(|param_tys| row_callable_args_match_types(args, &param_tys))
+        .unwrap_or(true)
+}
+
+fn callable_expr_param_types(expr: &Expr) -> Option<Vec<Type>> {
+    match expr {
+        Expr::Lambda { param_ty, .. } => param_ty
+            .as_deref()
+            .map(source_type_name_to_type)
+            .map(|ty| vec![ty]),
+        _ => None,
+    }
 }
 
 fn type_is_callable_storage(ty: &Type) -> bool {

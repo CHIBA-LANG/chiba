@@ -743,11 +743,24 @@ fn type_expr_with_context_and_controls(
             TypedExprKind::Lit(Literal::CStr(value.clone())),
             Type::Nominal("cstr".to_string()),
         ),
-        Expr::Lambda { param, body } => {
-            let param_ty = Type::Unknown;
+        Expr::Lambda {
+            param,
+            param_ty,
+            return_ty,
+            body,
+        } => {
+            let param_ty = param_ty
+                .as_deref()
+                .map(source_type_name_to_type)
+                .unwrap_or(Type::Unknown);
+            let return_ty = return_ty.as_deref().map(source_type_name_to_type);
             let mut env = env.clone();
             env.insert(param.clone(), param_ty.clone());
             let body = type_expr_with_context_and_controls(body, &env, context, controls);
+            let body = return_ty
+                .as_ref()
+                .map(|expected| coerce_expected(body.clone(), expected, context))
+                .unwrap_or(body);
             let ty = Type::Func(
                 Box::new(param_ty.clone()),
                 Box::new(body.ty.clone()),

@@ -1038,13 +1038,18 @@ impl FrontendParser {
         self.expect("LParen")?;
         let param = self.expect_lexeme("Ident")?;
         self.expect("Colon")?;
-        self.expect_type_name()?;
+        let param_ty = self.expect_type_name()?;
         self.expect("RParen")?;
         self.expect("Colon")?;
-        self.expect_type_name()?;
+        let return_ty = self.expect_type_name()?;
         self.expect("FatArrow")?;
         let body = self.parse_expr_bp(0)?;
-        Ok(Expr::lambda(param, body))
+        Ok(Expr::typed_lambda(
+            param,
+            Some(param_ty),
+            Some(return_ty),
+            body,
+        ))
     }
 
     fn parse_record_or_update(&mut self) -> Result<Expr, FrontendError> {
@@ -1610,9 +1615,14 @@ fn replace_pipe_placeholders(expr: Expr, input: &Expr) -> (Expr, bool) {
     match expr {
         Expr::Var(name) if name == "_" => (input.clone(), true),
         Expr::Var(_) | Expr::Lit(_) => (expr, false),
-        Expr::Lambda { param, body } => {
+        Expr::Lambda {
+            param,
+            param_ty,
+            return_ty,
+            body,
+        } => {
             let (body, used) = replace_pipe_placeholders(*body, input);
-            (Expr::lambda(param, body), used)
+            (Expr::typed_lambda(param, param_ty, return_ty, body), used)
         }
         Expr::Call { callee, args } => {
             let (callee, callee_used) = replace_pipe_placeholders(*callee, input);
@@ -2157,8 +2167,15 @@ fn enrich_expr_with_surface_facts(
             let variants = variants.get(&data).cloned().unwrap_or(old_variants);
             Expr::adt_ctor(data, ctor, variants, args)
         }
-        Expr::Lambda { param, body } => Expr::lambda(
+        Expr::Lambda {
             param,
+            param_ty,
+            return_ty,
+            body,
+        } => Expr::typed_lambda(
+            param,
+            param_ty,
+            return_ty,
             enrich_expr_with_surface_facts(*body, variants, nominal_row_types),
         ),
         Expr::Call { callee, args } => {
