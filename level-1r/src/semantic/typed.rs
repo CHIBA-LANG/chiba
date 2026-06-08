@@ -2849,6 +2849,15 @@ pub(crate) fn source_type_name_to_type(name: &str) -> Type {
         .unwrap_or_else(|| Type::Nominal(name.to_string()))
 }
 
+pub(crate) fn source_type_name_send_color(name: &str) -> SendColor {
+    parse_type_header(name)
+        .and_then(|header| match header {
+            ParsedTypeHeader::Callable { send, .. } => Some(send),
+            _ => None,
+        })
+        .unwrap_or(SendColor::Obligation)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum ParsedTypeHeader {
     Unknown,
@@ -2873,6 +2882,7 @@ enum ParsedTypeHeader {
     Callable {
         param: Box<ParsedTypeHeader>,
         result: Box<ParsedTypeHeader>,
+        send: SendColor,
     },
 }
 
@@ -2911,7 +2921,7 @@ impl ParsedTypeHeader {
                 input: Box::new(input.to_type()),
                 answer: Box::new(answer.to_type()),
             },
-            ParsedTypeHeader::Callable { param, result } => {
+            ParsedTypeHeader::Callable { param, result, .. } => {
                 Type::Func(Box::new(param.to_type()), Box::new(result.to_type()))
             }
         }
@@ -2931,6 +2941,10 @@ fn parse_type_header(name: &str) -> Option<ParsedTypeHeader> {
 
     if let Some(callable) = parse_callable_type_header(name) {
         return Some(callable);
+    }
+
+    if let Some(grouped) = parse_grouped_type_header(name) {
+        return Some(grouped);
     }
 
     if let Some(fields) = parse_dyn_row_type_header(name) {
@@ -3014,6 +3028,7 @@ fn top_level_colon(text: &str) -> Option<usize> {
 }
 
 fn parse_callable_type_header(name: &str) -> Option<ParsedTypeHeader> {
+    let (name, send) = strip_send_callable_suffix(name);
     let arrow = top_level_arrow(name)?;
     let param = parenthesized_type(name[..arrow].trim())?;
     let result = name[arrow + 2..].trim();
@@ -3023,7 +3038,32 @@ fn parse_callable_type_header(name: &str) -> Option<ParsedTypeHeader> {
     Some(ParsedTypeHeader::Callable {
         param: Box::new(parse_type_header(param)?),
         result: Box::new(parse_type_header(result)?),
+        send,
     })
+}
+
+fn parse_grouped_type_header(name: &str) -> Option<ParsedTypeHeader> {
+    let (name, send) = strip_send_callable_suffix(name);
+    let inner = parenthesized_type(name)?;
+    let mut parsed = parse_type_header(inner)?;
+    if send == SendColor::Send {
+        let ParsedTypeHeader::Callable {
+            send: callable_send,
+            ..
+        } = &mut parsed
+        else {
+            return None;
+        };
+        *callable_send = SendColor::Send;
+    }
+    Some(parsed)
+}
+
+fn strip_send_callable_suffix(name: &str) -> (&str, SendColor) {
+    let Some(prefix) = name.strip_suffix(" send") else {
+        return (name, SendColor::Obligation);
+    };
+    (prefix.trim_end(), SendColor::Send)
 }
 
 fn parse_application_type_header(name: &str) -> Option<Option<(String, Vec<String>)>> {
@@ -3145,12 +3185,20 @@ fn render_type_header(header: &ParsedTypeHeader) -> String {
             let base = if *multi { "ContN" } else { "Cont1" };
             render_nominal_type_header(base, &[input.as_ref().clone(), answer.as_ref().clone()])
         }
-        ParsedTypeHeader::Callable { param, result } => {
-            format!(
+        ParsedTypeHeader::Callable {
+            param,
+            result,
+            send,
+        } => {
+            let mut rendered = format!(
                 "({}) -> {}",
                 render_type_header(param),
                 render_type_header(result)
-            )
+            );
+            if *send == SendColor::Send {
+                rendered = format!("({rendered}) send");
+            }
+            rendered
         }
     }
 }

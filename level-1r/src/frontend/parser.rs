@@ -1399,8 +1399,24 @@ impl FrontendParser {
             self.pos += 1;
             let param = self.parse_type_name()?;
             self.expect("RParen")?;
+            if self
+                .tokens
+                .get(self.pos)
+                .is_some_and(|token| token.name == "Ident" && token.lexeme == "send")
+            {
+                self.pos += 1;
+                return Ok(format!("({param}) send"));
+            }
             self.expect("Arrow")?;
             let result = self.parse_type_name()?;
+            if self
+                .tokens
+                .get(self.pos)
+                .is_some_and(|token| token.name == "Ident" && token.lexeme == "send")
+            {
+                self.pos += 1;
+                return Ok(format!("(({param}) -> {result}) send"));
+            }
             return Ok(format!("({param}) -> {result}"));
         }
         let mut name = self.expect_type_atom()?;

@@ -50,9 +50,9 @@ use crate::symbol::encode_debug_symbol;
 use crate::template::{analyze_template_with_source, TemplateDiagnostic, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
-    nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_to_type,
-    type_expr_with_context, ReceiverMethodSummary, RecordTypeField, Type, TypeContext, TypeEnv,
-    TypedExpr,
+    nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_send_color,
+    source_type_name_to_type, type_expr_with_context, ReceiverMethodSummary, RecordTypeField, Type,
+    TypeContext, TypeEnv, TypedExpr,
 };
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -1290,14 +1290,10 @@ fn explicit_callable_storage_facts(
         .params
         .iter()
         .filter_map(|param| match source_type_name_to_type(&param.ty) {
-            Type::Continuation { multi, .. } => Some(CallableStorageFact {
-                subject: format!("param::{}", param.name),
-                kind: if multi {
-                    CallableStorageKind::ContNPackage
-                } else {
-                    CallableStorageKind::BoxedCont1
-                },
-                usage: if multi {
+            Type::Continuation { multi, .. } => Some(continuation_storage_fact(
+                format!("param::{}", param.name),
+                multi,
+                if multi {
                     crate::typed::UsageColor::Many
                 } else {
                     param_binders
@@ -1307,30 +1303,63 @@ fn explicit_callable_storage_facts(
                         .unwrap_or(crate::usage::UseCount::Zero)
                         .color()
                 },
-                send: crate::typed::SendColor::NotSend,
-            }),
+            )),
+            Type::Func(_, _) => Some(callable_storage_fact(
+                format!("param::{}", param.name),
+                source_type_name_send_color(&param.ty),
+            )),
             _ => None,
         })
         .collect::<Vec<_>>();
     if let Some(return_type) = &signature.return_type {
-        if let Type::Continuation { multi, .. } = source_type_name_to_type(return_type) {
-            facts.push(CallableStorageFact {
-                subject: format!("return::{def_name}"),
-                kind: if multi {
-                    CallableStorageKind::ContNPackage
-                } else {
-                    CallableStorageKind::BoxedCont1
-                },
-                usage: if multi {
-                    crate::typed::UsageColor::Many
-                } else {
-                    crate::typed::UsageColor::One
-                },
-                send: crate::typed::SendColor::NotSend,
-            });
+        match source_type_name_to_type(return_type) {
+            Type::Continuation { multi, .. } => {
+                facts.push(continuation_storage_fact(
+                    format!("return::{def_name}"),
+                    multi,
+                    if multi {
+                        crate::typed::UsageColor::Many
+                    } else {
+                        crate::typed::UsageColor::One
+                    },
+                ));
+            }
+            Type::Func(_, _) => {
+                facts.push(callable_storage_fact(
+                    format!("return::{def_name}"),
+                    source_type_name_send_color(return_type),
+                ));
+            }
+            _ => {}
         }
     }
     facts
+}
+
+fn continuation_storage_fact(
+    subject: String,
+    multi: bool,
+    usage: crate::typed::UsageColor,
+) -> CallableStorageFact {
+    CallableStorageFact {
+        subject,
+        kind: if multi {
+            CallableStorageKind::ContNPackage
+        } else {
+            CallableStorageKind::BoxedCont1
+        },
+        usage,
+        send: crate::typed::SendColor::NotSend,
+    }
+}
+
+fn callable_storage_fact(subject: String, send: crate::typed::SendColor) -> CallableStorageFact {
+    CallableStorageFact {
+        subject,
+        kind: CallableStorageKind::ErasedCallableAdt,
+        usage: crate::typed::UsageColor::Many,
+        send,
+    }
 }
 
 fn interface_callable_storage_facts(interface: &InterfaceSummary) -> Vec<CallableStorageFact> {
@@ -1341,20 +1370,19 @@ fn interface_callable_storage_facts(interface: &InterfaceSummary) -> Vec<Callabl
             ty.fields
                 .iter()
                 .filter_map(|field| match source_type_name_to_type(&field.ty) {
-                    Type::Continuation { multi, .. } => Some(CallableStorageFact {
-                        subject: format!("type::{}::{}", ty.name, field.name),
-                        kind: if multi {
-                            CallableStorageKind::ContNPackage
-                        } else {
-                            CallableStorageKind::BoxedCont1
-                        },
-                        usage: if multi {
+                    Type::Continuation { multi, .. } => Some(continuation_storage_fact(
+                        format!("type::{}::{}", ty.name, field.name),
+                        multi,
+                        if multi {
                             crate::typed::UsageColor::Many
                         } else {
                             crate::typed::UsageColor::One
                         },
-                        send: crate::typed::SendColor::NotSend,
-                    }),
+                    )),
+                    Type::Func(_, _) => Some(callable_storage_fact(
+                        format!("type::{}::{}", ty.name, field.name),
+                        source_type_name_send_color(&field.ty),
+                    )),
                     _ => None,
                 })
         })

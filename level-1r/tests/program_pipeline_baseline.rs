@@ -1898,6 +1898,62 @@ fn interface_type_continuation_field_enters_callable_storage() {
 }
 
 #[test]
+fn typed_sendable_callable_param_enters_callable_storage() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main(f: ((i64) -> i64) send): ((i64) -> i64) send = f",
+    )
+    .expect("compile source");
+    let main = &output.program.defs[0].output;
+
+    assert!(main.core.callable_storage.iter().any(|fact| {
+        fact.subject == "param::f"
+            && fact.kind == chiba_level1r::core::CallableStorageKind::ErasedCallableAdt
+            && fact.usage == chiba_level1r::typed::UsageColor::Many
+            && fact.send == chiba_level1r::typed::SendColor::Send
+    }));
+    assert!(main.core.callable_storage.iter().any(|fact| {
+        fact.subject == "return::main"
+            && fact.kind == chiba_level1r::core::CallableStorageKind::ErasedCallableAdt
+            && fact.usage == chiba_level1r::typed::UsageColor::Many
+            && fact.send == chiba_level1r::typed::SendColor::Send
+    }));
+    assert!(main.core_validation.diagnostics.is_empty());
+}
+
+#[test]
+fn interface_type_sendable_callable_field_enters_callable_storage() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "SendBox",
+            Vec::new(),
+            vec![TypeField::new("run", "((i64) -> i64) send")],
+        )],
+        Vec::new(),
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(bundle.defs[0]
+        .output
+        .core
+        .callable_storage
+        .iter()
+        .any(|fact| {
+            fact.subject == "type::SendBox::run"
+                && fact.kind == chiba_level1r::core::CallableStorageKind::ErasedCallableAdt
+                && fact.usage == chiba_level1r::typed::UsageColor::Many
+                && fact.send == chiba_level1r::typed::SendColor::Send
+        }));
+    assert!(bundle.defs[0]
+        .output
+        .render_visual()
+        .contains("type::SendBox::run kind=erased-callable-adt usage=N send=send"));
+}
+
+#[test]
 fn program_bundle_selects_main_and_links_def_artifacts() {
     let program = SourceProgram::new(vec![
         def("helper", vec![], Expr::i64(1)),

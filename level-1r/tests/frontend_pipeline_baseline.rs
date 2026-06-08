@@ -978,6 +978,31 @@ fn frontend_parses_dyn_row_type_annotations() {
 }
 
 #[test]
+fn frontend_parses_sendable_callable_type_annotations() {
+    let parsed =
+        parse_source_program("def use_send(f: ((i64) -> i64) send): ((i64) -> i64) send = f")
+            .expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def {
+            params,
+            return_type,
+            ..
+        } => {
+            assert_eq!(
+                params,
+                &vec![ParamDecl::new("f", Some("((i64) -> i64) send".to_string()))]
+            );
+            assert_eq!(return_type, &Some("((i64) -> i64) send".to_string()));
+        }
+        other => panic!(
+            "expected function def, got {}",
+            source_item_kind_name(other)
+        ),
+    }
+}
+
+#[test]
 fn frontend_parses_continuation_callable_type_sugar() {
     let parsed = parse_source_program(
         "type ParserState = { retry: contN (i64) -> bool }
