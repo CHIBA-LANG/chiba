@@ -4,7 +4,8 @@ use crate::ast::{BinaryOp, Literal, Pattern};
 use crate::control::ContinuationKind;
 use crate::typed::{
     AggregateBoundary, AggregateKind, BuiltinMethodCall, FieldAccessKind, IndexAccessKind,
-    RangeBoundary, TextBoundary, TextKind, Type, TypedExpr, TypedExprKind, TypedRecordField,
+    RangeBoundary, TextBoundary, TextKind, Type, TypedExpr, TypedExprKind,
+    TypedReceiverMethodTarget, TypedRecordField,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -480,6 +481,7 @@ fn transform(
             receiver,
             index,
             access,
+            receiver_method,
         } => {
             let receiver_controls = controls.clone();
             transform(
@@ -537,11 +539,11 @@ fn transform(
                             let w = ctx.fresh("w");
                             let kont_body = k(CpsAtom::Var(w.clone()), ctx);
                             CpsTerm::AppFun {
-                                func: CpsAtom::OperatorCallee {
+                                func: operator_callee_atom(
                                     kind,
-                                    protocol: kind.protocol_name().to_string(),
-                                    receiver: Box::new(receiver),
-                                },
+                                    receiver_method.as_ref(),
+                                    receiver,
+                                ),
                                 args: vec![index],
                                 kont: CpsAtom::ContLambda {
                                     param: w,
@@ -582,7 +584,12 @@ fn transform(
                 ctx,
             )
         }
-        TypedExprKind::Binary { op, lhs, rhs } => {
+        TypedExprKind::Binary {
+            op,
+            lhs,
+            rhs,
+            receiver_method,
+        } => {
             let kind = OperatorKind::Binary(*op);
             let lhs_controls = controls.clone();
             let rhs_controls = controls;
@@ -596,11 +603,7 @@ fn transform(
                             let w = ctx.fresh("w");
                             let kont_body = k(CpsAtom::Var(w.clone()), ctx);
                             CpsTerm::AppFun {
-                                func: CpsAtom::OperatorCallee {
-                                    kind,
-                                    protocol: kind.protocol_name().to_string(),
-                                    receiver: Box::new(lhs),
-                                },
+                                func: operator_callee_atom(kind, receiver_method.as_ref(), lhs),
                                 args: vec![rhs],
                                 kont: CpsAtom::ContLambda {
                                     param: w,
@@ -1238,6 +1241,26 @@ fn type_has_callable_dyn_row_field(receiver: &Type, name: &str) -> bool {
 impl CpsProgram {
     pub fn contains_administrative_let_cont(&self) -> bool {
         false
+    }
+}
+
+fn operator_callee_atom(
+    kind: OperatorKind,
+    receiver_method: Option<&TypedReceiverMethodTarget>,
+    receiver: CpsAtom,
+) -> CpsAtom {
+    if let Some(method) = receiver_method {
+        CpsAtom::ReceiverMethod {
+            receiver: Box::new(receiver),
+            symbol: method.symbol.clone(),
+            runtime_target: method.runtime_target.clone(),
+        }
+    } else {
+        CpsAtom::OperatorCallee {
+            kind,
+            protocol: kind.protocol_name().to_string(),
+            receiver: Box::new(receiver),
+        }
     }
 }
 

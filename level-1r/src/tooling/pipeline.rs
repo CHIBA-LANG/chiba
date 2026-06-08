@@ -3185,9 +3185,15 @@ fn collect_operator_operand_diagnostics(
     diagnostics: &mut Vec<ProgramDiagnostic>,
 ) {
     match &expr.kind {
-        TypedExprKind::Binary { op, lhs, rhs } => {
-            if binary_operand_is_concrete_non_i64(&lhs.ty)
-                || binary_operand_is_concrete_non_i64(&rhs.ty)
+        TypedExprKind::Binary {
+            op,
+            lhs,
+            rhs,
+            receiver_method,
+        } => {
+            if receiver_method.is_none()
+                && (binary_operand_is_concrete_non_i64(&lhs.ty)
+                    || binary_operand_is_concrete_non_i64(&rhs.ty))
             {
                 diagnostics.push(ProgramDiagnostic::InvalidOperatorOperands {
                     def: def.to_string(),
@@ -3258,6 +3264,7 @@ fn collect_operator_operand_diagnostics(
             receiver,
             index,
             access,
+            receiver_method: _,
         } => {
             collect_index_operator_diagnostics(def, receiver, index, access, diagnostics);
             collect_operator_operand_diagnostics(def, receiver, diagnostics);

@@ -1503,8 +1503,16 @@ fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
             render_typed_child("start", start, depth, out);
             render_typed_child("end", end, depth, out);
         }
-        TypedExprKind::Binary { op, lhs, rhs } => {
+        TypedExprKind::Binary {
+            op,
+            lhs,
+            rhs,
+            receiver_method,
+        } => {
             writeln!(out, "{indent}  op {}", render_source_binary_op(*op)).unwrap();
+            if let Some(method) = receiver_method {
+                writeln!(out, "{indent}  receiver-method {}", method.symbol).unwrap();
+            }
             render_typed_child("lhs", lhs, depth, out);
             render_typed_child("rhs", rhs, depth, out);
         }

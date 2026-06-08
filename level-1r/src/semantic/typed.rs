@@ -84,6 +84,7 @@ pub enum TypedExprKind {
         receiver: Box<TypedExpr>,
         index: Box<TypedExpr>,
         access: IndexAccessKind,
+        receiver_method: Option<TypedReceiverMethodTarget>,
     },
     Range {
         start: Box<TypedExpr>,
@@ -93,6 +94,7 @@ pub enum TypedExprKind {
         op: BinaryOp,
         lhs: Box<TypedExpr>,
         rhs: Box<TypedExpr>,
+        receiver_method: Option<TypedReceiverMethodTarget>,
     },
     If {
         cond: Box<TypedExpr>,
@@ -441,6 +443,14 @@ impl TypeContext {
                 self.receiver_methods
                     .get(&(base.to_string(), name.to_string()))
             })
+    }
+
+    pub fn operator_method(
+        &self,
+        receiver: &Type,
+        protocol: &str,
+    ) -> Option<&ReceiverMethodSummary> {
+        self.receiver_method(receiver, protocol)
     }
 
     fn generic_nominal_field_type(&self, nominal: &str, field: &str) -> Option<Type> {
@@ -930,12 +940,27 @@ fn type_expr_with_context_and_controls(
             let receiver = type_expr_with_context_and_controls(receiver, env, context, controls);
             let index = type_expr_with_context_and_controls(index, env, context, controls);
             let access = index_access_kind(&receiver.ty, &index.ty);
-            let ty = index_result_type(&access);
+            let receiver_method = if matches!(access, IndexAccessKind::Operator) {
+                let protocol = index_operator_protocol(&index);
+                operator_method_target(
+                    &receiver.ty,
+                    protocol,
+                    std::slice::from_ref(&index),
+                    context,
+                )
+            } else {
+                None
+            };
+            let ty = receiver_method
+                .as_ref()
+                .map(|method| method.result_ty.clone())
+                .unwrap_or_else(|| index_result_type(&access));
             typed(
                 TypedExprKind::Index {
                     receiver: Box::new(receiver),
                     index: Box::new(index),
                     access,
+                    receiver_method: receiver_method.map(|method| method.target),
                 },
                 ty,
             )
@@ -954,12 +979,22 @@ fn type_expr_with_context_and_controls(
         Expr::Binary { op, lhs, rhs } => {
             let lhs = type_expr_with_context_and_controls(lhs, env, context, controls);
             let rhs = type_expr_with_context_and_controls(rhs, env, context, controls);
-            let ty = binary_result_type(&lhs.ty, &rhs.ty);
+            let receiver_method = operator_method_target(
+                &lhs.ty,
+                binary_operator_protocol(*op),
+                std::slice::from_ref(&rhs),
+                context,
+            );
+            let ty = receiver_method
+                .as_ref()
+                .map(|method| method.result_ty.clone())
+                .unwrap_or_else(|| binary_result_type(&lhs.ty, &rhs.ty));
             typed(
                 TypedExprKind::Binary {
                     op: op.clone(),
                     lhs: Box::new(lhs),
                     rhs: Box::new(rhs),
+                    receiver_method: receiver_method.map(|method| method.target),
                 },
                 ty,
             )
@@ -1422,12 +1457,27 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
             let receiver = refine_continuation_types(*receiver, context);
             let index = refine_continuation_types(*index, context);
             let access = index_access_kind(&receiver.ty, &index.ty);
-            let ty = index_result_type(&access);
+            let receiver_method = if matches!(access, IndexAccessKind::Operator) {
+                let protocol = index_operator_protocol(&index);
+                operator_method_target(
+                    &receiver.ty,
+                    protocol,
+                    std::slice::from_ref(&index),
+                    context,
+                )
+            } else {
+                None
+            };
+            let ty = receiver_method
+                .as_ref()
+                .map(|method| method.result_ty.clone())
+                .unwrap_or_else(|| index_result_type(&access));
             typed(
                 TypedExprKind::Index {
                     receiver: Box::new(receiver),
                     index: Box::new(index),
                     access,
+                    receiver_method: receiver_method.map(|method| method.target),
                 },
                 ty,
             )
@@ -1443,15 +1493,25 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 Type::Nominal("Range".to_string()),
             )
         }
-        TypedExprKind::Binary { op, lhs, rhs } => {
+        TypedExprKind::Binary { op, lhs, rhs, .. } => {
             let lhs = refine_continuation_types(*lhs, context);
             let rhs = refine_continuation_types(*rhs, context);
-            let ty = binary_result_type(&lhs.ty, &rhs.ty);
+            let receiver_method = operator_method_target(
+                &lhs.ty,
+                binary_operator_protocol(op),
+                std::slice::from_ref(&rhs),
+                context,
+            );
+            let ty = receiver_method
+                .as_ref()
+                .map(|method| method.result_ty.clone())
+                .unwrap_or_else(|| binary_result_type(&lhs.ty, &rhs.ty));
             typed(
                 TypedExprKind::Binary {
                     op,
                     lhs: Box::new(lhs),
                     rhs: Box::new(rhs),
+                    receiver_method: receiver_method.map(|method| method.target),
                 },
                 ty,
             )
@@ -1841,6 +1901,7 @@ fn refine_pattern_binding_types(
             receiver,
             index,
             access,
+            receiver_method: _,
         } => {
             let receiver = refine_pattern_binding_types(*receiver, bindings, context);
             let index = refine_pattern_binding_types(*index, bindings, context);
@@ -1861,11 +1922,23 @@ fn refine_pattern_binding_types(
                 | IndexAccessKind::TextSlice { .. } => index_result_type(&access),
                 IndexAccessKind::Operator => expr.ty,
             };
+            let receiver_method = if matches!(access, IndexAccessKind::Operator) {
+                let protocol = index_operator_protocol(&index);
+                operator_method_target(
+                    &receiver.ty,
+                    protocol,
+                    std::slice::from_ref(&index),
+                    context,
+                )
+            } else {
+                None
+            };
             typed(
                 TypedExprKind::Index {
                     receiver: Box::new(receiver),
                     index: Box::new(index),
                     access,
+                    receiver_method: receiver_method.map(|method| method.target),
                 },
                 ty,
             )
@@ -1877,15 +1950,25 @@ fn refine_pattern_binding_types(
             },
             Type::Nominal("Range".to_string()),
         ),
-        TypedExprKind::Binary { op, lhs, rhs } => {
+        TypedExprKind::Binary { op, lhs, rhs, .. } => {
             let lhs = refine_pattern_binding_types(*lhs, bindings, context);
             let rhs = refine_pattern_binding_types(*rhs, bindings, context);
-            let ty = binary_result_type(&lhs.ty, &rhs.ty);
+            let receiver_method = operator_method_target(
+                &lhs.ty,
+                binary_operator_protocol(op),
+                std::slice::from_ref(&rhs),
+                context,
+            );
+            let ty = receiver_method
+                .as_ref()
+                .map(|method| method.result_ty.clone())
+                .unwrap_or_else(|| binary_result_type(&lhs.ty, &rhs.ty));
             typed(
                 TypedExprKind::Binary {
                     op,
                     lhs: Box::new(lhs),
                     rhs: Box::new(rhs),
+                    receiver_method: receiver_method.map(|method| method.target),
                 },
                 ty,
             )
@@ -2287,11 +2370,13 @@ fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type
             receiver,
             index,
             access,
+            receiver_method,
         } => typed(
             TypedExprKind::Index {
                 receiver: Box::new(rewrite_continuation_callee_input(*receiver, binder, input)),
                 index: Box::new(rewrite_continuation_callee_input(*index, binder, input)),
                 access,
+                receiver_method,
             },
             expr.ty,
         ),
@@ -2302,11 +2387,17 @@ fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type
             },
             expr.ty,
         ),
-        TypedExprKind::Binary { op, lhs, rhs } => typed(
+        TypedExprKind::Binary {
+            op,
+            lhs,
+            rhs,
+            receiver_method,
+        } => typed(
             TypedExprKind::Binary {
                 op,
                 lhs: Box::new(rewrite_continuation_callee_input(*lhs, binder, input)),
                 rhs: Box::new(rewrite_continuation_callee_input(*rhs, binder, input)),
+                receiver_method,
             },
             expr.ty,
         ),
@@ -2689,6 +2780,59 @@ fn receiver_method_target(
         },
         result_ty: method.result_ty.clone(),
     })
+}
+
+fn operator_method_target(
+    receiver: &Type,
+    protocol: &str,
+    args: &[TypedExpr],
+    context: &TypeContext,
+) -> Option<ReceiverMethodTargetType> {
+    let Some(method) = context.operator_method(receiver, protocol) else {
+        return None;
+    };
+    receiver_method_target_from_summary(method, args)
+}
+
+fn receiver_method_target_from_summary(
+    method: &ReceiverMethodSummary,
+    args: &[TypedExpr],
+) -> Option<ReceiverMethodTargetType> {
+    if method.param_tys.len() != args.len() {
+        return None;
+    }
+    if method
+        .param_tys
+        .iter()
+        .zip(args)
+        .any(|(expected, actual)| expected != &Type::Unknown && expected != &actual.ty)
+    {
+        return None;
+    }
+    Some(ReceiverMethodTargetType {
+        target: TypedReceiverMethodTarget {
+            symbol: method.symbol.clone(),
+            runtime_target: method.runtime_target.clone(),
+        },
+        result_ty: method.result_ty.clone(),
+    })
+}
+
+fn binary_operator_protocol(op: BinaryOp) -> &'static str {
+    match op {
+        BinaryOp::Add => "op_add",
+        BinaryOp::Sub => "op_sub",
+        BinaryOp::Mul => "op_mul",
+        BinaryOp::Div => "op_div",
+    }
+}
+
+fn index_operator_protocol(index: &TypedExpr) -> &'static str {
+    if matches!(index.kind, TypedExprKind::Range { .. }) {
+        "op_index_slice"
+    } else {
+        "op_index"
+    }
 }
 
 fn field_callable_callee_type(
