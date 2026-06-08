@@ -8348,6 +8348,11 @@ fn project_surface_many_merges_namespaces_deterministically() {
     assert_eq!(forward, reverse);
     assert_eq!(forward.namespace, "<project>");
     assert_eq!(
+        forward.namespaces,
+        vec!["lexer".to_string(), "parser".to_string()]
+    );
+    assert_eq!(forward.duplicate_namespaces, Vec::<String>::new());
+    assert_eq!(
         forward.imports,
         vec!["lexer.*".to_string(), "std.text".to_string()]
     );
@@ -8373,6 +8378,44 @@ fn project_surface_many_merges_namespaces_deterministically() {
     assert_eq!(forward_summary.types[0].name, "TokenId");
     assert_eq!(forward_summary.data[0].symbol, "parser::Ast");
     assert_eq!(forward_summary.constructors[0].symbol, "parser::Ast.Node");
+}
+
+#[test]
+fn project_surface_many_reports_duplicate_namespace_headers_deterministically() {
+    let first = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![def("scan", vec![], Expr::i64(1))],
+    );
+    let second = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["parser".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![def("parse", vec![], Expr::i64(2))],
+    );
+
+    let forward = project_surface_many(&[first.clone(), second.clone()]);
+    let reverse = project_surface_many(&[second, first]);
+    let diagnostics = chiba_level1r::pipeline::program_surface_diagnostics(&forward);
+
+    assert_eq!(forward, reverse);
+    assert_eq!(forward.namespaces, vec!["parser".to_string()]);
+    assert_eq!(forward.duplicate_namespaces, vec!["parser".to_string()]);
+    assert!(
+        diagnostics.contains(&ProgramDiagnostic::DuplicateNamespace {
+            namespace: "parser".to_string(),
+        })
+    );
+
+    assert_eq!(
+        diagnostics,
+        vec![ProgramDiagnostic::DuplicateNamespace {
+            namespace: "parser".to_string(),
+        }]
+    );
 }
 
 #[test]

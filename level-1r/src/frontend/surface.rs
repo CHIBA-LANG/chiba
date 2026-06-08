@@ -8,6 +8,8 @@ use crate::ast::{
 pub struct ProjectSurface {
     pub namespace: String,
     pub namespace_path: Option<Vec<String>>,
+    pub namespaces: Vec<String>,
+    pub duplicate_namespaces: Vec<String>,
     pub imports: Vec<String>,
     pub defs: Vec<SurfaceDef>,
     pub statics: Vec<SurfaceStatic>,
@@ -244,6 +246,8 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .flat_map(|decl| surface_constructors(&namespace, decl))
         .collect();
     ProjectSurface {
+        namespaces: vec![namespace.clone()],
+        duplicate_namespaces: Vec::new(),
         namespace,
         namespace_path,
         imports,
@@ -256,6 +260,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
 }
 
 pub fn project_surface_many(programs: &[SourceProgram]) -> ProjectSurface {
+    let mut namespace_counts = BTreeMap::<String, usize>::new();
     let mut imports = BTreeSet::new();
     let mut defs = Vec::new();
     let mut statics = Vec::new();
@@ -264,6 +269,9 @@ pub fn project_surface_many(programs: &[SourceProgram]) -> ProjectSurface {
     let mut constructors = Vec::new();
 
     for surface in programs.iter().map(project_surface) {
+        for namespace in surface.namespaces {
+            *namespace_counts.entry(namespace).or_default() += 1;
+        }
         imports.extend(surface.imports);
         defs.extend(surface.defs);
         statics.extend(surface.statics);
@@ -277,10 +285,17 @@ pub fn project_surface_many(programs: &[SourceProgram]) -> ProjectSurface {
     sort_types(&mut types);
     sort_data(&mut data);
     sort_constructors(&mut constructors);
+    let namespaces = namespace_counts.keys().cloned().collect::<Vec<_>>();
+    let duplicate_namespaces = namespace_counts
+        .into_iter()
+        .filter_map(|(namespace, count)| (count > 1).then_some(namespace))
+        .collect::<Vec<_>>();
 
     ProjectSurface {
         namespace: "<project>".to_string(),
         namespace_path: None,
+        namespaces,
+        duplicate_namespaces,
         imports: imports.into_iter().collect(),
         defs,
         statics,
@@ -620,6 +635,10 @@ fn duplicate_owned_names<'a>(names: impl Iterator<Item = (&'a str, &'a str)>) ->
 fn stable_summary_hash(surface: &ProjectSurface) -> String {
     let mut text = String::new();
     text.push_str(&surface.namespace);
+    for namespace in &surface.namespaces {
+        text.push_str("|namespace:");
+        text.push_str(namespace);
+    }
     for import in &surface.imports {
         text.push_str("|use:");
         text.push_str(import);

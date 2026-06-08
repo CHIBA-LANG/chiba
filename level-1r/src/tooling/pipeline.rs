@@ -137,6 +137,9 @@ pub enum ProgramDiagnostic {
     InvalidSourceFileHeader {
         reason: String,
     },
+    DuplicateNamespace {
+        namespace: String,
+    },
     MultipleEntries {
         names: Vec<String>,
     },
@@ -2512,6 +2515,13 @@ pub fn program_surface_diagnostics(surface: &ProjectSurface) -> Vec<ProgramDiagn
             reason: "empty namespace path".to_string(),
         });
     }
+    diagnostics.extend(
+        surface
+            .duplicate_namespaces
+            .iter()
+            .cloned()
+            .map(|namespace| ProgramDiagnostic::DuplicateNamespace { namespace }),
+    );
     for def in &surface.defs {
         let key = (
             def.owner.clone(),
@@ -5070,6 +5080,14 @@ fn render_project_surface_summary(surface: &ProjectSurface) -> String {
     out.push_str("  surface:\n");
     out.push_str(&format!("    namespace={}\n", surface.namespace));
     out.push_str(&format!(
+        "    namespaces={}\n",
+        render_string_values(&surface.namespaces)
+    ));
+    out.push_str(&format!(
+        "    duplicate-namespaces={}\n",
+        render_string_values(&surface.duplicate_namespaces)
+    ));
+    out.push_str(&format!(
         "    imports={}\n",
         render_imports_summary(surface.imports.iter().cloned())
     ));
@@ -5320,6 +5338,9 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
     match diagnostic {
         ProgramDiagnostic::InvalidSourceFileHeader { reason } => {
             format!("invalid source file header: {reason}")
+        }
+        ProgramDiagnostic::DuplicateNamespace { namespace } => {
+            format!("duplicate namespace {namespace}")
         }
         ProgramDiagnostic::MultipleEntries { names } => {
             format!("multiple entries [{}]", names.join(", "))
