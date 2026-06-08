@@ -1178,6 +1178,40 @@ def main(): i64 = call_f(X({x: 10}))
 }
 
 #[test]
+fn source_generic_row_member_bound_accepts_receiver_method_with_tupled_args() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+type X = {x: i64}
+def X.f(self: Self, a: i64, b: i64): i64 = self.x + a + b
+def call_f[F, T: {r | f: F}](v: T): i64 = v.f(2, 3)
+def main(): i64 = call_f(X({x: 10}))
+"#,
+    )
+    .expect("compile generic row callable multi-arg nominal method");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(main
+        .output
+        .visual
+        .typed
+        .contains("method f receiver-method=root::X.f"));
+    assert!(!main
+        .output
+        .core
+        .ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::TailCall { func, .. } if func == "call_f")));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "15");
+}
+
+#[test]
 fn source_generic_row_member_bound_prefers_nominal_field_over_method() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"
