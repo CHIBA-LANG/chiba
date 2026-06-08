@@ -840,6 +840,22 @@ def main(): i64 = make_adder(7)(5)
 }
 
 #[test]
+fn program_callable_return_stored_in_record_field_keeps_capturing_closure_env() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def make_adder(base: i64): (i64) -> i64 = (n: i64): i64 => base + n
+def main(): i64 = {f: make_adder(7)}.f(5)
+"#,
+    )
+    .expect("compile callable return record field");
+    let bundle = output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "12");
+}
+
+#[test]
 fn program_dyn_row_param_builds_static_to_dyn_package_contract() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"

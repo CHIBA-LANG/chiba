@@ -3424,12 +3424,13 @@ fn effective_tailcall<'a>(
     args: &'a [CoreValue],
     env: &'a RenderEnv,
 ) -> (&'a str, Vec<CoreValue>) {
-    if let Some(callable) = env.returned_callable_local(func) {
+    let callable_local = tailcall_callable_alias_local(core, func).unwrap_or(func);
+    if let Some(callable) = env.returned_callable_local(callable_local) {
         let mut effective_args = callable
             .env
             .iter()
             .enumerate()
-            .map(|(index, _)| CoreValue::Var(returned_callable_env_lane(func, index)))
+            .map(|(index, _)| CoreValue::Var(returned_callable_env_lane(callable_local, index)))
             .collect::<Vec<_>>();
         effective_args.extend(args.iter().cloned());
         return (callable.target.as_str(), effective_args);
@@ -3453,6 +3454,21 @@ fn effective_tailcall<'a>(
         }
     }
     (tailcall_runtime_target(core, func), args.to_vec())
+}
+
+fn tailcall_callable_alias_local<'a>(core: &'a CoreProgram, func: &'a str) -> Option<&'a str> {
+    core.ops.iter().find_map(|op| {
+        let CoreOp::CallableAlias { target, value } = op else {
+            return None;
+        };
+        if target != func {
+            return None;
+        }
+        match value {
+            CoreValue::Var(name) => Some(name.as_str()),
+            _ => None,
+        }
+    })
 }
 
 fn render_tailcall_args(
