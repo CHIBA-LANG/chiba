@@ -54,6 +54,16 @@ fn backend_emits_lifted_symbol_manifest_for_lambda_surface() {
         .unwrap();
     assert_eq!(entry.final_symbol, "lift__0000__closure__x");
     assert_eq!(entry.pass_origin, "L15LambdaLift");
+    assert_eq!(entry.lowering_role, "lifted-function");
+    assert_eq!(entry.stable_id.len(), 16);
+    assert!(output.backend.wat.contains(&format!(
+        ";; symbol lift__0000__closure__x source=closure::x origin=L15LambdaLift role=lifted-function stable-id={}",
+        entry.stable_id
+    )));
+    assert!(output.render_visual().contains(&format!(
+        "symbol lift__0000__closure__x source=closure::x origin=L15LambdaLift role=lifted-function stable-id={}",
+        entry.stable_id
+    )));
 }
 
 #[test]
@@ -78,13 +88,18 @@ fn backend_records_tailcall_targets_in_serialized_output() {
     let artifact = emit_wasm_gc_with_params(&core, &validation, &["v".to_string()]);
 
     assert_eq!(artifact.diagnostics, vec![]);
-    assert!(artifact
-        .wat
-        .contains(";; symbol math_Vec2_norm source=norm origin=L16Core"));
+    assert!(artifact.wat.contains(
+        ";; symbol math_Vec2_norm source=norm origin=L16Core role=direct-method-target stable-id="
+    ));
     assert!(artifact.wat.contains(";; tailcall math_Vec2_norm args=[v]"));
     assert!(artifact.wat.contains("call $math_Vec2_norm"));
     assert!(!artifact.wat.contains("(func $math_Vec2_norm"));
     assert_eq!(artifact.manifest.entries[0].source_debug_name, "norm");
+    assert_eq!(
+        artifact.manifest.entries[0].lowering_role,
+        "direct-method-target"
+    );
+    assert_eq!(artifact.manifest.entries[0].stable_id.len(), 16);
 }
 
 #[test]

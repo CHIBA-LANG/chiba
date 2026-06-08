@@ -43,6 +43,8 @@ pub struct BackendManifestEntry {
     pub final_symbol: String,
     pub source_debug_name: String,
     pub pass_origin: String,
+    pub lowering_role: String,
+    pub stable_id: String,
     pub ownership: Option<OwnershipDecision>,
 }
 
@@ -670,12 +672,16 @@ fn collect_manifest_entries(
             final_symbol: final_symbol(symbol),
             source_debug_name: source.clone(),
             pass_origin: "L15LambdaLift".to_string(),
+            lowering_role: "lifted-function".to_string(),
+            stable_id: manifest_stable_id("L15LambdaLift", "lifted-function", source, symbol),
             ownership: ownership_for_subject(core, source),
         }),
         CoreOp::DirectMethodTarget { name, target } => entries.push(BackendManifestEntry {
             final_symbol: final_symbol(target),
             source_debug_name: name.clone(),
             pass_origin: "L16Core".to_string(),
+            lowering_role: "direct-method-target".to_string(),
+            stable_id: manifest_stable_id("L16Core", "direct-method-target", name, target),
             ownership: ownership_for_subject(core, target),
         }),
         CoreOp::OperatorTarget {
@@ -684,6 +690,8 @@ fn collect_manifest_entries(
             final_symbol: final_symbol(target),
             source_debug_name: protocol.clone(),
             pass_origin: "L16Core".to_string(),
+            lowering_role: "operator-target".to_string(),
+            stable_id: manifest_stable_id("L16Core", "operator-target", protocol, target),
             ownership: ownership_for_subject(core, target),
         }),
         CoreOp::CaptureContinuation { captured, .. } => {
@@ -718,6 +726,17 @@ fn collect_manifest_entries(
         | CoreOp::StaticRowAccess { .. }
         | CoreOp::DynRowAdapterAccess { .. } => {}
     }
+}
+
+fn manifest_stable_id(
+    pass_origin: &str,
+    lowering_role: &str,
+    source_debug_name: &str,
+    target_symbol: &str,
+) -> String {
+    stable_digest(&format!(
+        "{pass_origin}|{lowering_role}|{source_debug_name}|{target_symbol}"
+    ))
 }
 
 fn collect_manifest_imports(op: &CoreOp, env: &RenderEnv, imports: &mut Vec<BackendExternImport>) {
@@ -1434,8 +1453,12 @@ fn render_wat(
     let mut tailcall_index = 0usize;
     for entry in &manifest.entries {
         wat.push_str(&format!(
-            "  ;; symbol {} source={} origin={}\n",
-            entry.final_symbol, entry.source_debug_name, entry.pass_origin
+            "  ;; symbol {} source={} origin={} role={} stable-id={}\n",
+            entry.final_symbol,
+            entry.source_debug_name,
+            entry.pass_origin,
+            entry.lowering_role,
+            entry.stable_id
         ));
     }
     if render_tailcall_result_chain(&mut wat, core, &env)? {
@@ -1758,8 +1781,12 @@ fn render_continuation_wat(
     }
     for entry in &manifest.entries {
         wat.push_str(&format!(
-            "  ;; symbol {} source={} origin={}\n",
-            entry.final_symbol, entry.source_debug_name, entry.pass_origin
+            "  ;; symbol {} source={} origin={} role={} stable-id={}\n",
+            entry.final_symbol,
+            entry.source_debug_name,
+            entry.pass_origin,
+            entry.lowering_role,
+            entry.stable_id
         ));
     }
     for op in collect_operator_targets(&core.ops) {
@@ -5027,6 +5054,10 @@ pub fn backend_cache_key(
         encoded.push_str(&entry.source_debug_name);
         encoded.push('|');
         encoded.push_str(&entry.pass_origin);
+        encoded.push('|');
+        encoded.push_str(&entry.lowering_role);
+        encoded.push('|');
+        encoded.push_str(&entry.stable_id);
         encoded.push('|');
         encoded.push_str(
             entry

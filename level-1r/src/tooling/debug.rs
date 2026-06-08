@@ -1127,10 +1127,12 @@ fn render_backend_manifest(out: &mut String, manifest: &BackendManifest) {
     for entry in &manifest.entries {
         writeln!(
             out,
-            "symbol {} source={} origin={} ownership={}",
+            "symbol {} source={} origin={} role={} stable-id={} ownership={}",
             entry.final_symbol,
             entry.source_debug_name,
             entry.pass_origin,
+            entry.lowering_role,
+            entry.stable_id,
             entry
                 .ownership
                 .map(render_ownership_decision)
