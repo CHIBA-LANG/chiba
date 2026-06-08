@@ -86,6 +86,7 @@ fn collect(expr: &TypedExpr, scope: &mut BTreeSet<String>, facts: &mut ClosureFa
                 collect(arg, scope, facts);
             }
         }
+        TypedExprKind::AdtToTuple { value, .. } => collect(value, scope, facts),
         TypedExprKind::Field { receiver, .. } => collect(receiver, scope, facts),
         TypedExprKind::MethodCall { receiver, args, .. } => {
             collect(receiver, scope, facts);
@@ -435,6 +436,7 @@ fn collect_free_vars(expr: &TypedExpr, locals: &mut BTreeSet<String>, free: &mut
                 collect_free_vars(arg, locals, free);
             }
         }
+        TypedExprKind::AdtToTuple { value, .. } => collect_free_vars(value, locals, free),
         TypedExprKind::Field { receiver, .. } => collect_free_vars(receiver, locals, free),
         TypedExprKind::MethodCall { receiver, args, .. } => {
             collect_free_vars(receiver, locals, free);

@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use chiba_level1r::ast::Pattern;
 use chiba_level1r::core::{CompilerIntrinsic, CoreOp, LayoutKind};
 use chiba_level1r::pattern::PatternDiagnostic;
@@ -17,6 +19,7 @@ fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::DynRowPackage { .. } => "dyn-row-package",
         TypedExprKind::DynRowField { .. } => "dyn-row-field",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
+        TypedExprKind::AdtToTuple { .. } => "adt-to-tuple",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",
         TypedExprKind::Assign { .. } => "assign",
@@ -38,6 +41,37 @@ fn option_some(value: Expr) -> Expr {
 
 fn option_none() -> Expr {
     Expr::adt_ctor("Option", "None", vec!["Some", "None"], vec![])
+}
+
+fn run_wat_text(wat: &str) -> String {
+    let path = std::env::temp_dir().join(format!(
+        "level1r-adt-{}-{}.wat",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("test")
+    ));
+    std::fs::write(&path, wat).expect("write generated wat fixture");
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("level-1r parent repo root");
+    let output = Command::new("node")
+        .arg("tools/node/run-wat.mjs")
+        .arg(&path)
+        .arg("--invoke")
+        .arg("main")
+        .current_dir(repo_root)
+        .output()
+        .expect("run generated wat");
+    assert!(
+        output.status.success(),
+        "generated WAT failed\nstdout:\n{}\nstderr:\n{}\nwat:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+        wat
+    );
+    String::from_utf8(output.stdout)
+        .expect("wat stdout utf8")
+        .trim()
+        .to_string()
 }
 
 #[test]
@@ -122,6 +156,49 @@ fn adt_constructor_reaches_cps_core_and_target_neutral_layout() {
         .wat
         .contains("compiler.intrinsic.adt_to_tuple"));
     assert!(output.backend.wat.contains(";; compiler-intrinsic"));
+}
+
+#[test]
+fn adt_to_tuple_intrinsic_surface_extracts_payload_through_tuple_field() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+data Option[T] = { Some(T), None }
+def main(): i64 = adt_to_tuple(Option.Some(41))._2
+"#,
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(main.output.core_validation.diagnostics.is_empty());
+    assert!(
+        main.output.backend.diagnostics.is_empty(),
+        "{:?}",
+        main.output.backend.diagnostics
+    );
+    assert!(main
+        .output
+        .visual
+        .typed
+        .contains("node kind=adt-to-tuple type=Tuple[_, i64]"));
+    assert!(
+        main.output.core.ops.iter().any(|op| matches!(
+            op,
+            CoreOp::CompilerIntrinsicUse {
+                intrinsic: CompilerIntrinsic::AdtToTuple,
+                owner_namespace,
+                subject,
+            } if owner_namespace == "compiler.intrinsic" && subject.contains("Option.Some")
+        )),
+        "{:?}",
+        main.output.core.ops
+    );
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "41");
 }
 
 #[test]

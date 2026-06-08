@@ -861,6 +861,11 @@ fn collect_runtime_value_imports(
                 collect_runtime_value_imports(arg, env, imports);
             }
         }
+        CoreValue::AdtTuple { fields, .. } => {
+            for field in fields {
+                collect_runtime_value_imports(field, env, imports);
+            }
+        }
         CoreValue::Unit
         | CoreValue::I64(_)
         | CoreValue::Bool(_)
@@ -3312,6 +3317,11 @@ fn infer_param_kinds_from_value(
                 infer_param_kinds_from_value(arg, params, kinds);
             }
         }
+        CoreValue::AdtTuple { fields, .. } => {
+            for field in fields {
+                infer_param_kinds_from_value(field, params, kinds);
+            }
+        }
         CoreValue::Unit
         | CoreValue::I64(_)
         | CoreValue::Bool(_)
@@ -4032,6 +4042,7 @@ fn render_core_value_i32(
         CoreValue::Var(_)
         | CoreValue::TextLiteral { .. }
         | CoreValue::Tuple { .. }
+        | CoreValue::AdtTuple { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
         | CoreValue::BuiltinRuntimeCall { .. }
@@ -4414,6 +4425,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
                 .unwrap_or(false)
         }
         CoreValue::Tuple { .. }
+        | CoreValue::AdtTuple { .. }
         | CoreValue::TextLiteral { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
@@ -4481,10 +4493,10 @@ fn tuple_field_value<'a>(
     env: &'a RenderEnv,
 ) -> Option<&'a CoreValue> {
     let tuple = resolve_core_value_binding(tuple, env);
-    let CoreValue::Tuple { fields } = tuple else {
-        return None;
-    };
-    fields.get(field_index)
+    match tuple {
+        CoreValue::Tuple { fields } | CoreValue::AdtTuple { fields, .. } => fields.get(field_index),
+        _ => None,
+    }
 }
 
 fn record_field_value<'a>(

@@ -1170,6 +1170,9 @@ fn collect_dyn_row_contract_param_types(expr: &TypedExpr, contracts: &mut BTreeM
                 collect_dyn_row_contract_param_types(arg, contracts);
             }
         }
+        TypedExprKind::AdtToTuple { value, .. } => {
+            collect_dyn_row_contract_param_types(value, contracts);
+        }
         TypedExprKind::MethodCall { receiver, args, .. } => {
             collect_dyn_row_contract_param_types(receiver, contracts);
             for arg in args {
@@ -2639,6 +2642,9 @@ fn collect_send_callable_diagnostics(
                 collect_send_callable_diagnostics(def, arg, signatures, diagnostics);
             }
         }
+        crate::typed::TypedExprKind::AdtToTuple { value, .. } => {
+            collect_send_callable_diagnostics(def, value, signatures, diagnostics);
+        }
         crate::typed::TypedExprKind::Field { receiver, .. } => {
             collect_send_callable_diagnostics(def, receiver, signatures, diagnostics);
         }
@@ -2762,6 +2768,9 @@ fn collect_typed_free_vars(
             for arg in args {
                 collect_typed_free_vars(arg, locals, free);
             }
+        }
+        crate::typed::TypedExprKind::AdtToTuple { value, .. } => {
+            collect_typed_free_vars(value, locals, free);
         }
         crate::typed::TypedExprKind::Field { receiver, .. } => {
             collect_typed_free_vars(receiver, locals, free);
@@ -2908,6 +2917,9 @@ fn collect_assignment_diagnostics(
             for arg in args {
                 collect_assignment_diagnostics(def, arg, diagnostics);
             }
+        }
+        crate::typed::TypedExprKind::AdtToTuple { value, .. } => {
+            collect_assignment_diagnostics(def, value, diagnostics);
         }
         crate::typed::TypedExprKind::Field { receiver, .. } => {
             collect_assignment_diagnostics(def, receiver, diagnostics);

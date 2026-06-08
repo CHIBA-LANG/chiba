@@ -86,6 +86,7 @@ fn visit(expr: &TypedExpr, facts: &mut UsageFacts) {
                 visit(arg, facts);
             }
         }
+        TypedExprKind::AdtToTuple { value, .. } => visit(value, facts),
         TypedExprKind::Field { receiver, .. } => visit(receiver, facts),
         TypedExprKind::MethodCall { receiver, args, .. } => {
             visit(receiver, facts);

@@ -620,6 +620,23 @@ fn render_core_value(value: &CoreValue) -> String {
                 args
             )
         }
+        CoreValue::AdtTuple {
+            data,
+            ctor,
+            variants,
+            fields,
+        } => {
+            let fields = fields
+                .iter()
+                .map(render_core_value)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "adt-tuple {data}.{ctor} variants=[{}] fields=[{}]",
+                variants.join(", "),
+                fields
+            )
+        }
         CoreValue::LiftedFunction { source, symbol } => {
             format!("lifted-function {source} -> {symbol}")
         }
@@ -1080,6 +1097,11 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
         } => {
             format!("adt {data}.{ctor}/{}", args.len())
         }
+        crate::core::CoreValue::AdtTuple {
+            data, ctor, fields, ..
+        } => {
+            format!("adt-tuple {data}.{ctor}/{}", fields.len())
+        }
         crate::core::CoreValue::LiftedFunction { source, symbol } => {
             format!("lifted-function {source} -> {symbol}")
         }
@@ -1395,6 +1417,13 @@ fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
                 render_typed_child(&format!("arg {index}"), arg, depth, out);
             }
         }
+        TypedExprKind::AdtToTuple {
+            value,
+            tuple_nominal,
+        } => {
+            writeln!(out, "{indent}  adt-to-tuple tuple={tuple_nominal}").unwrap();
+            render_typed_child("value", value, depth, out);
+        }
         TypedExprKind::Field {
             receiver,
             name,
@@ -1536,6 +1565,7 @@ fn render_typed_expr_kind(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::DynRowPackage { .. } => "dyn-row-package",
         TypedExprKind::DynRowField { .. } => "dyn-row-field",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
+        TypedExprKind::AdtToTuple { .. } => "adt-to-tuple",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",
         TypedExprKind::Assign { .. } => "assign",

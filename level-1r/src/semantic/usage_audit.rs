@@ -302,6 +302,7 @@ fn type_for_var(expr: &TypedExpr, name: &str) -> Option<Type> {
         crate::typed::TypedExprKind::AdtCtor { args, .. } => {
             args.iter().find_map(|arg| type_for_var(arg, name))
         }
+        crate::typed::TypedExprKind::AdtToTuple { value, .. } => type_for_var(value, name),
         crate::typed::TypedExprKind::Field { receiver, .. } => type_for_var(receiver, name),
         crate::typed::TypedExprKind::MethodCall { receiver, args, .. } => {
             type_for_var(receiver, name)
