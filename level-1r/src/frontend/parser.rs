@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
     render_source_pattern, BinaryOp, DataDecl, DataVariant, Expr, ExternAbi, ExternDecl, ItemAttr,
@@ -395,9 +395,10 @@ impl FrontendParser {
             previous_top_level_end = self.previous_token_end();
         }
         let variants = data_variant_map(&data);
+        let nominal_row_types = nominal_row_type_set(&types);
         let items = items
             .into_iter()
-            .map(|item| enrich_item_with_data_variants(item, &variants))
+            .map(|item| enrich_item_with_surface_facts(item, &variants, &nominal_row_types))
             .collect();
         Ok(SourceProgram::with_surface(
             namespace, imports, types, data, items,
@@ -1999,9 +2000,18 @@ fn data_variant_map(data: &[DataDecl]) -> BTreeMap<String, Vec<String>> {
         .collect()
 }
 
-fn enrich_item_with_data_variants(
+fn nominal_row_type_set(types: &[TypeDecl]) -> BTreeSet<String> {
+    types
+        .iter()
+        .filter(|decl| decl.alias_target.is_none())
+        .map(|decl| decl.name.clone())
+        .collect()
+}
+
+fn enrich_item_with_surface_facts(
     item: SourceItem,
     variants: &BTreeMap<String, Vec<String>>,
+    nominal_row_types: &BTreeSet<String>,
 ) -> SourceItem {
     match item {
         SourceItem::Def {
@@ -2021,7 +2031,7 @@ fn enrich_item_with_data_variants(
             generics,
             params,
             return_type,
-            body: enrich_expr_with_data_variants(body, variants),
+            body: enrich_expr_with_surface_facts(body, variants, nominal_row_types),
         },
         SourceItem::ExternDef {
             name,
@@ -2053,7 +2063,7 @@ fn enrich_item_with_data_variants(
             attrs,
             visibility,
             ty,
-            body: enrich_expr_with_data_variants(body, variants),
+            body: enrich_expr_with_surface_facts(body, variants, nominal_row_types),
         },
     }
 }
@@ -2066,7 +2076,11 @@ fn source_item_kind_name(item: &SourceItem) -> (String, String) {
     }
 }
 
-fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<String>>) -> Expr {
+fn enrich_expr_with_surface_facts(
+    expr: Expr,
+    variants: &BTreeMap<String, Vec<String>>,
+    nominal_row_types: &BTreeSet<String>,
+) -> Expr {
     match expr {
         Expr::AdtCtor {
             data,
@@ -2076,33 +2090,42 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
         } => {
             let args = args
                 .into_iter()
-                .map(|arg| enrich_expr_with_data_variants(arg, variants))
+                .map(|arg| enrich_expr_with_surface_facts(arg, variants, nominal_row_types))
                 .collect();
             let variants = variants.get(&data).cloned().unwrap_or(old_variants);
             Expr::adt_ctor(data, ctor, variants, args)
         }
-        Expr::Lambda { param, body } => {
-            Expr::lambda(param, enrich_expr_with_data_variants(*body, variants))
-        }
-        Expr::Call { callee, args } => Expr::call_args(
-            enrich_expr_with_data_variants(*callee, variants),
-            args.into_iter()
-                .map(|arg| enrich_expr_with_data_variants(arg, variants))
-                .collect(),
+        Expr::Lambda { param, body } => Expr::lambda(
+            param,
+            enrich_expr_with_surface_facts(*body, variants, nominal_row_types),
         ),
-        Expr::Instantiate { callee, type_args } => {
-            Expr::instantiate(enrich_expr_with_data_variants(*callee, variants), type_args)
+        Expr::Call { callee, args } => {
+            let callee = enrich_expr_with_surface_facts(*callee, variants, nominal_row_types);
+            let args = args
+                .into_iter()
+                .map(|arg| enrich_expr_with_surface_facts(arg, variants, nominal_row_types))
+                .collect::<Vec<_>>();
+            match (callee, args.as_slice()) {
+                (Expr::Var(name), [arg]) if nominal_row_types.contains(&name) => {
+                    Expr::nominal(name, arg.clone())
+                }
+                (callee, args) => Expr::call_args(callee, args.to_vec()),
+            }
         }
+        Expr::Instantiate { callee, type_args } => Expr::instantiate(
+            enrich_expr_with_surface_facts(*callee, variants, nominal_row_types),
+            type_args,
+        ),
         Expr::Tuple(fields) => Expr::tuple(
             fields
                 .into_iter()
-                .map(|field| enrich_expr_with_data_variants(field, variants))
+                .map(|field| enrich_expr_with_surface_facts(field, variants, nominal_row_types))
                 .collect(),
         ),
         Expr::SliceLiteral(items) => Expr::slice_literal(
             items
                 .into_iter()
-                .map(|item| enrich_expr_with_data_variants(item, variants))
+                .map(|item| enrich_expr_with_surface_facts(item, variants, nominal_row_types))
                 .collect(),
         ),
         Expr::Record(fields) => Expr::Record(
@@ -2110,32 +2133,37 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
                 .into_iter()
                 .map(|field| crate::ast::RecordField {
                     name: field.name,
-                    value: enrich_expr_with_data_variants(field.value, variants),
+                    value: enrich_expr_with_surface_facts(field.value, variants, nominal_row_types),
                 })
                 .collect(),
         ),
         Expr::RecordUpdate { base, fields } => Expr::RecordUpdate {
-            base: Box::new(enrich_expr_with_data_variants(*base, variants)),
+            base: Box::new(enrich_expr_with_surface_facts(
+                *base,
+                variants,
+                nominal_row_types,
+            )),
             fields: fields
                 .into_iter()
                 .map(|field| crate::ast::RecordField {
                     name: field.name,
-                    value: enrich_expr_with_data_variants(field.value, variants),
+                    value: enrich_expr_with_surface_facts(field.value, variants, nominal_row_types),
                 })
                 .collect(),
         },
-        Expr::Field { receiver, name } => {
-            Expr::field(enrich_expr_with_data_variants(*receiver, variants), name)
-        }
+        Expr::Field { receiver, name } => Expr::field(
+            enrich_expr_with_surface_facts(*receiver, variants, nominal_row_types),
+            name,
+        ),
         Expr::MethodCall {
             receiver,
             name,
             args,
         } => {
-            let receiver = enrich_expr_with_data_variants(*receiver, variants);
+            let receiver = enrich_expr_with_surface_facts(*receiver, variants, nominal_row_types);
             let args = args
                 .into_iter()
-                .map(|arg| enrich_expr_with_data_variants(arg, variants))
+                .map(|arg| enrich_expr_with_surface_facts(arg, variants, nominal_row_types))
                 .collect::<Vec<_>>();
             match receiver {
                 Expr::Var(data) if data_ctor_known(variants, &data, &name) => {
@@ -2146,30 +2174,30 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
             }
         }
         Expr::Assign { target, value } => Expr::assign(
-            enrich_expr_with_data_variants(*target, variants),
-            enrich_expr_with_data_variants(*value, variants),
+            enrich_expr_with_surface_facts(*target, variants, nominal_row_types),
+            enrich_expr_with_surface_facts(*value, variants, nominal_row_types),
         ),
         Expr::Index { receiver, index } => Expr::index(
-            enrich_expr_with_data_variants(*receiver, variants),
-            enrich_expr_with_data_variants(*index, variants),
+            enrich_expr_with_surface_facts(*receiver, variants, nominal_row_types),
+            enrich_expr_with_surface_facts(*index, variants, nominal_row_types),
         ),
         Expr::Range { start, end } => Expr::range(
-            enrich_expr_with_data_variants(*start, variants),
-            enrich_expr_with_data_variants(*end, variants),
+            enrich_expr_with_surface_facts(*start, variants, nominal_row_types),
+            enrich_expr_with_surface_facts(*end, variants, nominal_row_types),
         ),
         Expr::Binary { op, lhs, rhs } => Expr::binary(
             op,
-            enrich_expr_with_data_variants(*lhs, variants),
-            enrich_expr_with_data_variants(*rhs, variants),
+            enrich_expr_with_surface_facts(*lhs, variants, nominal_row_types),
+            enrich_expr_with_surface_facts(*rhs, variants, nominal_row_types),
         ),
         Expr::If {
             cond,
             then_branch,
             else_branch,
         } => Expr::if_else(
-            enrich_expr_with_data_variants(*cond, variants),
-            enrich_expr_with_data_variants(*then_branch, variants),
-            enrich_expr_with_data_variants(*else_branch, variants),
+            enrich_expr_with_surface_facts(*cond, variants, nominal_row_types),
+            enrich_expr_with_surface_facts(*then_branch, variants, nominal_row_types),
+            enrich_expr_with_surface_facts(*else_branch, variants, nominal_row_types),
         ),
         Expr::IfLet {
             pattern,
@@ -2178,35 +2206,37 @@ fn enrich_expr_with_data_variants(expr: Expr, variants: &BTreeMap<String, Vec<St
             else_branch,
         } => Expr::if_let(
             pattern,
-            enrich_expr_with_data_variants(*scrutinee, variants),
-            enrich_expr_with_data_variants(*then_branch, variants),
-            enrich_expr_with_data_variants(*else_branch, variants),
+            enrich_expr_with_surface_facts(*scrutinee, variants, nominal_row_types),
+            enrich_expr_with_surface_facts(*then_branch, variants, nominal_row_types),
+            enrich_expr_with_surface_facts(*else_branch, variants, nominal_row_types),
         ),
         Expr::Match { scrutinee, arms } => Expr::match_expr(
-            enrich_expr_with_data_variants(*scrutinee, variants),
+            enrich_expr_with_surface_facts(*scrutinee, variants, nominal_row_types),
             arms.into_iter()
                 .map(|arm| {
                     (
                         arm.pattern,
-                        enrich_expr_with_data_variants(arm.body, variants),
+                        enrich_expr_with_surface_facts(arm.body, variants, nominal_row_types),
                     )
                 })
                 .collect(),
         ),
-        Expr::Nominal { name, expr } => {
-            Expr::nominal(name, enrich_expr_with_data_variants(*expr, variants))
-        }
+        Expr::Nominal { name, expr } => Expr::nominal(
+            name,
+            enrich_expr_with_surface_facts(*expr, variants, nominal_row_types),
+        ),
         Expr::Reset { multi, body } => {
-            let body = enrich_expr_with_data_variants(*body, variants);
+            let body = enrich_expr_with_surface_facts(*body, variants, nominal_row_types);
             if multi {
                 Expr::resetn(body)
             } else {
                 Expr::reset(body)
             }
         }
-        Expr::Shift { binder, body } => {
-            Expr::shift(binder, enrich_expr_with_data_variants(*body, variants))
-        }
+        Expr::Shift { binder, body } => Expr::shift(
+            binder,
+            enrich_expr_with_surface_facts(*body, variants, nominal_row_types),
+        ),
         Expr::Var(_) | Expr::Lit(_) => expr,
     }
 }

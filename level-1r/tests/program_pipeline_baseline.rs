@@ -1078,6 +1078,35 @@ fn program_auto_generic_row_callable_field_accepts_nominal_receiver_method() {
 }
 
 #[test]
+fn source_row_callable_field_accepts_nominal_receiver_method() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+type X = {x: i64}
+def X.f(self: Self, n: i64): i64 = self.x + n
+def call_f(v) = v.f(1)
+def main(): i64 = call_f(X({x: 10}))
+"#,
+    )
+    .expect("compile source row callable nominal method");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(!main
+        .output
+        .core
+        .ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::TailCall { func, .. } if func == "call_f")));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "11");
+}
+
+#[test]
 fn program_dyn_row_callable_field_accepts_field_and_method_adapters() {
     let program = SourceProgram::with_surface(
         None,

@@ -301,6 +301,42 @@ def main(id: UserId) = id",
 }
 
 #[test]
+fn frontend_enriches_known_row_type_call_as_nominal_construction() {
+    let output = parse_source_program(
+        "type X = { x: i64 }
+def main(): i64 = X({x: 10}).x",
+    )
+    .expect("frontend parse");
+
+    let SourceItem::Def { body, .. } = &output.program.items[0] else {
+        panic!("expected def item");
+    };
+    let Expr::Field { receiver, name } = body else {
+        panic!("expected field access, got {body:?}");
+    };
+    assert_eq!(name, "x");
+    let Expr::Nominal { name, expr } = receiver.as_ref() else {
+        panic!("expected nominal receiver, got {receiver:?}");
+    };
+    assert_eq!(name, "X");
+    assert!(matches!(expr.as_ref(), Expr::Record(_)));
+}
+
+#[test]
+fn frontend_keeps_type_alias_call_as_value_call() {
+    let output = parse_source_program(
+        "type UserId = i64
+def main(): i64 = UserId(10)",
+    )
+    .expect("frontend parse");
+
+    let SourceItem::Def { body, .. } = &output.program.items[0] else {
+        panic!("expected def item");
+    };
+    assert!(matches!(body, Expr::Call { .. }));
+}
+
+#[test]
 fn frontend_parses_utf8_row_style_type_decl_names() {
     let output = parse_source_program(
         "type 向量🚀[Τ] = { 值中文: Τ, emoji字段🚀: i64 }
