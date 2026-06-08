@@ -924,6 +924,10 @@ fn lower_term(
             scrutinee, arms, ..
         } => {
             if let Some(arms) = direct_match_arms(arms) {
+                let mut scrutinee_ops = Vec::new();
+                lower_atom_value(scrutinee, lambda_lift, &mut scrutinee_ops);
+                scrutinee_ops.retain(|op| !matches!(op, CoreOp::ReturnValue(_)));
+                ops.extend(scrutinee_ops);
                 ops.push(CoreOp::ReturnMatch {
                     scrutinee: core_value(scrutinee),
                     arms,
@@ -1192,6 +1196,17 @@ fn substitute_cps_atom(atom: &CpsAtom, bindings: &[(&str, &CpsAtom)]) -> CpsAtom
         } => CpsAtom::AdtToTuple {
             value: Box::new(substitute_cps_atom(value, bindings)),
             tuple_nominal: tuple_nominal.clone(),
+        },
+        CpsAtom::TupleToAdt {
+            data,
+            ctor,
+            variants,
+            value,
+        } => CpsAtom::TupleToAdt {
+            data: data.clone(),
+            ctor: ctor.clone(),
+            variants: variants.clone(),
+            value: Box::new(substitute_cps_atom(value, bindings)),
         },
     }
 }
@@ -1682,7 +1697,9 @@ fn find_cps_fun_lambda_atom<'a>(
         CpsAtom::BuiltinRuntimeCall { args, .. } | CpsAtom::AdtCtor { args, .. } => args
             .iter()
             .find_map(|arg| find_cps_fun_lambda_atom(arg, function)),
-        CpsAtom::AdtToTuple { value, .. } => find_cps_fun_lambda_atom(value, function),
+        CpsAtom::AdtToTuple { value, .. } | CpsAtom::TupleToAdt { value, .. } => {
+            find_cps_fun_lambda_atom(value, function)
+        }
         CpsAtom::RecordUpdate { base, fields, .. } => find_cps_fun_lambda_atom(base, function)
             .or_else(|| {
                 fields
@@ -2231,6 +2248,9 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::AdtToTuple { value, .. } => {
             format!("adt_to_tuple({})", render_atom(value))
         }
+        CpsAtom::TupleToAdt { value, .. } => {
+            format!("tuple_to_adt({})", render_atom(value))
+        }
     }
 }
 
@@ -2401,6 +2421,27 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
                 debug: render_atom(atom),
             },
         },
+        CpsAtom::TupleToAdt {
+            data,
+            ctor,
+            variants,
+            value,
+        } => match value.as_ref() {
+            CpsAtom::AdtToTuple { value, .. } => match value.as_ref() {
+                CpsAtom::AdtCtor { args, .. } => CoreValue::Adt {
+                    data: data.clone(),
+                    ctor: ctor.clone(),
+                    variants: variants.clone(),
+                    args: args.iter().map(core_value).collect(),
+                },
+                _ => CoreValue::Rendered {
+                    debug: render_atom(atom),
+                },
+            },
+            _ => CoreValue::Rendered {
+                debug: render_atom(atom),
+            },
+        },
         _ => CoreValue::Rendered {
             debug: render_atom(atom),
         },
@@ -2558,6 +2599,18 @@ fn lower_atom_value(atom: &CpsAtom, lambda_lift: &LambdaLiftFacts, ops: &mut Vec
             ops.push(CoreOp::CompilerIntrinsicUse {
                 intrinsic: CompilerIntrinsic::AdtToTuple,
                 owner_namespace: CompilerIntrinsic::AdtToTuple.owner_namespace().to_string(),
+                subject: render_atom(value),
+            });
+            ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
+        }
+        CpsAtom::TupleToAdt { value, .. } => {
+            let mut child_ops = Vec::new();
+            lower_atom_value(value, lambda_lift, &mut child_ops);
+            child_ops.retain(|op| !matches!(op, CoreOp::ReturnValue(_)));
+            ops.extend(child_ops);
+            ops.push(CoreOp::CompilerIntrinsicUse {
+                intrinsic: CompilerIntrinsic::TupleToAdt,
+                owner_namespace: CompilerIntrinsic::TupleToAdt.owner_namespace().to_string(),
                 subject: render_atom(value),
             });
             ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));

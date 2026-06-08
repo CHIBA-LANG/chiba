@@ -98,6 +98,9 @@ fn visit(
         TypedExprKind::AdtToTuple { value, .. } => {
             visit(value, stack, facts, replay_context);
         }
+        TypedExprKind::TupleToAdt { value, .. } => {
+            visit(value, stack, facts, replay_context);
+        }
         TypedExprKind::Field { receiver, .. } => visit(receiver, stack, facts, replay_context),
         TypedExprKind::MethodCall {
             receiver,
@@ -305,6 +308,9 @@ fn collect_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<Type>)
             }
         }
         TypedExprKind::AdtToTuple { value, .. } => {
+            collect_resume_inputs(binder, value, inputs);
+        }
+        TypedExprKind::TupleToAdt { value, .. } => {
             collect_resume_inputs(binder, value, inputs);
         }
         TypedExprKind::Field { receiver, .. } => collect_resume_inputs(binder, receiver, inputs),

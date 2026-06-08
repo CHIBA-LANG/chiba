@@ -23,6 +23,7 @@ fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::DynRowField { .. } => "dyn-row-field",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
         TypedExprKind::AdtToTuple { .. } => "adt-to-tuple",
+        TypedExprKind::TupleToAdt { .. } => "tuple-to-adt",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",
         TypedExprKind::Assign { .. } => "assign",

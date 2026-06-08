@@ -1424,6 +1424,20 @@ fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
             writeln!(out, "{indent}  adt-to-tuple tuple={tuple_nominal}").unwrap();
             render_typed_child("value", value, depth, out);
         }
+        TypedExprKind::TupleToAdt {
+            data,
+            ctor,
+            variants,
+            value,
+        } => {
+            writeln!(
+                out,
+                "{indent}  tuple-to-adt {data}.{ctor} variants=[{}]",
+                variants.join(", ")
+            )
+            .unwrap();
+            render_typed_child("value", value, depth, out);
+        }
         TypedExprKind::Field {
             receiver,
             name,
@@ -1566,6 +1580,7 @@ fn render_typed_expr_kind(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::DynRowField { .. } => "dyn-row-field",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
         TypedExprKind::AdtToTuple { .. } => "adt-to-tuple",
+        TypedExprKind::TupleToAdt { .. } => "tuple-to-adt",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",
         TypedExprKind::Assign { .. } => "assign",

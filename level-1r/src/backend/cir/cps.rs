@@ -115,6 +115,12 @@ pub enum CpsAtom {
         value: Box<CpsAtom>,
         tuple_nominal: String,
     },
+    TupleToAdt {
+        data: String,
+        ctor: String,
+        variants: Vec<String>,
+        value: Box<CpsAtom>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -318,6 +324,27 @@ fn transform(
                     CpsAtom::AdtToTuple {
                         value: Box::new(value),
                         tuple_nominal: tuple_nominal.clone(),
+                    },
+                    ctx,
+                )
+            }),
+            controls,
+            ctx,
+        ),
+        TypedExprKind::TupleToAdt {
+            data,
+            ctor,
+            variants,
+            value,
+        } => transform(
+            value,
+            Box::new(|value, ctx| {
+                k(
+                    CpsAtom::TupleToAdt {
+                        data: data.clone(),
+                        ctor: ctor.clone(),
+                        variants: variants.clone(),
+                        value: Box::new(value),
                     },
                     ctx,
                 )
@@ -1346,6 +1373,9 @@ impl fmt::Display for CpsAtom {
             }
             CpsAtom::AdtToTuple { value, .. } => {
                 write!(f, "adt_to_tuple({value})")
+            }
+            CpsAtom::TupleToAdt { value, .. } => {
+                write!(f, "tuple_to_adt({value})")
             }
         }
     }

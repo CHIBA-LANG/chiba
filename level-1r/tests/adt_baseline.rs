@@ -20,6 +20,7 @@ fn typed_expr_kind_name(kind: &TypedExprKind) -> &'static str {
         TypedExprKind::DynRowField { .. } => "dyn-row-field",
         TypedExprKind::AdtCtor { .. } => "adt-ctor",
         TypedExprKind::AdtToTuple { .. } => "adt-to-tuple",
+        TypedExprKind::TupleToAdt { .. } => "tuple-to-adt",
         TypedExprKind::Field { .. } => "field",
         TypedExprKind::MethodCall { .. } => "method-call",
         TypedExprKind::Assign { .. } => "assign",
@@ -194,6 +195,52 @@ def main(): i64 = adt_to_tuple(Option.Some(41))._2
                 owner_namespace,
                 subject,
             } if owner_namespace == "compiler.intrinsic" && subject.contains("Option.Some")
+        )),
+        "{:?}",
+        main.output.core.ops
+    );
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "41");
+}
+
+#[test]
+fn adt_tuple_bridge_roundtrips_back_to_adt_and_executes_match() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+data Option[T] = { Some(T), None }
+def main(): i64 = match tuple_to_adt(adt_to_tuple(Option.Some(41))) { Some(value) => value, None => 0 }
+"#,
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(main.output.core_validation.diagnostics.is_empty());
+    assert!(
+        main.output.backend.diagnostics.is_empty(),
+        "{:?}",
+        main.output.backend.diagnostics
+    );
+    assert!(
+        main.output
+            .visual
+            .typed
+            .contains("node kind=tuple-to-adt type=Option[i64]"),
+        "{}",
+        main.output.visual.typed
+    );
+    assert!(
+        main.output.core.ops.iter().any(|op| matches!(
+            op,
+            CoreOp::CompilerIntrinsicUse {
+                intrinsic: CompilerIntrinsic::TupleToAdt,
+                owner_namespace,
+                subject,
+            } if owner_namespace == "compiler.intrinsic" && subject.contains("adt_to_tuple")
         )),
         "{:?}",
         main.output.core.ops

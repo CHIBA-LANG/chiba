@@ -125,6 +125,7 @@ fn visit(expr: &TypedExpr, facts: &mut PatternFacts, context: &TypeContext) {
             }
         }
         TypedExprKind::AdtToTuple { value, .. } => visit(value, facts, context),
+        TypedExprKind::TupleToAdt { value, .. } => visit(value, facts, context),
         TypedExprKind::Field { receiver, .. } => visit(receiver, facts, context),
         TypedExprKind::MethodCall { receiver, args, .. } => {
             visit(receiver, facts, context);

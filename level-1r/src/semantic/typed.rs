@@ -57,6 +57,12 @@ pub enum TypedExprKind {
         value: Box<TypedExpr>,
         tuple_nominal: String,
     },
+    TupleToAdt {
+        data: String,
+        ctor: String,
+        variants: Vec<String>,
+        value: Box<TypedExpr>,
+    },
     Field {
         receiver: Box<TypedExpr>,
         name: String,
@@ -1071,19 +1077,37 @@ fn type_compiler_intrinsic_call(
     context: &TypeContext,
     controls: &mut Vec<ContinuationTypeBoundary>,
 ) -> Option<TypedExpr> {
-    if compiler_intrinsic_callee_name(callee)? != "adt_to_tuple" || args.len() != 1 {
+    let intrinsic = compiler_intrinsic_callee_name(callee)?;
+    if args.len() != 1 {
         return None;
     }
     let value = type_expr_with_context_and_controls(&args[0], env, context, controls);
-    let field_types = adt_tuple_field_types(&value);
-    let tuple_nominal = tuple_nominal_name(&field_types);
-    Some(typed(
-        TypedExprKind::AdtToTuple {
-            value: Box::new(value),
-            tuple_nominal,
-        },
-        Type::Tuple(field_types),
-    ))
+    match intrinsic {
+        "adt_to_tuple" => {
+            let field_types = adt_tuple_field_types(&value);
+            let tuple_nominal = tuple_nominal_name(&field_types);
+            Some(typed(
+                TypedExprKind::AdtToTuple {
+                    value: Box::new(value),
+                    tuple_nominal,
+                },
+                Type::Tuple(field_types),
+            ))
+        }
+        "tuple_to_adt" => {
+            let (data, ctor, variants, ty) = tuple_to_adt_target(&value)?;
+            Some(typed(
+                TypedExprKind::TupleToAdt {
+                    data: data.clone(),
+                    ctor,
+                    variants: variants.clone(),
+                    value: Box::new(value),
+                },
+                ty,
+            ))
+        }
+        _ => None,
+    }
 }
 
 fn compiler_intrinsic_callee_name(callee: &Expr) -> Option<&str> {
@@ -1103,6 +1127,27 @@ fn adt_tuple_field_types(value: &TypedExpr) -> Vec<Type> {
         _ => fields.push(Type::Unknown),
     }
     fields
+}
+
+fn tuple_to_adt_target(value: &TypedExpr) -> Option<(String, String, Vec<String>, Type)> {
+    let TypedExprKind::AdtToTuple { value, .. } = &value.kind else {
+        return None;
+    };
+    let TypedExprKind::AdtCtor {
+        data,
+        ctor,
+        variants,
+        ..
+    } = &value.kind
+    else {
+        return None;
+    };
+    Some((
+        data.clone(),
+        ctor.clone(),
+        variants.clone(),
+        value.ty.clone(),
+    ))
 }
 
 fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExpr {
@@ -1265,6 +1310,20 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 Type::Tuple(field_types),
             )
         }
+        TypedExprKind::TupleToAdt {
+            data,
+            ctor,
+            variants,
+            value,
+        } => typed(
+            TypedExprKind::TupleToAdt {
+                data: data.clone(),
+                ctor,
+                variants: variants.clone(),
+                value: Box::new(refine_continuation_types(*value, context)),
+            },
+            expr.ty,
+        ),
         TypedExprKind::Field {
             receiver,
             name,
@@ -1667,6 +1726,20 @@ fn refine_pattern_binding_types(
                 Type::Tuple(field_types),
             )
         }
+        TypedExprKind::TupleToAdt {
+            data,
+            ctor,
+            variants,
+            value,
+        } => typed(
+            TypedExprKind::TupleToAdt {
+                data: data.clone(),
+                ctor,
+                variants: variants.clone(),
+                value: Box::new(refine_pattern_binding_types(*value, bindings, context)),
+            },
+            expr.ty,
+        ),
         TypedExprKind::Field {
             receiver,
             name,
@@ -1936,6 +2009,9 @@ fn collect_typed_resume_inputs(binder: &str, expr: &TypedExpr, inputs: &mut Vec<
         TypedExprKind::AdtToTuple { value, .. } => {
             collect_typed_resume_inputs(binder, value, inputs);
         }
+        TypedExprKind::TupleToAdt { value, .. } => {
+            collect_typed_resume_inputs(binder, value, inputs);
+        }
         TypedExprKind::Field { receiver, .. } => {
             collect_typed_resume_inputs(binder, receiver, inputs);
         }
@@ -2120,6 +2196,20 @@ fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type
             TypedExprKind::AdtToTuple {
                 value: Box::new(rewrite_continuation_callee_input(*value, binder, input)),
                 tuple_nominal,
+            },
+            expr.ty,
+        ),
+        TypedExprKind::TupleToAdt {
+            data,
+            ctor,
+            variants,
+            value,
+        } => typed(
+            TypedExprKind::TupleToAdt {
+                data,
+                ctor,
+                variants,
+                value: Box::new(rewrite_continuation_callee_input(*value, binder, input)),
             },
             expr.ty,
         ),
