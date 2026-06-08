@@ -578,8 +578,8 @@ fn unsupported_expanded_tailcall_arg(
                 });
             };
             let renderable = match WasmValueKind::from(field.kind) {
-                WasmValueKind::I32 => core_value_is_renderable_i32(value, env),
-                WasmValueKind::ExternRef => core_value_is_renderable_externref(value, env),
+                WasmValueKind::I32 => core_value_is_renderable_i32(&value, env),
+                WasmValueKind::ExternRef => core_value_is_renderable_externref(&value, env),
             };
             (!renderable).then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
                 value: value.debug_name(),
@@ -2915,6 +2915,14 @@ impl RenderEnv {
         dyn_row_param_fields: BTreeMap<String, Vec<BackendDynRowParamFieldAbi>>,
     ) -> Self {
         let mut next = self.clone();
+        for (param, fields) in &dyn_row_param_fields {
+            for field in fields {
+                next.locals.insert(
+                    dyn_row_param_field_lane(param, &field.field),
+                    WasmValueKind::from(field.kind),
+                );
+            }
+        }
         next.dyn_row_param_fields = dyn_row_param_fields;
         next
     }
@@ -3340,9 +3348,9 @@ fn tailcall_args_are_renderable(
                 BackendCallableArgExpansion::DynRowFields(fields) => fields.iter().all(|field| {
                     dyn_row_data_field_value(arg, &field.field, env)
                         .map(|value| match WasmValueKind::from(field.kind) {
-                            WasmValueKind::I32 => core_value_is_renderable_i32(value, env),
+                            WasmValueKind::I32 => core_value_is_renderable_i32(&value, env),
                             WasmValueKind::ExternRef => {
-                                core_value_is_renderable_externref(value, env)
+                                core_value_is_renderable_externref(&value, env)
                             }
                         })
                         .unwrap_or(false)
@@ -3472,9 +3480,9 @@ fn render_tailcall_args(
                                 }
                             })?;
                         match WasmValueKind::from(field.kind) {
-                            WasmValueKind::I32 => render_core_value_i32(wat, value, env)?,
+                            WasmValueKind::I32 => render_core_value_i32(wat, &value, env)?,
                             WasmValueKind::ExternRef => {
-                                render_core_value_externref(wat, value, env)?
+                                render_core_value_externref(wat, &value, env)?
                             }
                         }
                     }
@@ -4443,21 +4451,30 @@ fn dyn_row_field_value<'a>(
     }
 }
 
-fn dyn_row_data_field_value<'a>(
-    package: &'a CoreValue,
+fn dyn_row_data_field_value(
+    package: &CoreValue,
     field: &str,
-    env: &'a RenderEnv,
-) -> Option<&'a CoreValue> {
+    env: &RenderEnv,
+) -> Option<CoreValue> {
     let package = resolve_core_value_binding(package, env);
     match package {
+        CoreValue::Record { .. } | CoreValue::RecordUpdate { .. } => {
+            record_field_value(package, field, env).cloned()
+        }
         CoreValue::DynRowPackage { payload, fields } => {
             let adapter = fields.iter().find(|candidate| candidate.name == field)?;
             match adapter.source {
                 crate::core::CoreDynRowFieldSource::Field => {
-                    record_field_value(payload, field, env)
+                    record_field_value(payload, field, env).cloned()
                 }
-                crate::core::CoreDynRowFieldSource::ContractObligation { .. }
-                | crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
+                crate::core::CoreDynRowFieldSource::ContractObligation { .. } => {
+                    let CoreValue::Var(param) = resolve_core_value_binding(payload, env) else {
+                        return None;
+                    };
+                    env.dyn_row_param_field_lane(param, field)
+                        .map(CoreValue::Var)
+                }
+                crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
             }
         }
         _ => None,

@@ -52,7 +52,7 @@ use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
     nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_to_type,
     type_expr_with_context, type_expr_with_expected, ReceiverMethodSummary, RecordTypeField, Type,
-    TypeContext, TypeEnv, TypedExpr,
+    TypeContext, TypeEnv, TypedExpr, TypedExprKind,
 };
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -1065,16 +1065,22 @@ fn refresh_program_backends_with_lifted_callables(
 ) {
     let lifted = program_lifted_callable_abis(defs);
     let returned = program_returned_callable_abis(defs);
-    if lifted.is_empty() && returned.is_empty() {
+    let dyn_contracts = program_dyn_row_contract_param_types(defs);
+    if lifted.is_empty() && returned.is_empty() && dyn_contracts.is_empty() {
         return;
     }
+    let dyn_function_abis =
+        program_dyn_row_contract_function_abis(defs, interface, &dyn_contracts, &returned);
     for def in defs {
+        let mut extra_functions = lifted.clone();
+        extra_functions.extend(dyn_function_abis.clone());
         let param_abi = backend_param_abi_with_extra_functions(
             &def.output.typed_signature,
             &interface.functions,
             &interface.statics,
-            lifted.clone(),
+            extra_functions,
             &returned,
+            dyn_contracts.get(&def.name),
         );
         let backend = emit_wasm_gc_with_param_abi(
             &def.output.core,
@@ -1092,6 +1098,197 @@ fn refresh_program_backends_with_lifted_callables(
             crate::debug::render_backend_link(&def.output.backend_link);
         def.output.visual.backend_cache_key =
             crate::debug::render_backend_cache_key(&def.output.backend_cache_key);
+    }
+}
+
+fn program_dyn_row_contract_param_types(
+    defs: &[ProgramDefOutput],
+) -> BTreeMap<String, BTreeMap<String, Type>> {
+    defs.iter()
+        .filter_map(|def| {
+            let contracts = dyn_row_contract_param_types_for_expr(&def.output.typed);
+            (!contracts.is_empty()).then_some((def.name.clone(), contracts))
+        })
+        .collect()
+}
+
+fn dyn_row_contract_param_types_for_expr(expr: &TypedExpr) -> BTreeMap<String, Type> {
+    let mut contracts = BTreeMap::new();
+    collect_dyn_row_contract_param_types(expr, &mut contracts);
+    contracts
+}
+
+fn collect_dyn_row_contract_param_types(expr: &TypedExpr, contracts: &mut BTreeMap<String, Type>) {
+    match &expr.kind {
+        TypedExprKind::DynRowPackage { payload, fields } => {
+            if let TypedExprKind::Var(param) = &payload.kind {
+                if fields.iter().any(|field| {
+                    matches!(
+                        field.source,
+                        crate::typed::DynRowFieldSource::ContractObligation { .. }
+                    )
+                }) {
+                    contracts.insert(param.clone(), expr.ty.clone());
+                }
+            }
+            collect_dyn_row_contract_param_types(payload, contracts);
+        }
+        TypedExprKind::Lambda { body, .. } => collect_dyn_row_contract_param_types(body, contracts),
+        TypedExprKind::Call { callee, args } => {
+            collect_dyn_row_contract_param_types(callee, contracts);
+            for arg in args {
+                collect_dyn_row_contract_param_types(arg, contracts);
+            }
+        }
+        TypedExprKind::Tuple { fields, .. } | TypedExprKind::SliceLiteral { items: fields, .. } => {
+            for field in fields {
+                collect_dyn_row_contract_param_types(field, contracts);
+            }
+        }
+        TypedExprKind::Record { fields } => {
+            for field in fields {
+                collect_dyn_row_contract_param_types(&field.value, contracts);
+            }
+        }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            collect_dyn_row_contract_param_types(base, contracts);
+            for field in fields {
+                collect_dyn_row_contract_param_types(&field.value, contracts);
+            }
+        }
+        TypedExprKind::DynRowField { package, .. }
+        | TypedExprKind::Field {
+            receiver: package, ..
+        }
+        | TypedExprKind::Nominal { expr: package, .. }
+        | TypedExprKind::Reset { body: package, .. }
+        | TypedExprKind::Shift { body: package, .. } => {
+            collect_dyn_row_contract_param_types(package, contracts);
+        }
+        TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_dyn_row_contract_param_types(arg, contracts);
+            }
+        }
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            collect_dyn_row_contract_param_types(receiver, contracts);
+            for arg in args {
+                collect_dyn_row_contract_param_types(arg, contracts);
+            }
+        }
+        TypedExprKind::Assign { target, value, .. } => {
+            collect_dyn_row_contract_param_types(target, contracts);
+            collect_dyn_row_contract_param_types(value, contracts);
+        }
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
+            collect_dyn_row_contract_param_types(receiver, contracts);
+            collect_dyn_row_contract_param_types(index, contracts);
+        }
+        TypedExprKind::Range { start, end }
+        | TypedExprKind::Binary {
+            lhs: start,
+            rhs: end,
+            ..
+        } => {
+            collect_dyn_row_contract_param_types(start, contracts);
+            collect_dyn_row_contract_param_types(end, contracts);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_dyn_row_contract_param_types(cond, contracts);
+            collect_dyn_row_contract_param_types(then_branch, contracts);
+            collect_dyn_row_contract_param_types(else_branch, contracts);
+        }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_dyn_row_contract_param_types(scrutinee, contracts);
+            collect_dyn_row_contract_param_types(then_branch, contracts);
+            collect_dyn_row_contract_param_types(else_branch, contracts);
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            collect_dyn_row_contract_param_types(scrutinee, contracts);
+            for arm in arms {
+                collect_dyn_row_contract_param_types(&arm.body, contracts);
+            }
+        }
+        TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
+    }
+}
+
+fn program_dyn_row_contract_function_abis(
+    defs: &[ProgramDefOutput],
+    interface: &InterfaceSummary,
+    contracts: &BTreeMap<String, BTreeMap<String, Type>>,
+    returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
+) -> BTreeMap<String, BackendCallableAbi> {
+    let function_abis =
+        backend_callable_abis_for_interface(&interface.functions, returned_callables);
+    defs.iter()
+        .filter_map(|def| {
+            let param_contracts = contracts.get(&def.name)?;
+            let base = function_abis.get(&def.name)?;
+            let expansions = def
+                .output
+                .typed_signature
+                .params
+                .iter()
+                .zip(base.arg_expansions.iter())
+                .map(|(param, expansion)| {
+                    param_contracts
+                        .get(&param.name)
+                        .and_then(dyn_row_contract_arg_expansion)
+                        .unwrap_or_else(|| expansion.clone())
+                })
+                .collect::<Vec<_>>();
+            let params = expansions
+                .iter()
+                .flat_map(backend_arg_expansion_param_kinds)
+                .collect::<Vec<_>>();
+            Some((
+                def.name.clone(),
+                BackendCallableAbi {
+                    params,
+                    arg_expansions: expansions,
+                    result: base.result,
+                    result_ref_cell_lane: base.result_ref_cell_lane,
+                    return_callable: base.return_callable.clone(),
+                },
+            ))
+        })
+        .collect()
+}
+
+fn dyn_row_contract_arg_expansion(ty: &Type) -> Option<BackendCallableArgExpansion> {
+    let Type::DynRow(fields) = ty else {
+        return None;
+    };
+    Some(BackendCallableArgExpansion::DynRowFields(
+        backend_dyn_row_field_abis(fields),
+    ))
+}
+
+fn backend_arg_expansion_param_kinds(
+    expansion: &BackendCallableArgExpansion,
+) -> Vec<BackendValueKind> {
+    match expansion {
+        BackendCallableArgExpansion::Direct(kind) => vec![*kind],
+        BackendCallableArgExpansion::Callable { env, .. } => {
+            let mut params = vec![BackendValueKind::I32];
+            params.extend(env.iter().copied());
+            params
+        }
+        BackendCallableArgExpansion::DynRowFields(fields) => {
+            fields.iter().map(|field| field.kind).collect()
+        }
     }
 }
 
@@ -1410,6 +1607,7 @@ fn backend_param_abi(
         statics,
         BTreeMap::new(),
         &BTreeMap::new(),
+        None,
     )
 }
 
@@ -1419,9 +1617,22 @@ fn backend_param_abi_with_extra_functions(
     statics: &[crate::surface::InterfaceStatic],
     extra_functions: BTreeMap<String, BackendCallableAbi>,
     returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
+    extra_dyn_param_types: Option<&BTreeMap<String, Type>>,
 ) -> BackendParamAbi {
     let mut function_abis = backend_callable_abis_for_interface(functions, returned_callables);
     function_abis.extend(extra_functions);
+    let mut dyn_row_param_fields = backend_dyn_row_param_fields_for_signature(signature);
+    let mut dyn_row_param_methods =
+        backend_dyn_row_param_methods_for_signature(signature, functions);
+    if let Some(extra_dyn_param_types) = extra_dyn_param_types {
+        dyn_row_param_fields.extend(backend_dyn_row_param_fields_for_param_types(
+            extra_dyn_param_types,
+        ));
+        dyn_row_param_methods.extend(backend_dyn_row_param_methods_for_param_types(
+            extra_dyn_param_types,
+            functions,
+        ));
+    }
     BackendParamAbi {
         params: signature
             .params
@@ -1440,8 +1651,8 @@ fn backend_param_abi_with_extra_functions(
         functions: function_abis,
         statics: backend_static_abis_for_interface(statics),
         static_ref_cell_lanes: backend_static_ref_cell_lanes_for_interface(statics),
-        dyn_row_param_fields: backend_dyn_row_param_fields_for_signature(signature),
-        dyn_row_param_methods: backend_dyn_row_param_methods_for_signature(signature, functions),
+        dyn_row_param_fields,
+        dyn_row_param_methods,
         aggregate_element_lanes: backend_aggregate_element_lanes_for_signature(signature)
             .into_iter()
             .chain(backend_static_aggregate_element_lanes_for_interface(
@@ -1507,6 +1718,21 @@ fn backend_dyn_row_field_abis(fields: &[RecordTypeField]) -> Vec<BackendDynRowPa
         .collect()
 }
 
+fn backend_dyn_row_param_fields_for_param_types(
+    param_types: &BTreeMap<String, Type>,
+) -> BTreeMap<String, Vec<BackendDynRowParamFieldAbi>> {
+    param_types
+        .iter()
+        .filter_map(|(param, ty)| {
+            let Type::DynRow(fields) = ty else {
+                return None;
+            };
+            let fields = backend_dyn_row_field_abis(fields);
+            (!fields.is_empty()).then_some((param.clone(), fields))
+        })
+        .collect()
+}
+
 fn backend_dyn_row_param_methods_for_signature(
     signature: &TypedSignature,
     functions: &[crate::surface::InterfaceFunction],
@@ -1541,6 +1767,43 @@ fn backend_dyn_row_param_methods_for_signature(
                 })
                 .collect::<Vec<_>>();
             (!methods.is_empty()).then_some((param.name.clone(), methods))
+        })
+        .collect()
+}
+
+fn backend_dyn_row_param_methods_for_param_types(
+    param_types: &BTreeMap<String, Type>,
+    functions: &[crate::surface::InterfaceFunction],
+) -> BTreeMap<String, Vec<BackendDynRowParamMethodAbi>> {
+    let receiver_methods = functions
+        .iter()
+        .filter(|function| function.receiver.is_some())
+        .collect::<Vec<_>>();
+    param_types
+        .iter()
+        .filter_map(|(param, ty)| {
+            let Type::DynRow(fields) = ty else {
+                return None;
+            };
+            let methods = fields
+                .iter()
+                .filter_map(|field| {
+                    let Type::Func(..) = field.ty else {
+                        return None;
+                    };
+                    receiver_methods
+                        .iter()
+                        .find(|function| {
+                            function.source_name == field.name
+                                && dyn_row_method_field_type(function) == field.ty
+                        })
+                        .map(|function| BackendDynRowParamMethodAbi {
+                            field: field.name.clone(),
+                            target: function.symbol.clone(),
+                        })
+                })
+                .collect::<Vec<_>>();
+            (!methods.is_empty()).then_some((param.clone(), methods))
         })
         .collect()
 }

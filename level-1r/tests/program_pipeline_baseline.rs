@@ -1332,7 +1332,10 @@ fn program_auto_generic_dyn_row_param_instantiates_nominal_method_adapter() {
                 Vec::new(),
                 Vec::new(),
                 Some("i64".to_string()),
-                Expr::i64(0),
+                Expr::call(
+                    Expr::var("apply_auto"),
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(7))])),
+                ),
             ),
         ],
     );
@@ -1365,6 +1368,8 @@ fn program_auto_generic_dyn_row_param_instantiates_nominal_method_adapter() {
         .visual
         .typed
         .contains("x=contract-obligation(i64)"));
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "12");
 }
 
 #[test]
