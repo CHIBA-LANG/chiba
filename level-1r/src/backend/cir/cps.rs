@@ -387,6 +387,11 @@ fn transform(
                         value: Box::new(value),
                         boundary: *boundary,
                     },
+                    FieldAccessKind::ReceiverMethod { target } => CpsAtom::ReceiverMethod {
+                        receiver: Box::new(value),
+                        symbol: target.symbol.clone(),
+                        runtime_target: target.runtime_target.clone(),
+                    },
                     FieldAccessKind::RecordOrNominal => CpsAtom::RecordField {
                         record: Box::new(value),
                         field: name.clone(),

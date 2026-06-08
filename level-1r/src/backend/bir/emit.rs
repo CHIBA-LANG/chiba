@@ -890,6 +890,9 @@ fn collect_runtime_value_imports(
         CoreValue::DynRowField { package, .. } => {
             collect_runtime_value_imports(package, env, imports);
         }
+        CoreValue::ReceiverMethod { receiver, .. } => {
+            collect_runtime_value_imports(receiver, env, imports);
+        }
         CoreValue::Adt { args, .. } => {
             for arg in args {
                 collect_runtime_value_imports(arg, env, imports);
@@ -2575,6 +2578,7 @@ fn callable_selector_for_value(
     let name = match value {
         CoreValue::Var(name) => name.as_str(),
         CoreValue::LiftedFunction { symbol, .. } => symbol.as_str(),
+        CoreValue::ReceiverMethod { symbol, .. } => symbol.as_str(),
         _ => return None,
     };
     callable_candidates(params, env_params, result, env)
@@ -2590,6 +2594,19 @@ fn callable_env_values(
 ) -> Option<Vec<CoreValue>> {
     if env_params.is_empty() {
         return Some(Vec::new());
+    }
+    if let CoreValue::ReceiverMethod { receiver, .. } = value {
+        let [kind] = env_params else {
+            return None;
+        };
+        let value = receiver_method_self_env_value(receiver);
+        return match WasmValueKind::from(*kind) {
+            WasmValueKind::I32 if core_value_is_renderable_i32(&value, env) => Some(vec![value]),
+            WasmValueKind::ExternRef if core_value_is_renderable_externref(&value, env) => {
+                Some(vec![value])
+            }
+            _ => None,
+        };
     }
     let CoreValue::LiftedFunction { source, .. } = value else {
         return Some(zero_callable_env_values(env_params));
@@ -2622,6 +2639,13 @@ fn callable_env_values(
 
 fn zero_callable_env_values(env_params: &[BackendValueKind]) -> Vec<CoreValue> {
     env_params.iter().map(|_| CoreValue::I64(0)).collect()
+}
+
+fn receiver_method_self_env_value(receiver: &CoreValue) -> CoreValue {
+    match receiver {
+        CoreValue::Record { fields } if fields.len() == 1 => fields[0].value.clone(),
+        _ => receiver.clone(),
+    }
 }
 
 fn closure_env_capture_name(closure: &str, index: usize, env: &RenderEnv) -> Option<String> {
@@ -3405,6 +3429,9 @@ fn infer_param_kinds_from_value(
         CoreValue::DynRowField { package, .. } => {
             infer_param_kinds_from_value(package, params, kinds);
         }
+        CoreValue::ReceiverMethod { receiver, .. } => {
+            infer_param_kinds_from_value(receiver, params, kinds);
+        }
         CoreValue::Adt { args, .. } => {
             for arg in args {
                 infer_param_kinds_from_value(arg, params, kinds);
@@ -4153,6 +4180,7 @@ fn render_core_value_i32(
         | CoreValue::Range { .. }
         | CoreValue::BuiltinRuntimeCall { .. }
         | CoreValue::Record { .. }
+        | CoreValue::ReceiverMethod { .. }
         | CoreValue::LiftedFunction { .. }
         | CoreValue::Rendered { .. } => {
             return Err(unsupported_i32_render_diagnostic(value));
@@ -4540,6 +4568,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
+        | CoreValue::ReceiverMethod { .. }
         | CoreValue::LiftedFunction { .. }
         | CoreValue::Rendered { .. } => false,
     }

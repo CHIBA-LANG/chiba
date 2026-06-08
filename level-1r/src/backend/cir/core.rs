@@ -287,6 +287,11 @@ pub enum CoreValue {
         package: Box<CoreValue>,
         field: String,
     },
+    ReceiverMethod {
+        receiver: Box<CoreValue>,
+        symbol: String,
+        runtime_target: String,
+    },
     RangeField {
         range: Box<CoreValue>,
         field: RangeField,
@@ -448,6 +453,11 @@ impl CoreValue {
             CoreValue::DynRowField { package, field } => {
                 format!("{}.{}", package.debug_name(), field)
             }
+            CoreValue::ReceiverMethod {
+                receiver,
+                runtime_target,
+                ..
+            } => format!("{}.{}", receiver.debug_name(), runtime_target),
             CoreValue::RangeField { range, field } => {
                 format!("{}.{}", range.debug_name(), field.source_name())
             }
@@ -2303,8 +2313,14 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
         CpsAtom::OperatorCallee { .. } => CoreValue::Rendered {
             debug: render_atom(atom),
         },
-        CpsAtom::ReceiverMethod { .. } => CoreValue::Rendered {
-            debug: render_atom(atom),
+        CpsAtom::ReceiverMethod {
+            receiver,
+            symbol,
+            runtime_target,
+        } => CoreValue::ReceiverMethod {
+            receiver: Box::new(core_value(receiver)),
+            symbol: symbol.clone(),
+            runtime_target: runtime_target.clone(),
         },
         CpsAtom::Tuple { fields, .. } => CoreValue::Tuple {
             fields: fields.iter().map(core_value).collect(),

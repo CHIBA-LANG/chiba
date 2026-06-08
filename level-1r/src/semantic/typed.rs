@@ -166,6 +166,9 @@ pub enum DynRowFieldSource {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FieldAccessKind {
     RecordOrNominal,
+    ReceiverMethod {
+        target: TypedReceiverMethodTarget,
+    },
     TuplePositionalRow {
         index: usize,
     },
@@ -879,18 +882,7 @@ fn type_expr_with_context_and_controls(
                     ty,
                 );
             }
-            let access = field_access_kind(&receiver.ty, name);
-            let ty = match access {
-                FieldAccessKind::TuplePositionalRow { index } => {
-                    tuple_field_type(&receiver.ty, index)
-                }
-                FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::TextBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, name)
-                    .or_else(|| context.nominal_field_type(&receiver.ty, name)),
-            }
-            .unwrap_or(Type::Unknown);
+            let (access, ty) = field_access_type_and_kind(&receiver.ty, name, context);
             typed(
                 TypedExprKind::Field {
                     receiver: Box::new(receiver),
@@ -1468,18 +1460,7 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
             access: _,
         } => {
             let receiver = refine_continuation_types(*receiver, context);
-            let access = field_access_kind(&receiver.ty, &name);
-            let ty = match access {
-                FieldAccessKind::TuplePositionalRow { index } => {
-                    tuple_field_type(&receiver.ty, index)
-                }
-                FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::TextBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
-                    .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
-            }
-            .unwrap_or(Type::Unknown);
+            let (access, ty) = field_access_type_and_kind(&receiver.ty, &name, context);
             typed(
                 TypedExprKind::Field {
                     receiver: Box::new(receiver),
@@ -1914,18 +1895,7 @@ fn refine_pattern_binding_types(
             access: _,
         } => {
             let receiver = refine_pattern_binding_types(*receiver, bindings, context);
-            let access = field_access_kind(&receiver.ty, &name);
-            let ty = match access {
-                FieldAccessKind::TuplePositionalRow { index } => {
-                    tuple_field_type(&receiver.ty, index)
-                }
-                FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::TextBoundary { .. } => Some(Type::I64),
-                FieldAccessKind::RecordOrNominal => record_field_type(&receiver.ty, &name)
-                    .or_else(|| context.nominal_field_type(&receiver.ty, &name)),
-            }
-            .unwrap_or(Type::Unknown);
+            let (access, ty) = field_access_type_and_kind(&receiver.ty, &name, context);
             typed(
                 TypedExprKind::Field {
                     receiver: Box::new(receiver),
@@ -2929,13 +2899,52 @@ fn field_callable_callee_type(
         FieldAccessKind::TuplePositionalRow { index } => tuple_field_type(receiver, index),
         FieldAccessKind::RangeBoundary { .. }
         | FieldAccessKind::AggregateBoundary { .. }
-        | FieldAccessKind::TextBoundary { .. } => None,
+        | FieldAccessKind::TextBoundary { .. }
+        | FieldAccessKind::ReceiverMethod { .. } => None,
         FieldAccessKind::RecordOrNominal => {
             record_field_type(receiver, name).or_else(|| context.nominal_field_type(receiver, name))
         }
     }?;
     matches!(field_ty, Type::Func(_, _, _) | Type::Continuation { .. })
         .then_some((access, field_ty))
+}
+
+fn field_access_type_and_kind(
+    receiver: &Type,
+    name: &str,
+    context: &TypeContext,
+) -> (FieldAccessKind, Type) {
+    let access = field_access_kind(receiver, name);
+    let ty = match &access {
+        FieldAccessKind::TuplePositionalRow { index } => tuple_field_type(receiver, *index),
+        FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
+        FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
+        FieldAccessKind::TextBoundary { .. } => Some(Type::I64),
+        FieldAccessKind::RecordOrNominal => {
+            record_field_type(receiver, name).or_else(|| context.nominal_field_type(receiver, name))
+        }
+        FieldAccessKind::ReceiverMethod { .. } => None,
+    };
+    if let Some(ty) = ty {
+        return (access, ty);
+    }
+    if !matches!(access, FieldAccessKind::RecordOrNominal) {
+        return (access, Type::Unknown);
+    }
+    context
+        .specialized_receiver_method(receiver, name)
+        .map(|method| {
+            (
+                FieldAccessKind::ReceiverMethod {
+                    target: TypedReceiverMethodTarget {
+                        symbol: method.symbol.clone(),
+                        runtime_target: method.runtime_target.clone(),
+                    },
+                },
+                bound_method_type(&method),
+            )
+        })
+        .unwrap_or((access, Type::Unknown))
 }
 
 fn tuple_field_type(receiver: &Type, index: usize) -> Option<Type> {

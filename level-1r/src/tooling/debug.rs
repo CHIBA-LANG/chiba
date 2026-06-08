@@ -550,6 +550,11 @@ fn render_core_value(value: &CoreValue) -> String {
         CoreValue::DynRowField { package, field } => {
             format!("{}.{}", render_core_value(package), field)
         }
+        CoreValue::ReceiverMethod {
+            receiver,
+            runtime_target,
+            ..
+        } => format!("{}.{}", render_core_value(receiver), runtime_target),
         CoreValue::RangeField { range, field } => {
             format!("{}.{}", render_core_value(range), field.source_name())
         }
@@ -1023,6 +1028,17 @@ fn render_core_value_summary(value: &crate::core::CoreValue) -> String {
             format!(
                 "dyn-row-field {}.{field}",
                 render_core_value_summary(package)
+            )
+        }
+        crate::core::CoreValue::ReceiverMethod {
+            receiver,
+            runtime_target,
+            ..
+        } => {
+            format!(
+                "receiver-method {}.{}",
+                render_core_value_summary(receiver),
+                runtime_target
             )
         }
         crate::core::CoreValue::RangeField { range, field } => {
@@ -1622,6 +1638,9 @@ fn render_typed_expr_kind(kind: &TypedExprKind) -> &'static str {
 fn render_field_access_kind(access: &FieldAccessKind) -> String {
     match access {
         FieldAccessKind::RecordOrNominal => "record-or-nominal".to_string(),
+        FieldAccessKind::ReceiverMethod { target } => {
+            format!("receiver-method {}", target.symbol)
+        }
         FieldAccessKind::TuplePositionalRow { index } => {
             format!("tuple-positional-row index={index}")
         }

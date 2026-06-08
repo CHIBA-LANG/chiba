@@ -1107,6 +1107,34 @@ def main(): i64 = call_f(X({x: 10}))
 }
 
 #[test]
+fn source_nominal_receiver_method_field_is_bound_callable_value() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+type X = {x: i64}
+def X.f(self: Self, n: i64): i64 = self.x + n
+def apply(f: (i64) -> i64): i64 = f(1)
+def main(): i64 = apply(X({x: 10}).f)
+"#,
+    )
+    .expect("compile source bound method field");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(main
+        .output
+        .visual
+        .typed
+        .contains("field f access=receiver-method"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "11");
+}
+
+#[test]
 fn program_dyn_row_callable_field_accepts_field_and_method_adapters() {
     let program = SourceProgram::with_surface(
         None,
