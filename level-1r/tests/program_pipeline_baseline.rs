@@ -10976,6 +10976,30 @@ fn program_bundle_reports_missing_entry_for_empty_program() {
 }
 
 #[test]
+fn program_surface_reports_empty_namespace_header_as_invalid_source_file_header() {
+    let program = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(Vec::new())),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![def("main", vec![], Expr::i64(0))],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.surface.namespace, "");
+    assert_eq!(bundle.surface.namespace_path, Some(Vec::new()));
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::InvalidSourceFileHeader {
+            reason: "empty namespace path".to_string(),
+        }));
+    assert!(bundle
+        .render_summary()
+        .contains("invalid source file header: empty namespace path"));
+}
+
+#[test]
 fn program_summary_contains_program_level_nanopass_events() {
     let program = SourceProgram::new(vec![def("main", vec![], Expr::i64(7))]);
 

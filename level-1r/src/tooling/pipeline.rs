@@ -132,6 +132,9 @@ pub struct ProgramDefOutput {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProgramDiagnostic {
+    InvalidSourceFileHeader {
+        reason: String,
+    },
     DuplicateDef {
         name: String,
     },
@@ -2491,6 +2494,11 @@ fn nominal_display_name(name: &str, generics: &[String]) -> String {
 pub fn program_surface_diagnostics(surface: &ProjectSurface) -> Vec<ProgramDiagnostic> {
     let mut seen = BTreeSet::new();
     let mut diagnostics = Vec::new();
+    if matches!(&surface.namespace_path, Some(path) if path.is_empty()) {
+        diagnostics.push(ProgramDiagnostic::InvalidSourceFileHeader {
+            reason: "empty namespace path".to_string(),
+        });
+    }
     for def in &surface.defs {
         let key = (
             def.owner.clone(),
@@ -5263,6 +5271,9 @@ fn render_program_diagnostics_summary(diagnostics: &[ProgramDiagnostic]) -> Stri
 
 fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
     match diagnostic {
+        ProgramDiagnostic::InvalidSourceFileHeader { reason } => {
+            format!("invalid source file header: {reason}")
+        }
         ProgramDiagnostic::DuplicateDef { name } => format!("duplicate def {name}"),
         ProgramDiagnostic::DuplicateType { name } => format!("duplicate type {name}"),
         ProgramDiagnostic::DuplicateTypeField { type_name, field } => {

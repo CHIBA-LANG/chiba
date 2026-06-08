@@ -7,6 +7,7 @@ use crate::ast::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectSurface {
     pub namespace: String,
+    pub namespace_path: Option<Vec<String>>,
     pub imports: Vec<String>,
     pub defs: Vec<SurfaceDef>,
     pub statics: Vec<SurfaceStatic>,
@@ -142,6 +143,10 @@ pub struct InterfaceConstructor {
 }
 
 pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
+    let namespace_path = program
+        .namespace
+        .as_ref()
+        .map(|namespace| namespace.path.clone());
     let namespace = program
         .namespace
         .as_ref()
@@ -232,6 +237,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .collect();
     ProjectSurface {
         namespace,
+        namespace_path,
         imports,
         defs,
         statics,
@@ -266,6 +272,7 @@ pub fn project_surface_many(programs: &[SourceProgram]) -> ProjectSurface {
 
     ProjectSurface {
         namespace: "<project>".to_string(),
+        namespace_path: None,
         imports: imports.into_iter().collect(),
         defs,
         statics,
