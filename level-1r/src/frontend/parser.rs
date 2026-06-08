@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::ast::{
-    render_source_pattern, BinaryOp, DataDecl, DataVariant, Expr, ExternAbi, ExternDecl,
+    render_source_pattern, BinaryOp, DataDecl, DataVariant, Expr, ExternAbi, ExternDecl, ItemAttr,
     MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, TypeDecl,
     TypeField, UseDecl, Visibility,
 };
@@ -287,6 +287,7 @@ fn chiba_lexer_spec() -> LexerSpec {
             punct("RParen", "\\)"),
             punct("LBrace", "\\{"),
             punct("RBrace", "\\}"),
+            punct("Hash", "#"),
             punct("LBracket", "\\["),
             punct("RBracket", "\\]"),
             punct("FatArrow", "=>"),
@@ -362,10 +363,12 @@ impl FrontendParser {
                     imports_closed = true;
                     data.push(self.parse_data()?);
                 }
-                Some("KwDef") | Some("KwPrivate") => {
+                Some("KwDef") | Some("KwPrivate") | Some("Hash") => {
                     imports_closed = true;
                     let start = self.tokens[self.pos].start;
+                    let attrs = self.parse_item_attrs()?;
                     let item = self.parse_def()?;
+                    let item = item.with_attrs(attrs);
                     let end = self.previous_token_end().unwrap_or(start);
                     self.item_spans
                         .push(self.source_item_span(&item, start, end));
@@ -382,6 +385,7 @@ impl FrontendParser {
                             "KwData".to_string(),
                             "KwDef".to_string(),
                             "KwPrivate".to_string(),
+                            "Hash".to_string(),
                         ],
                         offset: token.start,
                     });
@@ -430,6 +434,23 @@ impl FrontendParser {
             path.push(self.expect_lexeme("Ident")?);
         }
         Ok(path)
+    }
+
+    fn parse_item_attrs(&mut self) -> Result<Vec<ItemAttr>, FrontendError> {
+        let mut attrs = Vec::new();
+        while self.peek_name() == Some("Hash") {
+            self.pos += 1;
+            self.expect("LBracket")?;
+            let name = self.expect_lexeme("Ident")?;
+            self.expect("RBracket")?;
+            match name.as_str() {
+                "entry" => attrs.push(ItemAttr::Entry),
+                _ => {
+                    return Err(self.unexpected_current(vec!["entry"]));
+                }
+            }
+        }
+        Ok(attrs)
     }
 
     fn parse_def(&mut self) -> Result<SourceItem, FrontendError> {
@@ -490,6 +511,7 @@ impl FrontendParser {
             let extern_decl = self.parse_extern_decl()?;
             return Ok(SourceItem::ExternDef {
                 name,
+                attrs: Vec::new(),
                 visibility,
                 generics: receiver
                     .as_ref()
@@ -504,6 +526,7 @@ impl FrontendParser {
         let body = self.parse_expr_bp(0)?;
         Ok(SourceItem::Def {
             name,
+            attrs: Vec::new(),
             visibility,
             generics: receiver
                 .as_ref()
@@ -1983,6 +2006,7 @@ fn enrich_item_with_data_variants(
     match item {
         SourceItem::Def {
             name,
+            attrs,
             visibility,
             receiver,
             generics,
@@ -1991,6 +2015,7 @@ fn enrich_item_with_data_variants(
             body,
         } => SourceItem::Def {
             name,
+            attrs,
             visibility,
             receiver,
             generics,
@@ -2000,6 +2025,7 @@ fn enrich_item_with_data_variants(
         },
         SourceItem::ExternDef {
             name,
+            attrs,
             visibility,
             receiver,
             generics,
@@ -2008,6 +2034,7 @@ fn enrich_item_with_data_variants(
             extern_decl,
         } => SourceItem::ExternDef {
             name,
+            attrs,
             visibility,
             receiver,
             generics,
@@ -2017,11 +2044,13 @@ fn enrich_item_with_data_variants(
         },
         SourceItem::StaticValue {
             name,
+            attrs,
             visibility,
             ty,
             body,
         } => SourceItem::StaticValue {
             name,
+            attrs,
             visibility,
             ty,
             body: enrich_expr_with_data_variants(body, variants),

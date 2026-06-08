@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
-    DataDecl, ExternDecl, MethodReceiver, SourceItem, SourceProgram, TypeDecl, Visibility,
+    DataDecl, ExternDecl, ItemAttr, MethodReceiver, SourceItem, SourceProgram, TypeDecl, Visibility,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,6 +20,7 @@ pub struct ProjectSurface {
 pub struct SurfaceDef {
     pub owner: String,
     pub name: String,
+    pub entry: bool,
     pub visibility: Visibility,
     pub receiver: Option<MethodReceiver>,
     pub generics: Vec<String>,
@@ -33,6 +34,7 @@ pub struct SurfaceDef {
 pub struct SurfaceStatic {
     pub owner: String,
     pub name: String,
+    pub entry: bool,
     pub visibility: Visibility,
     pub ty: Option<String>,
 }
@@ -163,6 +165,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .filter_map(|item| match item {
             SourceItem::Def {
                 name,
+                attrs,
                 visibility,
                 receiver,
                 generics,
@@ -172,6 +175,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
             } => Some(SurfaceDef {
                 owner: namespace.clone(),
                 name: name.clone(),
+                entry: attrs.contains(&ItemAttr::Entry),
                 visibility: *visibility,
                 receiver: receiver.clone(),
                 generics: generics.clone(),
@@ -182,6 +186,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
             }),
             SourceItem::ExternDef {
                 name,
+                attrs,
                 visibility,
                 receiver,
                 generics,
@@ -191,6 +196,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
             } => Some(SurfaceDef {
                 owner: namespace.clone(),
                 name: name.clone(),
+                entry: attrs.contains(&ItemAttr::Entry),
                 visibility: *visibility,
                 receiver: receiver.clone(),
                 generics: generics.clone(),
@@ -208,12 +214,14 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
         .filter_map(|item| match item {
             SourceItem::StaticValue {
                 name,
+                attrs,
                 visibility,
                 ty,
                 ..
             } => Some(SurfaceStatic {
                 owner: namespace.clone(),
                 name: name.clone(),
+                entry: attrs.contains(&ItemAttr::Entry),
                 visibility: *visibility,
                 ty: ty.clone(),
             }),

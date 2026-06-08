@@ -1,5 +1,6 @@
 use chiba_level1r::ast::{
-    BinaryOp, Expr, ExternAbi, MethodReceiver, ParamDecl, Pattern, SourceItem, TypeDecl, TypeField,
+    BinaryOp, Expr, ExternAbi, ItemAttr, MethodReceiver, ParamDecl, Pattern, SourceItem, TypeDecl,
+    TypeField,
 };
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::CoreValue;
@@ -102,6 +103,41 @@ fn frontend_lexes_and_parses_def_source_to_program() {
             source_item_kind_name(other)
         ),
     }
+}
+
+#[test]
+fn frontend_parses_entry_attribute_as_item_attr() {
+    let output = parse_source_program("#[entry]\ndef start() = 0").expect("frontend parse");
+
+    assert_eq!(
+        output
+            .tokens
+            .iter()
+            .take(4)
+            .map(|token| (token.name.as_str(), token.lexeme.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("Hash", "#"),
+            ("LBracket", "["),
+            ("Ident", "entry"),
+            ("RBracket", "]"),
+        ]
+    );
+    match &output.program.items[0] {
+        SourceItem::Def { name, attrs, .. } => {
+            assert_eq!(name, "start");
+            assert_eq!(attrs, &vec![ItemAttr::Entry]);
+        }
+        other => panic!("expected entry def, got {other:?}"),
+    }
+    assert_eq!(
+        output
+            .item_spans
+            .iter()
+            .map(|span| span.name.clone())
+            .collect::<Vec<_>>(),
+        vec!["start".to_string()]
+    );
 }
 
 #[test]
@@ -858,6 +894,7 @@ def main() = ANSWER",
         output.frontend.program.items[0],
         SourceItem::StaticValue {
             name: "ANSWER".to_string(),
+            attrs: Vec::new(),
             visibility: chiba_level1r::Visibility::Public,
             ty: Some("I64".to_string()),
             body: Expr::i64(42),
@@ -1137,6 +1174,7 @@ def main() = TWO",
         output.program.items[0],
         SourceItem::StaticValue {
             name: "ONE".to_string(),
+            attrs: Vec::new(),
             visibility: chiba_level1r::Visibility::Public,
             ty: Some("i64".to_string()),
             body: Expr::i64(1),
@@ -1146,6 +1184,7 @@ def main() = TWO",
         output.program.items[1],
         SourceItem::StaticValue {
             name: "TWO".to_string(),
+            attrs: Vec::new(),
             visibility: chiba_level1r::Visibility::Public,
             ty: None,
             body: Expr::var("ONE"),

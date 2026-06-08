@@ -171,6 +171,7 @@ fn tuple_pattern_collects_nested_bindings_in_source_order() {
 #[test]
 fn function_parameter_tuple_pattern_uses_tuple_type_arguments() {
     let program = SourceProgram::new(vec![SourceItem::Def {
+        attrs: Vec::new(),
         receiver: None,
         generics: Vec::new(),
         name: "first".to_string(),
@@ -382,6 +383,7 @@ fn function_parameter_record_pattern_uses_nominal_row_field_types() {
         )],
         Vec::new(),
         vec![SourceItem::Def {
+            attrs: Vec::new(),
             receiver: None,
             generics: Vec::new(),
             name: "get".to_string(),

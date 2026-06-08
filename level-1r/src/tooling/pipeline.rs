@@ -2,8 +2,9 @@ use crate::alpha::{alpha_expr_with_params, AlphaBinder, AlphaFacts};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
-    render_source_binary_op, render_source_expr, Expr, ExternAbi, ExternDecl, MethodReceiver,
-    NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, UseDecl, Visibility,
+    render_source_binary_op, render_source_expr, Expr, ExternAbi, ExternDecl, ItemAttr,
+    MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, UseDecl,
+    Visibility,
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_param_abi, link_backend_artifacts, sort_dedup_imports,
@@ -126,6 +127,7 @@ pub struct SourceCompileOutput {
 #[derive(Clone, Debug)]
 pub struct ProgramDefOutput {
     pub name: String,
+    pub entry: bool,
     pub params: Vec<String>,
     pub output: CompileOutput,
 }
@@ -134,6 +136,12 @@ pub struct ProgramDefOutput {
 pub enum ProgramDiagnostic {
     InvalidSourceFileHeader {
         reason: String,
+    },
+    MultipleEntries {
+        names: Vec<String>,
+    },
+    EntryOnNonFunction {
+        name: String,
     },
     DuplicateDef {
         name: String,
@@ -620,6 +628,7 @@ fn compile_program_bundle_internal(
     if entry.is_none() {
         all_diagnostics.push(ProgramDiagnostic::MissingEntry);
     }
+    all_diagnostics.extend(entry_diagnostics(&defs, &surface));
     if let Some(entry_name) = &entry {
         if let Some(def) = defs.iter().find(|def| def.name == *entry_name) {
             if !def.params.is_empty() {
@@ -977,6 +986,7 @@ fn is_refutable_clause_pattern(pattern: &Pattern) -> bool {
 fn merge_clause_items(clauses: &[SourceItem]) -> SourceItem {
     let SourceItem::Def {
         name,
+        attrs,
         visibility,
         receiver,
         generics,
@@ -1026,6 +1036,7 @@ fn merge_clause_items(clauses: &[SourceItem]) -> SourceItem {
         .collect();
     SourceItem::Def {
         name: name.clone(),
+        attrs: attrs.clone(),
         visibility: *visibility,
         receiver: receiver.clone(),
         generics: generics.clone(),
@@ -1064,6 +1075,7 @@ fn compile_program_defs(
         .filter_map(|item| match item {
             SourceItem::Def {
                 name,
+                attrs,
                 receiver,
                 generics,
                 params,
@@ -1072,6 +1084,7 @@ fn compile_program_defs(
                 ..
             } => Some(ProgramDefOutput {
                 name: name.clone(),
+                entry: attrs.contains(&ItemAttr::Entry),
                 params: params.iter().map(|param| param.name.clone()).collect(),
                 output: {
                     let mut output = compile_expr_with_indexes_and_generics(
@@ -2612,11 +2625,45 @@ impl From<GlobalInitDiagnostic> for ProgramDiagnostic {
 }
 
 fn select_program_entry(defs: &[ProgramDefOutput]) -> Option<String> {
-    if defs.iter().any(|def| def.name == "main") {
+    let explicit = defs
+        .iter()
+        .filter(|def| def.entry)
+        .map(|def| def.name.clone())
+        .collect::<Vec<_>>();
+    if let [name] = explicit.as_slice() {
+        Some(name.clone())
+    } else if !explicit.is_empty() {
+        None
+    } else if defs.iter().any(|def| def.name == "main") {
         Some("main".to_string())
     } else {
         defs.first().map(|def| def.name.clone())
     }
+}
+
+fn entry_diagnostics(
+    defs: &[ProgramDefOutput],
+    surface: &ProjectSurface,
+) -> Vec<ProgramDiagnostic> {
+    let mut diagnostics = Vec::new();
+    let explicit = defs
+        .iter()
+        .filter(|def| def.entry)
+        .map(|def| def.name.clone())
+        .collect::<Vec<_>>();
+    if explicit.len() > 1 {
+        diagnostics.push(ProgramDiagnostic::MultipleEntries { names: explicit });
+    }
+    diagnostics.extend(
+        surface
+            .statics
+            .iter()
+            .filter(|static_value| static_value.entry)
+            .map(|static_value| ProgramDiagnostic::EntryOnNonFunction {
+                name: static_value.name.clone(),
+            }),
+    );
+    diagnostics
 }
 
 fn template_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
@@ -5273,6 +5320,12 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
     match diagnostic {
         ProgramDiagnostic::InvalidSourceFileHeader { reason } => {
             format!("invalid source file header: {reason}")
+        }
+        ProgramDiagnostic::MultipleEntries { names } => {
+            format!("multiple entries [{}]", names.join(", "))
+        }
+        ProgramDiagnostic::EntryOnNonFunction { name } => {
+            format!("entry on non-function {name}")
         }
         ProgramDiagnostic::DuplicateDef { name } => format!("duplicate def {name}"),
         ProgramDiagnostic::DuplicateType { name } => format!("duplicate type {name}"),

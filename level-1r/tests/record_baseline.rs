@@ -282,6 +282,7 @@ fn nominal_field_callable_method_call_uses_function_header_type() {
         )],
         Vec::new(),
         vec![SourceItem::Def {
+            attrs: Vec::new(),
             receiver: None,
             generics: Vec::new(),
             name: "main".to_string(),
@@ -320,6 +321,7 @@ fn nominal_field_callable_method_call_wins_over_receiver_method() {
                 Expr::var("value"),
             ),
             SourceItem::Def {
+                attrs: Vec::new(),
                 receiver: None,
                 generics: Vec::new(),
                 name: "main".to_string(),

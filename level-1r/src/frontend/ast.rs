@@ -22,6 +22,7 @@ pub struct UseDecl {
 pub enum SourceItem {
     Def {
         name: String,
+        attrs: Vec<ItemAttr>,
         visibility: Visibility,
         receiver: Option<MethodReceiver>,
         generics: Vec<String>,
@@ -31,6 +32,7 @@ pub enum SourceItem {
     },
     ExternDef {
         name: String,
+        attrs: Vec<ItemAttr>,
         visibility: Visibility,
         receiver: Option<MethodReceiver>,
         generics: Vec<String>,
@@ -40,10 +42,16 @@ pub enum SourceItem {
     },
     StaticValue {
         name: String,
+        attrs: Vec<ItemAttr>,
         visibility: Visibility,
         ty: Option<String>,
         body: Expr,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ItemAttr {
+    Entry,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -277,6 +285,7 @@ impl SourceItem {
     ) -> Self {
         Self::Def {
             name: name.into(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             receiver: None,
             generics,
@@ -297,6 +306,7 @@ impl SourceItem {
             generics: receiver.generics.clone(),
             receiver: Some(receiver),
             name: name.into(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params,
             return_type,
@@ -307,6 +317,7 @@ impl SourceItem {
     pub fn static_value(name: impl Into<String>, ty: Option<String>, body: Expr) -> Self {
         Self::StaticValue {
             name: name.into(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             ty,
             body,
@@ -322,6 +333,7 @@ impl SourceItem {
     ) -> Self {
         Self::ExternDef {
             name: name.into(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             receiver: None,
             generics,
@@ -335,6 +347,7 @@ impl SourceItem {
         match self {
             Self::Def {
                 name,
+                attrs,
                 receiver,
                 generics,
                 params,
@@ -343,6 +356,7 @@ impl SourceItem {
                 ..
             } => Self::Def {
                 name,
+                attrs,
                 visibility,
                 receiver,
                 generics,
@@ -352,6 +366,7 @@ impl SourceItem {
             },
             Self::ExternDef {
                 name,
+                attrs,
                 receiver,
                 generics,
                 params,
@@ -360,6 +375,7 @@ impl SourceItem {
                 ..
             } => Self::ExternDef {
                 name,
+                attrs,
                 visibility,
                 receiver,
                 generics,
@@ -367,8 +383,71 @@ impl SourceItem {
                 return_type,
                 extern_decl,
             },
-            Self::StaticValue { name, ty, body, .. } => Self::StaticValue {
+            Self::StaticValue {
                 name,
+                attrs,
+                ty,
+                body,
+                ..
+            } => Self::StaticValue {
+                name,
+                attrs,
+                visibility,
+                ty,
+                body,
+            },
+        }
+    }
+
+    pub fn with_attrs(self, attrs: Vec<ItemAttr>) -> Self {
+        match self {
+            Self::Def {
+                name,
+                visibility,
+                receiver,
+                generics,
+                params,
+                return_type,
+                body,
+                ..
+            } => Self::Def {
+                name,
+                attrs,
+                visibility,
+                receiver,
+                generics,
+                params,
+                return_type,
+                body,
+            },
+            Self::ExternDef {
+                name,
+                visibility,
+                receiver,
+                generics,
+                params,
+                return_type,
+                extern_decl,
+                ..
+            } => Self::ExternDef {
+                name,
+                attrs,
+                visibility,
+                receiver,
+                generics,
+                params,
+                return_type,
+                extern_decl,
+            },
+            Self::StaticValue {
+                name,
+                visibility,
+                ty,
+                body,
+                ..
+            } => Self::StaticValue {
+                name,
+                attrs,
                 visibility,
                 ty,
                 body,

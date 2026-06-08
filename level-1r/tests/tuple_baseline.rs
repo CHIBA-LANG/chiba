@@ -148,6 +148,7 @@ fn tuple_header_type_field_access_uses_tuple_type_arguments() {
         receiver: None,
         generics: Vec::new(),
         name: "second".to_string(),
+        attrs: Vec::new(),
         visibility: Visibility::Public,
         params: vec![ParamDecl::new("pair", Some("Tuple[i64,bool]".to_string()))],
         return_type: Some("bool".to_string()),

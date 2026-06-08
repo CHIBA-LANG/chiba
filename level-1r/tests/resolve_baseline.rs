@@ -235,6 +235,7 @@ fn interface_summary_resolves_global_function_owner_symbol() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            attrs: Vec::new(),
             receiver: None,
             generics: Vec::new(),
             name: "helper".to_string(),
@@ -271,6 +272,7 @@ fn current_namespace_function_candidate_wins_over_external_same_name() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            attrs: Vec::new(),
             receiver: None,
             generics: Vec::new(),
             name: "shared".to_string(),
@@ -286,6 +288,7 @@ fn current_namespace_function_candidate_wins_over_external_same_name() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            attrs: Vec::new(),
             receiver: None,
             generics: Vec::new(),
             name: "shared".to_string(),
@@ -331,6 +334,7 @@ fn current_namespace_static_shadows_external_function_call_target() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            attrs: Vec::new(),
             receiver: None,
             generics: Vec::new(),
             name: "shared".to_string(),
@@ -557,6 +561,7 @@ fn interface_summary_resolves_one_arg_function_call_by_arity() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            attrs: Vec::new(),
             receiver: None,
             generics: Vec::new(),
             name: "helper".to_string(),
@@ -593,6 +598,7 @@ fn interface_summary_reports_function_call_arity_mismatch() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            attrs: Vec::new(),
             receiver: None,
             generics: Vec::new(),
             name: "helper".to_string(),
@@ -875,6 +881,7 @@ fn interface_summary_does_not_resolve_local_binder_as_global_function() {
         Vec::new(),
         Vec::new(),
         vec![SourceItem::Def {
+            attrs: Vec::new(),
             receiver: None,
             generics: Vec::new(),
             name: "x".to_string(),

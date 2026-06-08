@@ -1,6 +1,6 @@
 use chiba_level1r::ast::{
-    BinaryOp, DataDecl, DataVariant, ExternAbi, ExternDecl, MethodReceiver, NamespaceDecl,
-    ParamDecl, SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
+    BinaryOp, DataDecl, DataVariant, ExternAbi, ExternDecl, ItemAttr, MethodReceiver,
+    NamespaceDecl, ParamDecl, SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
 };
 use chiba_level1r::core::{CoreOp, CoreValue};
 use chiba_level1r::pattern::PatternDiagnostic;
@@ -18,6 +18,7 @@ fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
         receiver: None,
         generics: Vec::new(),
         name: name.to_string(),
+        attrs: Vec::new(),
         visibility: Visibility::Public,
         params: params.into_iter().map(ParamDecl::untyped).collect(),
         return_type: None,
@@ -28,6 +29,7 @@ fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
 fn static_value(name: &str, ty: Option<&str>, body: Expr) -> SourceItem {
     SourceItem::StaticValue {
         name: name.to_string(),
+        attrs: Vec::new(),
         ty: ty.map(str::to_string),
         visibility: Visibility::Public,
         body,
@@ -1461,6 +1463,7 @@ fn program_dyn_row_return_reports_missing_adapter_field() {
                 receiver: None,
                 generics: Vec::new(),
                 name: "make".to_string(),
+                attrs: Vec::new(),
                 visibility: Visibility::Public,
                 params: Vec::new(),
                 return_type: Some("dyn {x: i64, y: (Unit) -> i64}".to_string()),
@@ -1914,6 +1917,7 @@ fn program_dyn_row_return_wraps_nominal_value_and_method_adapter() {
                 receiver: None,
                 generics: Vec::new(),
                 name: "make".to_string(),
+                attrs: Vec::new(),
                 visibility: Visibility::Public,
                 params: Vec::new(),
                 return_type: Some("dyn {x: i64, y: (Unit) -> i64}".to_string()),
@@ -8072,6 +8076,7 @@ fn pattern_clause_defs_lower_to_single_dispatcher_without_duplicate_def() {
                 receiver: None,
                 generics: vec!["T".to_string()],
                 name: "unwrap_or_zero".to_string(),
+                attrs: Vec::new(),
                 visibility: Visibility::Public,
                 params: vec![ParamDecl::pattern(
                     chiba_level1r::ast::Pattern::ctor(
@@ -8087,6 +8092,7 @@ fn pattern_clause_defs_lower_to_single_dispatcher_without_duplicate_def() {
                 receiver: None,
                 generics: vec!["T".to_string()],
                 name: "unwrap_or_zero".to_string(),
+                attrs: Vec::new(),
                 visibility: Visibility::Public,
                 params: vec![ParamDecl::pattern(
                     chiba_level1r::ast::Pattern::ctor("None", Vec::new()),
@@ -8383,6 +8389,7 @@ fn interface_summary_preserves_function_signature_types() {
             receiver: None,
             generics: Vec::new(),
             name: "id".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new("x", Some("I64".to_string()))],
             return_type: Some("I64".to_string()),
@@ -8426,6 +8433,7 @@ fn interface_summary_hash_ignores_function_body_changes() {
             receiver: None,
             generics: Vec::new(),
             name: "parse".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new("input", Some("Token".to_string()))],
             return_type: Some("Ast".to_string()),
@@ -8441,6 +8449,7 @@ fn interface_summary_hash_ignores_function_body_changes() {
             receiver: None,
             generics: Vec::new(),
             name: "parse".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new("input", Some("Token".to_string()))],
             return_type: Some("Ast".to_string()),
@@ -8491,6 +8500,7 @@ fn interface_summary_preserves_explicit_checked_template_params() {
             receiver: None,
             generics: vec!["T".to_string()],
             name: "id".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new("x", Some("T".to_string()))],
             return_type: Some("T".to_string()),
@@ -8590,6 +8600,7 @@ fn typed_signature_resolves_type_alias_headers() {
             receiver: None,
             generics: Vec::new(),
             name: "id".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new("value", Some("UserId".to_string()))],
             return_type: Some("UserId".to_string()),
@@ -8627,6 +8638,7 @@ fn typed_signature_resolves_local_alias_when_project_has_same_alias_name() {
             receiver: None,
             generics: Vec::new(),
             name: "id".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new("value", Some("UserId".to_string()))],
             return_type: Some("UserId".to_string()),
@@ -8666,6 +8678,7 @@ fn typed_signature_does_not_guess_alias_when_owner_is_ambiguous() {
             receiver: None,
             generics: Vec::new(),
             name: "id".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new("value", Some("UserId".to_string()))],
             return_type: Some("UserId".to_string()),
@@ -8722,6 +8735,7 @@ fn typed_context_resolves_local_nominal_row_when_project_has_same_type_name() {
             receiver: None,
             generics: Vec::new(),
             name: "read".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new("box", Some("Box".to_string()))],
             return_type: None,
@@ -8756,6 +8770,7 @@ fn typed_context_does_not_guess_nominal_row_when_owner_is_ambiguous() {
             receiver: None,
             generics: Vec::new(),
             name: "read".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new("box", Some("Box".to_string()))],
             return_type: None,
@@ -8802,6 +8817,7 @@ fn typed_context_uses_unique_external_constructor_payload_from_interface() {
             receiver: None,
             generics: Vec::new(),
             name: "unwrap".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::pattern(
                 chiba_level1r::ast::Pattern::ctor(
@@ -8853,6 +8869,7 @@ fn typed_context_resolves_local_constructor_payload_when_project_has_same_data_n
             receiver: None,
             generics: Vec::new(),
             name: "unwrap".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::pattern(
                 chiba_level1r::ast::Pattern::ctor(
@@ -8897,6 +8914,7 @@ fn typed_context_does_not_guess_constructor_payload_when_owner_is_ambiguous() {
             receiver: None,
             generics: Vec::new(),
             name: "unwrap".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::pattern(
                 chiba_level1r::ast::Pattern::ctor(
@@ -9236,6 +9254,7 @@ fn nominal_row_field_access_substitutes_concrete_type_arguments() {
             receiver: None,
             generics: Vec::new(),
             name: "main".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new("box", Some("Box[i64]".to_string()))],
             return_type: Some("i64".to_string()),
@@ -9270,6 +9289,7 @@ fn nominal_row_field_access_preserves_nested_type_arguments() {
             receiver: None,
             generics: Vec::new(),
             name: "main".to_string(),
+            attrs: Vec::new(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::new(
                 "box",
@@ -10768,6 +10788,7 @@ fn phantom_type_fields_are_not_available_for_field_access() {
                 receiver: None,
                 generics: Vec::new(),
                 name: "probe".to_string(),
+                attrs: Vec::new(),
                 visibility: Visibility::Public,
                 params: vec![ParamDecl::new("box", Some("Box".to_string()))],
                 return_type: None,
@@ -10973,6 +10994,78 @@ fn program_bundle_reports_missing_entry_for_empty_program() {
     assert_eq!(bundle.entry, None);
     assert_eq!(bundle.diagnostics, vec![ProgramDiagnostic::MissingEntry]);
     assert!(bundle.backend_link.linked_wat.starts_with("(module\n"));
+}
+
+#[test]
+fn program_entry_attribute_selects_non_main_entry() {
+    let output = compile_source_program_bundle(
+        "#[entry]
+def start() = 42
+def main() = 1",
+    )
+    .expect("compile source");
+
+    assert_eq!(output.program.entry, Some("start".to_string()));
+    assert!(output.program.diagnostics.is_empty());
+    assert!(output
+        .program
+        .backend_link
+        .linked_wat
+        .contains("(export \"main\""));
+    assert!(output.program.backend_link.linked_wat.contains("start"));
+}
+
+#[test]
+fn program_reports_multiple_entry_attributes() {
+    let output = compile_source_program_bundle(
+        "#[entry]
+def start() = 1
+#[entry]
+def again() = 2",
+    )
+    .expect("compile source");
+
+    assert_eq!(output.program.entry, None);
+    assert!(output.program.diagnostics.iter().any(|diagnostic| {
+        if let ProgramDiagnostic::MultipleEntries { names } = diagnostic {
+            names
+                .iter()
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>()
+                == ["again".to_string(), "start".to_string()]
+                    .into_iter()
+                    .collect()
+        } else {
+            false
+        }
+    }));
+    assert!(output
+        .program
+        .diagnostics
+        .contains(&ProgramDiagnostic::MissingEntry));
+}
+
+#[test]
+fn program_reports_entry_attribute_on_static_value() {
+    let program = SourceProgram::new(vec![
+        SourceItem::StaticValue {
+            name: "VALUE".to_string(),
+            attrs: vec![ItemAttr::Entry],
+            visibility: Visibility::Public,
+            ty: Some("i64".to_string()),
+            body: Expr::i64(1),
+        },
+        def("main", vec![], Expr::i64(0)),
+    ]);
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.entry, Some("main".to_string()));
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::EntryOnNonFunction {
+            name: "VALUE".to_string(),
+        }));
 }
 
 #[test]
