@@ -1635,6 +1635,72 @@ fn program_dyn_row_return_stored_in_record_field_keeps_method_adapter() {
 }
 
 #[test]
+fn program_dyn_row_return_stored_in_record_update_field_keeps_method_adapter() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "add",
+                vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("n", Some("i64".to_string())),
+                ],
+                Some("i64".to_string()),
+                Expr::binary(
+                    BinaryOp::Add,
+                    Expr::field(Expr::var("self"), "x"),
+                    Expr::var("n"),
+                ),
+            ),
+            SourceItem::def(
+                "make_auto",
+                Vec::new(),
+                vec![ParamDecl::untyped("value")],
+                Some("dyn {x: i64, add: (i64) -> i64}".to_string()),
+                Expr::var("value"),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::method_call_args(
+                    Expr::field(
+                        Expr::record_update(
+                            Expr::record(vec![(
+                                "slot",
+                                Expr::call(
+                                    Expr::var("make_auto"),
+                                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(7))])),
+                                ),
+                            )]),
+                            vec![("other", Expr::i64(0))],
+                        ),
+                        "slot",
+                    ),
+                    "add",
+                    vec![Expr::i64(5)],
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "12");
+}
+
+#[test]
 fn program_dyn_row_return_stored_in_tuple_field_keeps_method_adapter() {
     let program = SourceProgram::with_surface(
         None,
