@@ -573,8 +573,21 @@ fn compile_program_bundle_internal(
     program: &SourceProgram,
     interface_override: Option<InterfaceSummary>,
 ) -> ProgramCompileOutput {
-    let normalized_program =
-        specialize_row_callable_call_sites(&normalize_pattern_clause_defs(program));
+    let initial_program = normalize_pattern_clause_defs(program);
+    let initial_surface = project_surface(&initial_program);
+    let initial_interface = interface_override
+        .clone()
+        .unwrap_or_else(|| build_interface_summary(&initial_surface));
+    let current_namespace = initial_program
+        .namespace
+        .as_ref()
+        .map(NamespaceDecl::dotted)
+        .unwrap_or_else(|| "root".to_string());
+    let normalized_program = specialize_row_callable_call_sites(
+        &initial_program,
+        &initial_interface,
+        &current_namespace,
+    );
     let mut passes = PassReport::default();
     let surface = passes.record(
         "P1ProjectSurface",
@@ -691,7 +704,11 @@ struct RowCallableDef {
     args: Vec<Expr>,
 }
 
-fn specialize_row_callable_call_sites(program: &SourceProgram) -> SourceProgram {
+fn specialize_row_callable_call_sites(
+    program: &SourceProgram,
+    interface: &InterfaceSummary,
+    current_namespace: &str,
+) -> SourceProgram {
     let row_callables = program
         .items
         .iter()
@@ -702,12 +719,30 @@ fn specialize_row_callable_call_sites(program: &SourceProgram) -> SourceProgram 
     }
 
     let mut specialized = program.clone();
+    let method_records = row_callable_method_records(interface, current_namespace);
     specialized.items = program
         .items
         .iter()
-        .map(|item| specialize_row_callable_item(item, &row_callables))
+        .map(|item| specialize_row_callable_item(item, &row_callables, &method_records))
         .collect();
     specialized
+}
+
+fn row_callable_method_records(
+    interface: &InterfaceSummary,
+    current_namespace: &str,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let mut records = BTreeMap::<String, BTreeSet<String>>::new();
+    for method in visible_receiver_methods(interface, current_namespace) {
+        let Some(receiver) = &method.receiver else {
+            continue;
+        };
+        records
+            .entry(receiver.display_name())
+            .or_default()
+            .insert(method.source_name.clone());
+    }
+    records
 }
 
 fn row_callable_def(item: &SourceItem) -> Option<(String, RowCallableDef)> {
@@ -752,6 +787,7 @@ fn row_callable_def(item: &SourceItem) -> Option<(String, RowCallableDef)> {
 fn specialize_row_callable_item(
     item: &SourceItem,
     row_callables: &BTreeMap<String, RowCallableDef>,
+    method_records: &BTreeMap<String, BTreeSet<String>>,
 ) -> SourceItem {
     match item {
         SourceItem::Def {
@@ -771,7 +807,7 @@ fn specialize_row_callable_item(
             generics: generics.clone(),
             params: params.clone(),
             return_type: return_type.clone(),
-            body: specialize_row_callable_expr(body, row_callables),
+            body: specialize_row_callable_expr(body, row_callables, method_records),
         },
         SourceItem::StaticValue {
             name,
@@ -784,7 +820,7 @@ fn specialize_row_callable_item(
             attrs: attrs.clone(),
             visibility: *visibility,
             ty: ty.clone(),
-            body: specialize_row_callable_expr(body, row_callables),
+            body: specialize_row_callable_expr(body, row_callables, method_records),
         },
         SourceItem::ExternDef { .. } => item.clone(),
     }
@@ -793,14 +829,20 @@ fn specialize_row_callable_item(
 fn specialize_row_callable_expr(
     expr: &Expr,
     row_callables: &BTreeMap<String, RowCallableDef>,
+    method_records: &BTreeMap<String, BTreeSet<String>>,
 ) -> Expr {
     if let Expr::Call { callee, args } = expr {
         if let Expr::Var(callee_name) = callee.as_ref() {
             if let Some(row_callable) = row_callables.get(callee_name) {
                 if let [arg] = args.as_slice() {
-                    if row_callable_arg_has_callable_field(arg, &row_callable.field) {
+                    if row_callable_arg_has_callable_field(arg, &row_callable.field, method_records)
+                    {
                         return Expr::MethodCall {
-                            receiver: Box::new(specialize_row_callable_expr(arg, row_callables)),
+                            receiver: Box::new(specialize_row_callable_expr(
+                                arg,
+                                row_callables,
+                                method_records,
+                            )),
                             name: row_callable.field.clone(),
                             args: row_callable
                                 .args
@@ -811,6 +853,7 @@ fn specialize_row_callable_expr(
                                         &row_callable.param,
                                         args.first().expect("checked one row callable arg"),
                                         row_callables,
+                                        method_records,
                                     )
                                 })
                                 .collect(),
@@ -825,29 +868,41 @@ fn specialize_row_callable_expr(
         Expr::Var(_) | Expr::Lit(_) => expr.clone(),
         Expr::Lambda { param, body } => Expr::Lambda {
             param: param.clone(),
-            body: Box::new(specialize_row_callable_expr(body, row_callables)),
+            body: Box::new(specialize_row_callable_expr(
+                body,
+                row_callables,
+                method_records,
+            )),
         },
         Expr::Call { callee, args } => Expr::Call {
-            callee: Box::new(specialize_row_callable_expr(callee, row_callables)),
+            callee: Box::new(specialize_row_callable_expr(
+                callee,
+                row_callables,
+                method_records,
+            )),
             args: args
                 .iter()
-                .map(|arg| specialize_row_callable_expr(arg, row_callables))
+                .map(|arg| specialize_row_callable_expr(arg, row_callables, method_records))
                 .collect(),
         },
         Expr::Instantiate { callee, type_args } => Expr::Instantiate {
-            callee: Box::new(specialize_row_callable_expr(callee, row_callables)),
+            callee: Box::new(specialize_row_callable_expr(
+                callee,
+                row_callables,
+                method_records,
+            )),
             type_args: type_args.clone(),
         },
         Expr::Tuple(fields) => Expr::Tuple(
             fields
                 .iter()
-                .map(|field| specialize_row_callable_expr(field, row_callables))
+                .map(|field| specialize_row_callable_expr(field, row_callables, method_records))
                 .collect(),
         ),
         Expr::SliceLiteral(items) => Expr::SliceLiteral(
             items
                 .iter()
-                .map(|item| specialize_row_callable_expr(item, row_callables))
+                .map(|item| specialize_row_callable_expr(item, row_callables, method_records))
                 .collect(),
         ),
         Expr::Record(fields) => Expr::Record(
@@ -855,17 +910,29 @@ fn specialize_row_callable_expr(
                 .iter()
                 .map(|field| crate::ast::RecordField {
                     name: field.name.clone(),
-                    value: specialize_row_callable_expr(&field.value, row_callables),
+                    value: specialize_row_callable_expr(
+                        &field.value,
+                        row_callables,
+                        method_records,
+                    ),
                 })
                 .collect(),
         ),
         Expr::RecordUpdate { base, fields } => Expr::RecordUpdate {
-            base: Box::new(specialize_row_callable_expr(base, row_callables)),
+            base: Box::new(specialize_row_callable_expr(
+                base,
+                row_callables,
+                method_records,
+            )),
             fields: fields
                 .iter()
                 .map(|field| crate::ast::RecordField {
                     name: field.name.clone(),
-                    value: specialize_row_callable_expr(&field.value, row_callables),
+                    value: specialize_row_callable_expr(
+                        &field.value,
+                        row_callables,
+                        method_records,
+                    ),
                 })
                 .collect(),
         },
@@ -880,11 +947,15 @@ fn specialize_row_callable_expr(
             variants: variants.clone(),
             args: args
                 .iter()
-                .map(|arg| specialize_row_callable_expr(arg, row_callables))
+                .map(|arg| specialize_row_callable_expr(arg, row_callables, method_records))
                 .collect(),
         },
         Expr::Field { receiver, name } => Expr::Field {
-            receiver: Box::new(specialize_row_callable_expr(receiver, row_callables)),
+            receiver: Box::new(specialize_row_callable_expr(
+                receiver,
+                row_callables,
+                method_records,
+            )),
             name: name.clone(),
         },
         Expr::MethodCall {
@@ -892,38 +963,86 @@ fn specialize_row_callable_expr(
             name,
             args,
         } => Expr::MethodCall {
-            receiver: Box::new(specialize_row_callable_expr(receiver, row_callables)),
+            receiver: Box::new(specialize_row_callable_expr(
+                receiver,
+                row_callables,
+                method_records,
+            )),
             name: name.clone(),
             args: args
                 .iter()
-                .map(|arg| specialize_row_callable_expr(arg, row_callables))
+                .map(|arg| specialize_row_callable_expr(arg, row_callables, method_records))
                 .collect(),
         },
         Expr::Assign { target, value } => Expr::Assign {
-            target: Box::new(specialize_row_callable_expr(target, row_callables)),
-            value: Box::new(specialize_row_callable_expr(value, row_callables)),
+            target: Box::new(specialize_row_callable_expr(
+                target,
+                row_callables,
+                method_records,
+            )),
+            value: Box::new(specialize_row_callable_expr(
+                value,
+                row_callables,
+                method_records,
+            )),
         },
         Expr::Index { receiver, index } => Expr::Index {
-            receiver: Box::new(specialize_row_callable_expr(receiver, row_callables)),
-            index: Box::new(specialize_row_callable_expr(index, row_callables)),
+            receiver: Box::new(specialize_row_callable_expr(
+                receiver,
+                row_callables,
+                method_records,
+            )),
+            index: Box::new(specialize_row_callable_expr(
+                index,
+                row_callables,
+                method_records,
+            )),
         },
         Expr::Range { start, end } => Expr::Range {
-            start: Box::new(specialize_row_callable_expr(start, row_callables)),
-            end: Box::new(specialize_row_callable_expr(end, row_callables)),
+            start: Box::new(specialize_row_callable_expr(
+                start,
+                row_callables,
+                method_records,
+            )),
+            end: Box::new(specialize_row_callable_expr(
+                end,
+                row_callables,
+                method_records,
+            )),
         },
         Expr::Binary { op, lhs, rhs } => Expr::Binary {
             op: *op,
-            lhs: Box::new(specialize_row_callable_expr(lhs, row_callables)),
-            rhs: Box::new(specialize_row_callable_expr(rhs, row_callables)),
+            lhs: Box::new(specialize_row_callable_expr(
+                lhs,
+                row_callables,
+                method_records,
+            )),
+            rhs: Box::new(specialize_row_callable_expr(
+                rhs,
+                row_callables,
+                method_records,
+            )),
         },
         Expr::If {
             cond,
             then_branch,
             else_branch,
         } => Expr::If {
-            cond: Box::new(specialize_row_callable_expr(cond, row_callables)),
-            then_branch: Box::new(specialize_row_callable_expr(then_branch, row_callables)),
-            else_branch: Box::new(specialize_row_callable_expr(else_branch, row_callables)),
+            cond: Box::new(specialize_row_callable_expr(
+                cond,
+                row_callables,
+                method_records,
+            )),
+            then_branch: Box::new(specialize_row_callable_expr(
+                then_branch,
+                row_callables,
+                method_records,
+            )),
+            else_branch: Box::new(specialize_row_callable_expr(
+                else_branch,
+                row_callables,
+                method_records,
+            )),
         },
         Expr::IfLet {
             pattern,
@@ -932,31 +1051,59 @@ fn specialize_row_callable_expr(
             else_branch,
         } => Expr::IfLet {
             pattern: pattern.clone(),
-            scrutinee: Box::new(specialize_row_callable_expr(scrutinee, row_callables)),
-            then_branch: Box::new(specialize_row_callable_expr(then_branch, row_callables)),
-            else_branch: Box::new(specialize_row_callable_expr(else_branch, row_callables)),
+            scrutinee: Box::new(specialize_row_callable_expr(
+                scrutinee,
+                row_callables,
+                method_records,
+            )),
+            then_branch: Box::new(specialize_row_callable_expr(
+                then_branch,
+                row_callables,
+                method_records,
+            )),
+            else_branch: Box::new(specialize_row_callable_expr(
+                else_branch,
+                row_callables,
+                method_records,
+            )),
         },
         Expr::Match { scrutinee, arms } => Expr::Match {
-            scrutinee: Box::new(specialize_row_callable_expr(scrutinee, row_callables)),
+            scrutinee: Box::new(specialize_row_callable_expr(
+                scrutinee,
+                row_callables,
+                method_records,
+            )),
             arms: arms
                 .iter()
                 .map(|arm| crate::ast::MatchArm {
                     pattern: arm.pattern.clone(),
-                    body: specialize_row_callable_expr(&arm.body, row_callables),
+                    body: specialize_row_callable_expr(&arm.body, row_callables, method_records),
                 })
                 .collect(),
         },
         Expr::Nominal { name, expr } => Expr::Nominal {
             name: name.clone(),
-            expr: Box::new(specialize_row_callable_expr(expr, row_callables)),
+            expr: Box::new(specialize_row_callable_expr(
+                expr,
+                row_callables,
+                method_records,
+            )),
         },
         Expr::Reset { multi, body } => Expr::Reset {
             multi: *multi,
-            body: Box::new(specialize_row_callable_expr(body, row_callables)),
+            body: Box::new(specialize_row_callable_expr(
+                body,
+                row_callables,
+                method_records,
+            )),
         },
         Expr::Shift { binder, body } => Expr::Shift {
             binder: binder.clone(),
-            body: Box::new(specialize_row_callable_expr(body, row_callables)),
+            body: Box::new(specialize_row_callable_expr(
+                body,
+                row_callables,
+                method_records,
+            )),
         },
     }
 }
@@ -966,10 +1113,11 @@ fn substitute_row_callable_param(
     param: &str,
     replacement: &Expr,
     row_callables: &BTreeMap<String, RowCallableDef>,
+    method_records: &BTreeMap<String, BTreeSet<String>>,
 ) -> Expr {
     match expr {
         Expr::Var(name) if name == param => {
-            specialize_row_callable_expr(replacement, row_callables)
+            specialize_row_callable_expr(replacement, row_callables, method_records)
         }
         Expr::Lambda {
             param: lambda_param,
@@ -988,6 +1136,7 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
         },
         Expr::Call { callee, args } => Expr::Call {
@@ -996,10 +1145,19 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             args: args
                 .iter()
-                .map(|arg| substitute_row_callable_param(arg, param, replacement, row_callables))
+                .map(|arg| {
+                    substitute_row_callable_param(
+                        arg,
+                        param,
+                        replacement,
+                        row_callables,
+                        method_records,
+                    )
+                })
                 .collect(),
         },
         Expr::MethodCall {
@@ -1012,11 +1170,20 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             name: name.clone(),
             args: args
                 .iter()
-                .map(|arg| substitute_row_callable_param(arg, param, replacement, row_callables))
+                .map(|arg| {
+                    substitute_row_callable_param(
+                        arg,
+                        param,
+                        replacement,
+                        row_callables,
+                        method_records,
+                    )
+                })
                 .collect(),
         },
         Expr::Field { receiver, name } => Expr::Field {
@@ -1025,6 +1192,7 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             name: name.clone(),
         },
@@ -1035,12 +1203,14 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             rhs: Box::new(substitute_row_callable_param(
                 rhs,
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
         },
         Expr::Instantiate { callee, type_args } => Expr::Instantiate {
@@ -1049,6 +1219,7 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             type_args: type_args.clone(),
         },
@@ -1056,14 +1227,28 @@ fn substitute_row_callable_param(
             fields
                 .iter()
                 .map(|field| {
-                    substitute_row_callable_param(field, param, replacement, row_callables)
+                    substitute_row_callable_param(
+                        field,
+                        param,
+                        replacement,
+                        row_callables,
+                        method_records,
+                    )
                 })
                 .collect(),
         ),
         Expr::SliceLiteral(items) => Expr::SliceLiteral(
             items
                 .iter()
-                .map(|item| substitute_row_callable_param(item, param, replacement, row_callables))
+                .map(|item| {
+                    substitute_row_callable_param(
+                        item,
+                        param,
+                        replacement,
+                        row_callables,
+                        method_records,
+                    )
+                })
                 .collect(),
         ),
         Expr::Record(fields) => Expr::Record(
@@ -1076,6 +1261,7 @@ fn substitute_row_callable_param(
                         param,
                         replacement,
                         row_callables,
+                        method_records,
                     ),
                 })
                 .collect(),
@@ -1086,6 +1272,7 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             fields: fields
                 .iter()
@@ -1096,6 +1283,7 @@ fn substitute_row_callable_param(
                         param,
                         replacement,
                         row_callables,
+                        method_records,
                     ),
                 })
                 .collect(),
@@ -1111,7 +1299,15 @@ fn substitute_row_callable_param(
             variants: variants.clone(),
             args: args
                 .iter()
-                .map(|arg| substitute_row_callable_param(arg, param, replacement, row_callables))
+                .map(|arg| {
+                    substitute_row_callable_param(
+                        arg,
+                        param,
+                        replacement,
+                        row_callables,
+                        method_records,
+                    )
+                })
                 .collect(),
         },
         Expr::Assign { target, value } => Expr::Assign {
@@ -1120,12 +1316,14 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             value: Box::new(substitute_row_callable_param(
                 value,
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
         },
         Expr::Index { receiver, index } => Expr::Index {
@@ -1134,12 +1332,14 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             index: Box::new(substitute_row_callable_param(
                 index,
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
         },
         Expr::Range { start, end } => Expr::Range {
@@ -1148,12 +1348,14 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             end: Box::new(substitute_row_callable_param(
                 end,
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
         },
         Expr::If {
@@ -1166,18 +1368,21 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             then_branch: Box::new(substitute_row_callable_param(
                 then_branch,
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             else_branch: Box::new(substitute_row_callable_param(
                 else_branch,
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
         },
         Expr::IfLet {
@@ -1192,18 +1397,21 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             then_branch: Box::new(substitute_row_callable_param(
                 then_branch,
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             else_branch: Box::new(substitute_row_callable_param(
                 else_branch,
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
         },
         Expr::Match { scrutinee, arms } => Expr::Match {
@@ -1212,6 +1420,7 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
             arms: arms
                 .iter()
@@ -1222,6 +1431,7 @@ fn substitute_row_callable_param(
                         param,
                         replacement,
                         row_callables,
+                        method_records,
                     ),
                 })
                 .collect(),
@@ -1233,6 +1443,7 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
         },
         Expr::Reset { multi, body } => Expr::Reset {
@@ -1242,6 +1453,7 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
         },
         Expr::Shift { binder, body } if binder == param => Expr::Shift {
@@ -1255,19 +1467,29 @@ fn substitute_row_callable_param(
                 param,
                 replacement,
                 row_callables,
+                method_records,
             )),
         },
-        Expr::Var(_) | Expr::Lit(_) => specialize_row_callable_expr(expr, row_callables),
+        Expr::Var(_) | Expr::Lit(_) => {
+            specialize_row_callable_expr(expr, row_callables, method_records)
+        }
     }
 }
 
-fn row_callable_arg_has_callable_field(arg: &Expr, field: &str) -> bool {
-    let Expr::Record(fields) = arg else {
-        return false;
-    };
-    fields
-        .iter()
-        .any(|candidate| candidate.name == field && expr_is_callable_value(&candidate.value))
+fn row_callable_arg_has_callable_field(
+    arg: &Expr,
+    field: &str,
+    method_records: &BTreeMap<String, BTreeSet<String>>,
+) -> bool {
+    match arg {
+        Expr::Record(fields) => fields
+            .iter()
+            .any(|candidate| candidate.name == field && expr_is_callable_value(&candidate.value)),
+        Expr::Nominal { name, .. } => method_records
+            .get(name)
+            .is_some_and(|methods| methods.contains(field)),
+        _ => false,
+    }
 }
 
 fn expr_is_callable_value(expr: &Expr) -> bool {

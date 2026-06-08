@@ -1014,6 +1014,70 @@ def main(): i64 = call_f({f: (x: i64): i64 => x + 1})
 }
 
 #[test]
+fn program_auto_generic_row_callable_field_accepts_nominal_receiver_method() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "f",
+                vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("n", Some("i64".to_string())),
+                ],
+                Some("i64".to_string()),
+                Expr::binary(
+                    BinaryOp::Add,
+                    Expr::field(Expr::var("self"), "x"),
+                    Expr::var("n"),
+                ),
+            ),
+            SourceItem::def(
+                "call_f",
+                Vec::new(),
+                vec![ParamDecl::untyped("v")],
+                None,
+                Expr::method_call_args(Expr::var("v"), "f", vec![Expr::i64(1)]),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("call_f"),
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(10))])),
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(!main
+        .output
+        .core
+        .ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::TailCall { func, .. } if func == "call_f")));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "11");
+}
+
+#[test]
 fn program_dyn_row_callable_field_accepts_field_and_method_adapters() {
     let program = SourceProgram::with_surface(
         None,
