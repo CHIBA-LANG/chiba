@@ -3221,6 +3221,43 @@ fn source_slice_param_bool_range_slice_lowers_to_executable_runtime_import() {
 }
 
 #[test]
+fn source_builtin_index_rejects_wrong_concrete_index_operand() {
+    let output =
+        chiba_level1r::compile_source_program_bundle("def main(s: Slice[i64]): i64 = s[true]")
+            .expect("compile source");
+    let bundle = output.program;
+
+    assert!(
+        bundle.diagnostics.iter().any(|diagnostic| matches!(
+            diagnostic,
+            ProgramDiagnostic::InvalidOperatorOperands { def, op, lhs, rhs }
+                if def == "main" && op == "[]" && lhs == "Slice[i64]" && rhs == "bool"
+        )),
+        "{:?}",
+        bundle.diagnostics
+    );
+}
+
+#[test]
+fn source_builtin_slice_rejects_wrong_range_bound_operand() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main(s: Slice[i64]): i64 = s[true..1].len",
+    )
+    .expect("compile source");
+    let bundle = output.program;
+
+    assert!(
+        bundle.diagnostics.iter().any(|diagnostic| matches!(
+            diagnostic,
+            ProgramDiagnostic::InvalidOperatorOperands { def, op, lhs, rhs }
+                if def == "main" && op == "[..]" && lhs == "Slice[i64]" && rhs == "Range"
+        )),
+        "{:?}",
+        bundle.diagnostics
+    );
+}
+
+#[test]
 fn source_slice_param_string_index_lowers_to_executable_externref_runtime_import() {
     let bundle =
         compile_source_program_bundle("def main(s: Slice[String]): i64 = s[0].bytes_len()")
@@ -6479,6 +6516,35 @@ fn source_nominal_operator_stays_structural_obligation_not_builtin_operand_error
         .operator_obligations
         .iter()
         .any(|obligation| { obligation.protocol == "op_add" }));
+}
+
+#[test]
+fn source_unknown_index_stays_structural_obligation_not_builtin_operand_error() {
+    let output = chiba_level1r::compile_source_program_bundle("def main() = values[i]")
+        .expect("compile source");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert!(
+        !bundle.diagnostics.iter().any(|diagnostic| {
+            matches!(
+                diagnostic,
+                ProgramDiagnostic::InvalidOperatorOperands { .. }
+            )
+        }),
+        "{:?}",
+        bundle.diagnostics
+    );
+    assert!(main
+        .output
+        .resolve
+        .operator_obligations
+        .iter()
+        .any(|obligation| { obligation.protocol == "op_index" }));
 }
 
 #[test]

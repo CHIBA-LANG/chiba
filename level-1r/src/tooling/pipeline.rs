@@ -51,8 +51,8 @@ use crate::template::{analyze_template_with_source, TemplateDiagnostic, Template
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
     nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_to_type,
-    type_expr_with_context, type_expr_with_expected, ReceiverMethodSummary, RecordTypeField, Type,
-    TypeContext, TypeEnv, TypedExpr, TypedExprKind,
+    type_expr_with_context, type_expr_with_expected, IndexAccessKind, ReceiverMethodSummary,
+    RecordTypeField, Type, TypeContext, TypeEnv, TypedExpr, TypedExprKind,
 };
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -3255,8 +3255,11 @@ fn collect_operator_operand_diagnostics(
             collect_operator_operand_diagnostics(def, value, diagnostics);
         }
         TypedExprKind::Index {
-            receiver, index, ..
+            receiver,
+            index,
+            access,
         } => {
+            collect_index_operator_diagnostics(def, receiver, index, access, diagnostics);
             collect_operator_operand_diagnostics(def, receiver, diagnostics);
             collect_operator_operand_diagnostics(def, index, diagnostics);
         }
@@ -3298,6 +3301,63 @@ fn binary_operand_is_concrete_non_i64(ty: &Type) -> bool {
         ty,
         Type::Bool | Type::Rune | Type::Tuple(_) | Type::Record(_) | Type::DynRow(_)
     )
+}
+
+fn collect_index_operator_diagnostics(
+    def: &str,
+    receiver: &TypedExpr,
+    index: &TypedExpr,
+    access: &IndexAccessKind,
+    diagnostics: &mut Vec<ProgramDiagnostic>,
+) {
+    if !matches!(access, IndexAccessKind::Operator) {
+        if let TypedExprKind::Range { start, end } = &index.kind {
+            if start.ty != Type::I64 || end.ty != Type::I64 {
+                diagnostics.push(ProgramDiagnostic::InvalidOperatorOperands {
+                    def: def.to_string(),
+                    op: "[..]".to_string(),
+                    lhs: program_type_name(&receiver.ty),
+                    rhs: program_type_name(&index.ty),
+                });
+            }
+        }
+        return;
+    }
+
+    if builtin_indexable_type(&receiver.ty) && invalid_builtin_index_type(index) {
+        diagnostics.push(ProgramDiagnostic::InvalidOperatorOperands {
+            def: def.to_string(),
+            op: index_operator_name(index),
+            lhs: program_type_name(&receiver.ty),
+            rhs: program_type_name(&index.ty),
+        });
+    }
+}
+
+fn builtin_indexable_type(ty: &Type) -> bool {
+    matches!(
+        ty,
+        Type::Nominal(name)
+            if matches!(
+                nominal_base_name_for_type(&Type::Nominal(name.clone())).as_deref(),
+                Some("Slice" | "Array" | "Vec" | "str" | "String" | "cstr")
+            )
+    )
+}
+
+fn invalid_builtin_index_type(index: &TypedExpr) -> bool {
+    match &index.kind {
+        TypedExprKind::Range { start, end } => start.ty != Type::I64 || end.ty != Type::I64,
+        _ => index.ty != Type::I64,
+    }
+}
+
+fn index_operator_name(index: &TypedExpr) -> String {
+    if matches!(index.kind, TypedExprKind::Range { .. }) {
+        "[..]".to_string()
+    } else {
+        "[]".to_string()
+    }
 }
 
 fn program_type_name(ty: &Type) -> String {
