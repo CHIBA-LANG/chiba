@@ -54,6 +54,11 @@ pub enum CpsAtom {
         package: Box<CpsAtom>,
         field: String,
     },
+    ReceiverMethod {
+        receiver: Box<CpsAtom>,
+        symbol: String,
+        runtime_target: String,
+    },
     Range {
         start: Box<CpsAtom>,
         end: Box<CpsAtom>,
@@ -396,6 +401,7 @@ fn transform(
             name,
             args,
             builtin,
+            receiver_method,
         } => {
             let receiver_has_callable_field = type_has_callable_record_field(&receiver.ty, name);
             let receiver_has_callable_dyn_row_field =
@@ -425,6 +431,12 @@ fn transform(
                         CpsAtom::RecordField {
                             record: Box::new(receiver),
                             field: name.clone(),
+                        }
+                    } else if let Some(method) = receiver_method {
+                        CpsAtom::ReceiverMethod {
+                            receiver: Box::new(receiver),
+                            symbol: method.symbol.clone(),
+                            runtime_target: method.runtime_target.clone(),
                         }
                     } else {
                         CpsAtom::Var(format!("{receiver}.{name}"))
@@ -1286,6 +1298,11 @@ impl fmt::Display for CpsAtom {
                 write!(f, "]}}")
             }
             CpsAtom::DynRowField { package, field } => write!(f, "{package}.{field}"),
+            CpsAtom::ReceiverMethod {
+                receiver,
+                runtime_target,
+                ..
+            } => write!(f, "{receiver}.{runtime_target}"),
             CpsAtom::Range { start, end } => write!(f, "{start}..{end}"),
             CpsAtom::RangeField { range, boundary } => {
                 write!(f, "{range}.{}", boundary.source_name())

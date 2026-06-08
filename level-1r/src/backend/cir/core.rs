@@ -1110,6 +1110,15 @@ fn substitute_cps_atom(atom: &CpsAtom, bindings: &[(&str, &CpsAtom)]) -> CpsAtom
             package: Box::new(substitute_cps_atom(package, bindings)),
             field: field.clone(),
         },
+        CpsAtom::ReceiverMethod {
+            receiver,
+            symbol,
+            runtime_target,
+        } => CpsAtom::ReceiverMethod {
+            receiver: Box::new(substitute_cps_atom(receiver, bindings)),
+            symbol: symbol.clone(),
+            runtime_target: runtime_target.clone(),
+        },
         CpsAtom::Range { start, end } => CpsAtom::Range {
             start: Box::new(substitute_cps_atom(start, bindings)),
             end: Box::new(substitute_cps_atom(end, bindings)),
@@ -1289,6 +1298,11 @@ fn lower_call_args(
                 .map(|arg| core_callable_arg_value(arg, lambda_lift))
                 .collect()
         }
+        CpsAtom::ReceiverMethod { receiver, .. } => {
+            std::iter::once(receiver_method_self_arg(receiver))
+                .chain(args.iter().map(core_value))
+                .collect()
+        }
         _ => args
             .iter()
             .map(|arg| core_callable_arg_value(arg, lambda_lift))
@@ -1298,6 +1312,13 @@ fn lower_call_args(
 
 fn core_callable_arg_value(atom: &CpsAtom, lambda_lift: &LambdaLiftFacts) -> CoreValue {
     core_value_with_lift(atom, lambda_lift)
+}
+
+fn receiver_method_self_arg(receiver: &CpsAtom) -> CoreValue {
+    match receiver {
+        CpsAtom::Record { fields, .. } if fields.len() == 1 => core_value(&fields[0].value),
+        _ => core_value(receiver),
+    }
 }
 
 fn core_value_with_lift(atom: &CpsAtom, lambda_lift: &LambdaLiftFacts) -> CoreValue {
@@ -1363,6 +1384,10 @@ fn lower_callable_target(target: &str, atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 target: target.to_string(),
             });
         }
+        CpsAtom::ReceiverMethod { symbol, .. } => ops.push(CoreOp::CallableAlias {
+            target: target.to_string(),
+            value: CoreValue::Var(symbol.clone()),
+        }),
         _ => ops.push(CoreOp::DynamicCallableTarget {
             target: target.to_string(),
         }),
@@ -1672,6 +1697,7 @@ fn find_cps_fun_lambda_atom<'a>(
         | CpsAtom::DynRowField {
             package: receiver, ..
         }
+        | CpsAtom::ReceiverMethod { receiver, .. }
         | CpsAtom::RangeField {
             range: receiver, ..
         }
@@ -2226,6 +2252,11 @@ fn render_atom(atom: &CpsAtom) -> String {
         CpsAtom::DynRowField { package, field } => {
             format!("{}.{}", render_atom(package), field)
         }
+        CpsAtom::ReceiverMethod {
+            receiver,
+            runtime_target,
+            ..
+        } => format!("{}.{}", render_atom(receiver), runtime_target),
         CpsAtom::RecordUpdate {
             base,
             layout,
@@ -2270,6 +2301,9 @@ fn core_value(atom: &CpsAtom) -> CoreValue {
         CpsAtom::Var(name) if name == "Unit" || name == "unit" => CoreValue::Unit,
         CpsAtom::Var(name) => CoreValue::Var(name.clone()),
         CpsAtom::OperatorCallee { .. } => CoreValue::Rendered {
+            debug: render_atom(atom),
+        },
+        CpsAtom::ReceiverMethod { .. } => CoreValue::Rendered {
             debug: render_atom(atom),
         },
         CpsAtom::Tuple { fields, .. } => CoreValue::Tuple {

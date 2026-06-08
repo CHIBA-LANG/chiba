@@ -168,6 +168,130 @@ fn program_typed_lambda_call_uses_function_return_type() {
 }
 
 #[test]
+fn program_receiver_method_wins_over_same_named_plain_function() {
+    let current = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "value",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                Some("i64".to_string()),
+                Expr::field(Expr::var("self"), "x"),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::method_call_args(
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(42))])),
+                    "value",
+                    Vec::new(),
+                ),
+            ),
+        ],
+    );
+    let imported = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["lib".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::def(
+            "value",
+            Vec::new(),
+            vec![ParamDecl::new("x", Some("X".to_string()))],
+            Some("bool".to_string()),
+            Expr::bool(false),
+        )],
+    );
+    let interface = build_interface_summary(&project_surface_many(&[current.clone(), imported]));
+
+    let outputs = compile_program_with_interface(&current, &interface);
+    let main = outputs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(main.output.typed.ty, Type::I64);
+    assert!(main
+        .output
+        .resolve
+        .resolved_calls
+        .iter()
+        .any(|call| matches!(
+            call,
+            chiba_level1r::resolve::ResolvedCall::ReceiverMethod {
+                receiver,
+                name,
+                symbol,
+            } if receiver == "X" && name == "value" && symbol == "root::X.value"
+        )));
+    assert!(main.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::CallableAlias { target, value }
+                if target.ends_with(".value") && value == &CoreValue::Var("root::X.value".to_string())
+        )
+    }));
+    assert!(main.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::DirectMethodTarget { name, target }
+                if name == "value" && target == "root::X.value"
+        )
+    }));
+    assert!(!main.output.backend.wat.contains("call $lib__value"));
+}
+
+#[test]
+fn program_receiver_method_call_lowers_to_executable_wat() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "value",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                Some("i64".to_string()),
+                Expr::field(Expr::var("self"), "x"),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::method_call_args(
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(42))])),
+                    "value",
+                    Vec::new(),
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "42");
+}
+
+#[test]
 fn typed_multi_arg_call_steps_through_curried_function_type() {
     let mut env = chiba_level1r::typed::TypeEnv::new();
     env.insert(

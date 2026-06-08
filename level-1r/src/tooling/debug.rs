@@ -1456,12 +1456,20 @@ fn render_typed_expr_into(expr: &TypedExpr, depth: usize, out: &mut String) {
             name,
             args,
             builtin,
+            receiver_method,
         } => {
             if let Some(builtin) = builtin {
                 writeln!(
                     out,
                     "{indent}  method {name} builtin={}",
                     builtin.debug_name()
+                )
+                .unwrap();
+            } else if let Some(method) = receiver_method {
+                writeln!(
+                    out,
+                    "{indent}  method {name} receiver-method={}",
+                    method.symbol
                 )
                 .unwrap();
             } else {

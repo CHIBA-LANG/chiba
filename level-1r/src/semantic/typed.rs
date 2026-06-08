@@ -73,6 +73,7 @@ pub enum TypedExprKind {
         name: String,
         args: Vec<TypedExpr>,
         builtin: Option<BuiltinMethodCall>,
+        receiver_method: Option<TypedReceiverMethodTarget>,
     },
     Assign {
         target: Box<TypedExpr>,
@@ -138,6 +139,12 @@ pub struct TypedRecordField {
 pub struct TypedDynRowField {
     pub name: String,
     pub source: DynRowFieldSource,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypedReceiverMethodTarget {
+    pub symbol: String,
+    pub runtime_target: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -878,17 +885,22 @@ fn type_expr_with_context_and_controls(
                 );
             }
             let builtin = builtin_method_call(&receiver, name, &args);
+            let receiver_method = receiver_method_target(&receiver.ty, name, &args, context);
             let ty = builtin
                 .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty, &args))
-                .unwrap_or_else(|| {
-                    field_callable_result_type(&receiver.ty, name, args.len(), context)
-                });
+                .or_else(|| {
+                    receiver_method
+                        .as_ref()
+                        .map(|method| method.result_ty.clone())
+                })
+                .unwrap_or(Type::Unknown);
             typed(
                 TypedExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     name: name.clone(),
                     args,
                     builtin,
+                    receiver_method: receiver_method.map(|method| method.target),
                 },
                 ty,
             )
@@ -1363,17 +1375,22 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
                 .map(|arg| refine_continuation_types(arg, context))
                 .collect::<Vec<_>>();
             let builtin = builtin_method_call(&receiver, &name, &args);
+            let receiver_method = receiver_method_target(&receiver.ty, &name, &args, context);
             let ty = builtin
                 .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty, &args))
-                .unwrap_or_else(|| {
-                    field_callable_result_type(&receiver.ty, &name, args.len(), context)
-                });
+                .or_else(|| {
+                    receiver_method
+                        .as_ref()
+                        .map(|method| method.result_ty.clone())
+                })
+                .unwrap_or(Type::Unknown);
             typed(
                 TypedExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     name,
                     args,
                     builtin,
+                    receiver_method: receiver_method.map(|method| method.target),
                 },
                 ty,
             )
@@ -1779,17 +1796,22 @@ fn refine_pattern_binding_types(
                 .map(|arg| refine_pattern_binding_types(arg, bindings, context))
                 .collect::<Vec<_>>();
             let builtin = builtin_method_call(&receiver, &name, &args);
+            let receiver_method = receiver_method_target(&receiver.ty, &name, &args, context);
             let ty = builtin
                 .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty, &args))
-                .unwrap_or_else(|| {
-                    field_callable_result_type(&receiver.ty, &name, args.len(), context)
-                });
+                .or_else(|| {
+                    receiver_method
+                        .as_ref()
+                        .map(|method| method.result_ty.clone())
+                })
+                .unwrap_or(Type::Unknown);
             typed(
                 TypedExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     name,
                     args,
                     builtin,
+                    receiver_method: receiver_method.map(|method| method.target),
                 },
                 ty,
             )
@@ -2229,6 +2251,7 @@ fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type
             receiver,
             name,
             args,
+            receiver_method,
             ..
         } => {
             let receiver = rewrite_continuation_callee_input(*receiver, binder, input);
@@ -2243,6 +2266,7 @@ fn rewrite_continuation_callee_input(expr: TypedExpr, binder: &str, input: &Type
                     name,
                     args,
                     builtin,
+                    receiver_method,
                 },
                 expr.ty,
             )
@@ -2633,15 +2657,38 @@ fn dyn_row_field_type(receiver: &Type, name: &str) -> Option<Type> {
     field_type(fields, name)
 }
 
-fn field_callable_result_type(
+struct ReceiverMethodTargetType {
+    target: TypedReceiverMethodTarget,
+    result_ty: Type,
+}
+
+fn receiver_method_target(
     receiver: &Type,
     name: &str,
-    arity: usize,
+    args: &[TypedExpr],
     context: &TypeContext,
-) -> Type {
-    field_callable_callee_type(receiver, name, context)
-        .map(|(_, ty)| call_result_type(&ty, arity))
-        .unwrap_or(Type::Unknown)
+) -> Option<ReceiverMethodTargetType> {
+    let Some(method) = context.receiver_method(receiver, name) else {
+        return None;
+    };
+    if method.param_tys.len() != args.len() {
+        return None;
+    }
+    if method
+        .param_tys
+        .iter()
+        .zip(args)
+        .any(|(expected, actual)| expected != &Type::Unknown && expected != &actual.ty)
+    {
+        return None;
+    }
+    Some(ReceiverMethodTargetType {
+        target: TypedReceiverMethodTarget {
+            symbol: method.symbol.clone(),
+            runtime_target: method.runtime_target.clone(),
+        },
+        result_ty: method.result_ty.clone(),
+    })
 }
 
 fn field_callable_callee_type(

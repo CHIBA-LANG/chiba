@@ -187,6 +187,7 @@ fn visit_atom(atom: &CpsAtom, facts: &mut CpsUsageFacts) {
         CpsAtom::RecordField { record, .. } => visit_atom(record, facts),
         CpsAtom::DynRowPackage { payload, .. } => visit_atom(payload, facts),
         CpsAtom::DynRowField { package, .. } => visit_atom(package, facts),
+        CpsAtom::ReceiverMethod { receiver, .. } => visit_atom(receiver, facts),
         CpsAtom::RecordUpdate { base, fields, .. } => {
             visit_atom(base, facts);
             for field in fields {
@@ -312,6 +313,7 @@ fn count_atom_refs(atom: &CpsAtom, binder: &str, count: &mut UseCount) {
         CpsAtom::RecordField { record, .. } => count_atom_refs(record, binder, count),
         CpsAtom::DynRowPackage { payload, .. } => count_atom_refs(payload, binder, count),
         CpsAtom::DynRowField { package, .. } => count_atom_refs(package, binder, count),
+        CpsAtom::ReceiverMethod { receiver, .. } => count_atom_refs(receiver, binder, count),
         CpsAtom::RecordUpdate { base, fields, .. } => {
             count_atom_refs(base, binder, count);
             for field in fields {
