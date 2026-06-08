@@ -6608,13 +6608,13 @@ fn program_nominal_operator_resolves_to_receiver_method_and_lowers_to_wat() {
                 "op_add",
                 vec![
                     ParamDecl::new("self", Some("Self".to_string())),
-                    ParamDecl::new("other", Some("i64".to_string())),
+                    ParamDecl::new("other", Some("Vec2".to_string())),
                 ],
                 Some("i64".to_string()),
                 Expr::binary(
                     BinaryOp::Add,
                     Expr::field(Expr::var("self"), "x"),
-                    Expr::var("other"),
+                    Expr::field(Expr::var("other"), "x"),
                 ),
             ),
             SourceItem::def(
@@ -6625,7 +6625,7 @@ fn program_nominal_operator_resolves_to_receiver_method_and_lowers_to_wat() {
                 Expr::binary(
                     BinaryOp::Add,
                     Expr::nominal("Vec2", Expr::record(vec![("x", Expr::i64(19))])),
-                    Expr::i64(23),
+                    Expr::nominal("Vec2", Expr::record(vec![("x", Expr::i64(23))])),
                 ),
             ),
         ],
@@ -6707,6 +6707,68 @@ fn program_nominal_index_operator_resolves_to_receiver_method_and_lowers_to_wat(
             op,
             CoreOp::CallableAlias { value, .. }
                 if value == &CoreValue::Var("root::Box.op_index".to_string())
+        )
+    }));
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "42");
+}
+
+#[test]
+fn program_nominal_index_slice_operator_resolves_to_receiver_method_and_lowers_to_wat() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("Box", Vec::new()),
+                "op_index_slice",
+                vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("range", Some("Range".to_string())),
+                ],
+                Some("i64".to_string()),
+                Expr::binary(
+                    BinaryOp::Add,
+                    Expr::binary(
+                        BinaryOp::Add,
+                        Expr::field(Expr::var("self"), "x"),
+                        Expr::field(Expr::var("range"), "start"),
+                    ),
+                    Expr::field(Expr::var("range"), "end"),
+                ),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::index(
+                    Expr::nominal("Box", Expr::record(vec![("x", Expr::i64(39))])),
+                    Expr::range(Expr::i64(1), Expr::i64(2)),
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(main.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::CallableAlias { value, .. }
+                if value == &CoreValue::Var("root::Box.op_index_slice".to_string())
         )
     }));
     assert_backend_link_clean_all(&bundle);

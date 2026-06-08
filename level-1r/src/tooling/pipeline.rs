@@ -234,6 +234,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &type_aliases,
         &[],
         &[],
+        &[],
         &TypeEnv::new(),
     )
 }
@@ -251,6 +252,7 @@ fn compile_expr_with_indexes_and_generics(
     current_namespace: &str,
     type_aliases: &TypeAliasIndex,
     interface_functions: &[crate::surface::InterfaceFunction],
+    interface_types: &[crate::surface::InterfaceType],
     interface_statics: &[crate::surface::InterfaceStatic],
     function_env: &TypeEnv,
 ) -> CompileOutput {
@@ -400,8 +402,12 @@ fn compile_expr_with_indexes_and_generics(
                 .iter()
                 .map(|param| param.name.clone())
                 .collect::<Vec<_>>();
-            let param_abi =
-                backend_param_abi(&typed_signature, interface_functions, interface_statics);
+            let param_abi = backend_param_abi(
+                &typed_signature,
+                interface_functions,
+                interface_types,
+                interface_statics,
+            );
             emit_wasm_gc_with_param_abi(&core, &core_validation, &param_names, &param_abi)
         },
     );
@@ -1055,6 +1061,7 @@ fn compile_program_defs(
                         &current_namespace,
                         &type_aliases,
                         &interface.functions,
+                        &interface.types,
                         &interface.statics,
                         &function_env,
                     );
@@ -1090,6 +1097,7 @@ fn refresh_program_backends_with_lifted_callables(
         let param_abi = backend_param_abi_with_extra_functions(
             &def.output.typed_signature,
             &interface.functions,
+            &interface.types,
             &interface.statics,
             extra_functions,
             &returned,
@@ -1249,8 +1257,11 @@ fn program_dyn_row_contract_function_abis(
     contracts: &BTreeMap<String, BTreeMap<String, Type>>,
     returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
 ) -> BTreeMap<String, BackendCallableAbi> {
-    let function_abis =
-        backend_callable_abis_for_interface(&interface.functions, returned_callables);
+    let function_abis = backend_callable_abis_for_interface(
+        &interface.functions,
+        &interface.types,
+        returned_callables,
+    );
     defs.iter()
         .filter_map(|def| {
             let param_contracts = contracts.get(&def.name)?;
@@ -1307,6 +1318,9 @@ fn backend_arg_expansion_param_kinds(
             params
         }
         BackendCallableArgExpansion::DynRowFields(fields) => {
+            fields.iter().map(|field| field.kind).collect()
+        }
+        BackendCallableArgExpansion::StaticRowFields(fields) => {
             fields.iter().map(|field| field.kind).collect()
         }
     }
@@ -1620,11 +1634,13 @@ fn interface_callable_storage_facts(interface: &InterfaceSummary) -> Vec<Callabl
 fn backend_param_abi(
     signature: &TypedSignature,
     functions: &[crate::surface::InterfaceFunction],
+    types: &[crate::surface::InterfaceType],
     statics: &[crate::surface::InterfaceStatic],
 ) -> BackendParamAbi {
     backend_param_abi_with_extra_functions(
         signature,
         functions,
+        types,
         statics,
         BTreeMap::new(),
         &BTreeMap::new(),
@@ -1635,14 +1651,16 @@ fn backend_param_abi(
 fn backend_param_abi_with_extra_functions(
     signature: &TypedSignature,
     functions: &[crate::surface::InterfaceFunction],
+    types: &[crate::surface::InterfaceType],
     statics: &[crate::surface::InterfaceStatic],
     extra_functions: BTreeMap<String, BackendCallableAbi>,
     returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
     extra_dyn_param_types: Option<&BTreeMap<String, Type>>,
 ) -> BackendParamAbi {
-    let mut function_abis = backend_callable_abis_for_interface(functions, returned_callables);
+    let mut function_abis =
+        backend_callable_abis_for_interface(functions, types, returned_callables);
     function_abis.extend(extra_functions);
-    let mut dyn_row_param_fields = backend_dyn_row_param_fields_for_signature(signature);
+    let mut dyn_row_param_fields = backend_dyn_row_param_fields_for_signature(signature, types);
     let mut dyn_row_param_methods =
         backend_dyn_row_param_methods_for_signature(signature, functions);
     if let Some(extra_dyn_param_types) = extra_dyn_param_types {
@@ -1714,15 +1732,23 @@ fn backend_callable_params_for_signature(
 
 fn backend_dyn_row_param_fields_for_signature(
     signature: &TypedSignature,
+    types: &[crate::surface::InterfaceType],
 ) -> BTreeMap<String, Vec<BackendDynRowParamFieldAbi>> {
+    let static_row_fields = backend_static_row_fields_by_type(types);
     signature
         .params
         .iter()
         .filter_map(|param| {
-            let Type::DynRow(fields) = source_type_name_to_type(&param.ty) else {
-                return None;
+            let ty = source_type_name_to_type(&param.ty);
+            let fields = match ty {
+                Type::DynRow(fields) | Type::Record(fields) => backend_dyn_row_field_abis(&fields),
+                Type::Nominal(name)
+                    if !backend_nominal_is_externref(&Type::Nominal(name.clone())) =>
+                {
+                    static_row_fields.get(&name).cloned().unwrap_or_default()
+                }
+                _ => Vec::new(),
             };
-            let fields = backend_dyn_row_field_abis(&fields);
             (!fields.is_empty()).then_some((param.name.clone(), fields))
         })
         .collect()
@@ -1736,6 +1762,31 @@ fn backend_dyn_row_field_abis(fields: &[RecordTypeField]) -> Vec<BackendDynRowPa
                 field: field.name.clone(),
                 kind,
             })
+        })
+        .collect()
+}
+
+fn backend_static_row_fields_by_type(
+    types: &[crate::surface::InterfaceType],
+) -> BTreeMap<String, Vec<BackendDynRowParamFieldAbi>> {
+    types
+        .iter()
+        .filter(|ty| ty.alias_target.is_none())
+        .filter_map(|ty| {
+            let fields = ty
+                .fields
+                .iter()
+                .filter_map(|field| {
+                    let field_ty = source_type_name_to_type(&field.ty);
+                    backend_storage_value_kind_for_type(&field_ty).map(|kind| {
+                        BackendDynRowParamFieldAbi {
+                            field: field.name.clone(),
+                            kind,
+                        }
+                    })
+                })
+                .collect::<Vec<_>>();
+            (!fields.is_empty()).then_some((nominal_display_name(&ty.name, &ty.generics), fields))
         })
         .collect()
 }
@@ -1947,9 +1998,11 @@ fn backend_static_ref_cell_lanes_for_interface(
 
 fn backend_callable_abis_for_interface(
     functions: &[crate::surface::InterfaceFunction],
+    types: &[crate::surface::InterfaceType],
     returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
 ) -> BTreeMap<String, BackendCallableAbi> {
     let mut abis = BTreeMap::new();
+    let static_row_fields = backend_static_row_fields_by_type(types);
     for function in functions.iter() {
         let arg_expansions = function
             .param_types
@@ -1960,6 +2013,17 @@ fn backend_callable_abis_for_interface(
                     Some(Type::DynRow(fields)) => BackendCallableArgExpansion::DynRowFields(
                         backend_dyn_row_field_abis(&fields),
                     ),
+                    Some(Type::Record(fields)) => BackendCallableArgExpansion::StaticRowFields(
+                        backend_dyn_row_field_abis(&fields),
+                    ),
+                    Some(Type::Nominal(ref name))
+                        if static_row_fields.contains_key(name)
+                            && !backend_nominal_is_externref(&Type::Nominal(name.clone())) =>
+                    {
+                        BackendCallableArgExpansion::StaticRowFields(
+                            static_row_fields.get(name).cloned().unwrap_or_default(),
+                        )
+                    }
                     Some(Type::Func(input, result, _)) => BackendCallableArgExpansion::Callable {
                         params: backend_value_kind_for_type(&input)
                             .or_else(|| backend_storage_value_kind_for_type(&input))
@@ -1988,6 +2052,9 @@ fn backend_callable_abis_for_interface(
                     params
                 }
                 BackendCallableArgExpansion::DynRowFields(fields) => {
+                    fields.iter().map(|field| field.kind).collect()
+                }
+                BackendCallableArgExpansion::StaticRowFields(fields) => {
                     fields.iter().map(|field| field.kind).collect()
                 }
             })

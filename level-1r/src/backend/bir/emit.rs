@@ -118,6 +118,7 @@ pub enum BackendCallableArgExpansion {
         result: Option<BackendValueKind>,
     },
     DynRowFields(Vec<BackendDynRowParamFieldAbi>),
+    StaticRowFields(Vec<BackendDynRowParamFieldAbi>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -572,8 +573,9 @@ fn unsupported_expanded_tailcall_arg(
         .then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
             value: arg.debug_name(),
         }),
-        BackendCallableArgExpansion::DynRowFields(fields) => fields.iter().find_map(|field| {
-            let Some(value) = dyn_row_data_field_value(arg, &field.field, env) else {
+        BackendCallableArgExpansion::DynRowFields(fields)
+        | BackendCallableArgExpansion::StaticRowFields(fields) => fields.iter().find_map(|field| {
+            let Some(value) = row_data_field_value(arg, &field.field, env) else {
                 return Some(BackendDiagnostic::UnsupportedI32ReturnValue {
                     value: format!("{}.{}", arg.debug_name(), field.field),
                 });
@@ -2766,6 +2768,7 @@ fn operator_intrinsic_opcode(intrinsic: Option<OperatorIntrinsic>) -> Option<&'s
 
 #[derive(Clone)]
 struct RenderEnv {
+    param_order: Vec<String>,
     params: BTreeSet<String>,
     locals: BTreeMap<String, WasmValueKind>,
     local_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
@@ -2786,6 +2789,7 @@ struct RenderEnv {
 impl RenderEnv {
     fn new(params: &[String], param_kinds: &BTreeMap<String, WasmValueKind>) -> Self {
         Self {
+            param_order: params.to_vec(),
             params: params.iter().cloned().collect(),
             locals: BTreeMap::new(),
             local_ref_cell_lanes: BTreeMap::new(),
@@ -3038,7 +3042,11 @@ impl RenderEnv {
 
     fn with_params_as_locals(&self, names: Vec<String>) -> Self {
         let mut next = self.with_locals(names.clone());
-        next.params.extend(names);
+        for name in names {
+            if next.params.insert(name.clone()) {
+                next.param_order.push(name);
+            }
+        }
         next
     }
 
@@ -3107,7 +3115,7 @@ impl RenderEnv {
 
     fn signature(&self) -> String {
         let mut out = String::new();
-        for param in &self.params {
+        for param in &self.param_order {
             if let Some(fields) = self.dyn_row_param_fields.get(param) {
                 for field in fields {
                     out.push_str(&format!(
@@ -3386,16 +3394,19 @@ fn tailcall_args_are_renderable(
                     callable_selector_for_value(arg, params, callable_env, *result, env).is_some()
                         && callable_env_values(arg, callable_env, env).is_some()
                 }
-                BackendCallableArgExpansion::DynRowFields(fields) => fields.iter().all(|field| {
-                    dyn_row_data_field_value(arg, &field.field, env)
-                        .map(|value| match WasmValueKind::from(field.kind) {
-                            WasmValueKind::I32 => core_value_is_renderable_i32(&value, env),
-                            WasmValueKind::ExternRef => {
-                                core_value_is_renderable_externref(&value, env)
-                            }
-                        })
-                        .unwrap_or(false)
-                }),
+                BackendCallableArgExpansion::DynRowFields(fields)
+                | BackendCallableArgExpansion::StaticRowFields(fields) => {
+                    fields.iter().all(|field| {
+                        row_data_field_value(arg, &field.field, env)
+                            .map(|value| match WasmValueKind::from(field.kind) {
+                                WasmValueKind::I32 => core_value_is_renderable_i32(&value, env),
+                                WasmValueKind::ExternRef => {
+                                    core_value_is_renderable_externref(&value, env)
+                                }
+                            })
+                            .unwrap_or(false)
+                    })
+                }
             });
     }
     let Some((params, _)) = callable_signature_for_target(core, func, env) else {
@@ -3554,10 +3565,11 @@ fn render_tailcall_args(
                         }
                     }
                 }
-                BackendCallableArgExpansion::DynRowFields(fields) => {
+                BackendCallableArgExpansion::DynRowFields(fields)
+                | BackendCallableArgExpansion::StaticRowFields(fields) => {
                     for field in fields {
                         let value =
-                            dyn_row_data_field_value(arg, &field.field, env).ok_or_else(|| {
+                            row_data_field_value(arg, &field.field, env).ok_or_else(|| {
                                 BackendDiagnostic::UnsupportedI32ReturnValue {
                                     value: format!("{}.{}", arg.debug_name(), field.field),
                                 }
@@ -3902,7 +3914,9 @@ fn render_core_value_i32(
             if let Some(value) = record_field_value(record, field, env) {
                 render_core_value_i32(wat, value, env)?;
             } else if let CoreValue::Var(name) = resolve_core_value_binding(record, env) {
-                if env.param_kind(name) == WasmValueKind::I32 {
+                if let Some(lane) = env.dyn_row_param_field_lane(name, field) {
+                    wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(&lane)));
+                } else if env.param_kind(name) == WasmValueKind::I32 {
                     wat.push_str(&format!("    local.get ${}\n", encode_debug_symbol(name)));
                 } else {
                     return Err(unsupported_i32_render_diagnostic(value));
@@ -4385,8 +4399,12 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         CoreValue::RecordField { record, field } => record_field_value(record, field, env)
             .map(|value| core_value_is_renderable_i32(value, env))
             .unwrap_or_else(|| {
-                matches!(resolve_core_value_binding(record, env), CoreValue::Var(name) if env.param_kind(name) == WasmValueKind::I32)
-                    && !field.is_empty()
+                matches!(
+                    resolve_core_value_binding(record, env),
+                    CoreValue::Var(name)
+                        if env.dyn_row_param_field_lane(name, field).is_some()
+                            || env.param_kind(name) == WasmValueKind::I32
+                ) && !field.is_empty()
             }),
         CoreValue::DynRowField { package, field } => dyn_row_field_value(package, field, env)
             .map(|value| core_value_is_renderable_i32(value, env))
@@ -4419,11 +4437,9 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         CoreValue::BuiltinRuntimeCall { call, args } => {
             builtin_runtime_call_is_renderable_i32(*call, args, env)
         }
-        CoreValue::DynRowPackage { .. } => {
-            single_data_lane_dyn_row_package_i32_value(value, env)
-                .map(|value| core_value_is_renderable_i32(&value, env))
-                .unwrap_or(false)
-        }
+        CoreValue::DynRowPackage { .. } => single_data_lane_dyn_row_package_i32_value(value, env)
+            .map(|value| core_value_is_renderable_i32(&value, env))
+            .unwrap_or(false),
         CoreValue::Tuple { .. }
         | CoreValue::AdtTuple { .. }
         | CoreValue::TextLiteral { .. }
@@ -4536,11 +4552,7 @@ fn dyn_row_field_value<'a>(
     }
 }
 
-fn dyn_row_data_field_value(
-    package: &CoreValue,
-    field: &str,
-    env: &RenderEnv,
-) -> Option<CoreValue> {
+fn row_data_field_value(package: &CoreValue, field: &str, env: &RenderEnv) -> Option<CoreValue> {
     let package = resolve_core_value_binding(package, env);
     match package {
         CoreValue::Record { .. } | CoreValue::RecordUpdate { .. } => {
