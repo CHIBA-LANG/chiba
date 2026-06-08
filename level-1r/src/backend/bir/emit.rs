@@ -7,7 +7,7 @@ use crate::core::{
     SliceField, TextField,
 };
 use crate::symbol::encode_debug_symbol;
-use crate::typed::{AggregateKind, BuiltinMethodCall, TextKind};
+use crate::typed::{AggregateKind, BuiltinMethodCall, TextKind, Type};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BackendArtifact {
@@ -106,6 +106,7 @@ pub struct BackendCallableAbi {
     pub result: Option<BackendValueKind>,
     pub result_ref_cell_lane: Option<CoreRefCellLane>,
     pub return_callable: Option<BackendReturnedCallableAbi>,
+    pub return_dyn_row_methods: Vec<BackendDynRowParamMethodAbi>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2645,17 +2646,23 @@ fn render_tailcall_result_store(
 }
 
 fn env_after_tailcall_result(binder: &str, runtime_func: &str, env: &RenderEnv) -> RenderEnv {
-    if let Some(callable) = env
-        .function_abi(runtime_func)
-        .and_then(|abi| abi.return_callable.as_ref())
-        .cloned()
-    {
+    let Some(abi) = env.function_abi(runtime_func) else {
+        return env.with_local_kind(binder, WasmValueKind::I32);
+    };
+    if let Some(callable) = abi.return_callable.as_ref().cloned() {
         env.with_returned_callable_local(binder, callable)
+    } else if !abi.return_dyn_row_methods.is_empty() {
+        env.with_returned_dyn_row_local(binder, abi.return_dyn_row_methods.clone())
+            .with_local_kind(
+                binder,
+                abi.result
+                    .map(WasmValueKind::from)
+                    .unwrap_or(WasmValueKind::I32),
+            )
     } else {
         env.with_local_kind(
             binder,
-            env.function_abi(runtime_func)
-                .and_then(|abi| abi.result)
+            abi.result
                 .map(WasmValueKind::from)
                 .unwrap_or(WasmValueKind::I32),
         )
@@ -2767,6 +2774,7 @@ struct RenderEnv {
     dyn_row_param_methods: BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>,
     closure_env_params: BTreeMap<String, Vec<String>>,
     returned_callable_locals: BTreeMap<String, BackendReturnedCallableAbi>,
+    returned_dyn_row_locals: BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>,
     bindings: BTreeMap<String, CoreValue>,
 }
 
@@ -2786,6 +2794,7 @@ impl RenderEnv {
             dyn_row_param_methods: BTreeMap::new(),
             closure_env_params: BTreeMap::new(),
             returned_callable_locals: BTreeMap::new(),
+            returned_dyn_row_locals: BTreeMap::new(),
             bindings: BTreeMap::new(),
         }
     }
@@ -2855,6 +2864,7 @@ impl RenderEnv {
                     result: Some(BackendValueKind::I32),
                     result_ref_cell_lane: None,
                     return_callable: None,
+                    return_dyn_row_methods: Vec::new(),
                 },
             );
         }
@@ -2942,6 +2952,27 @@ impl RenderEnv {
             .iter()
             .find(|method| method.field == field)
             .map(|method| method.target.as_str())
+    }
+
+    fn dyn_row_value_method_target(&self, value: &str, field: &str) -> Option<&str> {
+        self.dyn_row_param_method_target(value, field).or_else(|| {
+            self.returned_dyn_row_locals
+                .get(value)?
+                .iter()
+                .find(|method| method.field == field)
+                .map(|method| method.target.as_str())
+        })
+    }
+
+    fn with_returned_dyn_row_local(
+        &self,
+        local: &str,
+        methods: Vec<BackendDynRowParamMethodAbi>,
+    ) -> Self {
+        let mut next = self.clone();
+        next.returned_dyn_row_locals
+            .insert(local.to_string(), methods);
+        next
     }
 
     fn dyn_row_param_field(&self, param: &str, field: &str) -> Option<&BackendDynRowParamFieldAbi> {
@@ -3414,7 +3445,7 @@ fn effective_tailcall<'a>(
         };
         (target == func).then_some((param.as_str(), field.as_str()))
     }) {
-        if let Some(target) = env.dyn_row_param_method_target(param, field) {
+        if let Some(target) = env.dyn_row_value_method_target(param, field) {
             let mut effective_args = Vec::with_capacity(args.len() + 1);
             effective_args.push(CoreValue::Var(param.to_string()));
             effective_args.extend(args.iter().cloned());
@@ -3830,7 +3861,7 @@ fn render_core_value_i32(
         }
         CoreValue::DynRowPackage { .. } => {
             if let Some(value) = single_data_lane_dyn_row_package_i32_value(value, env) {
-                render_core_value_i32(wat, value, env)?;
+                render_core_value_i32(wat, &value, env)?;
             } else {
                 return Err(unsupported_i32_render_diagnostic(value));
             }
@@ -4337,7 +4368,7 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         }
         CoreValue::DynRowPackage { .. } => {
             single_data_lane_dyn_row_package_i32_value(value, env)
-                .map(|value| core_value_is_renderable_i32(value, env))
+                .map(|value| core_value_is_renderable_i32(&value, env))
                 .unwrap_or(false)
         }
         CoreValue::Tuple { .. }
@@ -4481,6 +4512,13 @@ fn dyn_row_data_field_value(
     }
 }
 
+fn backend_dyn_row_contract_storage_kind(ty: &Type) -> Option<BackendValueKind> {
+    match ty {
+        Type::I64 | Type::Rune | Type::Bool => Some(BackendValueKind::I32),
+        _ => None,
+    }
+}
+
 fn single_field_dyn_row_param(package: &CoreValue, field: &str, env: &RenderEnv) -> Option<String> {
     let package = resolve_core_value_binding(package, env);
     let CoreValue::Var(name) = package else {
@@ -4495,22 +4533,38 @@ fn single_field_dyn_row_param(package: &CoreValue, field: &str, env: &RenderEnv)
     Some(name.clone())
 }
 
-fn single_data_lane_dyn_row_package_i32_value<'a>(
-    value: &'a CoreValue,
-    env: &'a RenderEnv,
-) -> Option<&'a CoreValue> {
+fn single_data_lane_dyn_row_package_i32_value(
+    value: &CoreValue,
+    env: &RenderEnv,
+) -> Option<CoreValue> {
     let CoreValue::DynRowPackage { payload, fields } = resolve_core_value_binding(value, env)
     else {
         return None;
     };
-    let mut data_fields = fields
-        .iter()
-        .filter(|field| matches!(field.source, crate::core::CoreDynRowFieldSource::Field));
+    let mut data_fields = fields.iter().filter(|field| match &field.source {
+        crate::core::CoreDynRowFieldSource::Field => true,
+        crate::core::CoreDynRowFieldSource::ContractObligation { ty } => {
+            backend_dyn_row_contract_storage_kind(ty).is_some()
+        }
+        crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => false,
+    });
     let field = data_fields.next()?;
     if data_fields.next().is_some() {
         return None;
     }
-    record_field_value(payload, &field.name, env)
+    match field.source {
+        crate::core::CoreDynRowFieldSource::Field => {
+            record_field_value(payload, &field.name, env).cloned()
+        }
+        crate::core::CoreDynRowFieldSource::ContractObligation { .. } => {
+            let CoreValue::Var(param) = resolve_core_value_binding(payload, env) else {
+                return None;
+            };
+            env.dyn_row_param_field_lane(param, &field.name)
+                .map(CoreValue::Var)
+        }
+        crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
+    }
 }
 
 fn range_field_value<'a>(

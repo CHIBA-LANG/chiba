@@ -1261,6 +1261,7 @@ fn program_dyn_row_contract_function_abis(
                     result: base.result,
                     result_ref_cell_lane: base.result_ref_cell_lane,
                     return_callable: base.return_callable.clone(),
+                    return_dyn_row_methods: base.return_dyn_row_methods.clone(),
                 },
             ))
         })
@@ -1321,6 +1322,7 @@ fn program_lifted_callable_abis(defs: &[ProgramDefOutput]) -> BTreeMap<String, B
                     result: Some(BackendValueKind::I32),
                     result_ref_cell_lane: None,
                     return_callable: None,
+                    return_dyn_row_methods: Vec::new(),
                 },
             ))
         })
@@ -1684,6 +1686,7 @@ fn backend_callable_params_for_signature(
                     result: result_kind,
                     result_ref_cell_lane: None,
                     return_callable: None,
+                    return_dyn_row_methods: Vec::new(),
                 },
             ))
         })
@@ -1804,6 +1807,37 @@ fn backend_dyn_row_param_methods_for_param_types(
                 })
                 .collect::<Vec<_>>();
             (!methods.is_empty()).then_some((param.clone(), methods))
+        })
+        .collect()
+}
+
+fn backend_dyn_row_methods_for_type(
+    ty: &Type,
+    functions: &[crate::surface::InterfaceFunction],
+) -> Vec<BackendDynRowParamMethodAbi> {
+    let Type::DynRow(fields) = ty else {
+        return Vec::new();
+    };
+    let receiver_methods = functions
+        .iter()
+        .filter(|function| function.receiver.is_some())
+        .collect::<Vec<_>>();
+    fields
+        .iter()
+        .filter_map(|field| {
+            let Type::Func(..) = field.ty else {
+                return None;
+            };
+            receiver_methods
+                .iter()
+                .find(|function| {
+                    function.source_name == field.name
+                        && dyn_row_method_field_type(function) == field.ty
+                })
+                .map(|function| BackendDynRowParamMethodAbi {
+                    field: field.name.clone(),
+                    target: function.symbol.clone(),
+                })
         })
         .collect()
 }
@@ -1953,6 +1987,10 @@ fn backend_callable_abis_for_interface(
             result,
             result_ref_cell_lane,
             return_callable: returned_callables.get(&function.source_name).cloned(),
+            return_dyn_row_methods: result_type
+                .as_ref()
+                .map(|ty| backend_dyn_row_methods_for_type(ty, functions))
+                .unwrap_or_default(),
         };
         if function.receiver.is_some() {
             abis.insert(function.symbol.clone(), abi);

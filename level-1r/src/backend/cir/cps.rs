@@ -350,6 +350,8 @@ fn transform(
             builtin,
         } => {
             let receiver_has_callable_field = type_has_callable_record_field(&receiver.ty, name);
+            let receiver_has_callable_dyn_row_field =
+                type_has_callable_dyn_row_field(&receiver.ty, name);
             let receiver_controls = controls.clone();
             transform(
                 receiver,
@@ -366,7 +368,12 @@ fn transform(
                             ctx,
                         );
                     }
-                    let func = if receiver_has_callable_field {
+                    let func = if receiver_has_callable_dyn_row_field {
+                        CpsAtom::DynRowField {
+                            package: Box::new(receiver),
+                            field: name.clone(),
+                        }
+                    } else if receiver_has_callable_field {
                         CpsAtom::RecordField {
                             record: Box::new(receiver),
                             field: name.clone(),
@@ -1151,7 +1158,16 @@ fn nominal_atom_type(expr: &TypedExpr) -> Option<&String> {
 }
 
 fn type_has_callable_record_field(receiver: &Type, name: &str) -> bool {
-    let Type::Record(fields) = receiver else {
+    match receiver {
+        Type::Record(fields) | Type::DynRow(fields) => fields.iter().any(|field| {
+            field.name == name && matches!(field.ty, Type::Func(..) | Type::Continuation { .. })
+        }),
+        _ => false,
+    }
+}
+
+fn type_has_callable_dyn_row_field(receiver: &Type, name: &str) -> bool {
+    let Type::DynRow(fields) = receiver else {
         return false;
     };
     fields.iter().any(|field| {
