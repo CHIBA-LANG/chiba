@@ -51,8 +51,8 @@ use crate::template::{analyze_template_with_source, TemplateDiagnostic, Template
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
     nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_send_color,
-    source_type_name_to_type, type_expr_with_context, ReceiverMethodSummary, RecordTypeField, Type,
-    TypeContext, TypeEnv, TypedExpr,
+    source_type_name_to_type, type_expr_with_context, type_expr_with_expected,
+    ReceiverMethodSummary, RecordTypeField, Type, TypeContext, TypeEnv, TypedExpr,
 };
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -299,7 +299,12 @@ fn compile_expr_with_indexes_and_generics(
     );
     let typed_env = typed_signature.type_env(function_env);
     let typed = passes.record("L7Typed", "SourceExpr+TypedSignature", "TypedExpr", || {
-        type_expr_with_context(expr, &typed_env, type_context)
+        typed_signature
+            .return_type
+            .as_deref()
+            .map(source_type_name_to_type)
+            .map(|expected| type_expr_with_expected(expr, &typed_env, type_context, &expected))
+            .unwrap_or_else(|| type_expr_with_context(expr, &typed_env, type_context))
     });
     let pattern = passes.record(
         "L8PatternElab",

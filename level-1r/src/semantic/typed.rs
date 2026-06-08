@@ -600,6 +600,16 @@ pub fn type_expr_with_context(expr: &Expr, env: &TypeEnv, context: &TypeContext)
     refine_continuation_types(typed, context)
 }
 
+pub fn type_expr_with_expected(
+    expr: &Expr,
+    env: &TypeEnv,
+    context: &TypeContext,
+    expected: &Type,
+) -> TypedExpr {
+    let typed = type_expr_with_context(expr, env, context);
+    coerce_expected(typed, expected, context)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct ContinuationTypeBoundary {
     multi: bool,

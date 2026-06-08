@@ -1230,6 +1230,117 @@ def main(): i64 = use_dyn({x: 41, z: 1})
 }
 
 #[test]
+fn program_dyn_row_return_wraps_record_value_at_return_boundary() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def make(): dyn {x: i64, z: i64} = {x: 41, z: 1}
+def main(): i64 = 0
+"#,
+    )
+    .expect("compile source");
+    let bundle = output.program;
+    let make = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "make")
+        .expect("make def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(make.output.core_validation.diagnostics.is_empty());
+    match &make.output.typed.kind {
+        TypedExprKind::DynRowPackage { payload, fields } => {
+            assert!(matches!(payload.kind, TypedExprKind::Record { .. }));
+            assert_eq!(fields.len(), 2);
+            assert!(fields.iter().all(|field| {
+                matches!(field.source, chiba_level1r::typed::DynRowFieldSource::Field)
+            }));
+        }
+        other => panic!(
+            "expected dyn row package return, got {}",
+            typed_expr_kind_name(other)
+        ),
+    }
+}
+
+#[test]
+fn program_dyn_row_return_wraps_nominal_value_and_method_adapter() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "y",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                Some("i64".to_string()),
+                Expr::field(Expr::var("self"), "x"),
+            ),
+            SourceItem::Def {
+                receiver: None,
+                generics: Vec::new(),
+                name: "make".to_string(),
+                visibility: Visibility::Public,
+                params: Vec::new(),
+                return_type: Some("dyn {x: i64, y: (Unit) -> i64}".to_string()),
+                body: Expr::nominal("X", Expr::record(vec![("x", Expr::i64(7))])),
+            },
+            def("main", vec![], Expr::i64(0)),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let make = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "make")
+        .expect("make def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(make.output.core_validation.diagnostics.is_empty());
+    assert!(make
+        .output
+        .visual
+        .typed
+        .contains("y=receiver-method(root::X.y)"));
+    assert!(make
+        .output
+        .visual
+        .core
+        .contains("y=receiver-method(root::X.y)"));
+    match &make.output.typed.kind {
+        TypedExprKind::DynRowPackage { payload, fields } => {
+            assert_eq!(payload.ty, Type::Nominal("X".to_string()));
+            assert!(fields.iter().any(|field| {
+                field.name == "x"
+                    && matches!(field.source, chiba_level1r::typed::DynRowFieldSource::Field)
+            }));
+            assert!(fields.iter().any(|field| {
+                matches!(
+                    &field.source,
+                    chiba_level1r::typed::DynRowFieldSource::ReceiverMethod {
+                        symbol,
+                        runtime_target,
+                        ..
+                    } if field.name == "y"
+                        && symbol == "root::X.y"
+                        && runtime_target == "y"
+                )
+            }));
+        }
+        other => panic!(
+            "expected dyn row package return, got {}",
+            typed_expr_kind_name(other)
+        ),
+    }
+}
+
+#[test]
 fn program_contn_storage_field_call_can_resume_multiple_times() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"
