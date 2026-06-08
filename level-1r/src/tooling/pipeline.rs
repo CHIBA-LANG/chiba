@@ -127,6 +127,7 @@ pub struct SourceCompileOutput {
 #[derive(Clone, Debug)]
 pub struct ProgramDefOutput {
     pub name: String,
+    pub receiver: Option<String>,
     pub entry: bool,
     pub params: Vec<String>,
     pub output: CompileOutput,
@@ -761,6 +762,8 @@ struct RowCallableMemberRecords {
     fields: BTreeMap<String, BTreeMap<String, Type>>,
     methods: BTreeMap<String, BTreeMap<String, Vec<Type>>>,
 }
+
+type DynRowMethodTargets = BTreeMap<String, BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>>;
 
 fn row_callable_member_records(
     interface: &InterfaceSummary,
@@ -2381,6 +2384,7 @@ fn compile_program_defs(
                 ..
             } => Some(ProgramDefOutput {
                 name: name.clone(),
+                receiver: receiver.as_ref().map(MethodReceiver::display_name),
                 entry: attrs.contains(&ItemAttr::Entry),
                 params: params.iter().map(|param| param.name.clone()).collect(),
                 output: {
@@ -2424,11 +2428,21 @@ fn refresh_program_backends_with_lifted_callables(
     let lifted = program_lifted_callable_abis(defs);
     let returned = program_returned_callable_abis(defs);
     let dyn_contracts = program_dyn_row_contract_param_types(defs);
-    if lifted.is_empty() && returned.is_empty() && dyn_contracts.is_empty() {
+    let dyn_method_targets = program_dyn_row_method_targets(defs);
+    if lifted.is_empty()
+        && returned.is_empty()
+        && dyn_contracts.is_empty()
+        && dyn_method_targets.is_empty()
+    {
         return;
     }
-    let dyn_function_abis =
-        program_dyn_row_contract_function_abis(defs, interface, &dyn_contracts, &returned);
+    let dyn_function_abis = program_dyn_row_contract_function_abis(
+        defs,
+        interface,
+        &dyn_contracts,
+        &dyn_method_targets,
+        &returned,
+    );
     for def in defs {
         let mut extra_functions = lifted.clone();
         extra_functions.extend(dyn_function_abis.clone());
@@ -2441,6 +2455,7 @@ fn refresh_program_backends_with_lifted_callables(
             extra_functions,
             &returned,
             dyn_contracts.get(&def.name),
+            dyn_method_targets.get(&def.name),
         );
         let backend = emit_wasm_gc_with_param_abi(
             &def.output.core,
@@ -2590,10 +2605,174 @@ fn collect_dyn_row_contract_param_types(expr: &TypedExpr, contracts: &mut BTreeM
     }
 }
 
+fn program_dyn_row_method_targets(defs: &[ProgramDefOutput]) -> DynRowMethodTargets {
+    let signatures = defs
+        .iter()
+        .map(|def| (def.name.clone(), def.output.typed_signature.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let mut targets = BTreeMap::new();
+    for def in defs {
+        collect_dyn_row_method_targets(&def.output.typed, &signatures, &mut targets);
+    }
+    targets
+}
+
+fn collect_dyn_row_method_targets(
+    expr: &TypedExpr,
+    signatures: &BTreeMap<String, TypedSignature>,
+    targets: &mut DynRowMethodTargets,
+) {
+    if let TypedExprKind::Call { callee, args } = &expr.kind {
+        if let TypedExprKind::Var(callee_name) = &callee.kind {
+            if let Some(signature) = signatures.get(callee_name) {
+                for (param, arg) in signature.params.iter().zip(args) {
+                    collect_dyn_row_arg_method_targets(callee_name, &param.name, arg, targets);
+                }
+            }
+        }
+    }
+    match &expr.kind {
+        TypedExprKind::DynRowPackage { payload, .. } => {
+            collect_dyn_row_method_targets(payload, signatures, targets);
+        }
+        TypedExprKind::Lambda { body, .. } => {
+            collect_dyn_row_method_targets(body, signatures, targets)
+        }
+        TypedExprKind::Call { callee, args } => {
+            collect_dyn_row_method_targets(callee, signatures, targets);
+            for arg in args {
+                collect_dyn_row_method_targets(arg, signatures, targets);
+            }
+        }
+        TypedExprKind::Tuple { fields, .. } | TypedExprKind::SliceLiteral { items: fields, .. } => {
+            for field in fields {
+                collect_dyn_row_method_targets(field, signatures, targets);
+            }
+        }
+        TypedExprKind::Record { fields } => {
+            for field in fields {
+                collect_dyn_row_method_targets(&field.value, signatures, targets);
+            }
+        }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            collect_dyn_row_method_targets(base, signatures, targets);
+            for field in fields {
+                collect_dyn_row_method_targets(&field.value, signatures, targets);
+            }
+        }
+        TypedExprKind::DynRowField { package, .. }
+        | TypedExprKind::Field {
+            receiver: package, ..
+        }
+        | TypedExprKind::Nominal { expr: package, .. }
+        | TypedExprKind::Reset { body: package, .. }
+        | TypedExprKind::Shift { body: package, .. } => {
+            collect_dyn_row_method_targets(package, signatures, targets);
+        }
+        TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_dyn_row_method_targets(arg, signatures, targets);
+            }
+        }
+        TypedExprKind::AdtToTuple { value, .. } | TypedExprKind::TupleToAdt { value, .. } => {
+            collect_dyn_row_method_targets(value, signatures, targets);
+        }
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            collect_dyn_row_method_targets(receiver, signatures, targets);
+            for arg in args {
+                collect_dyn_row_method_targets(arg, signatures, targets);
+            }
+        }
+        TypedExprKind::Assign { target, value, .. } => {
+            collect_dyn_row_method_targets(target, signatures, targets);
+            collect_dyn_row_method_targets(value, signatures, targets);
+        }
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
+            collect_dyn_row_method_targets(receiver, signatures, targets);
+            collect_dyn_row_method_targets(index, signatures, targets);
+        }
+        TypedExprKind::Range { start, end }
+        | TypedExprKind::Binary {
+            lhs: start,
+            rhs: end,
+            ..
+        } => {
+            collect_dyn_row_method_targets(start, signatures, targets);
+            collect_dyn_row_method_targets(end, signatures, targets);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_dyn_row_method_targets(cond, signatures, targets);
+            collect_dyn_row_method_targets(then_branch, signatures, targets);
+            collect_dyn_row_method_targets(else_branch, signatures, targets);
+        }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_dyn_row_method_targets(scrutinee, signatures, targets);
+            collect_dyn_row_method_targets(then_branch, signatures, targets);
+            collect_dyn_row_method_targets(else_branch, signatures, targets);
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            collect_dyn_row_method_targets(scrutinee, signatures, targets);
+            for arm in arms {
+                collect_dyn_row_method_targets(&arm.body, signatures, targets);
+            }
+        }
+        TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
+    }
+}
+
+fn collect_dyn_row_arg_method_targets(
+    callee: &str,
+    param: &str,
+    arg: &TypedExpr,
+    targets: &mut DynRowMethodTargets,
+) {
+    let TypedExprKind::DynRowPackage { fields, .. } = &arg.kind else {
+        return;
+    };
+    let methods = fields
+        .iter()
+        .filter_map(|field| {
+            let crate::typed::DynRowFieldSource::ReceiverMethod { symbol, .. } = &field.source
+            else {
+                return None;
+            };
+            Some(BackendDynRowParamMethodAbi {
+                field: field.name.clone(),
+                target: symbol.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+    if methods.is_empty() {
+        return;
+    }
+    let entry = targets
+        .entry(callee.to_string())
+        .or_insert_with(BTreeMap::new)
+        .entry(param.to_string())
+        .or_insert_with(Vec::new);
+    for method in methods {
+        if !entry.contains(&method) {
+            entry.push(method);
+        }
+    }
+}
+
 fn program_dyn_row_contract_function_abis(
     defs: &[ProgramDefOutput],
     interface: &InterfaceSummary,
     contracts: &BTreeMap<String, BTreeMap<String, Type>>,
+    method_targets: &DynRowMethodTargets,
     returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
 ) -> BTreeMap<String, BackendCallableAbi> {
     let function_abis = backend_callable_abis_for_interface(
@@ -2604,7 +2783,11 @@ fn program_dyn_row_contract_function_abis(
     );
     defs.iter()
         .filter_map(|def| {
-            let param_contracts = contracts.get(&def.name)?;
+            let param_contracts = contracts.get(&def.name);
+            let param_method_targets = method_targets.get(&def.name);
+            if param_contracts.is_none() && param_method_targets.is_none() {
+                return None;
+            }
             let base = function_abis.get(&def.name)?;
             let expansions = def
                 .output
@@ -2613,10 +2796,20 @@ fn program_dyn_row_contract_function_abis(
                 .iter()
                 .zip(base.arg_expansions.iter())
                 .map(|(param, expansion)| {
-                    param_contracts
-                        .get(&param.name)
+                    let mut expanded = param_contracts
+                        .and_then(|contracts| contracts.get(&param.name))
                         .and_then(|ty| dyn_row_contract_arg_expansion(ty, &interface.functions))
-                        .unwrap_or_else(|| expansion.clone())
+                        .unwrap_or_else(|| expansion.clone());
+                    if let BackendCallableArgExpansion::DynRow { needs_payload, .. } = &mut expanded
+                    {
+                        if param_method_targets
+                            .and_then(|targets| targets.get(&param.name))
+                            .is_some_and(|targets| !targets.is_empty())
+                        {
+                            *needs_payload = true;
+                        }
+                    }
+                    expanded
                 })
                 .collect::<Vec<_>>();
             let params = expansions
@@ -3008,6 +3201,7 @@ fn backend_param_abi(
         BTreeMap::new(),
         &BTreeMap::new(),
         None,
+        None,
     )
 }
 
@@ -3020,6 +3214,7 @@ fn backend_param_abi_with_extra_functions(
     extra_functions: BTreeMap<String, BackendCallableAbi>,
     returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
     extra_dyn_param_types: Option<&BTreeMap<String, Type>>,
+    extra_dyn_param_methods: Option<&BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>>,
 ) -> BackendParamAbi {
     let mut function_abis =
         backend_callable_abis_for_interface(functions, types, data, returned_callables);
@@ -3035,6 +3230,18 @@ fn backend_param_abi_with_extra_functions(
             extra_dyn_param_types,
             functions,
         ));
+    }
+    if let Some(extra_dyn_param_methods) = extra_dyn_param_methods {
+        for (param, methods) in extra_dyn_param_methods {
+            let entry = dyn_row_param_methods
+                .entry(param.clone())
+                .or_insert_with(Vec::new);
+            for method in methods {
+                if !entry.contains(method) {
+                    entry.push(method.clone());
+                }
+            }
+        }
     }
     BackendParamAbi {
         params: signature
@@ -5049,7 +5256,8 @@ fn program_backend_artifacts(
             entry == Some(def.name.as_str())
                 || !is_uninstantiated_row_callable_template(def)
                 || defs.iter().any(|caller| {
-                    caller.name != def.name && typed_expr_calls_def(&caller.output.typed, &def.name)
+                    caller.name != def.name
+                        && typed_expr_calls_def(&caller.output.typed, def, interface)
                 })
         })
         .map(|(index, def)| {
@@ -5099,64 +5307,102 @@ fn is_row_callable_template_core(def: &ProgramDefOutput) -> bool {
             .any(|op| matches!(op, CoreOp::DynamicCallableTarget { .. }))
 }
 
-fn typed_expr_calls_def(expr: &TypedExpr, name: &str) -> bool {
+fn typed_expr_calls_def(
+    expr: &TypedExpr,
+    target: &ProgramDefOutput,
+    interface: &InterfaceSummary,
+) -> bool {
+    let target_method_symbol = interface
+        .functions
+        .iter()
+        .find(|function| {
+            function.receiver.is_some()
+                && function.source_name == target.name
+                && function.receiver.as_ref().map(MethodReceiver::display_name) == target.receiver
+        })
+        .map(|function| function.symbol.as_str());
     match &expr.kind {
         TypedExprKind::Call { callee, args } => {
-            matches!(callee.kind, TypedExprKind::Var(ref callee_name) if callee_name == name)
-                || typed_expr_calls_def(callee, name)
-                || args.iter().any(|arg| typed_expr_calls_def(arg, name))
+            matches!(callee.kind, TypedExprKind::Var(ref callee_name) if callee_name == &target.name)
+                || typed_expr_calls_def(callee, target, interface)
+                || args
+                    .iter()
+                    .any(|arg| typed_expr_calls_def(arg, target, interface))
         }
         TypedExprKind::Lambda { body, .. }
         | TypedExprKind::Nominal { expr: body, .. }
         | TypedExprKind::Reset { body, .. }
-        | TypedExprKind::Shift { body, .. } => typed_expr_calls_def(body, name),
+        | TypedExprKind::Shift { body, .. } => typed_expr_calls_def(body, target, interface),
         TypedExprKind::Tuple { fields, .. } | TypedExprKind::SliceLiteral { items: fields, .. } => {
-            fields.iter().any(|field| typed_expr_calls_def(field, name))
+            fields
+                .iter()
+                .any(|field| typed_expr_calls_def(field, target, interface))
         }
         TypedExprKind::Record { fields } => fields
             .iter()
-            .any(|field| typed_expr_calls_def(&field.value, name)),
+            .any(|field| typed_expr_calls_def(&field.value, target, interface)),
         TypedExprKind::RecordUpdate { base, fields } => {
-            typed_expr_calls_def(base, name)
+            typed_expr_calls_def(base, target, interface)
                 || fields
                     .iter()
-                    .any(|field| typed_expr_calls_def(&field.value, name))
+                    .any(|field| typed_expr_calls_def(&field.value, target, interface))
         }
-        TypedExprKind::DynRowPackage { payload, .. } => typed_expr_calls_def(payload, name),
+        TypedExprKind::DynRowPackage { payload, fields } => {
+            typed_expr_calls_def(payload, target, interface)
+                || fields.iter().any(|field| {
+                    matches!(
+                        &field.source,
+                        crate::typed::DynRowFieldSource::ReceiverMethod { symbol, .. }
+                            if Some(symbol.as_str()) == target_method_symbol
+                    )
+                })
+        }
         TypedExprKind::DynRowField { package, .. }
         | TypedExprKind::Field {
             receiver: package, ..
-        } => typed_expr_calls_def(package, name),
-        TypedExprKind::AdtCtor { args, .. } => {
-            args.iter().any(|arg| typed_expr_calls_def(arg, name))
-        }
+        } => typed_expr_calls_def(package, target, interface),
+        TypedExprKind::AdtCtor { args, .. } => args
+            .iter()
+            .any(|arg| typed_expr_calls_def(arg, target, interface)),
         TypedExprKind::AdtToTuple { value, .. } | TypedExprKind::TupleToAdt { value, .. } => {
-            typed_expr_calls_def(value, name)
+            typed_expr_calls_def(value, target, interface)
         }
         TypedExprKind::MethodCall { receiver, args, .. } => {
-            typed_expr_calls_def(receiver, name)
-                || args.iter().any(|arg| typed_expr_calls_def(arg, name))
+            typed_expr_calls_def(receiver, target, interface)
+                || args
+                    .iter()
+                    .any(|arg| typed_expr_calls_def(arg, target, interface))
         }
-        TypedExprKind::Assign { target, value, .. } => {
-            typed_expr_calls_def(target, name) || typed_expr_calls_def(value, name)
+        TypedExprKind::Assign {
+            target: assign_target,
+            value,
+            ..
+        } => {
+            typed_expr_calls_def(assign_target, target, interface)
+                || typed_expr_calls_def(value, target, interface)
         }
         TypedExprKind::Index {
             receiver, index, ..
-        } => typed_expr_calls_def(receiver, name) || typed_expr_calls_def(index, name),
+        } => {
+            typed_expr_calls_def(receiver, target, interface)
+                || typed_expr_calls_def(index, target, interface)
+        }
         TypedExprKind::Range { start, end } => {
-            typed_expr_calls_def(start, name) || typed_expr_calls_def(end, name)
+            typed_expr_calls_def(start, target, interface)
+                || typed_expr_calls_def(end, target, interface)
         }
         TypedExprKind::Binary { lhs, rhs, .. } => {
-            typed_expr_calls_def(lhs, name) || typed_expr_calls_def(rhs, name)
+            typed_expr_calls_def(lhs, target, interface)
+                || typed_expr_calls_def(rhs, target, interface)
         }
         TypedExprKind::If {
             cond,
             then_branch,
             else_branch,
         } => {
-            typed_expr_calls_def(cond, name)
-                || typed_expr_calls_def(then_branch, name)
-                || typed_expr_calls_def(else_branch, name)
+            typed_expr_calls_def(cond, target, interface)
+                || typed_expr_calls_def(then_branch, target, interface)
+                || typed_expr_calls_def(else_branch, target, interface)
         }
         TypedExprKind::IfLet {
             scrutinee,
@@ -5164,13 +5410,15 @@ fn typed_expr_calls_def(expr: &TypedExpr, name: &str) -> bool {
             else_branch,
             ..
         } => {
-            typed_expr_calls_def(scrutinee, name)
-                || typed_expr_calls_def(then_branch, name)
-                || typed_expr_calls_def(else_branch, name)
+            typed_expr_calls_def(scrutinee, target, interface)
+                || typed_expr_calls_def(then_branch, target, interface)
+                || typed_expr_calls_def(else_branch, target, interface)
         }
         TypedExprKind::Match { scrutinee, arms } => {
-            typed_expr_calls_def(scrutinee, name)
-                || arms.iter().any(|arm| typed_expr_calls_def(&arm.body, name))
+            typed_expr_calls_def(scrutinee, target, interface)
+                || arms
+                    .iter()
+                    .any(|arm| typed_expr_calls_def(&arm.body, target, interface))
         }
         TypedExprKind::Var(_) | TypedExprKind::Lit(_) => false,
     }
@@ -5204,7 +5452,11 @@ fn program_backend_def_symbol(
     interface
         .functions
         .iter()
-        .find(|function| function.receiver.is_some() && function.source_name == def.name)
+        .find(|function| {
+            function.receiver.is_some()
+                && function.source_name == def.name
+                && function.receiver.as_ref().map(MethodReceiver::display_name) == def.receiver
+        })
         .map(|function| sanitize_program_symbol(&function.symbol))
         .unwrap_or_else(|| def_symbol(&def.name, index, name_count))
 }

@@ -2484,6 +2484,7 @@ fn program_dyn_row_receiver_method_adapter_does_not_guess_ambiguous_receiver() {
         .iter()
         .find(|def| def.name == "use_dyn")
         .expect("use_dyn def");
+    let bundle = compile_program_bundle_with_interface(&current, &interface);
 
     assert!(use_dyn.output.backend.wat.contains("call $v_y"));
     assert!(
@@ -2491,6 +2492,9 @@ fn program_dyn_row_receiver_method_adapter_does_not_guess_ambiguous_receiver() {
         "{}",
         use_dyn.output.backend.wat
     );
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "7");
 }
 
 #[test]
