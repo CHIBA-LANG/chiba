@@ -298,6 +298,55 @@ fn nominal_field_callable_method_call_uses_function_header_type() {
 }
 
 #[test]
+fn nominal_field_callable_method_call_wins_over_receiver_method() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "CallableBox",
+            Vec::new(),
+            vec![TypeField::new("apply", "(i64) -> bool")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                chiba_level1r::MethodReceiver::new("CallableBox", Vec::new()),
+                "apply",
+                vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("value", Some("i64".to_string())),
+                ],
+                Some("i64".to_string()),
+                Expr::var("value"),
+            ),
+            SourceItem::Def {
+                receiver: None,
+                generics: Vec::new(),
+                name: "main".to_string(),
+                visibility: Visibility::Public,
+                params: vec![ParamDecl::new("box", Some("CallableBox".to_string()))],
+                return_type: Some("bool".to_string()),
+                body: Expr::method_call(Expr::var("box"), "apply", Expr::i64(1)),
+            },
+        ],
+    );
+
+    let output = compile_program_bundle(&program);
+    let main = &output.defs[1].output;
+
+    assert_eq!(
+        output.diagnostics,
+        vec![chiba_level1r::pipeline::ProgramDiagnostic::EntryHasParams {
+            name: "main".to_string(),
+            params: vec!["box".to_string()]
+        }]
+    );
+    assert_eq!(main.typed.ty, Type::Bool);
+    assert!(matches!(main.typed.kind, TypedExprKind::Call { .. }));
+    assert!(!main.visual.typed.contains("node kind=method-call type=i64"));
+}
+
+#[test]
 fn record_update_overwrites_existing_field_and_preserves_canonical_layout() {
     let expr = Expr::record_update(
         Expr::record(vec![("x", Expr::i64(1)), ("y", Expr::bool(true))]),
