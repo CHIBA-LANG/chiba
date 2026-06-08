@@ -7,8 +7,9 @@ use chiba_level1r::pattern::PatternDiagnostic;
 use chiba_level1r::typed::{AggregateKind, SendColor, Type, TypedExprKind};
 use chiba_level1r::{
     build_interface_summary, compile_program, compile_program_bundle,
-    compile_program_with_interface, compile_source_program_bundle, parse_source_program,
-    project_surface_many, Expr, ProgramCompileOutput, ProgramDiagnostic,
+    compile_program_bundle_with_interface, compile_program_with_interface,
+    compile_source_program_bundle, parse_source_program, project_surface_many, Expr,
+    ProgramCompileOutput, ProgramDiagnostic,
 };
 use std::process::Command;
 
@@ -289,6 +290,144 @@ fn program_receiver_method_call_lowers_to_executable_wat() {
     assert_eq!(bundle.diagnostics, vec![]);
     assert_backend_link_clean_all(&bundle);
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "42");
+}
+
+#[test]
+fn program_reports_ambiguous_external_receiver_methods_before_typed_context_can_overwrite() {
+    let consumer = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["consumer".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![SourceItem::def(
+            "main",
+            Vec::new(),
+            Vec::new(),
+            Some("i64".to_string()),
+            Expr::method_call_args(
+                Expr::nominal("X", Expr::record(vec![("x", Expr::i64(1))])),
+                "value",
+                Vec::new(),
+            ),
+        )],
+    );
+    let left = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["left".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::method_def(
+            MethodReceiver::new("X", Vec::new()),
+            "value",
+            vec![ParamDecl::new("self", Some("Self".to_string()))],
+            Some("i64".to_string()),
+            Expr::i64(10),
+        )],
+    );
+    let right = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["right".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::method_def(
+            MethodReceiver::new("X", Vec::new()),
+            "value",
+            vec![ParamDecl::new("self", Some("Self".to_string()))],
+            Some("i64".to_string()),
+            Expr::i64(20),
+        )],
+    );
+    let interface =
+        build_interface_summary(&project_surface_many(&[right, consumer.clone(), left]));
+
+    let bundle = compile_program_bundle_with_interface(&consumer, &interface);
+
+    assert!(
+        bundle.diagnostics.iter().any(|diagnostic| {
+            matches!(
+                diagnostic,
+                ProgramDiagnostic::AmbiguousReceiverMethod {
+                    receiver,
+                    name,
+                    candidates,
+                } if receiver == "X"
+                    && name == "value"
+                    && candidates.as_slice() == [
+                        "left::X.value".to_string(),
+                        "right::X.value".to_string()
+                    ]
+            )
+        }),
+        "{:?}",
+        bundle.diagnostics
+    );
+}
+
+#[test]
+fn program_reports_duplicate_local_receiver_methods_as_ambiguous_method_surface() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "value",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                Some("i64".to_string()),
+                Expr::i64(1),
+            ),
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "value",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                Some("i64".to_string()),
+                Expr::i64(2),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::i64(0),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(bundle
+        .diagnostics
+        .iter()
+        .any(|diagnostic| matches!(diagnostic, ProgramDiagnostic::DuplicateDef { name } if name == "value")));
+    assert!(
+        bundle.diagnostics.iter().any(|diagnostic| {
+            matches!(
+                diagnostic,
+                ProgramDiagnostic::AmbiguousReceiverMethod {
+                    receiver,
+                    name,
+                    candidates,
+                } if receiver == "X"
+                    && name == "value"
+                    && candidates.as_slice() == [
+                        "root::X.value".to_string(),
+                        "root::X.value".to_string()
+                    ]
+            )
+        }),
+        "{:?}",
+        bundle.diagnostics
+    );
 }
 
 #[test]

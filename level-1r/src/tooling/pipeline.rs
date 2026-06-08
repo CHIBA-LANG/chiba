@@ -205,6 +205,11 @@ pub enum ProgramDiagnostic {
         expected: String,
         actual: String,
     },
+    AmbiguousReceiverMethod {
+        receiver: String,
+        name: String,
+        candidates: Vec<String>,
+    },
     InvalidOperatorOperands {
         def: String,
         op: String,
@@ -492,6 +497,13 @@ pub fn compile_program(program: &SourceProgram) -> Vec<CompileOutput> {
         .collect()
 }
 
+pub fn compile_program_bundle_with_interface(
+    program: &SourceProgram,
+    interface: &InterfaceSummary,
+) -> ProgramCompileOutput {
+    compile_program_bundle_internal(program, Some(interface.clone()))
+}
+
 pub fn compile_program_with_interface(
     program: &SourceProgram,
     interface: &InterfaceSummary,
@@ -540,6 +552,13 @@ fn render_source_item_span(span: &SourceItemSpan) -> String {
 }
 
 pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
+    compile_program_bundle_internal(program, None)
+}
+
+fn compile_program_bundle_internal(
+    program: &SourceProgram,
+    interface_override: Option<InterfaceSummary>,
+) -> ProgramCompileOutput {
     let normalized_program = normalize_pattern_clause_defs(program);
     let mut passes = PassReport::default();
     let surface = passes.record(
@@ -552,7 +571,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         "P2InterfaceSummary",
         "ProjectSurface",
         "InterfaceSummary",
-        || build_interface_summary(&surface),
+        || interface_override.unwrap_or_else(|| build_interface_summary(&surface)),
     );
     let diagnostics = passes.record(
         "P3ProgramDiagnostics",
@@ -581,6 +600,10 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
         || select_program_entry(&defs),
     );
     let mut all_diagnostics = diagnostics;
+    all_diagnostics.extend(receiver_method_ambiguity_diagnostics(
+        &checked_interface,
+        &normalized_program,
+    ));
     all_diagnostics.extend(global_init.diagnostics.iter().cloned().map(Into::into));
     all_diagnostics.extend(template_diagnostics(&defs));
     all_diagnostics.extend(control_diagnostics(&defs));
@@ -2506,6 +2529,50 @@ pub fn program_surface_diagnostics(surface: &ProjectSurface) -> Vec<ProgramDiagn
             .map(|name| ProgramDiagnostic::DuplicateTopLevelName { name }),
     );
     diagnostics
+}
+
+fn receiver_method_ambiguity_diagnostics(
+    interface: &InterfaceSummary,
+    program: &SourceProgram,
+) -> Vec<ProgramDiagnostic> {
+    let current_namespace = program
+        .namespace
+        .as_ref()
+        .map(NamespaceDecl::dotted)
+        .unwrap_or_else(|| "root".to_string());
+    let mut by_receiver_name =
+        BTreeMap::<(String, String), Vec<&crate::surface::InterfaceFunction>>::new();
+    for function in &interface.functions {
+        let Some(receiver) = &function.receiver else {
+            continue;
+        };
+        if function.visibility == Visibility::Private && function.owner != current_namespace {
+            continue;
+        }
+        by_receiver_name
+            .entry((receiver.display_name(), function.source_name.clone()))
+            .or_default()
+            .push(function);
+    }
+    by_receiver_name
+        .into_iter()
+        .filter_map(|((receiver, name), candidates)| {
+            let local = candidates
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.owner == current_namespace)
+                .collect::<Vec<_>>();
+            let visible = if local.is_empty() { candidates } else { local };
+            (visible.len() > 1).then(|| ProgramDiagnostic::AmbiguousReceiverMethod {
+                receiver,
+                name,
+                candidates: visible
+                    .iter()
+                    .map(|candidate| candidate.symbol.clone())
+                    .collect(),
+            })
+        })
+        .collect()
 }
 
 impl From<GlobalInitDiagnostic> for ProgramDiagnostic {
@@ -5256,6 +5323,14 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
             expected,
             actual,
         } => format!("dyn row coercion failed {def}: expected {expected}, actual {actual}"),
+        ProgramDiagnostic::AmbiguousReceiverMethod {
+            receiver,
+            name,
+            candidates,
+        } => format!(
+            "ambiguous receiver method {receiver}.{name}: [{}]",
+            candidates.join(", ")
+        ),
         ProgramDiagnostic::InvalidOperatorOperands { def, op, lhs, rhs } => {
             format!("invalid operator operands {def}: {lhs} {op} {rhs}")
         }
