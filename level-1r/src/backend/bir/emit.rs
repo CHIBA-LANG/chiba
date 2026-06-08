@@ -3424,7 +3424,7 @@ fn effective_tailcall<'a>(
     args: &'a [CoreValue],
     env: &'a RenderEnv,
 ) -> (&'a str, Vec<CoreValue>) {
-    let callable_local = tailcall_callable_alias_local(core, func).unwrap_or(func);
+    let callable_local = tailcall_callable_alias_local(core, func, env).unwrap_or(func);
     if let Some(callable) = env.returned_callable_local(callable_local) {
         let mut effective_args = callable
             .env
@@ -3456,7 +3456,11 @@ fn effective_tailcall<'a>(
     (tailcall_runtime_target(core, func), args.to_vec())
 }
 
-fn tailcall_callable_alias_local<'a>(core: &'a CoreProgram, func: &'a str) -> Option<&'a str> {
+fn tailcall_callable_alias_local<'a>(
+    core: &'a CoreProgram,
+    func: &'a str,
+    env: &'a RenderEnv,
+) -> Option<&'a str> {
     core.ops.iter().find_map(|op| {
         let CoreOp::CallableAlias { target, value } = op else {
             return None;
@@ -3464,11 +3468,33 @@ fn tailcall_callable_alias_local<'a>(core: &'a CoreProgram, func: &'a str) -> Op
         if target != func {
             return None;
         }
-        match value {
-            CoreValue::Var(name) => Some(name.as_str()),
-            _ => None,
-        }
+        callable_alias_value_local(value, env)
     })
+}
+
+fn callable_alias_value_local<'a>(value: &'a CoreValue, env: &'a RenderEnv) -> Option<&'a str> {
+    match resolve_core_value_binding(value, env) {
+        CoreValue::Var(name) => Some(name.as_str()),
+        CoreValue::TupleField {
+            tuple, field_index, ..
+        } => tuple_field_value(tuple, *field_index, env).and_then(|value| {
+            match resolve_core_value_binding(value, env) {
+                CoreValue::Var(name) => Some(name.as_str()),
+                _ => None,
+            }
+        }),
+        CoreValue::RecordField { record, field } => record_field_value(record, field, env)
+            .and_then(|value| match resolve_core_value_binding(value, env) {
+                CoreValue::Var(name) => Some(name.as_str()),
+                _ => None,
+            }),
+        CoreValue::DynRowField { package, field } => dyn_row_field_value(package, field, env)
+            .and_then(|value| match resolve_core_value_binding(value, env) {
+                CoreValue::Var(name) => Some(name.as_str()),
+                _ => None,
+            }),
+        _ => None,
+    }
 }
 
 fn render_tailcall_args(

@@ -844,6 +844,26 @@ fn type_expr_with_context_and_controls(
                     ty,
                 );
             }
+            if let Some((access, field_ty)) =
+                field_callable_callee_type(&receiver.ty, name, context)
+            {
+                let callee = typed(
+                    TypedExprKind::Field {
+                        receiver: Box::new(receiver),
+                        name: name.clone(),
+                        access,
+                    },
+                    field_ty,
+                );
+                let ty = call_result_type(&callee.ty, args.len());
+                return typed(
+                    TypedExprKind::Call {
+                        callee: Box::new(callee),
+                        args,
+                    },
+                    ty,
+                );
+            }
             let builtin = builtin_method_call(&receiver, name, &args);
             let ty = builtin
                 .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty, &args))
@@ -2440,12 +2460,28 @@ fn field_callable_result_type(
     arity: usize,
     context: &TypeContext,
 ) -> Type {
-    let Some(field_ty) =
-        record_field_type(receiver, name).or_else(|| context.nominal_field_type(receiver, name))
-    else {
-        return Type::Unknown;
-    };
-    call_result_type(&field_ty, arity)
+    field_callable_callee_type(receiver, name, context)
+        .map(|(_, ty)| call_result_type(&ty, arity))
+        .unwrap_or(Type::Unknown)
+}
+
+fn field_callable_callee_type(
+    receiver: &Type,
+    name: &str,
+    context: &TypeContext,
+) -> Option<(FieldAccessKind, Type)> {
+    let access = field_access_kind(receiver, name);
+    let field_ty = match access {
+        FieldAccessKind::TuplePositionalRow { index } => tuple_field_type(receiver, index),
+        FieldAccessKind::RangeBoundary { .. }
+        | FieldAccessKind::AggregateBoundary { .. }
+        | FieldAccessKind::TextBoundary { .. } => None,
+        FieldAccessKind::RecordOrNominal => {
+            record_field_type(receiver, name).or_else(|| context.nominal_field_type(receiver, name))
+        }
+    }?;
+    matches!(field_ty, Type::Func(_, _, _) | Type::Continuation { .. })
+        .then_some((access, field_ty))
 }
 
 fn tuple_field_type(receiver: &Type, index: usize) -> Option<Type> {

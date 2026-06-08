@@ -1295,6 +1295,19 @@ fn lower_callable_target(target: &str, atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                 target: target.to_string(),
             });
         }
+        CpsAtom::TupleField {
+            tuple, field_index, ..
+        } => {
+            if let Some(value) = static_cps_tuple_field_value(tuple, *field_index) {
+                ops.push(CoreOp::CallableAlias {
+                    target: target.to_string(),
+                    value: core_value(value),
+                });
+            }
+            ops.push(CoreOp::DynamicCallableTarget {
+                target: target.to_string(),
+            });
+        }
         CpsAtom::DynRowField { package, field } => {
             if let Some((_, runtime_target)) = static_cps_dyn_receiver_method(package, field) {
                 ops.push(CoreOp::CallableAlias {
@@ -1359,6 +1372,9 @@ fn static_cps_record_field_value<'a>(record: &'a CpsAtom, name: &str) -> Option<
 fn static_cps_callable_value(atom: &CpsAtom) -> Option<&CpsAtom> {
     match atom {
         CpsAtom::RecordField { record, field } => static_cps_record_field_value(record, field),
+        CpsAtom::TupleField {
+            tuple, field_index, ..
+        } => static_cps_tuple_field_value(tuple, *field_index),
         _ => None,
     }
 }
