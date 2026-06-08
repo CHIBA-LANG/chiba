@@ -2609,7 +2609,7 @@ fn program_dyn_row_contract_function_abis(
                 .map(|(param, expansion)| {
                     param_contracts
                         .get(&param.name)
-                        .and_then(dyn_row_contract_arg_expansion)
+                        .and_then(|ty| dyn_row_contract_arg_expansion(ty, &interface.functions))
                         .unwrap_or_else(|| expansion.clone())
                 })
                 .collect::<Vec<_>>();
@@ -2632,13 +2632,25 @@ fn program_dyn_row_contract_function_abis(
         .collect()
 }
 
-fn dyn_row_contract_arg_expansion(ty: &Type) -> Option<BackendCallableArgExpansion> {
+fn dyn_row_contract_arg_expansion(
+    ty: &Type,
+    functions: &[crate::surface::InterfaceFunction],
+) -> Option<BackendCallableArgExpansion> {
     let Type::DynRow(fields) = ty else {
         return None;
     };
-    Some(BackendCallableArgExpansion::DynRowFields(
-        backend_dyn_row_field_abis(fields),
-    ))
+    Some(backend_dyn_row_arg_expansion(fields, functions))
+}
+
+fn backend_dyn_row_arg_expansion(
+    fields: &[RecordTypeField],
+    functions: &[crate::surface::InterfaceFunction],
+) -> BackendCallableArgExpansion {
+    BackendCallableArgExpansion::DynRow {
+        fields: backend_dyn_row_field_abis(fields),
+        needs_payload: !backend_row_member_method_abis(&Type::DynRow(fields.to_vec()), functions)
+            .is_empty(),
+    }
 }
 
 fn backend_arg_expansion_param_kinds(
@@ -2651,8 +2663,16 @@ fn backend_arg_expansion_param_kinds(
             params.extend(env.iter().copied());
             params
         }
-        BackendCallableArgExpansion::DynRowFields(fields) => {
-            fields.iter().map(|field| field.kind).collect()
+        BackendCallableArgExpansion::DynRow {
+            fields,
+            needs_payload,
+        } => {
+            let mut params = Vec::new();
+            if *needs_payload {
+                params.push(BackendValueKind::I32);
+            }
+            params.extend(fields.iter().map(|field| field.kind));
+            params
         }
         BackendCallableArgExpansion::StaticRowFields(fields) => {
             fields.iter().map(|field| field.kind).collect()
@@ -3310,9 +3330,7 @@ fn backend_callable_abis_for_interface(
             .map(|param| {
                 let ty = param.as_deref().map(source_type_name_to_type);
                 match ty {
-                    Some(Type::DynRow(fields)) => BackendCallableArgExpansion::DynRowFields(
-                        backend_dyn_row_field_abis(&fields),
-                    ),
+                    Some(Type::DynRow(fields)) => backend_dyn_row_arg_expansion(&fields, functions),
                     Some(Type::Record(fields)) => BackendCallableArgExpansion::StaticRowFields(
                         backend_dyn_row_field_abis(&fields),
                     ),
@@ -3351,8 +3369,16 @@ fn backend_callable_abis_for_interface(
                     params.extend(env.iter().copied());
                     params
                 }
-                BackendCallableArgExpansion::DynRowFields(fields) => {
-                    fields.iter().map(|field| field.kind).collect()
+                BackendCallableArgExpansion::DynRow {
+                    fields,
+                    needs_payload,
+                } => {
+                    let mut params = Vec::new();
+                    if *needs_payload {
+                        params.push(BackendValueKind::I32);
+                    }
+                    params.extend(fields.iter().map(|field| field.kind));
+                    params
                 }
                 BackendCallableArgExpansion::StaticRowFields(fields) => {
                     fields.iter().map(|field| field.kind).collect()
