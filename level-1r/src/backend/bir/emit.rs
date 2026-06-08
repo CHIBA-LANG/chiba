@@ -107,6 +107,7 @@ pub struct BackendParamAbi {
     pub statics: BTreeMap<String, BackendValueKind>,
     pub static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     pub aggregate_element_lanes: BTreeMap<String, BackendValueKind>,
+    pub adt_tag_params: BTreeMap<String, BackendAdtTagAbi>,
     pub dyn_row_param_fields: BTreeMap<String, Vec<BackendDynRowParamFieldAbi>>,
     pub dyn_row_param_methods: BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>,
 }
@@ -124,6 +125,10 @@ pub struct BackendCallableAbi {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BackendCallableArgExpansion {
     Direct(BackendValueKind),
+    AdtTag {
+        data: String,
+        variants: Vec<String>,
+    },
     Callable {
         params: Vec<BackendValueKind>,
         env: Vec<BackendValueKind>,
@@ -146,6 +151,12 @@ pub struct BackendReturnedCallableAbi {
 pub struct BackendDynRowParamFieldAbi {
     pub field: String,
     pub kind: BackendValueKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackendAdtTagAbi {
+    pub data: String,
+    pub variants: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -577,6 +588,13 @@ fn unsupported_expanded_tailcall_arg(
             };
             (!renderable).then(|| BackendDiagnostic::UnsupportedI32ReturnValue {
                 value: arg.debug_name(),
+            })
+        }
+        BackendCallableArgExpansion::AdtTag { data, variants } => {
+            (!adt_tag_arg_is_renderable_i32(arg, data, variants, env)).then(|| {
+                BackendDiagnostic::UnsupportedI32ReturnValue {
+                    value: arg.debug_name(),
+                }
             })
         }
         BackendCallableArgExpansion::Callable {
@@ -2930,6 +2948,7 @@ struct RenderEnv {
     static_kinds: BTreeMap<String, WasmValueKind>,
     static_ref_cell_lanes: BTreeMap<String, CoreRefCellLane>,
     aggregate_element_lanes: BTreeMap<String, WasmValueKind>,
+    adt_tag_params: BTreeMap<String, BackendAdtTagAbi>,
     dyn_row_param_fields: BTreeMap<String, Vec<BackendDynRowParamFieldAbi>>,
     dyn_row_param_methods: BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>,
     closure_env_params: BTreeMap<String, Vec<String>>,
@@ -2951,6 +2970,7 @@ impl RenderEnv {
             static_kinds: BTreeMap::new(),
             static_ref_cell_lanes: BTreeMap::new(),
             aggregate_element_lanes: BTreeMap::new(),
+            adt_tag_params: BTreeMap::new(),
             dyn_row_param_fields: BTreeMap::new(),
             dyn_row_param_methods: BTreeMap::new(),
             closure_env_params: BTreeMap::new(),
@@ -2971,6 +2991,7 @@ impl RenderEnv {
             .with_static_kinds(param_abi.statics.clone())
             .with_static_ref_cell_lanes(param_abi.static_ref_cell_lanes.clone())
             .with_aggregate_element_lanes(param_abi.aggregate_element_lanes.clone())
+            .with_adt_tag_params(param_abi.adt_tag_params.clone())
             .with_dyn_row_param_fields(param_abi.dyn_row_param_fields.clone())
             .with_dyn_row_param_methods(param_abi.dyn_row_param_methods.clone())
     }
@@ -3079,6 +3100,16 @@ impl RenderEnv {
             .map(|(name, kind)| (name, WasmValueKind::from(kind)))
             .collect();
         next
+    }
+
+    fn with_adt_tag_params(&self, adt_tag_params: BTreeMap<String, BackendAdtTagAbi>) -> Self {
+        let mut next = self.clone();
+        next.adt_tag_params = adt_tag_params;
+        next
+    }
+
+    fn adt_tag_param(&self, param: &str) -> Option<&BackendAdtTagAbi> {
+        self.adt_tag_params.get(param)
     }
 
     fn with_dyn_row_param_fields(
@@ -3558,6 +3589,9 @@ fn tailcall_args_are_renderable(
                     WasmValueKind::I32 => arg_value_is_renderable_i32(arg, env),
                     WasmValueKind::ExternRef => core_value_is_renderable_externref(arg, env),
                 },
+                BackendCallableArgExpansion::AdtTag { data, variants } => {
+                    adt_tag_arg_is_renderable_i32(arg, data, variants, env)
+                }
                 BackendCallableArgExpansion::Callable {
                     params,
                     env: callable_env,
@@ -3726,6 +3760,9 @@ fn render_tailcall_args(
                     WasmValueKind::I32 => render_i32_arg_value(wat, arg, env)?,
                     WasmValueKind::ExternRef => render_core_value_externref(wat, arg, env)?,
                 },
+                BackendCallableArgExpansion::AdtTag { data, variants } => {
+                    render_adt_tag_arg_i32(wat, arg, data, variants, env)?
+                }
                 BackendCallableArgExpansion::Callable {
                     params,
                     env: callable_env,
@@ -4303,6 +4340,64 @@ fn arg_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
     single_data_lane_i32_value(value, env)
         .map(|value| core_value_is_renderable_i32(&value, env))
         .unwrap_or_else(|| core_value_is_renderable_i32(value, env))
+}
+
+fn render_adt_tag_arg_i32(
+    wat: &mut String,
+    value: &CoreValue,
+    data: &str,
+    variants: &[String],
+    env: &RenderEnv,
+) -> Result<(), BackendDiagnostic> {
+    match adt_tag_arg_const_i32(value, data, variants, env) {
+        Some(tag) => {
+            wat.push_str(&format!("    i32.const {tag}\n"));
+            Ok(())
+        }
+        None if adt_tag_arg_is_renderable_i32(value, data, variants, env) => {
+            render_i32_arg_value(wat, value, env)
+        }
+        None => Err(unsupported_i32_render_diagnostic(value)),
+    }
+}
+
+fn adt_tag_arg_is_renderable_i32(
+    value: &CoreValue,
+    data: &str,
+    variants: &[String],
+    env: &RenderEnv,
+) -> bool {
+    if adt_tag_arg_const_i32(value, data, variants, env).is_some() {
+        return true;
+    }
+    match resolve_core_value_binding(value, env) {
+        CoreValue::Var(name) => env
+            .adt_tag_param(name)
+            .is_some_and(|abi| abi.data == data && abi.variants == variants),
+        _ => false,
+    }
+}
+
+fn adt_tag_arg_const_i32(
+    value: &CoreValue,
+    data: &str,
+    variants: &[String],
+    env: &RenderEnv,
+) -> Option<usize> {
+    match resolve_core_value_binding(value, env) {
+        CoreValue::Adt {
+            data: actual_data,
+            ctor,
+            args,
+            ..
+        } => {
+            if actual_data != data || !args.is_empty() {
+                return None;
+            }
+            variants.iter().position(|variant| variant == ctor)
+        }
+        _ => None,
+    }
 }
 
 fn render_core_value_externref(
@@ -5057,6 +5152,16 @@ fn render_match_arm_i32(
         CorePattern::Tuple(fields) => {
             if let Some(arm_env) = tuple_pattern_env(scrutinee, fields, env) {
                 render_core_value_i32_indented(wat, &arm.value, &arm_env, indent)?;
+            } else if let Some(arm_env) = tuple_pattern_runtime_env(scrutinee, fields, env) {
+                render_pattern_condition_i32(wat, scrutinee, &arm.pattern, env, indent)?;
+                push_indent(wat, indent);
+                wat.push_str("if (result i32)\n");
+                render_core_value_i32_indented(wat, &arm.value, &arm_env, indent + 2)?;
+                push_indent(wat, indent);
+                wat.push_str("else\n");
+                render_match_arms_i32(wat, scrutinee, rest, env, indent + 2)?;
+                push_indent(wat, indent);
+                wat.push_str("end\n");
             } else {
                 render_match_arms_i32(wat, scrutinee, rest, env, indent)?;
             }
@@ -5127,6 +5232,140 @@ fn tuple_pattern_env(
     Some(next)
 }
 
+fn tuple_pattern_runtime_env(
+    scrutinee: &CoreValue,
+    fields: &[CorePattern],
+    env: &RenderEnv,
+) -> Option<RenderEnv> {
+    let scrutinee = resolve_core_value_binding(scrutinee, env);
+    let CoreValue::Tuple { fields: values } = scrutinee else {
+        return None;
+    };
+    if fields.len() != values.len() {
+        return None;
+    }
+    let mut next = env.clone();
+    for (pattern, value) in fields.iter().zip(values) {
+        if !pattern_condition_is_renderable(value, pattern, env) {
+            return None;
+        }
+        bind_runtime_core_pattern(pattern, value, &mut next)?;
+    }
+    Some(next)
+}
+
+fn bind_runtime_core_pattern(
+    pattern: &CorePattern,
+    value: &CoreValue,
+    env: &mut RenderEnv,
+) -> Option<()> {
+    match pattern {
+        CorePattern::Wildcard => Some(()),
+        CorePattern::Bind(name) => {
+            env.bindings.insert(name.clone(), value.clone());
+            Some(())
+        }
+        CorePattern::Tuple(fields) => {
+            let CoreValue::Tuple { fields: values } = resolve_core_value_binding(value, env) else {
+                return None;
+            };
+            if fields.len() != values.len() {
+                return None;
+            }
+            let values = values.clone();
+            for (pattern, value) in fields.iter().zip(&values) {
+                bind_runtime_core_pattern(pattern, value, env)?;
+            }
+            Some(())
+        }
+        CorePattern::Constructor { args, .. } if args.is_empty() => Some(()),
+        CorePattern::I64(_) | CorePattern::Bool(_) | CorePattern::Constructor { .. } => Some(()),
+    }
+}
+
+fn pattern_condition_is_renderable(
+    value: &CoreValue,
+    pattern: &CorePattern,
+    env: &RenderEnv,
+) -> bool {
+    match pattern {
+        CorePattern::Wildcard | CorePattern::Bind(_) => true,
+        CorePattern::I64(_) | CorePattern::Bool(_) => core_value_is_renderable_i32(value, env),
+        CorePattern::Tuple(fields) => {
+            let CoreValue::Tuple { fields: values } = resolve_core_value_binding(value, env) else {
+                return false;
+            };
+            fields.len() == values.len()
+                && fields
+                    .iter()
+                    .zip(values)
+                    .all(|(pattern, value)| pattern_condition_is_renderable(value, pattern, env))
+        }
+        CorePattern::Constructor { data, ctor, args } => {
+            args.is_empty() && constructor_pattern_tag(value, data.as_deref(), ctor, env).is_some()
+        }
+    }
+}
+
+fn render_pattern_condition_i32(
+    wat: &mut String,
+    value: &CoreValue,
+    pattern: &CorePattern,
+    env: &RenderEnv,
+    indent: usize,
+) -> Result<(), BackendDiagnostic> {
+    match pattern {
+        CorePattern::Wildcard | CorePattern::Bind(_) => {
+            push_indent(wat, indent);
+            wat.push_str("i32.const 1\n");
+        }
+        CorePattern::I64(expected) => {
+            render_core_value_i32_indented(wat, value, env, indent)?;
+            push_indent(wat, indent);
+            wat.push_str(&format!("i32.const {}\n", *expected as i32));
+            push_indent(wat, indent);
+            wat.push_str("i32.eq\n");
+        }
+        CorePattern::Bool(expected) => {
+            render_core_value_i32_indented(wat, value, env, indent)?;
+            push_indent(wat, indent);
+            wat.push_str(&format!("i32.const {}\n", i32::from(*expected)));
+            push_indent(wat, indent);
+            wat.push_str("i32.eq\n");
+        }
+        CorePattern::Tuple(fields) => {
+            let CoreValue::Tuple { fields: values } = resolve_core_value_binding(value, env) else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            };
+            let Some((first_pattern, first_value)) = fields.first().zip(values.first()) else {
+                push_indent(wat, indent);
+                wat.push_str("i32.const 1\n");
+                return Ok(());
+            };
+            render_pattern_condition_i32(wat, first_value, first_pattern, env, indent)?;
+            for (pattern, value) in fields.iter().skip(1).zip(values.iter().skip(1)) {
+                render_pattern_condition_i32(wat, value, pattern, env, indent)?;
+                push_indent(wat, indent);
+                wat.push_str("i32.and\n");
+            }
+        }
+        CorePattern::Constructor { data, ctor, args } => {
+            if !args.is_empty() {
+                return Err(unsupported_i32_render_diagnostic(value));
+            }
+            let Some(tag) = constructor_pattern_tag(value, data.as_deref(), ctor, env) else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            };
+            render_core_value_i32_indented(wat, value, env, indent)?;
+            push_indent(wat, indent);
+            wat.push_str(&format!("i32.const {tag}\n"));
+            push_indent(wat, indent);
+            wat.push_str("i32.eq\n");
+        }
+    }
+    Ok(())
+}
+
 fn bind_core_pattern(pattern: &CorePattern, value: &CoreValue, env: &mut RenderEnv) -> Option<()> {
     match pattern {
         CorePattern::Wildcard => Some(()),
@@ -5144,6 +5383,25 @@ fn bind_core_pattern(pattern: &CorePattern, value: &CoreValue, env: &mut RenderE
         CorePattern::Tuple(fields) => tuple_pattern_env(value, fields, env).map(|next| {
             *env = next;
         }),
+        _ => None,
+    }
+}
+
+fn constructor_pattern_tag(
+    value: &CoreValue,
+    pattern_data: Option<&str>,
+    ctor: &str,
+    env: &RenderEnv,
+) -> Option<usize> {
+    match resolve_core_value_binding(value, env) {
+        CoreValue::Adt { .. } => constructor_tag(value, pattern_data, ctor),
+        CoreValue::Var(name) => {
+            let abi = env.adt_tag_param(name)?;
+            if pattern_data.is_some_and(|pattern_data| pattern_data != abi.data) {
+                return None;
+            }
+            abi.variants.iter().position(|variant| variant == ctor)
+        }
         _ => None,
     }
 }

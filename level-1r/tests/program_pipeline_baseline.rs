@@ -9073,6 +9073,36 @@ def main(): i64 = match (Bit.On, Bit.Off) { (Bit.On, Bit.On) => 11, (Bit.On, Bit
 }
 
 #[test]
+fn source_pattern_clause_defs_dispatch_zero_arg_adt_parameters_to_executable_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "data Bit = { On, Off }
+def pick(On: Bit, On: Bit): i64 = 11
+def pick(On: Bit, Off: Bit): i64 = 12
+def pick(Off: Bit, On: Bit): i64 = 21
+def pick(_: Bit, _: Bit): i64 = 22
+def main(): i64 = pick(Bit.On, Bit.On) * 1000 + pick(Bit.On, Bit.Off) * 100 + pick(Bit.Off, Bit.On) * 10 + pick(Bit.Off, Bit.Off)",
+    )
+    .expect("compile source zero-arg ADT parameter pattern clauses");
+    let bundle = output.program;
+    let pick = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "pick")
+        .expect("pick dispatcher");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(
+        bundle.defs.iter().filter(|def| def.name == "pick").count(),
+        1
+    );
+    assert_eq!(pick.params, vec!["value".to_string(), "value2".to_string()]);
+    assert_eq!(pick.output.pattern.matches.len(), 1);
+    assert!(pick.output.pattern.matches[0].exhaustive);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "12432");
+}
+
+#[test]
 fn program_surface_and_interface_summary_preserve_owner_namespace() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec![
