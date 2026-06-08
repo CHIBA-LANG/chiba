@@ -1301,10 +1301,10 @@ fn lower_callable_target(target: &str, atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
                     target: target.to_string(),
                     value: CoreValue::Var(runtime_target.to_string()),
                 });
-            } else if let CpsAtom::Var(param) = package.as_ref() {
+            } else if let Some(param) = dyn_row_method_package_var(package) {
                 ops.push(CoreOp::DynRowParamMethodTarget {
                     target: target.to_string(),
-                    param: param.clone(),
+                    param: param.to_string(),
                     field: field.clone(),
                 });
             }
@@ -1315,6 +1315,19 @@ fn lower_callable_target(target: &str, atom: &CpsAtom, ops: &mut Vec<CoreOp>) {
         _ => ops.push(CoreOp::DynamicCallableTarget {
             target: target.to_string(),
         }),
+    }
+}
+
+fn dyn_row_method_package_var<'a>(package: &'a CpsAtom) -> Option<&'a str> {
+    match package {
+        CpsAtom::Var(param) => Some(param.as_str()),
+        CpsAtom::RecordField { record, field } => {
+            let CpsAtom::Var(param) = static_cps_record_field_value(record, field)? else {
+                return None;
+            };
+            Some(param.as_str())
+        }
+        _ => None,
     }
 }
 
