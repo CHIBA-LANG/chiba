@@ -6694,6 +6694,103 @@ def main(): i64 = 2 |> add(_, _)",
 }
 
 #[test]
+fn source_pipe_chain_lowers_left_to_right_to_executable_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def inc(x: i64): i64 = x + 1
+def double(x: i64): i64 = x * 2
+def main(): i64 = 20 |> inc |> double",
+    )
+    .expect("compile source");
+    let bundle = &output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(bundle);
+    assert!(bundle.defs[2].output.cps.to_string().contains("inc(20,"));
+    assert!(bundle.defs[2].output.cps.to_string().contains("double(w"));
+    assert!(bundle.backend_link.linked_wat.contains("call $inc"));
+    assert!(bundle.backend_link.linked_wat.contains("call $double"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "42");
+}
+
+#[test]
+fn source_pipe_method_path_is_receiver_first_and_executable() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main(): i64 = String.from(\"hé\") |> String.bytes_len",
+    )
+    .expect("compile source");
+    let bundle = &output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(bundle);
+    match &output.frontend.program.items[0] {
+        SourceItem::Def { body, .. } => assert_eq!(
+            body,
+            &Expr::method_call_args(
+                Expr::method_call(Expr::var("String"), "from", Expr::string("hé")),
+                "bytes_len",
+                Vec::new()
+            )
+        ),
+        other => panic!("expected function def, got {other:?}"),
+    }
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_len"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_pipe_method_chain_lowers_like_dot_call_to_executable_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def main(): i64 = String.from(\"h\") |> String.concat(\"é\") |> String.bytes_len",
+    )
+    .expect("compile source");
+    let bundle = &output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(bundle);
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_concat"));
+    assert!(bundle
+        .backend_link
+        .linked_wat
+        .contains("call $std_string_i64_len"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "3");
+}
+
+#[test]
+fn source_pipe_placeholder_scope_can_mix_with_operator_lowering() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def add(x: i64, y: i64): i64 = x + y
+def main(): i64 = 4 |> add(_, 3) * 6",
+    )
+    .expect("compile source");
+    let bundle = &output.program;
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(bundle);
+    assert!(bundle.defs[1].output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            chiba_level1r::core::CoreOp::OperatorTarget {
+                protocol,
+                intrinsic: Some(chiba_level1r::core::OperatorIntrinsic::I64Mul),
+                ..
+            } if protocol == "op_mul"
+        )
+    }));
+    assert!(bundle.backend_link.linked_wat.contains("call $add"));
+
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "42");
+}
+
+#[test]
 fn source_arithmetic_operators_lower_to_executable_intrinsic_wat() {
     let output = chiba_level1r::compile_source_program_bundle(
         "def sub(x: i64, y: i64): i64 = x - y
