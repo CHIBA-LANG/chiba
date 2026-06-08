@@ -1003,15 +1003,14 @@ def main(): i64 = call_f({f: (x: i64): i64 => x + 1})
         .iter()
         .find(|def| def.name == "main")
         .expect("main def");
-    assert!(main
+    assert_backend_link_clean_all(&bundle);
+    assert!(!main
         .output
-        .backend
-        .diagnostics
+        .core
+        .ops
         .iter()
-        .any(|diagnostic| matches!(
-            diagnostic,
-            chiba_level1r::backend::BackendDiagnostic::UnsupportedI32ReturnValue { .. }
-        )));
+        .any(|op| matches!(op, CoreOp::TailCall { func, .. } if func == "call_f")));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
 }
 
 #[test]

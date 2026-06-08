@@ -573,7 +573,8 @@ fn compile_program_bundle_internal(
     program: &SourceProgram,
     interface_override: Option<InterfaceSummary>,
 ) -> ProgramCompileOutput {
-    let normalized_program = normalize_pattern_clause_defs(program);
+    let normalized_program =
+        specialize_row_callable_call_sites(&normalize_pattern_clause_defs(program));
     let mut passes = PassReport::default();
     let surface = passes.record(
         "P1ProjectSurface",
@@ -681,6 +682,596 @@ fn compile_program_bundle_internal(
         backend_cache_key,
         passes,
     }
+}
+
+#[derive(Clone, Debug)]
+struct RowCallableDef {
+    param: String,
+    field: String,
+    args: Vec<Expr>,
+}
+
+fn specialize_row_callable_call_sites(program: &SourceProgram) -> SourceProgram {
+    let row_callables = program
+        .items
+        .iter()
+        .filter_map(row_callable_def)
+        .collect::<BTreeMap<_, _>>();
+    if row_callables.is_empty() {
+        return program.clone();
+    }
+
+    let mut specialized = program.clone();
+    specialized.items = program
+        .items
+        .iter()
+        .map(|item| specialize_row_callable_item(item, &row_callables))
+        .collect();
+    specialized
+}
+
+fn row_callable_def(item: &SourceItem) -> Option<(String, RowCallableDef)> {
+    let SourceItem::Def {
+        name,
+        receiver: None,
+        generics,
+        params,
+        body,
+        ..
+    } = item
+    else {
+        return None;
+    };
+    if !generics.is_empty() || params.len() != 1 || params[0].ty.is_some() {
+        return None;
+    }
+    let Pattern::Bind(param_name) = &params[0].pattern else {
+        return None;
+    };
+    let Expr::MethodCall {
+        receiver,
+        name: field,
+        args,
+    } = body
+    else {
+        return None;
+    };
+    if !matches!(receiver.as_ref(), Expr::Var(receiver_name) if receiver_name == param_name) {
+        return None;
+    }
+    Some((
+        name.clone(),
+        RowCallableDef {
+            param: param_name.clone(),
+            field: field.clone(),
+            args: args.clone(),
+        },
+    ))
+}
+
+fn specialize_row_callable_item(
+    item: &SourceItem,
+    row_callables: &BTreeMap<String, RowCallableDef>,
+) -> SourceItem {
+    match item {
+        SourceItem::Def {
+            name,
+            attrs,
+            visibility,
+            receiver,
+            generics,
+            params,
+            return_type,
+            body,
+        } => SourceItem::Def {
+            name: name.clone(),
+            attrs: attrs.clone(),
+            visibility: *visibility,
+            receiver: receiver.clone(),
+            generics: generics.clone(),
+            params: params.clone(),
+            return_type: return_type.clone(),
+            body: specialize_row_callable_expr(body, row_callables),
+        },
+        SourceItem::StaticValue {
+            name,
+            attrs,
+            visibility,
+            ty,
+            body,
+        } => SourceItem::StaticValue {
+            name: name.clone(),
+            attrs: attrs.clone(),
+            visibility: *visibility,
+            ty: ty.clone(),
+            body: specialize_row_callable_expr(body, row_callables),
+        },
+        SourceItem::ExternDef { .. } => item.clone(),
+    }
+}
+
+fn specialize_row_callable_expr(
+    expr: &Expr,
+    row_callables: &BTreeMap<String, RowCallableDef>,
+) -> Expr {
+    if let Expr::Call { callee, args } = expr {
+        if let Expr::Var(callee_name) = callee.as_ref() {
+            if let Some(row_callable) = row_callables.get(callee_name) {
+                if let [arg] = args.as_slice() {
+                    if row_callable_arg_has_callable_field(arg, &row_callable.field) {
+                        return Expr::MethodCall {
+                            receiver: Box::new(specialize_row_callable_expr(arg, row_callables)),
+                            name: row_callable.field.clone(),
+                            args: row_callable
+                                .args
+                                .iter()
+                                .map(|arg| {
+                                    substitute_row_callable_param(
+                                        arg,
+                                        &row_callable.param,
+                                        args.first().expect("checked one row callable arg"),
+                                        row_callables,
+                                    )
+                                })
+                                .collect(),
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    match expr {
+        Expr::Var(_) | Expr::Lit(_) => expr.clone(),
+        Expr::Lambda { param, body } => Expr::Lambda {
+            param: param.clone(),
+            body: Box::new(specialize_row_callable_expr(body, row_callables)),
+        },
+        Expr::Call { callee, args } => Expr::Call {
+            callee: Box::new(specialize_row_callable_expr(callee, row_callables)),
+            args: args
+                .iter()
+                .map(|arg| specialize_row_callable_expr(arg, row_callables))
+                .collect(),
+        },
+        Expr::Instantiate { callee, type_args } => Expr::Instantiate {
+            callee: Box::new(specialize_row_callable_expr(callee, row_callables)),
+            type_args: type_args.clone(),
+        },
+        Expr::Tuple(fields) => Expr::Tuple(
+            fields
+                .iter()
+                .map(|field| specialize_row_callable_expr(field, row_callables))
+                .collect(),
+        ),
+        Expr::SliceLiteral(items) => Expr::SliceLiteral(
+            items
+                .iter()
+                .map(|item| specialize_row_callable_expr(item, row_callables))
+                .collect(),
+        ),
+        Expr::Record(fields) => Expr::Record(
+            fields
+                .iter()
+                .map(|field| crate::ast::RecordField {
+                    name: field.name.clone(),
+                    value: specialize_row_callable_expr(&field.value, row_callables),
+                })
+                .collect(),
+        ),
+        Expr::RecordUpdate { base, fields } => Expr::RecordUpdate {
+            base: Box::new(specialize_row_callable_expr(base, row_callables)),
+            fields: fields
+                .iter()
+                .map(|field| crate::ast::RecordField {
+                    name: field.name.clone(),
+                    value: specialize_row_callable_expr(&field.value, row_callables),
+                })
+                .collect(),
+        },
+        Expr::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => Expr::AdtCtor {
+            data: data.clone(),
+            ctor: ctor.clone(),
+            variants: variants.clone(),
+            args: args
+                .iter()
+                .map(|arg| specialize_row_callable_expr(arg, row_callables))
+                .collect(),
+        },
+        Expr::Field { receiver, name } => Expr::Field {
+            receiver: Box::new(specialize_row_callable_expr(receiver, row_callables)),
+            name: name.clone(),
+        },
+        Expr::MethodCall {
+            receiver,
+            name,
+            args,
+        } => Expr::MethodCall {
+            receiver: Box::new(specialize_row_callable_expr(receiver, row_callables)),
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|arg| specialize_row_callable_expr(arg, row_callables))
+                .collect(),
+        },
+        Expr::Assign { target, value } => Expr::Assign {
+            target: Box::new(specialize_row_callable_expr(target, row_callables)),
+            value: Box::new(specialize_row_callable_expr(value, row_callables)),
+        },
+        Expr::Index { receiver, index } => Expr::Index {
+            receiver: Box::new(specialize_row_callable_expr(receiver, row_callables)),
+            index: Box::new(specialize_row_callable_expr(index, row_callables)),
+        },
+        Expr::Range { start, end } => Expr::Range {
+            start: Box::new(specialize_row_callable_expr(start, row_callables)),
+            end: Box::new(specialize_row_callable_expr(end, row_callables)),
+        },
+        Expr::Binary { op, lhs, rhs } => Expr::Binary {
+            op: *op,
+            lhs: Box::new(specialize_row_callable_expr(lhs, row_callables)),
+            rhs: Box::new(specialize_row_callable_expr(rhs, row_callables)),
+        },
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => Expr::If {
+            cond: Box::new(specialize_row_callable_expr(cond, row_callables)),
+            then_branch: Box::new(specialize_row_callable_expr(then_branch, row_callables)),
+            else_branch: Box::new(specialize_row_callable_expr(else_branch, row_callables)),
+        },
+        Expr::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => Expr::IfLet {
+            pattern: pattern.clone(),
+            scrutinee: Box::new(specialize_row_callable_expr(scrutinee, row_callables)),
+            then_branch: Box::new(specialize_row_callable_expr(then_branch, row_callables)),
+            else_branch: Box::new(specialize_row_callable_expr(else_branch, row_callables)),
+        },
+        Expr::Match { scrutinee, arms } => Expr::Match {
+            scrutinee: Box::new(specialize_row_callable_expr(scrutinee, row_callables)),
+            arms: arms
+                .iter()
+                .map(|arm| crate::ast::MatchArm {
+                    pattern: arm.pattern.clone(),
+                    body: specialize_row_callable_expr(&arm.body, row_callables),
+                })
+                .collect(),
+        },
+        Expr::Nominal { name, expr } => Expr::Nominal {
+            name: name.clone(),
+            expr: Box::new(specialize_row_callable_expr(expr, row_callables)),
+        },
+        Expr::Reset { multi, body } => Expr::Reset {
+            multi: *multi,
+            body: Box::new(specialize_row_callable_expr(body, row_callables)),
+        },
+        Expr::Shift { binder, body } => Expr::Shift {
+            binder: binder.clone(),
+            body: Box::new(specialize_row_callable_expr(body, row_callables)),
+        },
+    }
+}
+
+fn substitute_row_callable_param(
+    expr: &Expr,
+    param: &str,
+    replacement: &Expr,
+    row_callables: &BTreeMap<String, RowCallableDef>,
+) -> Expr {
+    match expr {
+        Expr::Var(name) if name == param => {
+            specialize_row_callable_expr(replacement, row_callables)
+        }
+        Expr::Lambda {
+            param: lambda_param,
+            body,
+        } if lambda_param == param => Expr::Lambda {
+            param: lambda_param.clone(),
+            body: body.clone(),
+        },
+        Expr::Lambda {
+            param: lambda_param,
+            body,
+        } => Expr::Lambda {
+            param: lambda_param.clone(),
+            body: Box::new(substitute_row_callable_param(
+                body,
+                param,
+                replacement,
+                row_callables,
+            )),
+        },
+        Expr::Call { callee, args } => Expr::Call {
+            callee: Box::new(substitute_row_callable_param(
+                callee,
+                param,
+                replacement,
+                row_callables,
+            )),
+            args: args
+                .iter()
+                .map(|arg| substitute_row_callable_param(arg, param, replacement, row_callables))
+                .collect(),
+        },
+        Expr::MethodCall {
+            receiver,
+            name,
+            args,
+        } => Expr::MethodCall {
+            receiver: Box::new(substitute_row_callable_param(
+                receiver,
+                param,
+                replacement,
+                row_callables,
+            )),
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|arg| substitute_row_callable_param(arg, param, replacement, row_callables))
+                .collect(),
+        },
+        Expr::Field { receiver, name } => Expr::Field {
+            receiver: Box::new(substitute_row_callable_param(
+                receiver,
+                param,
+                replacement,
+                row_callables,
+            )),
+            name: name.clone(),
+        },
+        Expr::Binary { op, lhs, rhs } => Expr::Binary {
+            op: *op,
+            lhs: Box::new(substitute_row_callable_param(
+                lhs,
+                param,
+                replacement,
+                row_callables,
+            )),
+            rhs: Box::new(substitute_row_callable_param(
+                rhs,
+                param,
+                replacement,
+                row_callables,
+            )),
+        },
+        Expr::Instantiate { callee, type_args } => Expr::Instantiate {
+            callee: Box::new(substitute_row_callable_param(
+                callee,
+                param,
+                replacement,
+                row_callables,
+            )),
+            type_args: type_args.clone(),
+        },
+        Expr::Tuple(fields) => Expr::Tuple(
+            fields
+                .iter()
+                .map(|field| {
+                    substitute_row_callable_param(field, param, replacement, row_callables)
+                })
+                .collect(),
+        ),
+        Expr::SliceLiteral(items) => Expr::SliceLiteral(
+            items
+                .iter()
+                .map(|item| substitute_row_callable_param(item, param, replacement, row_callables))
+                .collect(),
+        ),
+        Expr::Record(fields) => Expr::Record(
+            fields
+                .iter()
+                .map(|field| crate::ast::RecordField {
+                    name: field.name.clone(),
+                    value: substitute_row_callable_param(
+                        &field.value,
+                        param,
+                        replacement,
+                        row_callables,
+                    ),
+                })
+                .collect(),
+        ),
+        Expr::RecordUpdate { base, fields } => Expr::RecordUpdate {
+            base: Box::new(substitute_row_callable_param(
+                base,
+                param,
+                replacement,
+                row_callables,
+            )),
+            fields: fields
+                .iter()
+                .map(|field| crate::ast::RecordField {
+                    name: field.name.clone(),
+                    value: substitute_row_callable_param(
+                        &field.value,
+                        param,
+                        replacement,
+                        row_callables,
+                    ),
+                })
+                .collect(),
+        },
+        Expr::AdtCtor {
+            data,
+            ctor,
+            variants,
+            args,
+        } => Expr::AdtCtor {
+            data: data.clone(),
+            ctor: ctor.clone(),
+            variants: variants.clone(),
+            args: args
+                .iter()
+                .map(|arg| substitute_row_callable_param(arg, param, replacement, row_callables))
+                .collect(),
+        },
+        Expr::Assign { target, value } => Expr::Assign {
+            target: Box::new(substitute_row_callable_param(
+                target,
+                param,
+                replacement,
+                row_callables,
+            )),
+            value: Box::new(substitute_row_callable_param(
+                value,
+                param,
+                replacement,
+                row_callables,
+            )),
+        },
+        Expr::Index { receiver, index } => Expr::Index {
+            receiver: Box::new(substitute_row_callable_param(
+                receiver,
+                param,
+                replacement,
+                row_callables,
+            )),
+            index: Box::new(substitute_row_callable_param(
+                index,
+                param,
+                replacement,
+                row_callables,
+            )),
+        },
+        Expr::Range { start, end } => Expr::Range {
+            start: Box::new(substitute_row_callable_param(
+                start,
+                param,
+                replacement,
+                row_callables,
+            )),
+            end: Box::new(substitute_row_callable_param(
+                end,
+                param,
+                replacement,
+                row_callables,
+            )),
+        },
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => Expr::If {
+            cond: Box::new(substitute_row_callable_param(
+                cond,
+                param,
+                replacement,
+                row_callables,
+            )),
+            then_branch: Box::new(substitute_row_callable_param(
+                then_branch,
+                param,
+                replacement,
+                row_callables,
+            )),
+            else_branch: Box::new(substitute_row_callable_param(
+                else_branch,
+                param,
+                replacement,
+                row_callables,
+            )),
+        },
+        Expr::IfLet {
+            pattern,
+            scrutinee,
+            then_branch,
+            else_branch,
+        } => Expr::IfLet {
+            pattern: pattern.clone(),
+            scrutinee: Box::new(substitute_row_callable_param(
+                scrutinee,
+                param,
+                replacement,
+                row_callables,
+            )),
+            then_branch: Box::new(substitute_row_callable_param(
+                then_branch,
+                param,
+                replacement,
+                row_callables,
+            )),
+            else_branch: Box::new(substitute_row_callable_param(
+                else_branch,
+                param,
+                replacement,
+                row_callables,
+            )),
+        },
+        Expr::Match { scrutinee, arms } => Expr::Match {
+            scrutinee: Box::new(substitute_row_callable_param(
+                scrutinee,
+                param,
+                replacement,
+                row_callables,
+            )),
+            arms: arms
+                .iter()
+                .map(|arm| crate::ast::MatchArm {
+                    pattern: arm.pattern.clone(),
+                    body: substitute_row_callable_param(
+                        &arm.body,
+                        param,
+                        replacement,
+                        row_callables,
+                    ),
+                })
+                .collect(),
+        },
+        Expr::Nominal { name, expr } => Expr::Nominal {
+            name: name.clone(),
+            expr: Box::new(substitute_row_callable_param(
+                expr,
+                param,
+                replacement,
+                row_callables,
+            )),
+        },
+        Expr::Reset { multi, body } => Expr::Reset {
+            multi: *multi,
+            body: Box::new(substitute_row_callable_param(
+                body,
+                param,
+                replacement,
+                row_callables,
+            )),
+        },
+        Expr::Shift { binder, body } if binder == param => Expr::Shift {
+            binder: binder.clone(),
+            body: body.clone(),
+        },
+        Expr::Shift { binder, body } => Expr::Shift {
+            binder: binder.clone(),
+            body: Box::new(substitute_row_callable_param(
+                body,
+                param,
+                replacement,
+                row_callables,
+            )),
+        },
+        Expr::Var(_) | Expr::Lit(_) => specialize_row_callable_expr(expr, row_callables),
+    }
+}
+
+fn row_callable_arg_has_callable_field(arg: &Expr, field: &str) -> bool {
+    let Expr::Record(fields) = arg else {
+        return false;
+    };
+    fields
+        .iter()
+        .any(|candidate| candidate.name == field && expr_is_callable_value(&candidate.value))
+}
+
+fn expr_is_callable_value(expr: &Expr) -> bool {
+    matches!(expr, Expr::Lambda { .. } | Expr::Var(_))
 }
 
 fn backend_cache_config_for_interface(interface: &InterfaceSummary) -> BackendCacheConfig {
@@ -3702,6 +4293,13 @@ fn program_backend_artifacts(
     }
     defs.iter()
         .enumerate()
+        .filter(|(_, def)| {
+            entry == Some(def.name.as_str())
+                || !is_uninstantiated_row_callable_template(def)
+                || defs.iter().any(|caller| {
+                    caller.name != def.name && typed_expr_calls_def(&caller.output.typed, &def.name)
+                })
+        })
         .map(|(index, def)| {
             let mut artifact = def.output.backend.clone();
             let is_entry = entry == Some(def.name.as_str()) && !entry_exported;
@@ -3727,6 +4325,111 @@ fn program_backend_artifacts(
             artifact
         })
         .collect()
+}
+
+fn is_uninstantiated_row_callable_template(def: &ProgramDefOutput) -> bool {
+    !def.output.typed_signature.params.is_empty()
+        && def
+            .output
+            .typed_signature
+            .params
+            .iter()
+            .all(|param| source_type_name_to_type(&param.ty) == Type::Unknown)
+        && def.output.typed_signature.return_type.is_none()
+        && is_row_callable_template_core(def)
+}
+
+fn is_row_callable_template_core(def: &ProgramDefOutput) -> bool {
+    !def.output.template.obligations.is_empty()
+        && def.output.template.obligations.iter().any(|obligation| {
+            matches!(
+                obligation,
+                crate::template::TemplateObligation::Field { .. }
+            )
+        })
+        && def.output.core.ops.iter().any(|op| {
+            matches!(
+                op,
+                CoreOp::DynamicCallableTarget { .. } | CoreOp::StaticRowAccess { .. }
+            )
+        })
+}
+
+fn typed_expr_calls_def(expr: &TypedExpr, name: &str) -> bool {
+    match &expr.kind {
+        TypedExprKind::Call { callee, args } => {
+            matches!(callee.kind, TypedExprKind::Var(ref callee_name) if callee_name == name)
+                || typed_expr_calls_def(callee, name)
+                || args.iter().any(|arg| typed_expr_calls_def(arg, name))
+        }
+        TypedExprKind::Lambda { body, .. }
+        | TypedExprKind::Nominal { expr: body, .. }
+        | TypedExprKind::Reset { body, .. }
+        | TypedExprKind::Shift { body, .. } => typed_expr_calls_def(body, name),
+        TypedExprKind::Tuple { fields, .. } | TypedExprKind::SliceLiteral { items: fields, .. } => {
+            fields.iter().any(|field| typed_expr_calls_def(field, name))
+        }
+        TypedExprKind::Record { fields } => fields
+            .iter()
+            .any(|field| typed_expr_calls_def(&field.value, name)),
+        TypedExprKind::RecordUpdate { base, fields } => {
+            typed_expr_calls_def(base, name)
+                || fields
+                    .iter()
+                    .any(|field| typed_expr_calls_def(&field.value, name))
+        }
+        TypedExprKind::DynRowPackage { payload, .. } => typed_expr_calls_def(payload, name),
+        TypedExprKind::DynRowField { package, .. }
+        | TypedExprKind::Field {
+            receiver: package, ..
+        } => typed_expr_calls_def(package, name),
+        TypedExprKind::AdtCtor { args, .. } => {
+            args.iter().any(|arg| typed_expr_calls_def(arg, name))
+        }
+        TypedExprKind::AdtToTuple { value, .. } | TypedExprKind::TupleToAdt { value, .. } => {
+            typed_expr_calls_def(value, name)
+        }
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            typed_expr_calls_def(receiver, name)
+                || args.iter().any(|arg| typed_expr_calls_def(arg, name))
+        }
+        TypedExprKind::Assign { target, value, .. } => {
+            typed_expr_calls_def(target, name) || typed_expr_calls_def(value, name)
+        }
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => typed_expr_calls_def(receiver, name) || typed_expr_calls_def(index, name),
+        TypedExprKind::Range { start, end } => {
+            typed_expr_calls_def(start, name) || typed_expr_calls_def(end, name)
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            typed_expr_calls_def(lhs, name) || typed_expr_calls_def(rhs, name)
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            typed_expr_calls_def(cond, name)
+                || typed_expr_calls_def(then_branch, name)
+                || typed_expr_calls_def(else_branch, name)
+        }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            typed_expr_calls_def(scrutinee, name)
+                || typed_expr_calls_def(then_branch, name)
+                || typed_expr_calls_def(else_branch, name)
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            typed_expr_calls_def(scrutinee, name)
+                || arms.iter().any(|arm| typed_expr_calls_def(&arm.body, name))
+        }
+        TypedExprKind::Var(_) | TypedExprKind::Lit(_) => false,
+    }
 }
 
 fn static_return_wat_from_fact(
