@@ -1108,6 +1108,137 @@ def main(): i64 = call_f(X({x: 10}))
 }
 
 #[test]
+fn source_generic_row_member_bound_accepts_record_callable_field() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def call_f[F, T: {r | f: F}](v: T): i64 = v.f(1)
+def main(): i64 = call_f({f: (x: i64): i64 => x + 1})
+"#,
+    )
+    .expect("compile exact generic row callable field");
+    let bundle = output.program;
+    let call_f = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "call_f")
+        .expect("call_f def");
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(call_f.output.template.obligations.contains(
+        &chiba_level1r::template::TemplateObligation::Field {
+            shape: chiba_level1r::template::canonical_open_row(vec![(
+                "f",
+                chiba_level1r::template::ShapeType::Named("F".to_string()),
+            )]),
+            field: "f".to_string(),
+        }
+    ));
+    assert_backend_link_clean_all(&bundle);
+    assert!(!main
+        .output
+        .core
+        .ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::TailCall { func, .. } if func == "call_f")));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "2");
+}
+
+#[test]
+fn source_generic_row_member_bound_accepts_nominal_receiver_method() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+type X = {x: i64}
+def X.f(self: Self, n: i64): i64 = self.x + n
+def call_f[F, T: {r | f: F}](v: T): i64 = v.f(1)
+def main(): i64 = call_f(X({x: 10}))
+"#,
+    )
+    .expect("compile exact generic row callable nominal method");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(!main
+        .output
+        .core
+        .ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::TailCall { func, .. } if func == "call_f")));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "11");
+}
+
+#[test]
+fn source_generic_row_member_bound_prefers_nominal_field_over_method() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+type X = {f: (i64) -> i64}
+def X.f(self: Self, n: i64): i64 = 101
+def call_f[F, T: {r | f: F}](v: T): i64 = v.f(1)
+def main(): i64 = call_f(X({f: (n: i64): i64 => n + 10}))
+"#,
+    )
+    .expect("compile exact generic row member priority");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(main
+        .output
+        .visual
+        .typed
+        .contains("field f access=record-or-nominal"));
+    assert!(!main
+        .output
+        .visual
+        .typed
+        .contains("field f access=receiver-method"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "11");
+}
+
+#[test]
+fn source_generic_row_member_bound_rejects_non_callable_or_mismatched_member_quickly() {
+    let start = std::time::Instant::now();
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+type Z = {f: i64}
+type M = {x: i64}
+def M.f(self: Self, bad: bool): i64 = 0
+def call_f[F, T: {r | f: F}](v: T): i64 = v.f(1)
+def bad_field(): i64 = call_f(Z({f: 1}))
+def bad_method(): i64 = call_f(M({x: 1}))
+def main(): i64 = 0
+"#,
+    )
+    .expect("compile exact generic row callable rejects");
+    let bundle = output.program;
+
+    assert!(
+        start.elapsed() < std::time::Duration::from_secs(2),
+        "row-bound rejection took {:?}",
+        start.elapsed()
+    );
+    assert!(
+        !bundle.backend_link.diagnostics.is_empty(),
+        "expected backend/link diagnostics for unsatisfied row callable member"
+    );
+}
+
+#[test]
 fn source_nominal_receiver_method_field_is_bound_callable_value() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"
