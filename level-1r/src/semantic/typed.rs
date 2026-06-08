@@ -164,6 +164,19 @@ pub enum DynRowFieldSource {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+enum RowMember {
+    Field {
+        access: FieldAccessKind,
+        ty: Type,
+    },
+    ReceiverMethod {
+        target: TypedReceiverMethodTarget,
+        param_ty: Type,
+        result_ty: Type,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FieldAccessKind {
     RecordOrNominal,
     ReceiverMethod {
@@ -2766,26 +2779,32 @@ fn dyn_row_adapter_fields(
     }
     let mut adapters = Vec::new();
     for field in fields {
-        let adapter = if let Some(field_ty) = record_field_type(payload, &field.name)
-            .or_else(|| context.nominal_field_type(payload, &field.name))
-        {
-            if field_ty != field.ty && field.ty != Type::Unknown {
-                return None;
+        let adapter = match row_member(payload, &field.name, context)? {
+            RowMember::Field { ty, .. } => {
+                if ty != field.ty && field.ty != Type::Unknown {
+                    return None;
+                }
+                DynRowFieldSource::Field
             }
-            DynRowFieldSource::Field
-        } else {
-            let method = context.specialized_receiver_method(payload, &field.name)?;
-            let method_ty = bound_method_type(&method);
-            if method_ty != field.ty && field.ty != Type::Unknown {
-                return None;
-            }
-            let param_ty = bound_method_param_type(&method);
-            let result_ty = method.result_ty.clone();
-            DynRowFieldSource::ReceiverMethod {
-                symbol: method.symbol,
-                runtime_target: method.runtime_target,
+            RowMember::ReceiverMethod {
+                target,
                 param_ty,
                 result_ty,
+            } => {
+                let method_ty = Type::Func(
+                    Box::new(param_ty.clone()),
+                    Box::new(result_ty.clone()),
+                    SendColor::Obligation,
+                );
+                if method_ty != field.ty && field.ty != Type::Unknown {
+                    return None;
+                }
+                DynRowFieldSource::ReceiverMethod {
+                    symbol: target.symbol,
+                    runtime_target: target.runtime_target,
+                    param_ty,
+                    result_ty,
+                }
             }
         };
         adapters.push(TypedDynRowField {
@@ -2796,12 +2815,69 @@ fn dyn_row_adapter_fields(
     Some(adapters)
 }
 
-fn bound_method_type(method: &SpecializedReceiverMethodSummary) -> Type {
-    Type::Func(
-        Box::new(bound_method_param_type(method)),
-        Box::new(method.result_ty.clone()),
-        SendColor::Obligation,
-    )
+fn row_member(receiver: &Type, name: &str, context: &TypeContext) -> Option<RowMember> {
+    let access = field_access_kind(receiver, name);
+    let ty = match &access {
+        FieldAccessKind::TuplePositionalRow { index } => tuple_field_type(receiver, *index),
+        FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
+        FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
+        FieldAccessKind::TextBoundary { .. } => Some(Type::I64),
+        FieldAccessKind::RecordOrNominal => {
+            record_field_type(receiver, name).or_else(|| context.nominal_field_type(receiver, name))
+        }
+        FieldAccessKind::ReceiverMethod { .. } => None,
+    };
+    if let Some(ty) = ty {
+        return Some(RowMember::Field { access, ty });
+    }
+    if !matches!(access, FieldAccessKind::RecordOrNominal) {
+        return None;
+    }
+    context
+        .specialized_receiver_method(receiver, name)
+        .map(|method| {
+            let param_ty = bound_method_param_type(&method);
+            RowMember::ReceiverMethod {
+                target: TypedReceiverMethodTarget {
+                    symbol: method.symbol,
+                    runtime_target: method.runtime_target,
+                },
+                param_ty,
+                result_ty: method.result_ty,
+            }
+        })
+}
+
+fn row_member_type_and_kind(
+    receiver: &Type,
+    name: &str,
+    context: &TypeContext,
+) -> (FieldAccessKind, Type) {
+    match row_member(receiver, name, context) {
+        Some(RowMember::Field { access, ty }) => (access, ty),
+        Some(RowMember::ReceiverMethod {
+            target,
+            param_ty,
+            result_ty,
+        }) => (
+            FieldAccessKind::ReceiverMethod { target },
+            Type::Func(
+                Box::new(param_ty),
+                Box::new(result_ty),
+                SendColor::Obligation,
+            ),
+        ),
+        None => (field_access_kind(receiver, name), Type::Unknown),
+    }
+}
+
+fn row_callable_member(
+    receiver: &Type,
+    name: &str,
+    context: &TypeContext,
+) -> Option<(FieldAccessKind, Type)> {
+    let (access, ty) = row_member_type_and_kind(receiver, name, context);
+    matches!(ty, Type::Func(_, _, _) | Type::Continuation { .. }).then_some((access, ty))
 }
 
 fn bound_method_param_type(method: &SpecializedReceiverMethodSummary) -> Type {
@@ -2894,19 +2970,10 @@ fn field_callable_callee_type(
     name: &str,
     context: &TypeContext,
 ) -> Option<(FieldAccessKind, Type)> {
-    let access = field_access_kind(receiver, name);
-    let field_ty = match access {
-        FieldAccessKind::TuplePositionalRow { index } => tuple_field_type(receiver, index),
-        FieldAccessKind::RangeBoundary { .. }
-        | FieldAccessKind::AggregateBoundary { .. }
-        | FieldAccessKind::TextBoundary { .. }
-        | FieldAccessKind::ReceiverMethod { .. } => None,
-        FieldAccessKind::RecordOrNominal => {
-            record_field_type(receiver, name).or_else(|| context.nominal_field_type(receiver, name))
-        }
-    }?;
-    matches!(field_ty, Type::Func(_, _, _) | Type::Continuation { .. })
-        .then_some((access, field_ty))
+    match row_callable_member(receiver, name, context)? {
+        (FieldAccessKind::ReceiverMethod { .. }, _) => None,
+        member => Some(member),
+    }
 }
 
 fn field_access_type_and_kind(
@@ -2914,37 +2981,7 @@ fn field_access_type_and_kind(
     name: &str,
     context: &TypeContext,
 ) -> (FieldAccessKind, Type) {
-    let access = field_access_kind(receiver, name);
-    let ty = match &access {
-        FieldAccessKind::TuplePositionalRow { index } => tuple_field_type(receiver, *index),
-        FieldAccessKind::RangeBoundary { .. } => Some(Type::I64),
-        FieldAccessKind::AggregateBoundary { .. } => Some(Type::I64),
-        FieldAccessKind::TextBoundary { .. } => Some(Type::I64),
-        FieldAccessKind::RecordOrNominal => {
-            record_field_type(receiver, name).or_else(|| context.nominal_field_type(receiver, name))
-        }
-        FieldAccessKind::ReceiverMethod { .. } => None,
-    };
-    if let Some(ty) = ty {
-        return (access, ty);
-    }
-    if !matches!(access, FieldAccessKind::RecordOrNominal) {
-        return (access, Type::Unknown);
-    }
-    context
-        .specialized_receiver_method(receiver, name)
-        .map(|method| {
-            (
-                FieldAccessKind::ReceiverMethod {
-                    target: TypedReceiverMethodTarget {
-                        symbol: method.symbol.clone(),
-                        runtime_target: method.runtime_target.clone(),
-                    },
-                },
-                bound_method_type(&method),
-            )
-        })
-        .unwrap_or((access, Type::Unknown))
+    row_member_type_and_kind(receiver, name, context)
 }
 
 fn tuple_field_type(receiver: &Type, index: usize) -> Option<Type> {

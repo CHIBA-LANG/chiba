@@ -1135,6 +1135,38 @@ def main(): i64 = apply(X({x: 10}).f)
 }
 
 #[test]
+fn source_row_member_lookup_prefers_field_over_receiver_method() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+type X = {f: (i64) -> i64}
+def X.f(self: Self, n: i64): i64 = 101
+def main(): i64 = X({f: (n: i64): i64 => n + 10}).f(1)
+"#,
+    )
+    .expect("compile source field/method row member priority");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(main
+        .output
+        .visual
+        .typed
+        .contains("field f access=record-or-nominal"));
+    assert!(!main
+        .output
+        .visual
+        .typed
+        .contains("field f access=receiver-method"));
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "11");
+}
+
+#[test]
 fn program_dyn_row_callable_field_accepts_field_and_method_adapters() {
     let program = SourceProgram::with_surface(
         None,
