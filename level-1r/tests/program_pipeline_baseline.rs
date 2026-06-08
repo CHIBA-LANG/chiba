@@ -8429,6 +8429,28 @@ fn auto_generic_is_lowering_fact_not_source_surface_generic() {
 }
 
 #[test]
+fn source_explicit_call_site_instantiation_lowers_to_executable_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def id[T](x: T): T = x
+def main(): i64 = id[i64](41)
+"#,
+    )
+    .expect("compile explicit instantiation source");
+    let bundle = output.program;
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(main.output.visual.template.contains("instantiate id[i64]"));
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "41");
+}
+
+#[test]
 fn program_surface_and_interface_preserve_static_values_separately_from_functions() {
     let program = SourceProgram::new(vec![
         static_value("ONE", Some("i64"), Expr::i64(1)),
