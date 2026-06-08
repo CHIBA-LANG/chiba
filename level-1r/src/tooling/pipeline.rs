@@ -759,8 +759,13 @@ fn specialize_row_callable_call_sites(
 
 #[derive(Clone, Debug, Default)]
 struct RowCallableMemberRecords {
-    fields: BTreeMap<String, BTreeMap<String, Type>>,
-    methods: BTreeMap<String, BTreeMap<String, Vec<Type>>>,
+    members: BTreeMap<String, BTreeMap<String, Vec<RowCallableMemberRecord>>>,
+}
+
+#[derive(Clone, Debug)]
+enum RowCallableMemberRecord {
+    Field { ty: Type },
+    ReceiverMethod { param_tys: Vec<Type> },
 }
 
 type DynRowMethodTargets = BTreeMap<String, BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>>;
@@ -773,10 +778,14 @@ fn row_callable_member_records(
     for ty in &interface.types {
         for field in &ty.fields {
             records
-                .fields
+                .members
                 .entry(ty.name.clone())
                 .or_default()
-                .insert(field.name.clone(), source_type_name_to_type(&field.ty));
+                .entry(field.name.clone())
+                .or_default()
+                .push(RowCallableMemberRecord::Field {
+                    ty: source_type_name_to_type(&field.ty),
+                });
         }
     }
     for method in visible_receiver_methods(interface, current_namespace) {
@@ -784,12 +793,13 @@ fn row_callable_member_records(
             continue;
         };
         records
-            .methods
+            .members
             .entry(receiver.display_name())
             .or_default()
-            .insert(
-                method.source_name.clone(),
-                method
+            .entry(method.source_name.clone())
+            .or_default()
+            .push(RowCallableMemberRecord::ReceiverMethod {
+                param_tys: method
                     .param_types
                     .iter()
                     .skip(1)
@@ -799,7 +809,7 @@ fn row_callable_member_records(
                             .unwrap_or(Type::Unknown)
                     })
                     .collect(),
-            );
+            });
     }
     records
 }
@@ -1587,21 +1597,36 @@ fn row_callable_arg_has_callable_field(
                 && expr_accepts_row_callable_args(&candidate.value, &row_callable.args)
         }),
         Expr::Nominal { name, .. } => member_records
-            .fields
+            .members
             .get(name)
-            .and_then(|fields| fields.get(&row_callable.field))
-            .map(|ty| type_accepts_row_callable_args(ty, &row_callable.args))
-            .unwrap_or_else(|| {
-                member_records
-                    .methods
-                    .get(name)
-                    .and_then(|methods| methods.get(&row_callable.field))
-                    .is_some_and(|param_tys| {
-                        row_callable_args_match_types(&row_callable.args, param_tys)
-                    })
-            }),
+            .and_then(|members| members.get(&row_callable.field))
+            .is_some_and(|members| row_member_records_accept_callable_args(members, row_callable)),
         _ => false,
     }
+}
+
+fn row_member_records_accept_callable_args(
+    members: &[RowCallableMemberRecord],
+    row_callable: &RowCallableDef,
+) -> bool {
+    let field_members = members
+        .iter()
+        .filter_map(|member| match member {
+            RowCallableMemberRecord::Field { ty } => Some(ty),
+            RowCallableMemberRecord::ReceiverMethod { .. } => None,
+        })
+        .collect::<Vec<_>>();
+    if !field_members.is_empty() {
+        return field_members
+            .iter()
+            .any(|ty| type_accepts_row_callable_args(ty, &row_callable.args));
+    }
+    members.iter().any(|member| match member {
+        RowCallableMemberRecord::Field { .. } => false,
+        RowCallableMemberRecord::ReceiverMethod { param_tys } => {
+            row_callable_args_match_types(&row_callable.args, param_tys)
+        }
+    })
 }
 
 fn expr_is_callable_value(expr: &Expr) -> bool {
