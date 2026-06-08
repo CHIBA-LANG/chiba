@@ -272,7 +272,7 @@ pub enum Type {
         variants: Vec<String>,
     },
     Nominal(String),
-    Func(Box<Type>, Box<Type>),
+    Func(Box<Type>, Box<Type>, SendColor),
     Continuation {
         multi: bool,
         input: Box<Type>,
@@ -648,7 +648,11 @@ fn type_expr_with_context_and_controls(
             let mut env = env.clone();
             env.insert(param.clone(), param_ty.clone());
             let body = type_expr_with_context_and_controls(body, &env, context, controls);
-            let ty = Type::Func(Box::new(param_ty.clone()), Box::new(body.ty.clone()));
+            let ty = Type::Func(
+                Box::new(param_ty.clone()),
+                Box::new(body.ty.clone()),
+                SendColor::Obligation,
+            );
             typed(
                 TypedExprKind::Lambda {
                     param: param.clone(),
@@ -1040,7 +1044,11 @@ fn refine_continuation_types(expr: TypedExpr, context: &TypeContext) -> TypedExp
             body,
         } => {
             let body = refine_continuation_types(*body, context);
-            let ty = Type::Func(Box::new(param_ty.clone()), Box::new(body.ty.clone()));
+            let ty = Type::Func(
+                Box::new(param_ty.clone()),
+                Box::new(body.ty.clone()),
+                SendColor::Obligation,
+            );
             typed(
                 TypedExprKind::Lambda {
                     param,
@@ -1424,7 +1432,11 @@ fn refine_pattern_binding_types(
             let mut nested = bindings.clone();
             nested.remove(&param);
             let body = refine_pattern_binding_types(*body, &nested, context);
-            let ty = Type::Func(Box::new(param_ty.clone()), Box::new(body.ty.clone()));
+            let ty = Type::Func(
+                Box::new(param_ty.clone()),
+                Box::new(body.ty.clone()),
+                SendColor::Obligation,
+            );
             typed(
                 TypedExprKind::Lambda {
                     param,
@@ -2284,7 +2296,7 @@ fn call_result_type(callee: &Type, arity: usize) -> Type {
     let mut current = callee;
     for _ in 0..arity {
         match current {
-            Type::Func(_, result) => current = result,
+            Type::Func(_, result, _) => current = result,
             _ => return Type::Unknown,
         }
     }
@@ -2293,7 +2305,7 @@ fn call_result_type(callee: &Type, arity: usize) -> Type {
 
 fn dyn_row_method_call_result_type(callee: &Type, arity: usize) -> Type {
     match (callee, arity) {
-        (Type::Func(param, result), 0) if matches!(param.as_ref(), Type::Nominal(name) if name == "Unit") => {
+        (Type::Func(param, result, _), 0) if matches!(param.as_ref(), Type::Nominal(name) if name == "Unit") => {
             result.as_ref().clone()
         }
         _ => call_result_type(callee, arity),
@@ -2316,7 +2328,7 @@ fn call_param_types(callee: &Type, arity: usize) -> Vec<Type> {
     let mut current = callee;
     for _ in 0..arity {
         match current {
-            Type::Func(param, result) => {
+            Type::Func(param, result, _) => {
                 params.push(param.as_ref().clone());
                 current = result;
             }
@@ -2387,6 +2399,7 @@ fn bound_method_type(method: &ReceiverMethodSummary) -> Type {
     Type::Func(
         Box::new(bound_method_param_type(method)),
         Box::new(method.result_ty.clone()),
+        SendColor::Obligation,
     )
 }
 
@@ -2859,15 +2872,6 @@ pub(crate) fn source_type_name_to_type(name: &str) -> Type {
         .unwrap_or_else(|| Type::Nominal(name.to_string()))
 }
 
-pub(crate) fn source_type_name_send_color(name: &str) -> SendColor {
-    parse_type_header(name)
-        .and_then(|header| match header {
-            ParsedTypeHeader::Callable { send, .. } => Some(send),
-            _ => None,
-        })
-        .unwrap_or(SendColor::Obligation)
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum ParsedTypeHeader {
     Unknown,
@@ -2931,9 +2935,11 @@ impl ParsedTypeHeader {
                 input: Box::new(input.to_type()),
                 answer: Box::new(answer.to_type()),
             },
-            ParsedTypeHeader::Callable { param, result, .. } => {
-                Type::Func(Box::new(param.to_type()), Box::new(result.to_type()))
-            }
+            ParsedTypeHeader::Callable {
+                param,
+                result,
+                send,
+            } => Type::Func(Box::new(param.to_type()), Box::new(result.to_type()), *send),
         }
     }
 }
@@ -3274,9 +3280,10 @@ fn substitute_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> 
                 })
                 .collect(),
         ),
-        Type::Func(param, result) => Type::Func(
+        Type::Func(param, result, send) => Type::Func(
             Box::new(substitute_type_params(param, substitutions)),
             Box::new(substitute_type_params(result, substitutions)),
+            *send,
         ),
         Type::Continuation {
             multi,
@@ -3357,8 +3364,8 @@ fn collect_payload_substitutions(
             }
             Some(())
         }
-        Type::Func(payload_param, payload_result) => {
-            let Type::Func(actual_param, actual_result) = actual else {
+        Type::Func(payload_param, payload_result, _) => {
+            let Type::Func(actual_param, actual_result, _) = actual else {
                 return Some(());
             };
             collect_payload_substitutions(payload_param, actual_param, generics, substitutions)?;
@@ -3439,12 +3446,17 @@ pub(crate) fn source_type_name_for_type(ty: &Type) -> String {
             ];
             render_source_type_application(base, &args)
         }
-        Type::Func(param, result) => {
-            format!(
+        Type::Func(param, result, send) => {
+            let rendered = format!(
                 "({}) -> {}",
                 source_type_name_for_type(param),
                 source_type_name_for_type(result)
-            )
+            );
+            if *send == SendColor::Send {
+                format!("({rendered}) send")
+            } else {
+                rendered
+            }
         }
         Type::Record(_) | Type::Adt { .. } | Type::Unknown => type_stable_name(ty),
         Type::DynRow(fields) => {
@@ -3512,7 +3524,12 @@ fn type_stable_name(ty: &Type) -> String {
             name
         }
         Type::Nominal(name) => format!("Nominal{}", sanitize_type_name(name)),
-        Type::Func(arg, ret) => format!("Fn_{}_{}", type_stable_name(arg), type_stable_name(ret)),
+        Type::Func(arg, ret, send) => format!(
+            "Fn_{}_{}_{}",
+            type_stable_name(arg),
+            type_stable_name(ret),
+            send_color_stable_name(*send)
+        ),
         Type::Continuation {
             multi,
             input,
@@ -3525,6 +3542,14 @@ fn type_stable_name(ty: &Type) -> String {
                 type_stable_name(answer)
             )
         }
+    }
+}
+
+fn send_color_stable_name(send: SendColor) -> &'static str {
+    match send {
+        SendColor::Send => "send",
+        SendColor::NotSend => "notsend",
+        SendColor::Obligation => "obligation",
     }
 }
 

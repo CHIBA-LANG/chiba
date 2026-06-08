@@ -1,7 +1,8 @@
 use chiba_level1r::core::{CoreOp, LayoutKind};
 use chiba_level1r::template::{canonical_closed_row, ShapeType};
 use chiba_level1r::typed::{
-    type_expr, type_expr_with_context, RecordTypeField, Type, TypeContext, TypeEnv, TypedExprKind,
+    type_expr, type_expr_with_context, RecordTypeField, SendColor, Type, TypeContext, TypeEnv,
+    TypedExprKind,
 };
 use chiba_level1r::{
     compile_expr, compile_program_bundle, Expr, ParamDecl, SourceItem, SourceProgram, TypeDecl,
@@ -189,7 +190,12 @@ fn record_field_callable_method_call_steps_through_curried_function_type() {
             name: "apply".to_string(),
             ty: Type::Func(
                 Box::new(Type::I64),
-                Box::new(Type::Func(Box::new(Type::Bool), Box::new(Type::I64))),
+                Box::new(Type::Func(
+                    Box::new(Type::Bool),
+                    Box::new(Type::I64),
+                    SendColor::Obligation,
+                )),
+                SendColor::Obligation,
             ),
         }]),
     );
@@ -209,13 +215,21 @@ fn record_field_callable_method_call_steps_through_curried_function_type() {
 
 #[test]
 fn record_field_callable_method_call_partial_application_keeps_remaining_function_type() {
-    let remaining = Type::Func(Box::new(Type::Bool), Box::new(Type::I64));
+    let remaining = Type::Func(
+        Box::new(Type::Bool),
+        Box::new(Type::I64),
+        SendColor::Obligation,
+    );
     let mut env = TypeEnv::new();
     env.insert(
         "record".to_string(),
         Type::Record(vec![RecordTypeField {
             name: "apply".to_string(),
-            ty: Type::Func(Box::new(Type::I64), Box::new(remaining.clone())),
+            ty: Type::Func(
+                Box::new(Type::I64),
+                Box::new(remaining.clone()),
+                SendColor::Obligation,
+            ),
         }]),
     );
 
@@ -235,7 +249,11 @@ fn nominal_field_callable_method_call_uses_field_return_type() {
         "CallableBox",
         vec![RecordTypeField {
             name: "apply".to_string(),
-            ty: Type::Func(Box::new(Type::I64), Box::new(Type::Bool)),
+            ty: Type::Func(
+                Box::new(Type::I64),
+                Box::new(Type::Bool),
+                SendColor::Obligation,
+            ),
         }],
     );
     let mut env = TypeEnv::new();

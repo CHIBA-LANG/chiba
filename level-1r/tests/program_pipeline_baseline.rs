@@ -4,7 +4,7 @@ use chiba_level1r::ast::{
 };
 use chiba_level1r::core::{CoreOp, CoreValue};
 use chiba_level1r::pattern::PatternDiagnostic;
-use chiba_level1r::typed::{AggregateKind, Type, TypedExprKind};
+use chiba_level1r::typed::{AggregateKind, SendColor, Type, TypedExprKind};
 use chiba_level1r::{
     build_interface_summary, compile_program, compile_program_bundle,
     compile_program_with_interface, compile_source_program_bundle, parse_source_program,
@@ -172,7 +172,12 @@ fn typed_multi_arg_call_steps_through_curried_function_type() {
         "f".to_string(),
         Type::Func(
             Box::new(Type::I64),
-            Box::new(Type::Func(Box::new(Type::Bool), Box::new(Type::I64))),
+            Box::new(Type::Func(
+                Box::new(Type::Bool),
+                Box::new(Type::I64),
+                SendColor::Obligation,
+            )),
+            SendColor::Obligation,
         ),
     );
 
@@ -187,11 +192,19 @@ fn typed_multi_arg_call_steps_through_curried_function_type() {
 
 #[test]
 fn typed_partial_call_preserves_remaining_function_type() {
-    let remaining = Type::Func(Box::new(Type::Bool), Box::new(Type::I64));
+    let remaining = Type::Func(
+        Box::new(Type::Bool),
+        Box::new(Type::I64),
+        SendColor::Obligation,
+    );
     let mut env = chiba_level1r::typed::TypeEnv::new();
     env.insert(
         "f".to_string(),
-        Type::Func(Box::new(Type::I64), Box::new(remaining.clone())),
+        Type::Func(
+            Box::new(Type::I64),
+            Box::new(remaining.clone()),
+            SendColor::Obligation,
+        ),
     );
 
     let typed = chiba_level1r::typed::type_expr_with_context(
@@ -1069,7 +1082,8 @@ fn program_dyn_row_receiver_method_adapter_call_enters_dyn_field_callee() {
                         callee.ty,
                         Type::Func(
                             Box::new(Type::Nominal("Unit".to_string())),
-                            Box::new(Type::I64)
+                            Box::new(Type::I64),
+                            SendColor::Obligation,
                         )
                     );
                 }
@@ -2073,6 +2087,10 @@ fn typed_sendable_callable_param_enters_callable_storage() {
     .expect("compile source");
     let main = &output.program.defs[0].output;
 
+    assert_eq!(
+        main.typed.ty,
+        Type::Func(Box::new(Type::I64), Box::new(Type::I64), SendColor::Send,)
+    );
     assert!(main.core.callable_storage.iter().any(|fact| {
         fact.subject == "param::f"
             && fact.kind == chiba_level1r::core::CallableStorageKind::ErasedCallableAdt

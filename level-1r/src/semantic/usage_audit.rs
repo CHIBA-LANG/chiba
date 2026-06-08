@@ -256,7 +256,14 @@ fn render_type(ty: &Type) -> String {
             format!("dyn {{{fields}}}")
         }
         Type::Adt { name, .. } | Type::Nominal(name) => name.clone(),
-        Type::Func(arg, ret) => format!("({}) -> {}", render_type(arg), render_type(ret)),
+        Type::Func(arg, ret, send) => {
+            let rendered = format!("({}) -> {}", render_type(arg), render_type(ret));
+            if *send == crate::typed::SendColor::Send {
+                format!("({rendered}) send")
+            } else {
+                rendered
+            }
+        }
         Type::Continuation {
             multi,
             input,

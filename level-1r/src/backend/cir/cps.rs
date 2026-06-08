@@ -1149,7 +1149,7 @@ fn type_has_callable_record_field(receiver: &Type, name: &str) -> bool {
         return false;
     };
     fields.iter().any(|field| {
-        field.name == name && matches!(field.ty, Type::Func(_, _) | Type::Continuation { .. })
+        field.name == name && matches!(field.ty, Type::Func(..) | Type::Continuation { .. })
     })
 }
 

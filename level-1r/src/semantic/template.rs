@@ -168,7 +168,7 @@ fn collect_dyn_row_contract_from_type(ty: &Type, facts: &mut TemplateFacts) {
             push_dyn_contract_once(facts, contract.clone());
             push_obligation_once(facts, TemplateObligation::DynAdapter { contract });
         }
-        Type::Func(param, result) => {
+        Type::Func(param, result, _) => {
             collect_dyn_row_contract_from_type(param, facts);
             collect_dyn_row_contract_from_type(result, facts);
         }

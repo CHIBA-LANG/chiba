@@ -50,9 +50,9 @@ use crate::symbol::encode_debug_symbol;
 use crate::template::{analyze_template_with_source, TemplateDiagnostic, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
-    nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_send_color,
-    source_type_name_to_type, type_expr_with_context, type_expr_with_expected,
-    ReceiverMethodSummary, RecordTypeField, Type, TypeContext, TypeEnv, TypedExpr,
+    nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_to_type,
+    type_expr_with_context, type_expr_with_expected, ReceiverMethodSummary, RecordTypeField, Type,
+    TypeContext, TypeEnv, TypedExpr,
 };
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -568,7 +568,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     all_diagnostics.extend(template_diagnostics(&defs));
     all_diagnostics.extend(control_diagnostics(&defs));
     all_diagnostics.extend(cps_usage_diagnostics(&defs));
-    let send_diagnostics = send_callable_diagnostics(&normalized_program, &defs);
+    let send_diagnostics = send_callable_diagnostics(&defs);
     all_diagnostics.extend(send_diagnostics.iter().cloned());
     all_diagnostics.extend(assignment_diagnostics(&defs));
     apply_program_backend_gates(&mut defs, &send_diagnostics);
@@ -1288,6 +1288,7 @@ fn function_type_from_interface(
                         .unwrap_or(Type::Unknown),
                 ),
                 Box::new(result),
+                crate::typed::SendColor::Obligation,
             )
         })
 }
@@ -1316,9 +1317,9 @@ fn explicit_callable_storage_facts(
                         .color()
                 },
             )),
-            Type::Func(_, _) => Some(callable_storage_fact(
+            Type::Func(_, _, send) => Some(callable_storage_fact(
                 format!("param::{}", param.name),
-                source_type_name_send_color(&param.ty),
+                send,
             )),
             _ => None,
         })
@@ -1336,11 +1337,8 @@ fn explicit_callable_storage_facts(
                     },
                 ));
             }
-            Type::Func(_, _) => {
-                facts.push(callable_storage_fact(
-                    format!("return::{def_name}"),
-                    source_type_name_send_color(return_type),
-                ));
+            Type::Func(_, _, send) => {
+                facts.push(callable_storage_fact(format!("return::{def_name}"), send));
             }
             _ => {}
         }
@@ -1391,9 +1389,9 @@ fn interface_callable_storage_facts(interface: &InterfaceSummary) -> Vec<Callabl
                             crate::typed::UsageColor::One
                         },
                     )),
-                    Type::Func(_, _) => Some(callable_storage_fact(
+                    Type::Func(_, _, send) => Some(callable_storage_fact(
                         format!("type::{}::{}", ty.name, field.name),
-                        source_type_name_send_color(&field.ty),
+                        send,
                     )),
                     _ => None,
                 })
@@ -1431,7 +1429,7 @@ fn backend_param_abi_with_extra_functions(
             .filter_map(|param| {
                 let ty = source_type_name_to_type(&param.ty);
                 match ty {
-                    Type::Func(_, _) => Some(BackendValueKind::I32),
+                    Type::Func(..) => Some(BackendValueKind::I32),
                     ty => backend_value_kind_for_type(&ty)
                         .or_else(|| backend_storage_value_kind_for_type(&ty)),
                 }
@@ -1460,7 +1458,7 @@ fn backend_callable_params_for_signature(
         .params
         .iter()
         .filter_map(|param| {
-            let Type::Func(input, result) = source_type_name_to_type(&param.ty) else {
+            let Type::Func(input, result, _) = source_type_name_to_type(&param.ty) else {
                 return None;
             };
             let input_kind = backend_value_kind_for_type(&input)
@@ -1527,7 +1525,7 @@ fn backend_dyn_row_param_methods_for_signature(
             let methods = fields
                 .iter()
                 .filter_map(|field| {
-                    let Type::Func(_, _) = field.ty else {
+                    let Type::Func(..) = field.ty else {
                         return None;
                     };
                     receiver_methods
@@ -1564,7 +1562,11 @@ fn dyn_row_method_field_type(function: &crate::surface::InterfaceFunction) -> Ty
                 .unwrap_or(Type::Unknown)
         })
         .collect::<Vec<_>>();
-    Type::Func(Box::new(method_bound_param_type(&params)), Box::new(result))
+    Type::Func(
+        Box::new(method_bound_param_type(&params)),
+        Box::new(result),
+        crate::typed::SendColor::Obligation,
+    )
 }
 
 fn method_bound_param_type(params: &[Type]) -> Type {
@@ -1642,7 +1644,7 @@ fn backend_callable_abis_for_interface(
                     Some(Type::DynRow(fields)) => BackendCallableArgExpansion::DynRowFields(
                         backend_dyn_row_field_abis(&fields),
                     ),
-                    Some(Type::Func(input, result)) => BackendCallableArgExpansion::Callable {
+                    Some(Type::Func(input, result, _)) => BackendCallableArgExpansion::Callable {
                         params: backend_value_kind_for_type(&input)
                             .or_else(|| backend_storage_value_kind_for_type(&input))
                             .into_iter()
@@ -1707,7 +1709,7 @@ fn backend_value_kind_for_type(ty: &Type) -> Option<BackendValueKind> {
         | Type::DynRow(_)
         | Type::Adt { .. }
         | Type::Nominal(_)
-        | Type::Func(_, _)
+        | Type::Func(..)
         | Type::Continuation { .. } => None,
     }
 }
@@ -1731,7 +1733,7 @@ fn core_ref_cell_lane_for_type(ty: &Type) -> Option<crate::core::CoreRefCellLane
                         | Type::Record(_)
                         | Type::DynRow(_)
                         | Type::Adt { .. }
-                        | Type::Func(_, _)
+                        | Type::Func(..)
                         | Type::Continuation { .. }
                 )
             {
@@ -2228,11 +2230,8 @@ fn cps_usage_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
         .collect()
 }
 
-fn send_callable_diagnostics(
-    program: &SourceProgram,
-    defs: &[ProgramDefOutput],
-) -> Vec<ProgramDiagnostic> {
-    let signatures = send_callable_signatures(program);
+fn send_callable_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
+    let signatures = send_callable_signatures(defs);
     if signatures.is_empty() {
         return Vec::new();
     }
@@ -2248,31 +2247,25 @@ fn send_callable_diagnostics(
     diagnostics
 }
 
-fn send_callable_signatures(program: &SourceProgram) -> BTreeMap<String, Vec<bool>> {
-    program
-        .items
-        .iter()
-        .filter_map(|item| {
-            let SourceItem::Def {
-                name,
-                receiver: None,
-                params,
-                ..
-            } = item
-            else {
-                return None;
-            };
-            let send_params = params
+fn send_callable_signatures(defs: &[ProgramDefOutput]) -> BTreeMap<String, Vec<bool>> {
+    defs.iter()
+        .filter_map(|def| {
+            let send_params = def
+                .output
+                .typed_signature
+                .params
                 .iter()
                 .map(|param| {
-                    param.ty.as_deref().map(source_type_name_send_color)
-                        == Some(crate::typed::SendColor::Send)
+                    matches!(
+                        source_type_name_to_type(&param.ty),
+                        Type::Func(_, _, crate::typed::SendColor::Send)
+                    )
                 })
                 .collect::<Vec<_>>();
             send_params
                 .iter()
                 .any(|send| *send)
-                .then_some((name.clone(), send_params))
+                .then_some((def.name.clone(), send_params))
         })
         .collect()
 }
@@ -2699,8 +2692,13 @@ fn program_type_name(ty: &Type) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
-        Type::Func(arg, ret) => {
-            format!("({}) -> {}", program_type_name(arg), program_type_name(ret))
+        Type::Func(arg, ret, send) => {
+            let rendered = format!("({}) -> {}", program_type_name(arg), program_type_name(ret));
+            if *send == crate::typed::SendColor::Send {
+                format!("({rendered}) send")
+            } else {
+                rendered
+            }
         }
         Type::Continuation {
             multi,
