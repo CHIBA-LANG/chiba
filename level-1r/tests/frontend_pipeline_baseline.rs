@@ -1051,6 +1051,28 @@ fn frontend_parses_dyn_row_type_annotations() {
 }
 
 #[test]
+fn frontend_parses_open_row_type_annotations() {
+    let parsed = parse_source_program("def get_x(v: {r | x: i64, f: (i64) -> i64}): i64 = v.x")
+        .expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def { params, .. } => {
+            assert_eq!(
+                params,
+                &vec![ParamDecl::new(
+                    "v",
+                    Some("{r | x: i64, f: (i64) -> i64}".to_string())
+                )]
+            );
+        }
+        other => panic!(
+            "expected function def, got {}",
+            source_item_kind_name(other)
+        ),
+    }
+}
+
+#[test]
 fn frontend_parses_sendable_callable_type_annotations() {
     let parsed =
         parse_source_program("def use_send(f: ((i64) -> i64) send): ((i64) -> i64) send = f")

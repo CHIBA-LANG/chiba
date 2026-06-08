@@ -309,3 +309,25 @@ fn annotated_function_boundary_does_not_create_auto_generic_params() {
 
     assert!(def.template.explicit_params.is_empty());
 }
+
+#[test]
+fn open_row_parameter_annotation_enters_template_field_obligations() {
+    let output =
+        chiba_level1r::compile_source_program_bundle("def get_x(v: {r | x: i64}): i64 = v.x")
+            .expect("compile source");
+    let def = &output.program.defs[0].output;
+
+    assert!(def.template.explicit_params.is_empty());
+    assert!(def.template.row_shapes.contains(&canonical_open_row(vec![(
+        "x",
+        ShapeType::Named("i64".to_string()),
+    )])));
+    assert!(def
+        .template
+        .obligations
+        .contains(&TemplateObligation::Field {
+            shape: canonical_open_row(vec![("x", ShapeType::Named("i64".to_string()))]),
+            field: "x".to_string(),
+        }));
+    assert_eq!(def.typed.ty, Type::I64);
+}

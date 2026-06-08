@@ -157,11 +157,11 @@ fn collect_source_dyn_row_contracts(
         .filter_map(|param| param.ty.as_deref())
         .chain(return_type.as_deref())
     {
-        collect_dyn_row_contract_from_type(&source_type_name_to_type(ty), facts);
+        collect_source_type_contracts(&source_type_name_to_type(ty), facts);
     }
 }
 
-fn collect_dyn_row_contract_from_type(ty: &Type, facts: &mut TemplateFacts) {
+fn collect_source_type_contracts(ty: &Type, facts: &mut TemplateFacts) {
     match ty {
         Type::DynRow(fields) => {
             let contract = dyn_row_contract_from_record_fields(fields);
@@ -169,22 +169,36 @@ fn collect_dyn_row_contract_from_type(ty: &Type, facts: &mut TemplateFacts) {
             push_obligation_once(facts, TemplateObligation::DynAdapter { contract });
         }
         Type::Func(param, result, _) => {
-            collect_dyn_row_contract_from_type(param, facts);
-            collect_dyn_row_contract_from_type(result, facts);
+            collect_source_type_contracts(param, facts);
+            collect_source_type_contracts(result, facts);
         }
         Type::Tuple(fields) => {
             for field in fields {
-                collect_dyn_row_contract_from_type(field, facts);
+                collect_source_type_contracts(field, facts);
             }
         }
         Type::Record(fields) => {
+            let shape = canonical_open_row(
+                fields
+                    .iter()
+                    .map(|field| (field.name.as_str(), shape_type_for_type(&field.ty)))
+                    .collect(),
+            );
+            push_row_shape_once(facts, shape.clone());
             for field in fields {
-                collect_dyn_row_contract_from_type(&field.ty, facts);
+                push_obligation_once(
+                    facts,
+                    TemplateObligation::Field {
+                        shape: shape.clone(),
+                        field: field.name.clone(),
+                    },
+                );
+                collect_source_type_contracts(&field.ty, facts);
             }
         }
         Type::Continuation { input, answer, .. } => {
-            collect_dyn_row_contract_from_type(input, facts);
-            collect_dyn_row_contract_from_type(answer, facts);
+            collect_source_type_contracts(input, facts);
+            collect_source_type_contracts(answer, facts);
         }
         Type::Unknown
         | Type::I64
@@ -214,6 +228,12 @@ fn shape_type_for_type(ty: &Type) -> ShapeType {
 fn push_dyn_contract_once(facts: &mut TemplateFacts, contract: DynRowContract) {
     if !facts.dyn_contracts.contains(&contract) {
         facts.dyn_contracts.push(contract);
+    }
+}
+
+fn push_row_shape_once(facts: &mut TemplateFacts, shape: RowShape) {
+    if !facts.row_shapes.contains(&shape) {
+        facts.row_shapes.push(shape);
     }
 }
 

@@ -1400,6 +1400,26 @@ impl FrontendParser {
             self.expect("RBrace")?;
             return Ok(format!("dyn {{{}}}", fields.join(", ")));
         }
+        if self.peek_name() == Some("LBrace") {
+            self.expect("LBrace")?;
+            let row = self.expect_lexeme("Ident")?;
+            if row != "r" {
+                return Err(self.unexpected_current(vec!["row marker `r`"]));
+            }
+            self.expect("Pipe")?;
+            let mut fields = Vec::new();
+            while self.peek_name() != Some("RBrace") {
+                let field = self.expect_lexeme("Ident")?;
+                self.expect("Colon")?;
+                let ty = self.parse_type_name()?;
+                fields.push(format!("{field}: {ty}"));
+                if self.peek_name() == Some("Comma") {
+                    self.pos += 1;
+                }
+            }
+            self.expect("RBrace")?;
+            return Ok(format!("{{r | {}}}", fields.join(", ")));
+        }
         if self.peek_name() == Some("Ident")
             && self
                 .tokens

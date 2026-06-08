@@ -3443,6 +3443,9 @@ enum ParsedTypeHeader {
     DynRow {
         fields: Vec<ParsedTypeFieldHeader>,
     },
+    OpenRow {
+        fields: Vec<ParsedTypeFieldHeader>,
+    },
     Continuation {
         multi: bool,
         input: Box<ParsedTypeHeader>,
@@ -3473,6 +3476,15 @@ impl ParsedTypeHeader {
                 Type::Tuple(args.iter().map(ParsedTypeHeader::to_type).collect())
             }
             ParsedTypeHeader::DynRow { fields } => Type::DynRow(canonical_fields(
+                fields
+                    .iter()
+                    .map(|field| RecordTypeField {
+                        name: field.name.clone(),
+                        ty: field.ty.to_type(),
+                    })
+                    .collect(),
+            )),
+            ParsedTypeHeader::OpenRow { fields } => Type::Record(canonical_fields(
                 fields
                     .iter()
                     .map(|field| RecordTypeField {
@@ -3521,6 +3533,9 @@ fn parse_type_header(name: &str) -> Option<ParsedTypeHeader> {
     if let Some(fields) = parse_dyn_row_type_header(name) {
         return Some(ParsedTypeHeader::DynRow { fields });
     }
+    if let Some(fields) = parse_open_row_type_header(name) {
+        return Some(ParsedTypeHeader::OpenRow { fields });
+    }
 
     let Some((base, args)) = parse_application_type_header(name)? else {
         return Some(ParsedTypeHeader::Nominal {
@@ -3557,6 +3572,16 @@ fn parse_type_header(name: &str) -> Option<ParsedTypeHeader> {
 fn parse_dyn_row_type_header(name: &str) -> Option<Vec<ParsedTypeFieldHeader>> {
     let body = name.strip_prefix("dyn")?.trim_start();
     let body = body.strip_prefix('{')?.strip_suffix('}')?.trim();
+    parse_type_field_headers(body)
+}
+
+fn parse_open_row_type_header(name: &str) -> Option<Vec<ParsedTypeFieldHeader>> {
+    let body = name.strip_prefix("{r")?.trim_start();
+    let body = body.strip_prefix('|')?.strip_suffix('}')?.trim();
+    parse_type_field_headers(body)
+}
+
+fn parse_type_field_headers(body: &str) -> Option<Vec<ParsedTypeFieldHeader>> {
     if body.is_empty() {
         return Some(Vec::new());
     }
@@ -3747,6 +3772,14 @@ fn render_type_header(header: &ParsedTypeHeader) -> String {
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("dyn {{{fields}}}")
+        }
+        ParsedTypeHeader::OpenRow { fields } => {
+            let fields = fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, render_type_header(&field.ty)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{r | {fields}}}")
         }
         ParsedTypeHeader::Continuation {
             multi,
