@@ -2,8 +2,8 @@ use crate::alpha::{alpha_expr_with_params, AlphaBinder, AlphaFacts};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
-    render_source_expr, Expr, ExternAbi, ExternDecl, MethodReceiver, NamespaceDecl, ParamDecl,
-    Pattern, SourceItem, SourceProgram, UseDecl, Visibility,
+    render_source_binary_op, render_source_expr, Expr, ExternAbi, ExternDecl, MethodReceiver,
+    NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, UseDecl, Visibility,
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_param_abi, link_backend_artifacts, sort_dedup_imports,
@@ -204,6 +204,12 @@ pub enum ProgramDiagnostic {
         def: String,
         expected: String,
         actual: String,
+    },
+    InvalidOperatorOperands {
+        def: String,
+        op: String,
+        lhs: String,
+        rhs: String,
     },
     MissingEntry,
     EntryHasParams {
@@ -577,6 +583,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     all_diagnostics.extend(send_diagnostics.iter().cloned());
     all_diagnostics.extend(assignment_diagnostics(&defs));
     all_diagnostics.extend(dyn_row_coercion_diagnostics(&defs));
+    all_diagnostics.extend(operator_operand_diagnostics(&defs));
     apply_program_backend_gates(&mut defs, &send_diagnostics);
     if entry.is_none() {
         all_diagnostics.push(ProgramDiagnostic::MissingEntry);
@@ -3164,6 +3171,135 @@ fn collect_call_dyn_row_coercion_diagnostics(
     }
 }
 
+fn operator_operand_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
+    let mut diagnostics = Vec::new();
+    for def in defs {
+        collect_operator_operand_diagnostics(&def.name, &def.output.typed, &mut diagnostics);
+    }
+    diagnostics
+}
+
+fn collect_operator_operand_diagnostics(
+    def: &str,
+    expr: &TypedExpr,
+    diagnostics: &mut Vec<ProgramDiagnostic>,
+) {
+    match &expr.kind {
+        TypedExprKind::Binary { op, lhs, rhs } => {
+            if binary_operand_is_concrete_non_i64(&lhs.ty)
+                || binary_operand_is_concrete_non_i64(&rhs.ty)
+            {
+                diagnostics.push(ProgramDiagnostic::InvalidOperatorOperands {
+                    def: def.to_string(),
+                    op: render_source_binary_op(*op).to_string(),
+                    lhs: program_type_name(&lhs.ty),
+                    rhs: program_type_name(&rhs.ty),
+                });
+            }
+            collect_operator_operand_diagnostics(def, lhs, diagnostics);
+            collect_operator_operand_diagnostics(def, rhs, diagnostics);
+        }
+        TypedExprKind::Lambda { body, .. }
+        | TypedExprKind::Nominal { expr: body, .. }
+        | TypedExprKind::Reset { body, .. }
+        | TypedExprKind::Shift { body, .. } => {
+            collect_operator_operand_diagnostics(def, body, diagnostics);
+        }
+        TypedExprKind::Call { callee, args } => {
+            collect_operator_operand_diagnostics(def, callee, diagnostics);
+            for arg in args {
+                collect_operator_operand_diagnostics(def, arg, diagnostics);
+            }
+        }
+        TypedExprKind::Tuple { fields, .. } | TypedExprKind::SliceLiteral { items: fields, .. } => {
+            for field in fields {
+                collect_operator_operand_diagnostics(def, field, diagnostics);
+            }
+        }
+        TypedExprKind::Record { fields } => {
+            for field in fields {
+                collect_operator_operand_diagnostics(def, &field.value, diagnostics);
+            }
+        }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            collect_operator_operand_diagnostics(def, base, diagnostics);
+            for field in fields {
+                collect_operator_operand_diagnostics(def, &field.value, diagnostics);
+            }
+        }
+        TypedExprKind::DynRowPackage { payload, .. } => {
+            collect_operator_operand_diagnostics(def, payload, diagnostics);
+        }
+        TypedExprKind::DynRowField { package, .. } => {
+            collect_operator_operand_diagnostics(def, package, diagnostics);
+        }
+        TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_operator_operand_diagnostics(def, arg, diagnostics);
+            }
+        }
+        TypedExprKind::AdtToTuple { value, .. } | TypedExprKind::TupleToAdt { value, .. } => {
+            collect_operator_operand_diagnostics(def, value, diagnostics);
+        }
+        TypedExprKind::Field { receiver, .. } => {
+            collect_operator_operand_diagnostics(def, receiver, diagnostics);
+        }
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            collect_operator_operand_diagnostics(def, receiver, diagnostics);
+            for arg in args {
+                collect_operator_operand_diagnostics(def, arg, diagnostics);
+            }
+        }
+        TypedExprKind::Assign { target, value, .. } => {
+            collect_operator_operand_diagnostics(def, target, diagnostics);
+            collect_operator_operand_diagnostics(def, value, diagnostics);
+        }
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
+            collect_operator_operand_diagnostics(def, receiver, diagnostics);
+            collect_operator_operand_diagnostics(def, index, diagnostics);
+        }
+        TypedExprKind::Range { start, end } => {
+            collect_operator_operand_diagnostics(def, start, diagnostics);
+            collect_operator_operand_diagnostics(def, end, diagnostics);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_operator_operand_diagnostics(def, cond, diagnostics);
+            collect_operator_operand_diagnostics(def, then_branch, diagnostics);
+            collect_operator_operand_diagnostics(def, else_branch, diagnostics);
+        }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_operator_operand_diagnostics(def, scrutinee, diagnostics);
+            collect_operator_operand_diagnostics(def, then_branch, diagnostics);
+            collect_operator_operand_diagnostics(def, else_branch, diagnostics);
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            collect_operator_operand_diagnostics(def, scrutinee, diagnostics);
+            for arm in arms {
+                collect_operator_operand_diagnostics(def, &arm.body, diagnostics);
+            }
+        }
+        TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
+    }
+}
+
+fn binary_operand_is_concrete_non_i64(ty: &Type) -> bool {
+    matches!(
+        ty,
+        Type::Bool | Type::Rune | Type::Tuple(_) | Type::Record(_) | Type::DynRow(_)
+    )
+}
+
 fn program_type_name(ty: &Type) -> String {
     match ty {
         Type::Unknown => "Unknown".to_string(),
@@ -4986,6 +5122,9 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
             expected,
             actual,
         } => format!("dyn row coercion failed {def}: expected {expected}, actual {actual}"),
+        ProgramDiagnostic::InvalidOperatorOperands { def, op, lhs, rhs } => {
+            format!("invalid operator operands {def}: {lhs} {op} {rhs}")
+        }
         ProgramDiagnostic::MissingEntry => "missing entry".to_string(),
         ProgramDiagnostic::EntryHasParams { name, params } => {
             format!("entry has params {name}({})", params.join(", "))

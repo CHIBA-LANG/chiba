@@ -6414,6 +6414,74 @@ def main(): i64 = div(mul(sub(10, 4), 3), 2)",
 }
 
 #[test]
+fn source_arithmetic_operator_rejects_wrong_concrete_operands() {
+    let output = chiba_level1r::compile_source_program_bundle("def main(): i64 = true + false")
+        .expect("compile source");
+    let bundle = output.program;
+
+    assert!(
+        bundle.diagnostics.iter().any(|diagnostic| matches!(
+            diagnostic,
+            ProgramDiagnostic::InvalidOperatorOperands { def, op, lhs, rhs }
+                if def == "main" && op == "+" && lhs == "bool" && rhs == "bool"
+        )),
+        "{:?}",
+        bundle.diagnostics
+    );
+}
+
+#[test]
+fn source_nominal_operator_stays_structural_obligation_not_builtin_operand_error() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Vec2",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::def(
+                "add",
+                Vec::new(),
+                vec![
+                    ParamDecl::new("a", Some("Vec2".to_string())),
+                    ParamDecl::new("b", Some("Vec2".to_string())),
+                ],
+                Some("Vec2".to_string()),
+                Expr::binary(BinaryOp::Add, Expr::var("a"), Expr::var("b")),
+            ),
+            def("main", vec![], Expr::i64(0)),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let add = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "add")
+        .expect("add def");
+
+    assert!(
+        !bundle.diagnostics.iter().any(|diagnostic| {
+            matches!(
+                diagnostic,
+                ProgramDiagnostic::InvalidOperatorOperands { .. }
+            )
+        }),
+        "{:?}",
+        bundle.diagnostics
+    );
+    assert!(add
+        .output
+        .resolve
+        .operator_obligations
+        .iter()
+        .any(|obligation| { obligation.protocol == "op_add" }));
+}
+
+#[test]
 fn program_param_branch_lowers_to_executable_wat() {
     let program = SourceProgram::new(vec![
         def(
