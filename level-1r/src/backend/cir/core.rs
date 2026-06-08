@@ -1327,8 +1327,23 @@ fn dyn_row_method_package_var<'a>(package: &'a CpsAtom) -> Option<&'a str> {
             };
             Some(param.as_str())
         }
+        CpsAtom::TupleField {
+            tuple, field_index, ..
+        } => {
+            let CpsAtom::Var(param) = static_cps_tuple_field_value(tuple, *field_index)? else {
+                return None;
+            };
+            Some(param.as_str())
+        }
         _ => None,
     }
+}
+
+fn static_cps_tuple_field_value(tuple: &CpsAtom, field_index: usize) -> Option<&CpsAtom> {
+    let CpsAtom::Tuple { fields, .. } = tuple else {
+        return None;
+    };
+    fields.get(field_index)
 }
 
 fn static_cps_record_field_value<'a>(record: &'a CpsAtom, name: &str) -> Option<&'a CpsAtom> {
