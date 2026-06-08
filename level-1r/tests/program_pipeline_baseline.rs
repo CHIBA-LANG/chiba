@@ -1646,6 +1646,43 @@ def main(): i64 = use_dyn({x: 41})
 }
 
 #[test]
+fn program_dyn_row_package_field_access_uses_adapter_not_static_payload_access() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def use_dyn(v: dyn {x: i64}): i64 = v.x
+def main(): i64 = 0
+"#,
+    )
+    .expect("compile source dyn row package field access");
+    let bundle = output.program;
+    let use_dyn = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "use_dyn")
+        .expect("use_dyn def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert!(use_dyn
+        .output
+        .visual
+        .typed
+        .contains("node kind=dyn-row-field type=i64"));
+    assert!(use_dyn
+        .output
+        .core
+        .ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::DynRowAdapterAccess { .. })));
+    assert!(!use_dyn
+        .output
+        .core
+        .ops
+        .iter()
+        .any(|op| matches!(op, CoreOp::StaticRowAccess { .. })));
+}
+
+#[test]
 fn program_dyn_row_param_wraps_nominal_value_and_extracts_receiver_method_adapter() {
     let program = SourceProgram::with_surface(
         None,

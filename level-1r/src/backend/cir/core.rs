@@ -5,6 +5,8 @@ use crate::cps::{CpsAtom, CpsProgram, CpsTerm, OperatorKind};
 use crate::lambda_lift::LambdaLiftFacts;
 use crate::resolve::OperatorSurface;
 use crate::specialize::{DischargedObligation, SpecializationFacts};
+use std::collections::BTreeSet;
+
 use crate::template::{dyn_row_contract_key, row_shape_key, DynRowContract, RowShape};
 use crate::typed::{
     AggregateBoundary, AggregateKind, BuiltinMethodCall, RangeBoundary, SendColor, TextBoundary,
@@ -807,7 +809,8 @@ pub fn lower_core_with_facts(
     let ownership = lower_ownership(continuations, specialize, usage);
     let callable_storage =
         lower_callable_storage(continuations, closures, explicit_callable_storage);
-    lower_specialization_ops(specialize, &layouts, &mut ops);
+    let access_facts = core_access_facts(&ops);
+    lower_specialization_ops(specialize, &layouts, &access_facts, &mut ops);
     lower_lifted_functions(cps, continuations, lambda_lift, &mut ops);
     CoreProgram {
         ops,
@@ -1516,9 +1519,111 @@ fn lower_continuation_atom(
     }
 }
 
+#[derive(Default)]
+struct CoreAccessFacts {
+    static_row_fields: BTreeSet<String>,
+    dyn_row_fields: BTreeSet<String>,
+}
+
+fn core_access_facts(ops: &[CoreOp]) -> CoreAccessFacts {
+    let mut facts = CoreAccessFacts::default();
+    for op in ops {
+        collect_core_op_access_facts(op, &mut facts);
+    }
+    facts
+}
+
+fn collect_core_op_access_facts(op: &CoreOp, facts: &mut CoreAccessFacts) {
+    match op {
+        CoreOp::ReturnValue(value) => collect_core_value_access_facts(value, facts),
+        CoreOp::TailCall { args, .. } => {
+            for arg in args {
+                collect_core_value_access_facts(arg, facts);
+            }
+        }
+        CoreOp::CallableAlias { value, .. } => collect_core_value_access_facts(value, facts),
+        _ => {}
+    }
+}
+
+fn collect_core_value_access_facts(value: &CoreValue, facts: &mut CoreAccessFacts) {
+    match value {
+        CoreValue::RecordField { record, field } => {
+            facts.static_row_fields.insert(field.clone());
+            collect_core_value_access_facts(record, facts);
+        }
+        CoreValue::DynRowField { package, field } => {
+            facts.dyn_row_fields.insert(field.clone());
+            collect_core_value_access_facts(package, facts);
+        }
+        CoreValue::Tuple { fields, .. } | CoreValue::SliceLiteral { items: fields } => {
+            for field in fields {
+                collect_core_value_access_facts(field, facts);
+            }
+        }
+        CoreValue::TupleField { tuple, .. } => collect_core_value_access_facts(tuple, facts),
+        CoreValue::Range { start, end } => {
+            collect_core_value_access_facts(start, facts);
+            collect_core_value_access_facts(end, facts);
+        }
+        CoreValue::Record { fields } | CoreValue::RecordUpdate { fields, .. } => {
+            for field in fields {
+                collect_core_value_access_facts(&field.value, facts);
+            }
+            if let CoreValue::RecordUpdate { base, .. } = value {
+                collect_core_value_access_facts(base, facts);
+            }
+        }
+        CoreValue::DynRowPackage { payload, .. } => collect_core_value_access_facts(payload, facts),
+        CoreValue::ReceiverMethod { receiver, .. }
+        | CoreValue::RangeField {
+            range: receiver, ..
+        }
+        | CoreValue::AggregateField {
+            value: receiver, ..
+        }
+        | CoreValue::TextField {
+            value: receiver, ..
+        } => collect_core_value_access_facts(receiver, facts),
+        CoreValue::AggregateIndex { value, index, .. }
+        | CoreValue::TextIndex { value, index, .. } => {
+            collect_core_value_access_facts(value, facts);
+            collect_core_value_access_facts(index, facts);
+        }
+        CoreValue::AggregateSlice { value, range, .. }
+        | CoreValue::TextSlice { value, range, .. } => {
+            collect_core_value_access_facts(value, facts);
+            collect_core_value_access_facts(range, facts);
+        }
+        CoreValue::BuiltinRuntimeCall { args, .. } => {
+            for arg in args {
+                collect_core_value_access_facts(arg, facts);
+            }
+        }
+        CoreValue::Adt { args, .. } => {
+            for arg in args {
+                collect_core_value_access_facts(arg, facts);
+            }
+        }
+        CoreValue::AdtTuple { fields, .. } => {
+            for field in fields {
+                collect_core_value_access_facts(field, facts);
+            }
+        }
+        CoreValue::Unit
+        | CoreValue::Var(_)
+        | CoreValue::I64(_)
+        | CoreValue::Bool(_)
+        | CoreValue::TextLiteral { .. }
+        | CoreValue::LiftedFunction { .. }
+        | CoreValue::Rendered { .. } => {}
+    }
+}
+
 fn lower_specialization_ops(
     specialize: &SpecializationFacts,
     layouts: &[LayoutFact],
+    access_facts: &CoreAccessFacts,
     ops: &mut Vec<CoreOp>,
 ) {
     for item in &specialize.work_items {
@@ -1558,6 +1663,11 @@ fn lower_specialization_ops(
                     }
                 }
                 DischargedObligation::Field { field, shape } => {
+                    if access_facts.dyn_row_fields.contains(field)
+                        && !access_facts.static_row_fields.contains(field)
+                    {
+                        continue;
+                    }
                     if let Some(layout) = layouts
                         .iter()
                         .find(|layout| {
