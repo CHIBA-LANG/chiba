@@ -174,6 +174,7 @@ fn function_parameter_tuple_pattern_uses_tuple_type_arguments() {
         attrs: Vec::new(),
         receiver: None,
         generics: Vec::new(),
+        generic_params: Vec::new(),
         name: "first".to_string(),
         visibility: Visibility::Public,
         params: vec![ParamDecl::pattern(
@@ -386,6 +387,7 @@ fn function_parameter_record_pattern_uses_nominal_row_field_types() {
             attrs: Vec::new(),
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "get".to_string(),
             visibility: Visibility::Public,
             params: vec![ParamDecl::pattern(

@@ -1,5 +1,7 @@
 use crate::alpha::{AlphaExpr, AlphaExprKind};
-use crate::ast::{render_source_expr, Expr, ParamDecl};
+use crate::ast::{
+    render_source_expr, Expr, GenericBoundDecl, GenericParamDecl, ParamDecl, TypeField,
+};
 use crate::resolve::{
     OperatorObligation, OperatorSurface, ResolveFacts, ResolvedCall, ResolvedName,
 };
@@ -128,6 +130,7 @@ pub fn analyze_template(expr: &AlphaExpr, resolve: &ResolveFacts) -> TemplateFac
 pub fn analyze_template_with_source(
     source: &Expr,
     explicit_params: &[String],
+    explicit_param_decls: &[GenericParamDecl],
     source_params: &[ParamDecl],
     return_type: &Option<String>,
     expr: &AlphaExpr,
@@ -142,9 +145,44 @@ pub fn analyze_template_with_source(
         })
         .collect();
     collect_auto_template_params(source, source_params, return_type, &mut facts);
+    collect_generic_param_bounds(explicit_param_decls, &mut facts);
     collect_source_dyn_row_contracts(source_params, return_type, &mut facts);
     collect_source_instantiations(source, &mut facts);
     facts
+}
+
+fn collect_generic_param_bounds(params: &[GenericParamDecl], facts: &mut TemplateFacts) {
+    for param in params {
+        match &param.bound {
+            Some(GenericBoundDecl::OpenRow(fields)) => collect_open_row_bound(fields, facts),
+            None => {}
+        }
+    }
+}
+
+fn collect_open_row_bound(fields: &[TypeField], facts: &mut TemplateFacts) {
+    let shape = canonical_open_row(
+        fields
+            .iter()
+            .map(|field| {
+                (
+                    field.name.as_str(),
+                    shape_type_for_type(&source_type_name_to_type(&field.ty)),
+                )
+            })
+            .collect(),
+    );
+    push_row_shape_once(facts, shape.clone());
+    for field in fields {
+        push_obligation_once(
+            facts,
+            TemplateObligation::Field {
+                shape: shape.clone(),
+                field: field.name.clone(),
+            },
+        );
+        collect_source_type_contracts(&source_type_name_to_type(&field.ty), facts);
+    }
 }
 
 fn collect_source_dyn_row_contracts(

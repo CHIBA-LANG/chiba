@@ -63,8 +63,9 @@ pub mod xiddata;
 
 pub use alpha::{alpha_expr, AlphaFacts, BinderId};
 pub use ast::{
-    DataDecl, DataVariant, Expr, ExternAbi, ExternDecl, Literal, MethodReceiver, NamespaceDecl,
-    ParamDecl, SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
+    DataDecl, DataVariant, Expr, ExternAbi, ExternDecl, GenericBoundDecl, GenericParamDecl,
+    Literal, MethodReceiver, NamespaceDecl, ParamDecl, SourceItem, SourceProgram, TypeDecl,
+    TypeField, UseDecl, Visibility,
 };
 pub use cps::{cps_program, CpsProgram};
 pub use debug::{render_visual_report, VisualReport};

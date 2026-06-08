@@ -331,3 +331,35 @@ fn open_row_parameter_annotation_enters_template_field_obligations() {
         }));
     assert_eq!(def.typed.ty, Type::I64);
 }
+
+#[test]
+fn open_row_generic_bound_enters_template_member_obligations() {
+    let output =
+        chiba_level1r::compile_source_program_bundle("def get_f[F, T: {r | f: F}](v: T): F = v.f")
+            .expect("compile source");
+    let def = &output.program.defs[0].output;
+
+    assert!(def.template.explicit_params.contains(&TemplateParam {
+        name: "F".to_string(),
+        source: TemplateParamSource::ExplicitHeader,
+    }));
+    assert!(def.template.explicit_params.contains(&TemplateParam {
+        name: "T".to_string(),
+        source: TemplateParamSource::ExplicitHeader,
+    }));
+    assert!(!def.template.explicit_params.contains(&TemplateParam {
+        name: "T_v".to_string(),
+        source: TemplateParamSource::SyntheticAutoGeneric,
+    }));
+    assert!(def.template.row_shapes.contains(&canonical_open_row(vec![(
+        "f",
+        ShapeType::Named("F".to_string()),
+    )])));
+    assert!(def
+        .template
+        .obligations
+        .contains(&TemplateObligation::Field {
+            shape: canonical_open_row(vec![("f", ShapeType::Named("F".to_string()))]),
+            field: "f".to_string(),
+        }));
+}

@@ -147,6 +147,7 @@ fn tuple_header_type_field_access_uses_tuple_type_arguments() {
     let program = SourceProgram::new(vec![SourceItem::Def {
         receiver: None,
         generics: Vec::new(),
+        generic_params: Vec::new(),
         name: "second".to_string(),
         attrs: Vec::new(),
         visibility: Visibility::Public,

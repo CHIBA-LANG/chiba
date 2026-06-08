@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
-    DataDecl, ExternDecl, ItemAttr, MethodReceiver, SourceItem, SourceProgram, TypeDecl, Visibility,
+    generic_param_decls_from_names, DataDecl, ExternDecl, GenericParamDecl, ItemAttr,
+    MethodReceiver, SourceItem, SourceProgram, TypeDecl, Visibility,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,6 +27,7 @@ pub struct SurfaceDef {
     pub visibility: Visibility,
     pub receiver: Option<MethodReceiver>,
     pub generics: Vec<String>,
+    pub generic_params: Vec<GenericParamDecl>,
     pub arity: usize,
     pub param_types: Vec<Option<String>>,
     pub return_type: Option<String>,
@@ -171,6 +173,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
                 visibility,
                 receiver,
                 generics,
+                generic_params,
                 params,
                 return_type,
                 ..
@@ -181,6 +184,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
                 visibility: *visibility,
                 receiver: receiver.clone(),
                 generics: generics.clone(),
+                generic_params: surface_generic_params(generic_params, generics),
                 arity: params.len(),
                 param_types: params.iter().map(|param| param.ty.clone()).collect(),
                 return_type: return_type.clone(),
@@ -192,6 +196,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
                 visibility,
                 receiver,
                 generics,
+                generic_params,
                 params,
                 return_type,
                 extern_decl,
@@ -202,6 +207,7 @@ pub fn project_surface(program: &SourceProgram) -> ProjectSurface {
                 visibility: *visibility,
                 receiver: receiver.clone(),
                 generics: generics.clone(),
+                generic_params: surface_generic_params(generic_params, generics),
                 arity: params.len(),
                 param_types: params.iter().map(|param| param.ty.clone()).collect(),
                 return_type: return_type.clone(),
@@ -658,7 +664,7 @@ fn stable_summary_hash(surface: &ProjectSurface) -> String {
             Visibility::Private => "private",
         });
         text.push('[');
-        text.push_str(&def.generics.join(","));
+        text.push_str(&render_generic_params(&def.generic_params));
         text.push(']');
         text.push(':');
         text.push_str(&def.arity.to_string());
@@ -748,6 +754,35 @@ fn extern_abi_name(abi: crate::ast::ExternAbi) -> &'static str {
     match abi {
         crate::ast::ExternAbi::Wasi => "wasi",
         crate::ast::ExternAbi::C => "c",
+    }
+}
+
+fn render_generic_params(params: &[GenericParamDecl]) -> String {
+    params
+        .iter()
+        .map(|param| match &param.bound {
+            None => param.name.clone(),
+            Some(crate::ast::GenericBoundDecl::OpenRow(fields)) => {
+                let rendered_fields = fields
+                    .iter()
+                    .map(|field| format!("{}:{}", field.name, field.ty))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!("{}:{{r|{rendered_fields}}}", param.name)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn surface_generic_params(
+    params: &[GenericParamDecl],
+    generics: &[String],
+) -> Vec<GenericParamDecl> {
+    if params.is_empty() && !generics.is_empty() {
+        generic_param_decls_from_names(generics)
+    } else {
+        params.to_vec()
     }
 }
 

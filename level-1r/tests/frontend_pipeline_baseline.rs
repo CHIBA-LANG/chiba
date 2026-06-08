@@ -1,6 +1,6 @@
 use chiba_level1r::ast::{
-    BinaryOp, Expr, ExternAbi, ItemAttr, MethodReceiver, ParamDecl, Pattern, SourceItem, TypeDecl,
-    TypeField,
+    BinaryOp, Expr, ExternAbi, GenericBoundDecl, GenericParamDecl, ItemAttr, MethodReceiver,
+    ParamDecl, Pattern, SourceItem, TypeDecl, TypeField,
 };
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::CoreValue;
@@ -1064,6 +1064,37 @@ fn frontend_parses_open_row_type_annotations() {
                     Some("{r | x: i64, f: (i64) -> i64}".to_string())
                 )]
             );
+        }
+        other => panic!(
+            "expected function def, got {}",
+            source_item_kind_name(other)
+        ),
+    }
+}
+
+#[test]
+fn frontend_parses_open_row_generic_bounds() {
+    let parsed =
+        parse_source_program("def call_f[F, T: {r | f: F}](v: T): i64 = v.f(1)").expect("parse");
+
+    match &parsed.program.items[0] {
+        SourceItem::Def {
+            generics,
+            generic_params,
+            ..
+        } => {
+            assert_eq!(generics, &vec!["F".to_string(), "T".to_string()]);
+            assert_eq!(
+                generic_params,
+                &vec![
+                    GenericParamDecl::new("F"),
+                    GenericParamDecl::open_row("T", vec![TypeField::new("f", "F")]),
+                ]
+            );
+            assert!(matches!(
+                &generic_params[1].bound,
+                Some(GenericBoundDecl::OpenRow(fields)) if fields == &vec![TypeField::new("f", "F")]
+            ));
         }
         other => panic!(
             "expected function def, got {}",

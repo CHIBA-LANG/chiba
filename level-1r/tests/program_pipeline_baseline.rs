@@ -17,6 +17,7 @@ fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
     SourceItem::Def {
         receiver: None,
         generics: Vec::new(),
+        generic_params: Vec::new(),
         name: name.to_string(),
         attrs: Vec::new(),
         visibility: Visibility::Public,
@@ -1911,6 +1912,7 @@ fn program_dyn_row_return_reports_missing_adapter_field() {
             SourceItem::Def {
                 receiver: None,
                 generics: Vec::new(),
+                generic_params: Vec::new(),
                 name: "make".to_string(),
                 attrs: Vec::new(),
                 visibility: Visibility::Public,
@@ -2365,6 +2367,7 @@ fn program_dyn_row_return_wraps_nominal_value_and_method_adapter() {
             SourceItem::Def {
                 receiver: None,
                 generics: Vec::new(),
+                generic_params: Vec::new(),
                 name: "make".to_string(),
                 attrs: Vec::new(),
                 visibility: Visibility::Public,
@@ -8524,6 +8527,7 @@ fn pattern_clause_defs_lower_to_single_dispatcher_without_duplicate_def() {
             SourceItem::Def {
                 receiver: None,
                 generics: vec!["T".to_string()],
+                generic_params: Vec::new(),
                 name: "unwrap_or_zero".to_string(),
                 attrs: Vec::new(),
                 visibility: Visibility::Public,
@@ -8540,6 +8544,7 @@ fn pattern_clause_defs_lower_to_single_dispatcher_without_duplicate_def() {
             SourceItem::Def {
                 receiver: None,
                 generics: vec!["T".to_string()],
+                generic_params: Vec::new(),
                 name: "unwrap_or_zero".to_string(),
                 attrs: Vec::new(),
                 visibility: Visibility::Public,
@@ -8880,6 +8885,7 @@ fn interface_summary_preserves_function_signature_types() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "id".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -8924,6 +8930,7 @@ fn interface_summary_hash_ignores_function_body_changes() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "parse".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -8940,6 +8947,7 @@ fn interface_summary_hash_ignores_function_body_changes() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "parse".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -8991,6 +8999,7 @@ fn interface_summary_preserves_explicit_checked_template_params() {
         vec![SourceItem::Def {
             receiver: None,
             generics: vec!["T".to_string()],
+            generic_params: Vec::new(),
             name: "id".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -9091,6 +9100,7 @@ fn typed_signature_resolves_type_alias_headers() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "id".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -9129,6 +9139,7 @@ fn typed_signature_resolves_local_alias_when_project_has_same_alias_name() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "id".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -9169,6 +9180,7 @@ fn typed_signature_does_not_guess_alias_when_owner_is_ambiguous() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "id".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -9226,6 +9238,7 @@ fn typed_context_resolves_local_nominal_row_when_project_has_same_type_name() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "read".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -9261,6 +9274,7 @@ fn typed_context_does_not_guess_nominal_row_when_owner_is_ambiguous() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "read".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -9308,6 +9322,7 @@ fn typed_context_uses_unique_external_constructor_payload_from_interface() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "unwrap".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -9360,6 +9375,7 @@ fn typed_context_resolves_local_constructor_payload_when_project_has_same_data_n
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "unwrap".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -9405,6 +9421,7 @@ fn typed_context_does_not_guess_constructor_payload_when_owner_is_ambiguous() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "unwrap".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -9745,6 +9762,7 @@ fn nominal_row_field_access_substitutes_concrete_type_arguments() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "main".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -9780,6 +9798,7 @@ fn nominal_row_field_access_preserves_nested_type_arguments() {
         vec![SourceItem::Def {
             receiver: None,
             generics: Vec::new(),
+            generic_params: Vec::new(),
             name: "main".to_string(),
             attrs: Vec::new(),
             visibility: Visibility::Public,
@@ -11279,6 +11298,7 @@ fn phantom_type_fields_are_not_available_for_field_access() {
             SourceItem::Def {
                 receiver: None,
                 generics: Vec::new(),
+                generic_params: Vec::new(),
                 name: "probe".to_string(),
                 attrs: Vec::new(),
                 visibility: Visibility::Public,

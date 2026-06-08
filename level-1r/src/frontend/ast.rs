@@ -26,6 +26,7 @@ pub enum SourceItem {
         visibility: Visibility,
         receiver: Option<MethodReceiver>,
         generics: Vec<String>,
+        generic_params: Vec<GenericParamDecl>,
         params: Vec<ParamDecl>,
         return_type: Option<String>,
         body: Expr,
@@ -36,6 +37,7 @@ pub enum SourceItem {
         visibility: Visibility,
         receiver: Option<MethodReceiver>,
         generics: Vec<String>,
+        generic_params: Vec<GenericParamDecl>,
         params: Vec<ParamDecl>,
         return_type: Option<String>,
         extern_decl: ExternDecl,
@@ -71,6 +73,17 @@ pub struct ParamDecl {
 pub struct MethodReceiver {
     pub name: String,
     pub generics: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GenericParamDecl {
+    pub name: String,
+    pub bound: Option<GenericBoundDecl>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GenericBoundDecl {
+    OpenRow(Vec<TypeField>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -275,6 +288,22 @@ impl MethodReceiver {
     }
 }
 
+impl GenericParamDecl {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            bound: None,
+        }
+    }
+
+    pub fn open_row(name: impl Into<String>, fields: Vec<TypeField>) -> Self {
+        Self {
+            name: name.into(),
+            bound: Some(GenericBoundDecl::OpenRow(fields)),
+        }
+    }
+}
+
 impl SourceItem {
     pub fn def(
         name: impl Into<String>,
@@ -288,6 +317,7 @@ impl SourceItem {
             attrs: Vec::new(),
             visibility: Visibility::Public,
             receiver: None,
+            generic_params: generic_param_decls_from_names(&generics),
             generics,
             params,
             return_type,
@@ -302,6 +332,7 @@ impl SourceItem {
         return_type: Option<String>,
         body: Expr,
     ) -> Self {
+        let generic_params = generic_param_decls_from_names(&receiver.generics);
         Self::Def {
             generics: receiver.generics.clone(),
             receiver: Some(receiver),
@@ -309,6 +340,7 @@ impl SourceItem {
             attrs: Vec::new(),
             visibility: Visibility::Public,
             params,
+            generic_params,
             return_type,
             body,
         }
@@ -336,6 +368,7 @@ impl SourceItem {
             attrs: Vec::new(),
             visibility: Visibility::Public,
             receiver: None,
+            generic_params: generic_param_decls_from_names(&generics),
             generics,
             params,
             return_type,
@@ -349,6 +382,7 @@ impl SourceItem {
                 name,
                 attrs,
                 receiver,
+                generic_params,
                 generics,
                 params,
                 return_type,
@@ -359,6 +393,7 @@ impl SourceItem {
                 attrs,
                 visibility,
                 receiver,
+                generic_params,
                 generics,
                 params,
                 return_type,
@@ -368,6 +403,7 @@ impl SourceItem {
                 name,
                 attrs,
                 receiver,
+                generic_params,
                 generics,
                 params,
                 return_type,
@@ -378,6 +414,7 @@ impl SourceItem {
                 attrs,
                 visibility,
                 receiver,
+                generic_params,
                 generics,
                 params,
                 return_type,
@@ -405,6 +442,7 @@ impl SourceItem {
                 name,
                 visibility,
                 receiver,
+                generic_params,
                 generics,
                 params,
                 return_type,
@@ -415,6 +453,7 @@ impl SourceItem {
                 attrs,
                 visibility,
                 receiver,
+                generic_params,
                 generics,
                 params,
                 return_type,
@@ -424,6 +463,7 @@ impl SourceItem {
                 name,
                 visibility,
                 receiver,
+                generic_params,
                 generics,
                 params,
                 return_type,
@@ -434,6 +474,7 @@ impl SourceItem {
                 attrs,
                 visibility,
                 receiver,
+                generic_params,
                 generics,
                 params,
                 return_type,
@@ -454,6 +495,13 @@ impl SourceItem {
             },
         }
     }
+}
+
+pub fn generic_param_decls_from_names(names: &[String]) -> Vec<GenericParamDecl> {
+    names
+        .iter()
+        .map(|name| GenericParamDecl::new(name.clone()))
+        .collect()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

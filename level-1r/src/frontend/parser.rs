@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
-    render_source_pattern, BinaryOp, DataDecl, DataVariant, Expr, ExternAbi, ExternDecl, ItemAttr,
-    MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, TypeDecl,
-    TypeField, UseDecl, Visibility,
+    generic_param_decls_from_names, render_source_pattern, BinaryOp, DataDecl, DataVariant, Expr,
+    ExternAbi, ExternDecl, GenericBoundDecl, GenericParamDecl, ItemAttr, MethodReceiver,
+    NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl,
+    Visibility,
 };
 use crate::chibalex::{compile_lexer, LexError, LexerRule, LexerSpec, Token};
 use crate::regex::RegexError;
@@ -463,13 +464,14 @@ impl FrontendParser {
         };
         self.expect("KwDef")?;
         let first_name = self.expect_lexeme("Ident")?;
-        let generics = if self.peek_name() == Some("LBracket")
+        let generic_params = if self.peek_name() == Some("LBracket")
             && self.peek_type_list_then(&["LParen", "Dot"])
         {
-            self.parse_generic_params()?
+            self.parse_generic_param_decls()?
         } else {
             Vec::new()
         };
+        let generics = generic_param_names(&generic_params);
         let (receiver, name) = if self.peek_name() == Some("Dot") {
             self.pos += 1;
             let method_name = self.expect_lexeme("Ident")?;
@@ -518,6 +520,10 @@ impl FrontendParser {
                     .as_ref()
                     .map(|receiver| receiver.generics.clone())
                     .unwrap_or(generics),
+                generic_params: receiver
+                    .as_ref()
+                    .map(|receiver| generic_param_decls_from_names(&receiver.generics))
+                    .unwrap_or(generic_params),
                 receiver,
                 params,
                 return_type,
@@ -533,6 +539,10 @@ impl FrontendParser {
                 .as_ref()
                 .map(|receiver| receiver.generics.clone())
                 .unwrap_or(generics),
+            generic_params: receiver
+                .as_ref()
+                .map(|receiver| generic_param_decls_from_names(&receiver.generics))
+                .unwrap_or(generic_params),
             receiver,
             params,
             return_type,
@@ -622,6 +632,10 @@ impl FrontendParser {
     }
 
     fn parse_generic_params(&mut self) -> Result<Vec<String>, FrontendError> {
+        Ok(generic_param_names(&self.parse_generic_param_decls()?))
+    }
+
+    fn parse_generic_param_decls(&mut self) -> Result<Vec<GenericParamDecl>, FrontendError> {
         self.expect("LBracket")?;
         let mut params = Vec::new();
         if self.peek_name() == Some("RBracket") {
@@ -629,7 +643,14 @@ impl FrontendParser {
             return Ok(params);
         }
         loop {
-            params.push(self.expect_lexeme("Ident")?);
+            let name = self.expect_lexeme("Ident")?;
+            let bound = if self.peek_name() == Some("Colon") {
+                self.pos += 1;
+                Some(self.parse_generic_bound_decl()?)
+            } else {
+                None
+            };
+            params.push(GenericParamDecl { name, bound });
             if self.peek_name() != Some("Comma") {
                 break;
             }
@@ -637,6 +658,30 @@ impl FrontendParser {
         }
         self.expect("RBracket")?;
         Ok(params)
+    }
+
+    fn parse_generic_bound_decl(&mut self) -> Result<GenericBoundDecl, FrontendError> {
+        self.expect("LBrace")?;
+        let row_marker = self.expect_lexeme("Ident")?;
+        if row_marker != "r" {
+            return Err(self.unexpected_current(vec!["r"]));
+        }
+        self.expect("Pipe")?;
+        let mut fields = Vec::new();
+        if self.peek_name() != Some("RBrace") {
+            loop {
+                let field_name = self.expect_lexeme("Ident")?;
+                self.expect("Colon")?;
+                let ty = self.expect_type_name()?;
+                fields.push(TypeField::new(field_name, ty));
+                if self.peek_name() != Some("Comma") {
+                    break;
+                }
+                self.pos += 1;
+            }
+        }
+        self.expect("RBrace")?;
+        Ok(GenericBoundDecl::OpenRow(fields))
     }
 
     fn parse_type_args(&mut self) -> Result<Vec<String>, FrontendError> {
@@ -663,44 +708,37 @@ impl FrontendParser {
             return false;
         }
         pos += 1;
-        if self.tokens.get(pos).map(|token| token.name.as_str()) == Some("RBracket") {
-            pos += 1;
-            return self
-                .tokens
-                .get(pos)
-                .is_some_and(|token| next.contains(&token.name.as_str()));
-        }
-        loop {
-            if !matches!(
-                self.tokens.get(pos).map(|token| token.name.as_str()),
-                Some(
-                    "Ident"
-                        | "KwReset"
-                        | "KwResetn"
-                        | "KwShift"
-                        | "KwMatch"
-                        | "KwIf"
-                        | "KwLet"
-                        | "KwElse"
-                        | "True"
-                        | "False"
-                )
-            ) {
-                return false;
-            }
-            pos += 1;
-            match self.tokens.get(pos).map(|token| token.name.as_str()) {
-                Some("Comma") => pos += 1,
-                Some("RBracket") => {
-                    pos += 1;
-                    return self
-                        .tokens
-                        .get(pos)
-                        .is_some_and(|token| next.contains(&token.name.as_str()));
+        let mut square_depth = 1usize;
+        let mut paren_depth = 0usize;
+        let mut brace_depth = 0usize;
+        while let Some(token) = self.tokens.get(pos) {
+            match token.name.as_str() {
+                "LBracket" => square_depth += 1,
+                "RBracket" => {
+                    square_depth -= 1;
+                    if square_depth == 0 {
+                        pos += 1;
+                        return paren_depth == 0
+                            && brace_depth == 0
+                            && self
+                                .tokens
+                                .get(pos)
+                                .is_some_and(|token| next.contains(&token.name.as_str()));
+                    }
                 }
-                _ => return false,
+                "LParen" => paren_depth += 1,
+                "RParen" => {
+                    paren_depth = paren_depth.saturating_sub(1);
+                }
+                "LBrace" => brace_depth += 1,
+                "RBrace" => {
+                    brace_depth = brace_depth.saturating_sub(1);
+                }
+                _ => {}
             }
+            pos += 1;
         }
+        false
     }
 
     fn parse_data_variant(&mut self) -> Result<DataVariant, FrontendError> {
@@ -2040,6 +2078,7 @@ fn enrich_item_with_surface_facts(
             visibility,
             receiver,
             generics,
+            generic_params,
             params,
             return_type,
             body,
@@ -2049,6 +2088,7 @@ fn enrich_item_with_surface_facts(
             visibility,
             receiver,
             generics,
+            generic_params,
             params,
             return_type,
             body: enrich_expr_with_surface_facts(body, variants, nominal_row_types),
@@ -2059,6 +2099,7 @@ fn enrich_item_with_surface_facts(
             visibility,
             receiver,
             generics,
+            generic_params,
             params,
             return_type,
             extern_decl,
@@ -2068,6 +2109,7 @@ fn enrich_item_with_surface_facts(
             visibility,
             receiver,
             generics,
+            generic_params,
             params,
             return_type,
             extern_decl,
@@ -2266,4 +2308,8 @@ fn data_ctor_known(variants: &BTreeMap<String, Vec<String>>, data: &str, ctor: &
         .get(data)
         .map(|items| items.iter().any(|item| item == ctor))
         .unwrap_or(false)
+}
+
+fn generic_param_names(params: &[GenericParamDecl]) -> Vec<String> {
+    params.iter().map(|param| param.name.clone()).collect()
 }

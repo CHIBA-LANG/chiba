@@ -2,9 +2,9 @@ use crate::alpha::{alpha_expr_with_params, AlphaBinder, AlphaFacts};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{
-    render_source_binary_op, render_source_expr, Expr, ExternAbi, ExternDecl, ItemAttr,
-    MethodReceiver, NamespaceDecl, ParamDecl, Pattern, SourceItem, SourceProgram, UseDecl,
-    Visibility,
+    generic_param_decls_from_names, render_source_binary_op, render_source_expr, Expr, ExternAbi,
+    ExternDecl, GenericParamDecl, ItemAttr, MethodReceiver, NamespaceDecl, ParamDecl, Pattern,
+    SourceItem, SourceProgram, UseDecl, Visibility,
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_param_abi, link_backend_artifacts, sort_dedup_imports,
@@ -246,6 +246,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         MethodIndex::default(),
         &[],
         &[],
+        &[],
         &None,
         &None,
         &TypeContext::new(),
@@ -264,6 +265,7 @@ fn compile_expr_with_indexes_and_generics(
     names: NameIndex,
     methods: MethodIndex,
     explicit_generics: &[String],
+    explicit_generic_params: &[GenericParamDecl],
     params: &[ParamDecl],
     return_type: &Option<String>,
     receiver: &Option<MethodReceiver>,
@@ -294,6 +296,7 @@ fn compile_expr_with_indexes_and_generics(
             analyze_template_with_source(
                 expr,
                 explicit_generics,
+                explicit_generic_param_decls(explicit_generics, explicit_generic_params).as_slice(),
                 params,
                 return_type,
                 &alpha.expr,
@@ -500,6 +503,17 @@ fn compile_expr_with_indexes_and_generics(
         backend_cache_key,
         passes,
         visual,
+    }
+}
+
+fn explicit_generic_param_decls(
+    explicit_generics: &[String],
+    explicit_generic_params: &[GenericParamDecl],
+) -> Vec<GenericParamDecl> {
+    if explicit_generic_params.is_empty() && !explicit_generics.is_empty() {
+        generic_param_decls_from_names(explicit_generics)
+    } else {
+        explicit_generic_params.to_vec()
     }
 }
 
@@ -796,6 +810,7 @@ fn specialize_row_callable_item(
             visibility,
             receiver,
             generics,
+            generic_params,
             params,
             return_type,
             body,
@@ -805,6 +820,7 @@ fn specialize_row_callable_item(
             visibility: *visibility,
             receiver: receiver.clone(),
             generics: generics.clone(),
+            generic_params: generic_params.clone(),
             params: params.clone(),
             return_type: return_type.clone(),
             body: specialize_row_callable_expr(body, row_callables, method_records),
@@ -1806,6 +1822,7 @@ fn merge_clause_items(clauses: &[SourceItem]) -> SourceItem {
         visibility,
         receiver,
         generics,
+        generic_params,
         params,
         return_type,
         ..
@@ -1856,6 +1873,7 @@ fn merge_clause_items(clauses: &[SourceItem]) -> SourceItem {
         visibility: *visibility,
         receiver: receiver.clone(),
         generics: generics.clone(),
+        generic_params: generic_params.clone(),
         params: dispatcher_params,
         return_type: return_type.clone(),
         body: Expr::match_expr(scrutinee, arms),
@@ -1894,6 +1912,7 @@ fn compile_program_defs(
                 attrs,
                 receiver,
                 generics,
+                generic_params,
                 params,
                 return_type,
                 body,
@@ -1909,6 +1928,7 @@ fn compile_program_defs(
                         names.clone(),
                         methods.clone(),
                         generics,
+                        generic_params,
                         params,
                         return_type,
                         receiver,
