@@ -200,6 +200,11 @@ pub enum ProgramDiagnostic {
         def: String,
         target_type: String,
     },
+    DynRowCoercionFailed {
+        def: String,
+        expected: String,
+        actual: String,
+    },
     MissingEntry,
     EntryHasParams {
         name: String,
@@ -571,6 +576,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
     let send_diagnostics = send_callable_diagnostics(&defs);
     all_diagnostics.extend(send_diagnostics.iter().cloned());
     all_diagnostics.extend(assignment_diagnostics(&defs));
+    all_diagnostics.extend(dyn_row_coercion_diagnostics(&defs));
     apply_program_backend_gates(&mut defs, &send_diagnostics);
     if entry.is_none() {
         all_diagnostics.push(ProgramDiagnostic::MissingEntry);
@@ -2985,6 +2991,179 @@ fn collect_assignment_diagnostics(
     }
 }
 
+fn dyn_row_coercion_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
+    let signatures = defs
+        .iter()
+        .map(|def| (def.name.clone(), def.output.typed_signature.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let mut diagnostics = Vec::new();
+    for def in defs {
+        if let Some(expected) = def
+            .output
+            .typed_signature
+            .return_type
+            .as_deref()
+            .map(source_type_name_to_type)
+        {
+            collect_dyn_row_coercion_diagnostics(
+                &def.name,
+                &def.output.typed,
+                &expected,
+                &mut diagnostics,
+            );
+        }
+        collect_call_dyn_row_coercion_diagnostics(
+            &def.name,
+            &def.output.typed,
+            &signatures,
+            &mut diagnostics,
+        );
+    }
+    diagnostics
+}
+
+fn collect_dyn_row_coercion_diagnostics(
+    def: &str,
+    expr: &TypedExpr,
+    expected: &Type,
+    diagnostics: &mut Vec<ProgramDiagnostic>,
+) {
+    if matches!(expected, Type::DynRow(_))
+        && !matches!(expr.kind, TypedExprKind::DynRowPackage { .. })
+        && expr.ty != *expected
+    {
+        diagnostics.push(ProgramDiagnostic::DynRowCoercionFailed {
+            def: def.to_string(),
+            expected: program_type_name(expected),
+            actual: program_type_name(&expr.ty),
+        });
+    }
+}
+
+fn collect_call_dyn_row_coercion_diagnostics(
+    def: &str,
+    expr: &TypedExpr,
+    signatures: &BTreeMap<String, TypedSignature>,
+    diagnostics: &mut Vec<ProgramDiagnostic>,
+) {
+    match &expr.kind {
+        TypedExprKind::Call { callee, args } => {
+            if let TypedExprKind::Var(callee_name) = &callee.kind {
+                if let Some(signature) = signatures.get(callee_name) {
+                    for (arg, param) in args.iter().zip(&signature.params) {
+                        let expected = source_type_name_to_type(&param.ty);
+                        collect_dyn_row_coercion_diagnostics(def, arg, &expected, diagnostics);
+                    }
+                }
+            }
+            collect_call_dyn_row_coercion_diagnostics(def, callee, signatures, diagnostics);
+            for arg in args {
+                collect_call_dyn_row_coercion_diagnostics(def, arg, signatures, diagnostics);
+            }
+        }
+        TypedExprKind::Lambda { body, .. }
+        | TypedExprKind::Nominal { expr: body, .. }
+        | TypedExprKind::Reset { body, .. }
+        | TypedExprKind::Shift { body, .. } => {
+            collect_call_dyn_row_coercion_diagnostics(def, body, signatures, diagnostics);
+        }
+        TypedExprKind::Tuple { fields, .. } | TypedExprKind::SliceLiteral { items: fields, .. } => {
+            for field in fields {
+                collect_call_dyn_row_coercion_diagnostics(def, field, signatures, diagnostics);
+            }
+        }
+        TypedExprKind::Record { fields } => {
+            for field in fields {
+                collect_call_dyn_row_coercion_diagnostics(
+                    def,
+                    &field.value,
+                    signatures,
+                    diagnostics,
+                );
+            }
+        }
+        TypedExprKind::RecordUpdate { base, fields } => {
+            collect_call_dyn_row_coercion_diagnostics(def, base, signatures, diagnostics);
+            for field in fields {
+                collect_call_dyn_row_coercion_diagnostics(
+                    def,
+                    &field.value,
+                    signatures,
+                    diagnostics,
+                );
+            }
+        }
+        TypedExprKind::DynRowPackage { payload, .. } => {
+            collect_call_dyn_row_coercion_diagnostics(def, payload, signatures, diagnostics);
+        }
+        TypedExprKind::DynRowField { package, .. } => {
+            collect_call_dyn_row_coercion_diagnostics(def, package, signatures, diagnostics);
+        }
+        TypedExprKind::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_call_dyn_row_coercion_diagnostics(def, arg, signatures, diagnostics);
+            }
+        }
+        TypedExprKind::AdtToTuple { value, .. } | TypedExprKind::TupleToAdt { value, .. } => {
+            collect_call_dyn_row_coercion_diagnostics(def, value, signatures, diagnostics);
+        }
+        TypedExprKind::Field { receiver, .. } => {
+            collect_call_dyn_row_coercion_diagnostics(def, receiver, signatures, diagnostics);
+        }
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            collect_call_dyn_row_coercion_diagnostics(def, receiver, signatures, diagnostics);
+            for arg in args {
+                collect_call_dyn_row_coercion_diagnostics(def, arg, signatures, diagnostics);
+            }
+        }
+        TypedExprKind::Assign { target, value, .. } => {
+            collect_call_dyn_row_coercion_diagnostics(def, target, signatures, diagnostics);
+            collect_call_dyn_row_coercion_diagnostics(def, value, signatures, diagnostics);
+        }
+        TypedExprKind::Index {
+            receiver, index, ..
+        } => {
+            collect_call_dyn_row_coercion_diagnostics(def, receiver, signatures, diagnostics);
+            collect_call_dyn_row_coercion_diagnostics(def, index, signatures, diagnostics);
+        }
+        TypedExprKind::Range { start, end }
+        | TypedExprKind::Binary {
+            lhs: start,
+            rhs: end,
+            ..
+        } => {
+            collect_call_dyn_row_coercion_diagnostics(def, start, signatures, diagnostics);
+            collect_call_dyn_row_coercion_diagnostics(def, end, signatures, diagnostics);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_call_dyn_row_coercion_diagnostics(def, cond, signatures, diagnostics);
+            collect_call_dyn_row_coercion_diagnostics(def, then_branch, signatures, diagnostics);
+            collect_call_dyn_row_coercion_diagnostics(def, else_branch, signatures, diagnostics);
+        }
+        TypedExprKind::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_call_dyn_row_coercion_diagnostics(def, scrutinee, signatures, diagnostics);
+            collect_call_dyn_row_coercion_diagnostics(def, then_branch, signatures, diagnostics);
+            collect_call_dyn_row_coercion_diagnostics(def, else_branch, signatures, diagnostics);
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            collect_call_dyn_row_coercion_diagnostics(def, scrutinee, signatures, diagnostics);
+            for arm in arms {
+                collect_call_dyn_row_coercion_diagnostics(def, &arm.body, signatures, diagnostics);
+            }
+        }
+        TypedExprKind::Var(_) | TypedExprKind::Lit(_) => {}
+    }
+}
+
 fn program_type_name(ty: &Type) -> String {
     match ty {
         Type::Unknown => "Unknown".to_string(),
@@ -4802,6 +4981,11 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
         ProgramDiagnostic::InvalidAssignmentTarget { def, target_type } => {
             format!("invalid assignment target {def}: {target_type}")
         }
+        ProgramDiagnostic::DynRowCoercionFailed {
+            def,
+            expected,
+            actual,
+        } => format!("dyn row coercion failed {def}: expected {expected}, actual {actual}"),
         ProgramDiagnostic::MissingEntry => "missing entry".to_string(),
         ProgramDiagnostic::EntryHasParams { name, params } => {
             format!("entry has params {name}({})", params.join(", "))

@@ -1066,6 +1066,163 @@ fn program_dyn_row_param_wraps_nominal_value_and_extracts_receiver_method_adapte
 }
 
 #[test]
+fn program_dyn_row_param_reports_missing_nominal_field_or_method() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::def(
+                "use_dyn",
+                Vec::new(),
+                vec![ParamDecl::new(
+                    "v",
+                    Some("dyn {x: i64, missing: (Unit) -> i64}".to_string()),
+                )],
+                Some("i64".to_string()),
+                Expr::field(Expr::var("v"), "x"),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("use_dyn"),
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(7))])),
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+
+    assert!(
+        bundle.diagnostics.iter().any(|diagnostic| matches!(
+            diagnostic,
+            ProgramDiagnostic::DynRowCoercionFailed { def, expected, actual }
+                if def == "main"
+                    && expected == "dyn {missing: (Unit) -> i64, x: i64}"
+                    && actual == "X"
+        )),
+        "{:?}",
+        bundle.diagnostics
+    );
+    assert!(!main
+        .output
+        .visual
+        .typed
+        .contains("node kind=dyn-row-package"));
+}
+
+#[test]
+fn program_dyn_row_param_reports_method_signature_mismatch() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "y",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                Some("bool".to_string()),
+                Expr::bool(true),
+            ),
+            SourceItem::def(
+                "use_dyn",
+                Vec::new(),
+                vec![ParamDecl::new(
+                    "v",
+                    Some("dyn {x: i64, y: (Unit) -> i64}".to_string()),
+                )],
+                Some("i64".to_string()),
+                Expr::field(Expr::var("v"), "x"),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("use_dyn"),
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(7))])),
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(
+        bundle.diagnostics.iter().any(|diagnostic| matches!(
+            diagnostic,
+            ProgramDiagnostic::DynRowCoercionFailed { def, expected, actual }
+                if def == "main"
+                    && expected == "dyn {x: i64, y: (Unit) -> i64}"
+                    && actual == "X"
+        )),
+        "{:?}",
+        bundle.diagnostics
+    );
+}
+
+#[test]
+fn program_dyn_row_return_reports_missing_adapter_field() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::Def {
+                receiver: None,
+                generics: Vec::new(),
+                name: "make".to_string(),
+                visibility: Visibility::Public,
+                params: Vec::new(),
+                return_type: Some("dyn {x: i64, y: (Unit) -> i64}".to_string()),
+                body: Expr::nominal("X", Expr::record(vec![("x", Expr::i64(7))])),
+            },
+            def("main", vec![], Expr::i64(0)),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(
+        bundle.diagnostics.iter().any(|diagnostic| matches!(
+            diagnostic,
+            ProgramDiagnostic::DynRowCoercionFailed { def, expected, actual }
+                if def == "make"
+                    && expected == "dyn {x: i64, y: (Unit) -> i64}"
+                    && actual == "X"
+        )),
+        "{:?}",
+        bundle.diagnostics
+    );
+}
+
+#[test]
 fn program_dyn_row_receiver_method_adapter_call_enters_dyn_field_callee() {
     let program = SourceProgram::with_surface(
         None,
