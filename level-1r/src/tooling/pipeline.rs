@@ -582,6 +582,7 @@ pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
                 &defs,
                 entry.as_deref(),
                 &global_init,
+                &interface,
             ));
             attach_program_extern_imports(&mut linked, &interface);
             lower_global_init_into_linked_wat(linked, &global_init)
@@ -1472,6 +1473,10 @@ fn backend_dyn_row_param_methods_for_signature(
     signature: &TypedSignature,
     functions: &[crate::surface::InterfaceFunction],
 ) -> BTreeMap<String, Vec<BackendDynRowParamMethodAbi>> {
+    let receiver_methods = functions
+        .iter()
+        .filter(|function| function.receiver.is_some())
+        .collect::<Vec<_>>();
     signature
         .params
         .iter()
@@ -1485,18 +1490,49 @@ fn backend_dyn_row_param_methods_for_signature(
                     let Type::Func(_, _) = field.ty else {
                         return None;
                     };
-                    functions
+                    receiver_methods
                         .iter()
-                        .find(|function| function.source_name == field.name)
+                        .find(|function| {
+                            function.source_name == field.name
+                                && dyn_row_method_field_type(function) == field.ty
+                        })
                         .map(|function| BackendDynRowParamMethodAbi {
                             field: field.name.clone(),
-                            target: function.source_name.clone(),
+                            target: function.symbol.clone(),
                         })
                 })
                 .collect::<Vec<_>>();
             (!methods.is_empty()).then_some((param.name.clone(), methods))
         })
         .collect()
+}
+
+fn dyn_row_method_field_type(function: &crate::surface::InterfaceFunction) -> Type {
+    let result = function
+        .return_type
+        .as_deref()
+        .map(source_type_name_to_type)
+        .unwrap_or(Type::Unknown);
+    let params = function
+        .param_types
+        .iter()
+        .skip(1)
+        .map(|param| {
+            param
+                .as_deref()
+                .map(source_type_name_to_type)
+                .unwrap_or(Type::Unknown)
+        })
+        .collect::<Vec<_>>();
+    Type::Func(Box::new(method_bound_param_type(&params)), Box::new(result))
+}
+
+fn method_bound_param_type(params: &[Type]) -> Type {
+    match params {
+        [] => Type::Nominal("Unit".to_string()),
+        [single] => single.clone(),
+        many => Type::Tuple(many.to_vec()),
+    }
 }
 
 fn backend_aggregate_element_lanes_for_signature(
@@ -1555,70 +1591,71 @@ fn backend_callable_abis_for_interface(
     functions: &[crate::surface::InterfaceFunction],
     returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
 ) -> BTreeMap<String, BackendCallableAbi> {
-    functions
-        .iter()
-        .map(|function| {
-            let arg_expansions = function
-                .param_types
-                .iter()
-                .map(|param| {
-                    let ty = param.as_deref().map(source_type_name_to_type);
-                    match ty {
-                        Some(Type::DynRow(fields)) => BackendCallableArgExpansion::DynRowFields(
-                            backend_dyn_row_field_abis(&fields),
-                        ),
-                        Some(Type::Func(input, result)) => BackendCallableArgExpansion::Callable {
-                            params: backend_value_kind_for_type(&input)
-                                .or_else(|| backend_storage_value_kind_for_type(&input))
-                                .into_iter()
-                                .collect(),
-                            env: vec![BackendValueKind::I32],
-                            result: backend_value_kind_for_type(&result)
-                                .or_else(|| backend_storage_value_kind_for_type(&result)),
-                        },
-                        Some(ty) => BackendCallableArgExpansion::Direct(
-                            backend_value_kind_for_type(&ty)
-                                .or_else(|| backend_storage_value_kind_for_type(&ty))
-                                .unwrap_or(BackendValueKind::I32),
-                        ),
-                        None => BackendCallableArgExpansion::Direct(BackendValueKind::I32),
-                    }
-                })
-                .collect::<Vec<_>>();
-            let params = arg_expansions
-                .iter()
-                .flat_map(|expansion| match expansion {
-                    BackendCallableArgExpansion::Direct(kind) => vec![*kind],
-                    BackendCallableArgExpansion::Callable { env, .. } => {
-                        let mut params = vec![BackendValueKind::I32];
-                        params.extend(env.iter().copied());
-                        params
-                    }
-                    BackendCallableArgExpansion::DynRowFields(fields) => {
-                        fields.iter().map(|field| field.kind).collect()
-                    }
-                })
-                .collect();
-            let result_type = function
-                .return_type
-                .as_deref()
-                .map(source_type_name_to_type);
-            let result = result_type.as_ref().and_then(|ty| {
-                backend_value_kind_for_type(ty).or_else(|| backend_storage_value_kind_for_type(ty))
-            });
-            let result_ref_cell_lane = result_type.as_ref().and_then(core_ref_cell_lane_for_type);
-            (
-                function.source_name.clone(),
-                BackendCallableAbi {
-                    params,
-                    arg_expansions,
-                    result,
-                    result_ref_cell_lane,
-                    return_callable: returned_callables.get(&function.source_name).cloned(),
-                },
-            )
-        })
-        .collect()
+    let mut abis = BTreeMap::new();
+    for function in functions.iter() {
+        let arg_expansions = function
+            .param_types
+            .iter()
+            .map(|param| {
+                let ty = param.as_deref().map(source_type_name_to_type);
+                match ty {
+                    Some(Type::DynRow(fields)) => BackendCallableArgExpansion::DynRowFields(
+                        backend_dyn_row_field_abis(&fields),
+                    ),
+                    Some(Type::Func(input, result)) => BackendCallableArgExpansion::Callable {
+                        params: backend_value_kind_for_type(&input)
+                            .or_else(|| backend_storage_value_kind_for_type(&input))
+                            .into_iter()
+                            .collect(),
+                        env: vec![BackendValueKind::I32],
+                        result: backend_value_kind_for_type(&result)
+                            .or_else(|| backend_storage_value_kind_for_type(&result)),
+                    },
+                    Some(ty) => BackendCallableArgExpansion::Direct(
+                        backend_value_kind_for_type(&ty)
+                            .or_else(|| backend_storage_value_kind_for_type(&ty))
+                            .unwrap_or(BackendValueKind::I32),
+                    ),
+                    None => BackendCallableArgExpansion::Direct(BackendValueKind::I32),
+                }
+            })
+            .collect::<Vec<_>>();
+        let params = arg_expansions
+            .iter()
+            .flat_map(|expansion| match expansion {
+                BackendCallableArgExpansion::Direct(kind) => vec![*kind],
+                BackendCallableArgExpansion::Callable { env, .. } => {
+                    let mut params = vec![BackendValueKind::I32];
+                    params.extend(env.iter().copied());
+                    params
+                }
+                BackendCallableArgExpansion::DynRowFields(fields) => {
+                    fields.iter().map(|field| field.kind).collect()
+                }
+            })
+            .collect();
+        let result_type = function
+            .return_type
+            .as_deref()
+            .map(source_type_name_to_type);
+        let result = result_type.as_ref().and_then(|ty| {
+            backend_value_kind_for_type(ty).or_else(|| backend_storage_value_kind_for_type(ty))
+        });
+        let result_ref_cell_lane = result_type.as_ref().and_then(core_ref_cell_lane_for_type);
+        let abi = BackendCallableAbi {
+            params,
+            arg_expansions,
+            result,
+            result_ref_cell_lane,
+            return_callable: returned_callables.get(&function.source_name).cloned(),
+        };
+        if function.receiver.is_some() {
+            abis.insert(function.symbol.clone(), abi);
+        } else {
+            abis.insert(function.source_name.clone(), abi);
+        }
+    }
+    abis
 }
 
 fn backend_value_kind_for_type(ty: &Type) -> Option<BackendValueKind> {
@@ -2368,6 +2405,7 @@ fn program_backend_artifacts(
     defs: &[ProgramDefOutput],
     entry: Option<&str>,
     global_init: &GlobalInitPlan,
+    interface: &InterfaceSummary,
 ) -> Vec<BackendArtifact> {
     let mut entry_exported = false;
     let static_names = if global_init.diagnostics.is_empty() {
@@ -2396,8 +2434,9 @@ fn program_backend_artifacts(
             if is_entry {
                 entry_exported = true;
             }
-            let symbol = def_symbol(
-                &def.name,
+            let symbol = program_backend_def_symbol(
+                def,
+                interface,
                 index,
                 def_name_counts
                     .get(def.name.as_str())
@@ -2433,6 +2472,20 @@ fn static_return_wat_from_fact(
         "(module\n  (func ${symbol} (export \"main\") (result i32)\n    global.get ${}\n  )\n)\n",
         static_symbol
     ))
+}
+
+fn program_backend_def_symbol(
+    def: &ProgramDefOutput,
+    interface: &InterfaceSummary,
+    index: usize,
+    name_count: usize,
+) -> String {
+    interface
+        .functions
+        .iter()
+        .find(|function| function.receiver.is_some() && function.source_name == def.name)
+        .map(|function| sanitize_program_symbol(&function.symbol))
+        .unwrap_or_else(|| def_symbol(&def.name, index, name_count))
 }
 
 fn relabel_program_wat(artifact: &BackendArtifact, symbol: &str, is_entry: bool) -> String {

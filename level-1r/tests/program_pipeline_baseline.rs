@@ -1079,6 +1079,85 @@ fn program_dyn_row_receiver_method_adapter_call_lowers_to_executable_wat() {
 }
 
 #[test]
+fn program_dyn_row_receiver_method_adapter_uses_method_identity_not_plain_function_name() {
+    let current = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "y",
+                vec![ParamDecl::new("self", Some("Self".to_string()))],
+                Some("i64".to_string()),
+                Expr::field(Expr::var("self"), "x"),
+            ),
+            SourceItem::def(
+                "use_dyn",
+                Vec::new(),
+                vec![ParamDecl::new(
+                    "v",
+                    Some("dyn {y: (Unit) -> i64}".to_string()),
+                )],
+                Some("i64".to_string()),
+                Expr::method_call_args(Expr::var("v"), "y", Vec::new()),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("use_dyn"),
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(7))])),
+                ),
+            ),
+        ],
+    );
+    let imported = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["lib".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::def(
+            "y",
+            Vec::new(),
+            vec![ParamDecl::new("value", Some("X".to_string()))],
+            Some("i64".to_string()),
+            Expr::i64(99),
+        )],
+    );
+    let interface = build_interface_summary(&project_surface_many(&[current.clone(), imported]));
+
+    let outputs = compile_program_with_interface(&current, &interface);
+    let use_dyn = outputs
+        .iter()
+        .find(|def| def.name == "use_dyn")
+        .expect("use_dyn def");
+
+    assert!(use_dyn.output.core_validation.diagnostics.is_empty());
+    assert!(use_dyn.output.backend.diagnostics.is_empty());
+    assert!(use_dyn.output.core.ops.iter().any(|op| {
+        matches!(
+            op,
+            CoreOp::DynRowParamMethodTarget { target, param, field }
+                if target == "v.y" && param == "v" && field == "y"
+        )
+    }));
+    assert!(
+        use_dyn.output.backend.wat.contains("call $root__X_y"),
+        "{}",
+        use_dyn.output.backend.wat
+    );
+    assert!(!use_dyn.output.backend.wat.contains("call $lib__y"));
+}
+
+#[test]
 fn program_dyn_row_receiver_method_adapter_call_passes_explicit_args() {
     let program = SourceProgram::with_surface(
         None,
