@@ -9137,6 +9137,52 @@ def main() = 0",
 }
 
 #[test]
+fn generic_receiver_method_call_specializes_self_and_lowers_to_executable_wat() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![TypeDecl::new(
+            "Box",
+            vec!["T".to_string()],
+            vec![TypeField::new("value", "T")],
+        )],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("Box", vec!["T".to_string()]),
+                "update",
+                vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("value", Some("T".to_string())),
+                ],
+                Some("Self".to_string()),
+                Expr::record_update(Expr::var("self"), vec![("value", Expr::var("value"))]),
+            ),
+            SourceItem::def(
+                "main",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::field(
+                    Expr::method_call_args(
+                        Expr::nominal("Box[i64]", Expr::record(vec![("value", Expr::i64(1))])),
+                        "update",
+                        vec![Expr::i64(42)],
+                    ),
+                    "value",
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "42");
+}
+
+#[test]
 fn method_self_field_access_uses_row_style_type_shape() {
     let program = SourceProgram::with_surface(
         Some(NamespaceDecl::new(vec![

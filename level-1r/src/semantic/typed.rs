@@ -356,6 +356,14 @@ pub struct ReceiverMethodSummary {
     pub result_ty: Type,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpecializedReceiverMethodSummary {
+    pub symbol: String,
+    pub runtime_target: String,
+    pub param_tys: Vec<Type>,
+    pub result_ty: Type,
+}
+
 impl TypeContext {
     pub fn new() -> Self {
         let mut context = Self::default();
@@ -443,14 +451,60 @@ impl TypeContext {
                 self.receiver_methods
                     .get(&(base.to_string(), name.to_string()))
             })
+            .or_else(|| self.receiver_method_by_parsed_base(nominal, name))
+    }
+
+    pub fn specialized_receiver_method(
+        &self,
+        receiver: &Type,
+        name: &str,
+    ) -> Option<SpecializedReceiverMethodSummary> {
+        let method = self.receiver_method(receiver, name)?;
+        let substitutions = receiver_method_substitutions(receiver, method).unwrap_or_default();
+        Some(SpecializedReceiverMethodSummary {
+            symbol: method.symbol.clone(),
+            runtime_target: method.runtime_target.clone(),
+            param_tys: method
+                .param_tys
+                .iter()
+                .map(|ty| substitute_type_params(ty, &substitutions))
+                .collect(),
+            result_ty: substitute_type_params(&method.result_ty, &substitutions),
+        })
     }
 
     pub fn operator_method(
         &self,
         receiver: &Type,
         protocol: &str,
+    ) -> Option<SpecializedReceiverMethodSummary> {
+        self.specialized_receiver_method(receiver, protocol)
+    }
+
+    fn receiver_method_by_parsed_base(
+        &self,
+        nominal: &str,
+        name: &str,
     ) -> Option<&ReceiverMethodSummary> {
-        self.receiver_method(receiver, protocol)
+        let ParsedTypeHeader::Nominal { base, .. } = parse_type_header(nominal)? else {
+            return None;
+        };
+        let mut candidates =
+            self.receiver_methods
+                .iter()
+                .filter_map(|((receiver, method_name), method)| {
+                    if method_name != name {
+                        return None;
+                    }
+                    match parse_type_header(receiver)? {
+                        ParsedTypeHeader::Nominal {
+                            base: method_base, ..
+                        } if method_base == base => Some(method),
+                        _ => None,
+                    }
+                });
+        let method = candidates.next()?;
+        candidates.next().is_none().then_some(method)
     }
 
     fn generic_nominal_field_type(&self, nominal: &str, field: &str) -> Option<Type> {
@@ -2705,16 +2759,18 @@ fn dyn_row_adapter_fields(
             }
             DynRowFieldSource::Field
         } else {
-            let method = context.receiver_method(payload, &field.name)?;
-            let method_ty = bound_method_type(method);
+            let method = context.specialized_receiver_method(payload, &field.name)?;
+            let method_ty = bound_method_type(&method);
             if method_ty != field.ty && field.ty != Type::Unknown {
                 return None;
             }
+            let param_ty = bound_method_param_type(&method);
+            let result_ty = method.result_ty.clone();
             DynRowFieldSource::ReceiverMethod {
-                symbol: method.symbol.clone(),
-                runtime_target: method.runtime_target.clone(),
-                param_ty: bound_method_param_type(method),
-                result_ty: method.result_ty.clone(),
+                symbol: method.symbol,
+                runtime_target: method.runtime_target,
+                param_ty,
+                result_ty,
             }
         };
         adapters.push(TypedDynRowField {
@@ -2725,7 +2781,7 @@ fn dyn_row_adapter_fields(
     Some(adapters)
 }
 
-fn bound_method_type(method: &ReceiverMethodSummary) -> Type {
+fn bound_method_type(method: &SpecializedReceiverMethodSummary) -> Type {
     Type::Func(
         Box::new(bound_method_param_type(method)),
         Box::new(method.result_ty.clone()),
@@ -2733,7 +2789,7 @@ fn bound_method_type(method: &ReceiverMethodSummary) -> Type {
     )
 }
 
-fn bound_method_param_type(method: &ReceiverMethodSummary) -> Type {
+fn bound_method_param_type(method: &SpecializedReceiverMethodSummary) -> Type {
     match method.param_tys.as_slice() {
         [] => Type::Nominal("Unit".to_string()),
         [single] => single.clone(),
@@ -2759,27 +2815,10 @@ fn receiver_method_target(
     args: &[TypedExpr],
     context: &TypeContext,
 ) -> Option<ReceiverMethodTargetType> {
-    let Some(method) = context.receiver_method(receiver, name) else {
+    let Some(method) = context.specialized_receiver_method(receiver, name) else {
         return None;
     };
-    if method.param_tys.len() != args.len() {
-        return None;
-    }
-    if method
-        .param_tys
-        .iter()
-        .zip(args)
-        .any(|(expected, actual)| expected != &Type::Unknown && expected != &actual.ty)
-    {
-        return None;
-    }
-    Some(ReceiverMethodTargetType {
-        target: TypedReceiverMethodTarget {
-            symbol: method.symbol.clone(),
-            runtime_target: method.runtime_target.clone(),
-        },
-        result_ty: method.result_ty.clone(),
-    })
+    receiver_method_target_from_summary(&method, args)
 }
 
 fn operator_method_target(
@@ -2791,11 +2830,11 @@ fn operator_method_target(
     let Some(method) = context.operator_method(receiver, protocol) else {
         return None;
     };
-    receiver_method_target_from_summary(method, args)
+    receiver_method_target_from_summary(&method, args)
 }
 
 fn receiver_method_target_from_summary(
-    method: &ReceiverMethodSummary,
+    method: &SpecializedReceiverMethodSummary,
     args: &[TypedExpr],
 ) -> Option<ReceiverMethodTargetType> {
     if method.param_tys.len() != args.len() {
@@ -3641,6 +3680,10 @@ fn render_type_header(header: &ParsedTypeHeader) -> String {
     }
 }
 
+fn type_to_parsed_header(ty: &Type) -> Option<ParsedTypeHeader> {
+    parse_type_header(&source_type_name_for_type(ty))
+}
+
 fn top_level_arrow(name: &str) -> Option<usize> {
     let mut square_depth = 0usize;
     let mut paren_depth = 0usize;
@@ -3674,10 +3717,23 @@ fn parenthesized_type(name: &str) -> Option<&str> {
 
 fn substitute_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> Type {
     match ty {
-        Type::Nominal(name) => substitutions
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| Type::Nominal(name.clone())),
+        Type::Nominal(name) => substitutions.get(name).cloned().unwrap_or_else(|| {
+            let Some(ParsedTypeHeader::Nominal { base, args }) = parse_type_header(name) else {
+                return Type::Nominal(name.clone());
+            };
+            if args.is_empty() {
+                return Type::Nominal(name.clone());
+            }
+            let substituted_args = args
+                .iter()
+                .map(|arg| {
+                    type_to_parsed_header(&substitute_type_params(&arg.to_type(), substitutions))
+                })
+                .collect::<Option<Vec<_>>>();
+            substituted_args
+                .map(|args| Type::Nominal(render_nominal_type_header(&base, &args)))
+                .unwrap_or_else(|| Type::Nominal(name.clone()))
+        }),
         Type::Tuple(fields) => Type::Tuple(
             fields
                 .iter()
@@ -3725,6 +3781,41 @@ fn substitute_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> 
         Type::Rune => Type::Rune,
         Type::Bool => Type::Bool,
     }
+}
+
+fn receiver_method_substitutions(
+    receiver: &Type,
+    method: &ReceiverMethodSummary,
+) -> Option<BTreeMap<String, Type>> {
+    let Type::Nominal(actual_name) = receiver else {
+        return None;
+    };
+    let ParsedTypeHeader::Nominal {
+        base: method_base,
+        args: method_args,
+    } = parse_type_header(&method.receiver)?
+    else {
+        return None;
+    };
+    let ParsedTypeHeader::Nominal {
+        base: actual_base,
+        args: actual_args,
+    } = parse_type_header(actual_name)?
+    else {
+        return None;
+    };
+    if method_base != actual_base || method_args.len() != actual_args.len() {
+        return None;
+    }
+    let mut substitutions = BTreeMap::new();
+    for (method_arg, actual_arg) in method_args.iter().zip(actual_args.iter()) {
+        if let ParsedTypeHeader::Nominal { base, args } = method_arg {
+            if args.is_empty() {
+                substitutions.insert(base.clone(), actual_arg.to_type());
+            }
+        }
+    }
+    Some(substitutions)
 }
 
 fn collect_payload_substitutions(

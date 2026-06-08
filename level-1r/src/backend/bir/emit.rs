@@ -3932,6 +3932,13 @@ fn render_core_value_i32(
                 return Err(unsupported_i32_render_diagnostic(value));
             }
         }
+        CoreValue::RecordUpdate { .. } => {
+            if let Some(value) = single_data_lane_record_update_i32_value(value, env) {
+                render_core_value_i32(wat, &value, env)?;
+            } else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            }
+        }
         CoreValue::DynRowField { package, field } => {
             if let Some(value) = dyn_row_field_value(package, field, env) {
                 render_core_value_i32(wat, value, env)?;
@@ -4061,7 +4068,6 @@ fn render_core_value_i32(
         | CoreValue::Range { .. }
         | CoreValue::BuiltinRuntimeCall { .. }
         | CoreValue::Record { .. }
-        | CoreValue::RecordUpdate { .. }
         | CoreValue::LiftedFunction { .. }
         | CoreValue::Rendered { .. } => {
             return Err(unsupported_i32_render_diagnostic(value));
@@ -4440,13 +4446,15 @@ fn core_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         CoreValue::DynRowPackage { .. } => single_data_lane_dyn_row_package_i32_value(value, env)
             .map(|value| core_value_is_renderable_i32(&value, env))
             .unwrap_or(false),
+        CoreValue::RecordUpdate { .. } => single_data_lane_record_update_i32_value(value, env)
+            .map(|value| core_value_is_renderable_i32(&value, env))
+            .unwrap_or(false),
         CoreValue::Tuple { .. }
         | CoreValue::AdtTuple { .. }
         | CoreValue::TextLiteral { .. }
         | CoreValue::SliceLiteral { .. }
         | CoreValue::Range { .. }
         | CoreValue::Record { .. }
-        | CoreValue::RecordUpdate { .. }
         | CoreValue::LiftedFunction { .. }
         | CoreValue::Rendered { .. } => false,
     }
@@ -4630,6 +4638,25 @@ fn single_data_lane_dyn_row_package_i32_value(
                 .map(CoreValue::Var)
         }
         crate::core::CoreDynRowFieldSource::ReceiverMethod { .. } => None,
+    }
+}
+
+fn single_data_lane_record_update_i32_value(
+    value: &CoreValue,
+    env: &RenderEnv,
+) -> Option<CoreValue> {
+    let CoreValue::RecordUpdate { base, fields } = resolve_core_value_binding(value, env) else {
+        return None;
+    };
+    match fields.as_slice() {
+        [field] => Some(field.value.clone()),
+        [] => match resolve_core_value_binding(base, env) {
+            CoreValue::Var(name) if env.param_kind(name) == WasmValueKind::I32 => {
+                Some(CoreValue::Var(name.clone()))
+            }
+            _ => None,
+        },
+        _ => None,
     }
 }
 

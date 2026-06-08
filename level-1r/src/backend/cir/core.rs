@@ -2571,7 +2571,10 @@ fn lower_atom_value(atom: &CpsAtom, lambda_lift: &LambdaLiftFacts, ops: &mut Vec
                 layout: layout.clone(),
                 fields: fields.iter().map(|field| field.name.clone()).collect(),
             });
-            lower_atom_value(base, lambda_lift, ops);
+            let mut base_ops = Vec::new();
+            lower_atom_value(base, lambda_lift, &mut base_ops);
+            base_ops.retain(|op| !matches!(op, CoreOp::ReturnValue(_)));
+            ops.extend(base_ops);
             ops.push(CoreOp::ReturnValue(core_value_with_lift(atom, lambda_lift)));
         }
         CpsAtom::RecordField { record, field } => {
