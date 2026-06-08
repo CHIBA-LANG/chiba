@@ -1232,6 +1232,22 @@ def main(): i64 = 0
         "row-bound rejection took {:?}",
         start.elapsed()
     );
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::RowMemberCallableUnsatisfied {
+            def: "bad_field".to_string(),
+            callee: "call_f".to_string(),
+            field: "f".to_string(),
+            actual: "Z({f: 1})".to_string(),
+        }));
+    assert!(bundle
+        .diagnostics
+        .contains(&ProgramDiagnostic::RowMemberCallableUnsatisfied {
+            def: "bad_method".to_string(),
+            callee: "call_f".to_string(),
+            field: "f".to_string(),
+            actual: "M({x: 1})".to_string(),
+        }));
     assert!(
         !bundle.backend_link.diagnostics.is_empty(),
         "expected backend/link diagnostics for unsatisfied row callable member"

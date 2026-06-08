@@ -219,6 +219,12 @@ pub enum ProgramDiagnostic {
         expected: String,
         actual: String,
     },
+    RowMemberCallableUnsatisfied {
+        def: String,
+        callee: String,
+        field: String,
+        actual: String,
+    },
     AmbiguousReceiverMethod {
         receiver: String,
         name: String,
@@ -654,6 +660,11 @@ fn compile_program_bundle_internal(
     all_diagnostics.extend(send_diagnostics.iter().cloned());
     all_diagnostics.extend(assignment_diagnostics(&defs));
     all_diagnostics.extend(dyn_row_coercion_diagnostics(&defs));
+    all_diagnostics.extend(row_member_callable_diagnostics(
+        &normalized_program,
+        &checked_interface,
+        &current_namespace,
+    ));
     all_diagnostics.extend(operator_operand_diagnostics(&defs));
     apply_program_backend_gates(&mut defs, &send_diagnostics);
     if entry.is_none() {
@@ -745,7 +756,7 @@ fn specialize_row_callable_call_sites(
 #[derive(Clone, Debug, Default)]
 struct RowCallableMemberRecords {
     fields: BTreeMap<String, BTreeMap<String, Type>>,
-    methods: BTreeMap<String, BTreeSet<String>>,
+    methods: BTreeMap<String, BTreeMap<String, Vec<Type>>>,
 }
 
 fn row_callable_member_records(
@@ -770,7 +781,19 @@ fn row_callable_member_records(
             .methods
             .entry(receiver.display_name())
             .or_default()
-            .insert(method.source_name.clone());
+            .insert(
+                method.source_name.clone(),
+                method
+                    .param_types
+                    .iter()
+                    .skip(1)
+                    .map(|ty| {
+                        ty.as_deref()
+                            .map(source_type_name_to_type)
+                            .unwrap_or(Type::Unknown)
+                    })
+                    .collect(),
+            );
     }
     records
 }
@@ -892,8 +915,7 @@ fn specialize_row_callable_expr(
         if let Expr::Var(callee_name) = callee.as_ref() {
             if let Some(row_callable) = row_callables.get(callee_name) {
                 if let [arg] = args.as_slice() {
-                    if row_callable_arg_has_callable_field(arg, &row_callable.field, member_records)
-                    {
+                    if row_callable_arg_has_callable_field(arg, row_callable, member_records) {
                         return Expr::MethodCall {
                             receiver: Box::new(specialize_row_callable_expr(
                                 arg,
@@ -1535,23 +1557,26 @@ fn substitute_row_callable_param(
 
 fn row_callable_arg_has_callable_field(
     arg: &Expr,
-    field: &str,
+    row_callable: &RowCallableDef,
     member_records: &RowCallableMemberRecords,
 ) -> bool {
     match arg {
-        Expr::Record(fields) => fields
-            .iter()
-            .any(|candidate| candidate.name == field && expr_is_callable_value(&candidate.value)),
+        Expr::Record(fields) => fields.iter().any(|candidate| {
+            candidate.name == row_callable.field && expr_is_callable_value(&candidate.value)
+        }),
         Expr::Nominal { name, .. } => member_records
             .fields
             .get(name)
-            .and_then(|fields| fields.get(field))
-            .map(type_is_callable_storage)
+            .and_then(|fields| fields.get(&row_callable.field))
+            .map(|ty| type_accepts_row_callable_args(ty, &row_callable.args))
             .unwrap_or_else(|| {
                 member_records
                     .methods
                     .get(name)
-                    .is_some_and(|methods| methods.contains(field))
+                    .and_then(|methods| methods.get(&row_callable.field))
+                    .is_some_and(|param_tys| {
+                        row_callable_args_match_types(&row_callable.args, param_tys)
+                    })
             }),
         _ => false,
     }
@@ -1563,6 +1588,352 @@ fn expr_is_callable_value(expr: &Expr) -> bool {
 
 fn type_is_callable_storage(ty: &Type) -> bool {
     matches!(ty, Type::Func(..) | Type::Continuation { .. })
+}
+
+fn row_member_callable_diagnostics(
+    program: &SourceProgram,
+    interface: &InterfaceSummary,
+    current_namespace: &str,
+) -> Vec<ProgramDiagnostic> {
+    let row_callables = program
+        .items
+        .iter()
+        .filter_map(row_callable_def)
+        .collect::<BTreeMap<_, _>>();
+    if row_callables.is_empty() {
+        return Vec::new();
+    }
+    let member_records = row_callable_member_records(interface, current_namespace);
+    let mut diagnostics = Vec::new();
+    for item in &program.items {
+        let SourceItem::Def { name, body, .. } = item else {
+            continue;
+        };
+        collect_row_member_callable_diagnostics(
+            name,
+            body,
+            &row_callables,
+            &member_records,
+            &mut diagnostics,
+        );
+    }
+    diagnostics
+}
+
+fn collect_row_member_callable_diagnostics(
+    def: &str,
+    expr: &Expr,
+    row_callables: &BTreeMap<String, RowCallableDef>,
+    member_records: &RowCallableMemberRecords,
+    diagnostics: &mut Vec<ProgramDiagnostic>,
+) {
+    match expr {
+        Expr::Call { callee, args } => {
+            if let Expr::Var(callee_name) = callee.as_ref() {
+                if let Some(row_callable) = row_callables.get(callee_name) {
+                    if let [arg] = args.as_slice() {
+                        if !row_callable_arg_has_callable_field(arg, row_callable, member_records) {
+                            diagnostics.push(ProgramDiagnostic::RowMemberCallableUnsatisfied {
+                                def: def.to_string(),
+                                callee: callee_name.clone(),
+                                field: row_callable.field.clone(),
+                                actual: render_source_expr(arg),
+                            });
+                        }
+                    }
+                }
+            }
+            collect_row_member_callable_diagnostics(
+                def,
+                callee,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            for arg in args {
+                collect_row_member_callable_diagnostics(
+                    def,
+                    arg,
+                    row_callables,
+                    member_records,
+                    diagnostics,
+                );
+            }
+        }
+        Expr::Lambda { body, .. }
+        | Expr::Nominal { expr: body, .. }
+        | Expr::Reset { body, .. }
+        | Expr::Shift { body, .. } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                body,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+        }
+        Expr::Tuple(fields) | Expr::SliceLiteral(fields) => {
+            for field in fields {
+                collect_row_member_callable_diagnostics(
+                    def,
+                    field,
+                    row_callables,
+                    member_records,
+                    diagnostics,
+                );
+            }
+        }
+        Expr::Record(fields) => {
+            for field in fields {
+                collect_row_member_callable_diagnostics(
+                    def,
+                    &field.value,
+                    row_callables,
+                    member_records,
+                    diagnostics,
+                );
+            }
+        }
+        Expr::RecordUpdate { base, fields } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                base,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            for field in fields {
+                collect_row_member_callable_diagnostics(
+                    def,
+                    &field.value,
+                    row_callables,
+                    member_records,
+                    diagnostics,
+                );
+            }
+        }
+        Expr::AdtCtor { args, .. } => {
+            for arg in args {
+                collect_row_member_callable_diagnostics(
+                    def,
+                    arg,
+                    row_callables,
+                    member_records,
+                    diagnostics,
+                );
+            }
+        }
+        Expr::Field { receiver, .. } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                receiver,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+        }
+        Expr::Index { receiver, index } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                receiver,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            collect_row_member_callable_diagnostics(
+                def,
+                index,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+        }
+        Expr::MethodCall { receiver, args, .. } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                receiver,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            for arg in args {
+                collect_row_member_callable_diagnostics(
+                    def,
+                    arg,
+                    row_callables,
+                    member_records,
+                    diagnostics,
+                );
+            }
+        }
+        Expr::Assign { target, value } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                target,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            collect_row_member_callable_diagnostics(
+                def,
+                value,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+        }
+        Expr::Range { start, end }
+        | Expr::Binary {
+            lhs: start,
+            rhs: end,
+            ..
+        } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                start,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            collect_row_member_callable_diagnostics(
+                def,
+                end,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                cond,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            collect_row_member_callable_diagnostics(
+                def,
+                then_branch,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            collect_row_member_callable_diagnostics(
+                def,
+                else_branch,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+        }
+        Expr::IfLet {
+            scrutinee,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                scrutinee,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            collect_row_member_callable_diagnostics(
+                def,
+                then_branch,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            collect_row_member_callable_diagnostics(
+                def,
+                else_branch,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+        }
+        Expr::Match { scrutinee, arms } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                scrutinee,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+            for arm in arms {
+                collect_row_member_callable_diagnostics(
+                    def,
+                    &arm.body,
+                    row_callables,
+                    member_records,
+                    diagnostics,
+                );
+            }
+        }
+        Expr::Instantiate { callee, .. } => {
+            collect_row_member_callable_diagnostics(
+                def,
+                callee,
+                row_callables,
+                member_records,
+                diagnostics,
+            );
+        }
+        Expr::Var(_) | Expr::Lit(_) => {}
+    }
+}
+
+fn type_accepts_row_callable_args(ty: &Type, args: &[Expr]) -> bool {
+    if !type_is_callable_storage(ty) {
+        return false;
+    }
+    callable_param_types(ty)
+        .map(|param_tys| row_callable_args_match_types(args, &param_tys))
+        .unwrap_or(true)
+}
+
+fn callable_param_types(ty: &Type) -> Option<Vec<Type>> {
+    match ty {
+        Type::Func(param, result, _) => {
+            let mut params = vec![param.as_ref().clone()];
+            if let Some(mut rest) = callable_param_types(result) {
+                params.append(&mut rest);
+            }
+            Some(params)
+        }
+        Type::Continuation { input, .. } => Some(vec![input.as_ref().clone()]),
+        _ => None,
+    }
+}
+
+fn row_callable_args_match_types(args: &[Expr], param_tys: &[Type]) -> bool {
+    args.len() == param_tys.len()
+        && args
+            .iter()
+            .zip(param_tys)
+            .all(|(arg, ty)| row_callable_arg_matches_type(arg, ty))
+}
+
+fn row_callable_arg_matches_type(arg: &Expr, ty: &Type) -> bool {
+    match source_expr_static_type(arg) {
+        Some(actual) => actual == *ty || matches!(ty, Type::Unknown),
+        None => true,
+    }
+}
+
+fn source_expr_static_type(expr: &Expr) -> Option<Type> {
+    match expr {
+        Expr::Lit(crate::ast::Literal::I64(_)) => Some(Type::I64),
+        Expr::Lit(crate::ast::Literal::Bool(_)) => Some(Type::Bool),
+        Expr::Lit(crate::ast::Literal::Rune(_)) => Some(Type::Rune),
+        _ => None,
+    }
 }
 
 fn backend_cache_config_for_interface(interface: &InterfaceSummary) -> BackendCacheConfig {
@@ -6429,6 +6800,14 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
             expected,
             actual,
         } => format!("dyn row coercion failed {def}: expected {expected}, actual {actual}"),
+        ProgramDiagnostic::RowMemberCallableUnsatisfied {
+            def,
+            callee,
+            field,
+            actual,
+        } => {
+            format!("row member callable unsatisfied {def}: {callee}.{field} for {actual}")
+        }
         ProgramDiagnostic::AmbiguousReceiverMethod {
             receiver,
             name,
