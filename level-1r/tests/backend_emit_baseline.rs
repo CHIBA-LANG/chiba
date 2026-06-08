@@ -5,10 +5,10 @@ use chiba_level1r::backend::{
 };
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
-    CoreCapturedContinuation, CoreDiagnostic, CoreOp, CoreProgram, CoreValidation, CoreValue,
-    OperatorIntrinsic, SliceField,
+    ClosureEnvField, ClosureEnvLayout, CoreCapturedContinuation, CoreDiagnostic, CoreOp,
+    CoreProgram, CoreValidation, CoreValue, LayoutFact, LayoutKind, OperatorIntrinsic, SliceField,
 };
-use chiba_level1r::typed::AggregateKind;
+use chiba_level1r::typed::{AggregateKind, SendColor, UsageColor};
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -53,17 +53,64 @@ fn backend_emits_lifted_symbol_manifest_for_lambda_surface() {
         .find(|entry| entry.source_debug_name == "closure::x")
         .unwrap();
     assert_eq!(entry.final_symbol, "lift__0000__closure__x");
+    assert_eq!(
+        entry.source.item_path.as_deref(),
+        Some("lift::0000::closure__x")
+    );
+    assert_eq!(entry.source.source_path, None);
+    assert_eq!(entry.source.owner_namespace, None);
+    assert_eq!(entry.source.layout_key, None);
+    assert_eq!(entry.source.specialization_key, None);
     assert_eq!(entry.pass_origin, "L15LambdaLift");
     assert_eq!(entry.lowering_role, "lifted-function");
     assert_eq!(entry.stable_id.len(), 16);
     assert!(output.backend.wat.contains(&format!(
-        ";; symbol lift__0000__closure__x source=closure::x origin=L15LambdaLift role=lifted-function stable-id={}",
+        ";; symbol lift__0000__closure__x source=closure::x origin=L15LambdaLift role=lifted-function stable-id={} owner=none item=lift::0000::closure__x layout=none specialization=none",
         entry.stable_id
     )));
     assert!(output.render_visual().contains(&format!(
-        "symbol lift__0000__closure__x source=closure::x origin=L15LambdaLift role=lifted-function stable-id={}",
+        "symbol lift__0000__closure__x source=closure::x source-path=none owner=none item=lift::0000::closure__x specialization=none layout=none origin=L15LambdaLift role=lifted-function stable-id={}",
         entry.stable_id
     )));
+}
+
+#[test]
+fn backend_manifest_links_final_symbol_to_layout_fact_when_core_proves_it() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::LiftedFunction {
+            source: "closure::y".to_string(),
+            symbol: "lift::0000::closure::y".to_string(),
+            env_params: vec!["x".to_string()],
+            direct: false,
+            param: Some("y".to_string()),
+            body: vec![CoreOp::ReturnValue(CoreValue::Var("y".to_string()))],
+        }],
+        layouts: vec![LayoutFact {
+            key: "closure-env::closure::y".to_string(),
+            hash: 1,
+            kind: LayoutKind::ClosureEnv(ClosureEnvLayout {
+                closure: "closure::y".to_string(),
+                fields: vec![ClosureEnvField {
+                    name: "x".to_string(),
+                    usage: UsageColor::Many,
+                    send: SendColor::Obligation,
+                }],
+            }),
+        }],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm_gc(&core, &CoreValidation::default());
+    let entry = artifact.manifest.entries.first().unwrap();
+
+    assert_eq!(
+        entry.source.layout_key.as_deref(),
+        Some("closure-env::closure::y")
+    );
+    assert!(artifact.wat.contains(
+        "item=lift::0000::closure::y layout=closure-env::closure::y specialization=none"
+    ));
 }
 
 #[test]
@@ -91,6 +138,9 @@ fn backend_records_tailcall_targets_in_serialized_output() {
     assert!(artifact.wat.contains(
         ";; symbol math_Vec2_norm source=norm origin=L16Core role=direct-method-target stable-id="
     ));
+    assert!(artifact
+        .wat
+        .contains("owner=none item=math.Vec2.norm layout=none specialization=none"));
     assert!(artifact.wat.contains(";; tailcall math_Vec2_norm args=[v]"));
     assert!(artifact.wat.contains("call $math_Vec2_norm"));
     assert!(!artifact.wat.contains("(func $math_Vec2_norm"));

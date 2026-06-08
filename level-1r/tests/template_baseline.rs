@@ -1,10 +1,9 @@
 use chiba_level1r::ast::BinaryOp;
-use chiba_level1r::resolve::ResolveDiagnostic;
 use chiba_level1r::template::{
     canonical_open_row, dyn_row_contract, ShapeType, TemplateDiagnostic, TemplateInstantiation,
     TemplateObligation, TemplateParam, TemplateParamSource,
 };
-use chiba_level1r::typed::{SendColor, UsageColor};
+use chiba_level1r::typed::{SendColor, Type, TypedExprKind, UsageColor};
 use chiba_level1r::{compile_expr, Expr};
 
 #[test]
@@ -56,7 +55,7 @@ fn operator_resolve_fact_enters_template_obligations() {
 }
 
 #[test]
-fn row_field_obligation_does_not_prove_nominal_method() {
+fn row_field_obligation_allows_deferred_callable_field_without_selecting_nominal_method() {
     let output = compile_expr(&Expr::method_call(
         Expr::field(Expr::var("row"), "field_fn"),
         "len",
@@ -70,13 +69,14 @@ fn row_field_obligation_does_not_prove_nominal_method() {
             shape: canonical_open_row(vec![("field_fn", ShapeType::Unknown)]),
             field: "field_fn".to_string(),
         }));
-    assert_eq!(
-        output.resolve.diagnostics,
-        vec![ResolveDiagnostic::MissingMethod {
-            receiver: None,
-            name: "len".to_string(),
-        }]
-    );
+    assert!(output
+        .template
+        .obligations
+        .contains(&TemplateObligation::Field {
+            shape: canonical_open_row(vec![("len", ShapeType::Unknown)]),
+            field: "len".to_string(),
+        }));
+    assert_eq!(output.resolve.diagnostics, vec![]);
 }
 
 #[test]
@@ -273,6 +273,32 @@ fn unannotated_row_field_function_keeps_auto_generic_and_row_obligation() {
             shape: canonical_open_row(vec![("name", ShapeType::Unknown)]),
             field: "name".to_string(),
         }));
+}
+
+#[test]
+fn unannotated_row_callable_function_keeps_dependent_field_obligation() {
+    let output = chiba_level1r::compile_source_program_bundle("def call_f(v) = v.f(1)")
+        .expect("compile source");
+    let def = &output.program.defs[0].output;
+
+    assert!(def.template.explicit_params.contains(&TemplateParam {
+        name: "T_v".to_string(),
+        source: TemplateParamSource::SyntheticAutoGeneric,
+    }));
+    assert!(def.template.explicit_params.contains(&TemplateParam {
+        name: "T_return".to_string(),
+        source: TemplateParamSource::SyntheticAutoGeneric,
+    }));
+    assert!(def
+        .template
+        .obligations
+        .contains(&TemplateObligation::Field {
+            shape: canonical_open_row(vec![("f", ShapeType::Unknown)]),
+            field: "f".to_string(),
+        }));
+    assert_eq!(def.resolve.diagnostics, vec![]);
+    assert_eq!(def.typed.ty, Type::Unknown);
+    assert!(matches!(def.typed.kind, TypedExprKind::Call { .. }));
 }
 
 #[test]

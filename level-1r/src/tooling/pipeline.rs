@@ -5027,6 +5027,25 @@ fn render_program_backend_link_summary(bundle: &BackendLinkedBundle) -> String {
         "    manifest-entries={}\n",
         bundle.manifest.entries.len()
     ));
+    for entry in &bundle.manifest.entries {
+        out.push_str(&format!(
+            "      symbol {} source={} source-path={} owner={} item={} specialization={} layout={} origin={} role={} stable-id={} ownership={}\n",
+            entry.final_symbol,
+            entry.source_debug_name,
+            entry.source.source_path.as_deref().unwrap_or("none"),
+            entry.source.owner_namespace.as_deref().unwrap_or("none"),
+            entry.source.item_path.as_deref().unwrap_or("none"),
+            entry.source.specialization_key.as_deref().unwrap_or("none"),
+            entry.source.layout_key.as_deref().unwrap_or("none"),
+            entry.pass_origin,
+            entry.lowering_role,
+            entry.stable_id,
+            entry
+                .ownership
+                .map(render_ownership_decision)
+                .unwrap_or("none")
+        ));
+    }
     out.push_str(&format!("    diagnostics={}\n", bundle.diagnostics.len()));
     for diagnostic in &bundle.diagnostics {
         out.push_str(&format!(
@@ -5035,6 +5054,18 @@ fn render_program_backend_link_summary(bundle: &BackendLinkedBundle) -> String {
         ));
     }
     out
+}
+
+fn render_ownership_decision(decision: crate::core::OwnershipDecision) -> &'static str {
+    match decision {
+        crate::core::OwnershipDecision::StackValue => "stack",
+        crate::core::OwnershipDecision::InplaceReuse => "inplace-reuse",
+        crate::core::OwnershipDecision::Rc => "rc",
+        crate::core::OwnershipDecision::Arc => "arc",
+        crate::core::OwnershipDecision::StaticData => "static-data",
+        crate::core::OwnershipDecision::BorrowedView => "borrowed-view",
+        crate::core::OwnershipDecision::DynPackage => "dyn-package",
+    }
 }
 
 fn render_backend_link_diagnostic(diagnostic: &BackendLinkDiagnostic) -> String {

@@ -968,6 +968,266 @@ fn program_callable_storage_field_calls_capturing_closure() {
 }
 
 #[test]
+fn program_auto_generic_row_callable_field_accepts_record_closure_field() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def call_f(v) = v.f(1)
+def main(): i64 = call_f({f: (x: i64): i64 => x + 1})
+"#,
+    )
+    .expect("compile row callable field closure");
+    let bundle = output.program;
+    let call_f = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "call_f")
+        .expect("call_f def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(call_f.output.template.obligations.contains(
+        &chiba_level1r::template::TemplateObligation::Field {
+            shape: chiba_level1r::template::canonical_open_row(vec![(
+                "f",
+                chiba_level1r::template::ShapeType::Unknown,
+            )]),
+            field: "f".to_string(),
+        }
+    ));
+    assert!(call_f
+        .output
+        .visual
+        .typed
+        .contains("field f access=record-or-nominal"));
+    let main = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "main")
+        .expect("main def");
+    assert!(main
+        .output
+        .backend
+        .diagnostics
+        .iter()
+        .any(|diagnostic| matches!(
+            diagnostic,
+            chiba_level1r::backend::BackendDiagnostic::UnsupportedI32ReturnValue { .. }
+        )));
+}
+
+#[test]
+fn program_dyn_row_callable_field_accepts_field_and_method_adapters() {
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![
+            TypeDecl::new("X", Vec::new(), vec![TypeField::new("x", "i64")]),
+            TypeDecl::new("Y", Vec::new(), vec![TypeField::new("f", "(i64) -> i64")]),
+        ],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("X", Vec::new()),
+                "f",
+                vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("n", Some("i64".to_string())),
+                ],
+                Some("i64".to_string()),
+                Expr::binary(
+                    BinaryOp::Add,
+                    Expr::field(Expr::var("self"), "x"),
+                    Expr::var("n"),
+                ),
+            ),
+            SourceItem::def(
+                "call_dyn",
+                Vec::new(),
+                vec![ParamDecl::new(
+                    "v",
+                    Some("dyn {f: (i64) -> i64}".to_string()),
+                )],
+                Some("i64".to_string()),
+                Expr::method_call_args(Expr::var("v"), "f", vec![Expr::i64(1)]),
+            ),
+            SourceItem::def(
+                "method_case",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("call_dyn"),
+                    Expr::nominal("X", Expr::record(vec![("x", Expr::i64(10))])),
+                ),
+            ),
+            SourceItem::def(
+                "field_case",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("call_dyn"),
+                    Expr::nominal(
+                        "Y",
+                        Expr::record(vec![(
+                            "f",
+                            Expr::lambda(
+                                "n",
+                                Expr::binary(BinaryOp::Add, Expr::var("n"), Expr::i64(2)),
+                            ),
+                        )]),
+                    ),
+                ),
+            ),
+            def("main", vec![], Expr::i64(0)),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+    let method_case = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "method_case")
+        .expect("method_case def");
+    let field_case = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "field_case")
+        .expect("field_case def");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert!(method_case
+        .output
+        .visual
+        .typed
+        .contains("f=receiver-method(root::X.f)"));
+    match &field_case.output.typed.kind {
+        TypedExprKind::Call { args, .. } => match &args[0].kind {
+            TypedExprKind::DynRowPackage { fields, .. } => {
+                assert!(fields.iter().any(|field| {
+                    field.name == "f"
+                        && matches!(field.source, chiba_level1r::typed::DynRowFieldSource::Field)
+                }));
+            }
+            other => panic!(
+                "expected dyn row package argument, got {}",
+                typed_expr_kind_name(other)
+            ),
+        },
+        other => panic!(
+            "expected field_case call, got {}",
+            typed_expr_kind_name(other)
+        ),
+    }
+}
+
+#[test]
+fn program_row_callable_field_accepts_continuation_fields() {
+    let cont1 = chiba_level1r::compile_source_program_bundle(
+        r#"
+def call_f(v) = v.f(1)
+def main(): i64 = reset { shift k { call_f({f: k}) } }
+"#,
+    )
+    .expect("compile row callable cont1 field");
+    let contn = chiba_level1r::compile_source_program_bundle(
+        r#"
+def call_f(v) = v.f(1) + v.f(2)
+def main(): i64 = resetn { shift k { call_f({f: k}) } }
+"#,
+    )
+    .expect("compile row callable contn field");
+
+    assert_eq!(cont1.program.diagnostics, vec![]);
+    assert!(cont1.program.defs.iter().any(|def| def
+        .output
+        .core
+        .callable_storage
+        .iter()
+        .any(|fact| fact.kind == chiba_level1r::core::CallableStorageKind::BoxedCont1)));
+    assert_eq!(contn.program.diagnostics, vec![]);
+    assert!(contn.program.defs.iter().any(|def| def
+        .output
+        .core
+        .callable_storage
+        .iter()
+        .any(|fact| fact.kind == chiba_level1r::core::CallableStorageKind::ContNPackage)));
+}
+
+#[test]
+fn program_dyn_row_callable_field_reports_non_callable_or_mismatched_adapters_quickly() {
+    let start = std::time::Instant::now();
+    let program = SourceProgram::with_surface(
+        None,
+        Vec::new(),
+        vec![
+            TypeDecl::new("Z", Vec::new(), vec![TypeField::new("f", "i64")]),
+            TypeDecl::new("M", Vec::new(), vec![TypeField::new("x", "i64")]),
+        ],
+        Vec::new(),
+        vec![
+            SourceItem::method_def(
+                MethodReceiver::new("M", Vec::new()),
+                "f",
+                vec![
+                    ParamDecl::new("self", Some("Self".to_string())),
+                    ParamDecl::new("bad", Some("bool".to_string())),
+                ],
+                Some("i64".to_string()),
+                Expr::i64(0),
+            ),
+            SourceItem::def(
+                "call_dyn",
+                Vec::new(),
+                vec![ParamDecl::new(
+                    "v",
+                    Some("dyn {f: (i64) -> i64}".to_string()),
+                )],
+                Some("i64".to_string()),
+                Expr::method_call_args(Expr::var("v"), "f", vec![Expr::i64(1)]),
+            ),
+            SourceItem::def(
+                "bad_field",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("call_dyn"),
+                    Expr::nominal("Z", Expr::record(vec![("f", Expr::i64(1))])),
+                ),
+            ),
+            SourceItem::def(
+                "bad_method",
+                Vec::new(),
+                Vec::new(),
+                Some("i64".to_string()),
+                Expr::call(
+                    Expr::var("call_dyn"),
+                    Expr::nominal("M", Expr::record(vec![("x", Expr::i64(1))])),
+                ),
+            ),
+        ],
+    );
+
+    let bundle = compile_program_bundle(&program);
+
+    assert!(
+        start.elapsed() < std::time::Duration::from_secs(2),
+        "row callable diagnostics timed out: {:?}",
+        start.elapsed()
+    );
+    assert!(bundle.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic,
+        ProgramDiagnostic::DynRowCoercionFailed { def, expected, actual }
+            if def == "bad_field" && expected == "dyn {f: (i64) -> i64}" && actual == "Z"
+    )));
+    assert!(bundle.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic,
+        ProgramDiagnostic::DynRowCoercionFailed { def, expected, actual }
+            if def == "bad_method" && expected == "dyn {f: (i64) -> i64}" && actual == "M"
+    )));
+}
+
+#[test]
 fn program_callable_param_calls_stored_function_value() {
     let output = chiba_level1r::compile_source_program_bundle(
         r#"

@@ -42,10 +42,20 @@ pub struct BackendManifest {
 pub struct BackendManifestEntry {
     pub final_symbol: String,
     pub source_debug_name: String,
+    pub source: BackendManifestSource,
     pub pass_origin: String,
     pub lowering_role: String,
     pub stable_id: String,
     pub ownership: Option<OwnershipDecision>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BackendManifestSource {
+    pub source_path: Option<String>,
+    pub owner_namespace: Option<String>,
+    pub item_path: Option<String>,
+    pub specialization_key: Option<String>,
+    pub layout_key: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -671,6 +681,7 @@ fn collect_manifest_entries(
         CoreOp::LiftedFunction { source, symbol, .. } => entries.push(BackendManifestEntry {
             final_symbol: final_symbol(symbol),
             source_debug_name: source.clone(),
+            source: manifest_source_for_subject(core, source, Some(symbol)),
             pass_origin: "L15LambdaLift".to_string(),
             lowering_role: "lifted-function".to_string(),
             stable_id: manifest_stable_id("L15LambdaLift", "lifted-function", source, symbol),
@@ -679,6 +690,7 @@ fn collect_manifest_entries(
         CoreOp::DirectMethodTarget { name, target } => entries.push(BackendManifestEntry {
             final_symbol: final_symbol(target),
             source_debug_name: name.clone(),
+            source: manifest_source_for_subject(core, target, Some(target)),
             pass_origin: "L16Core".to_string(),
             lowering_role: "direct-method-target".to_string(),
             stable_id: manifest_stable_id("L16Core", "direct-method-target", name, target),
@@ -689,6 +701,7 @@ fn collect_manifest_entries(
         } => entries.push(BackendManifestEntry {
             final_symbol: final_symbol(target),
             source_debug_name: protocol.clone(),
+            source: manifest_source_for_subject(core, target, Some(target)),
             pass_origin: "L16Core".to_string(),
             lowering_role: "operator-target".to_string(),
             stable_id: manifest_stable_id("L16Core", "operator-target", protocol, target),
@@ -1432,6 +1445,43 @@ fn ownership_for_subject(core: &CoreProgram, subject: &str) -> Option<OwnershipD
         .map(|fact| fact.decision)
 }
 
+fn manifest_source_for_subject(
+    core: &CoreProgram,
+    subject: &str,
+    item_path: Option<&str>,
+) -> BackendManifestSource {
+    BackendManifestSource {
+        source_path: None,
+        owner_namespace: None,
+        item_path: item_path.map(str::to_string),
+        specialization_key: None,
+        layout_key: manifest_layout_key_for_subject(core, subject),
+    }
+}
+
+fn manifest_layout_key_for_subject(core: &CoreProgram, subject: &str) -> Option<String> {
+    core.layouts.iter().find_map(|layout| match &layout.kind {
+        crate::core::LayoutKind::ClosureEnv(env) if env.closure == subject => {
+            Some(layout.key.clone())
+        }
+        crate::core::LayoutKind::ContinuationPackage(env)
+        | crate::core::LayoutKind::Cont1StateMachine(env)
+            if env.binder == subject =>
+        {
+            Some(layout.key.clone())
+        }
+        crate::core::LayoutKind::TupleStruct(tuple) if tuple.nominal == subject => {
+            Some(layout.key.clone())
+        }
+        crate::core::LayoutKind::AdtShape(adt) if adt.data == subject => Some(layout.key.clone()),
+        _ => None,
+    })
+}
+
+fn manifest_optional_comment(value: Option<&str>) -> &str {
+    value.unwrap_or("none")
+}
+
 fn render_wat(
     core: &CoreProgram,
     manifest: &BackendManifest,
@@ -1453,12 +1503,16 @@ fn render_wat(
     let mut tailcall_index = 0usize;
     for entry in &manifest.entries {
         wat.push_str(&format!(
-            "  ;; symbol {} source={} origin={} role={} stable-id={}\n",
+            "  ;; symbol {} source={} origin={} role={} stable-id={} owner={} item={} layout={} specialization={}\n",
             entry.final_symbol,
             entry.source_debug_name,
             entry.pass_origin,
             entry.lowering_role,
-            entry.stable_id
+            entry.stable_id,
+            manifest_optional_comment(entry.source.owner_namespace.as_deref()),
+            manifest_optional_comment(entry.source.item_path.as_deref()),
+            manifest_optional_comment(entry.source.layout_key.as_deref()),
+            manifest_optional_comment(entry.source.specialization_key.as_deref())
         ));
     }
     if render_tailcall_result_chain(&mut wat, core, &env)? {
@@ -1781,12 +1835,16 @@ fn render_continuation_wat(
     }
     for entry in &manifest.entries {
         wat.push_str(&format!(
-            "  ;; symbol {} source={} origin={} role={} stable-id={}\n",
+            "  ;; symbol {} source={} origin={} role={} stable-id={} owner={} item={} layout={} specialization={}\n",
             entry.final_symbol,
             entry.source_debug_name,
             entry.pass_origin,
             entry.lowering_role,
-            entry.stable_id
+            entry.stable_id,
+            manifest_optional_comment(entry.source.owner_namespace.as_deref()),
+            manifest_optional_comment(entry.source.item_path.as_deref()),
+            manifest_optional_comment(entry.source.layout_key.as_deref()),
+            manifest_optional_comment(entry.source.specialization_key.as_deref())
         ));
     }
     for op in collect_operator_targets(&core.ops) {
@@ -5052,6 +5110,16 @@ pub fn backend_cache_key(
         encoded.push_str(&entry.final_symbol);
         encoded.push('|');
         encoded.push_str(&entry.source_debug_name);
+        encoded.push('|');
+        encoded.push_str(entry.source.source_path.as_deref().unwrap_or("none"));
+        encoded.push('|');
+        encoded.push_str(entry.source.owner_namespace.as_deref().unwrap_or("none"));
+        encoded.push('|');
+        encoded.push_str(entry.source.item_path.as_deref().unwrap_or("none"));
+        encoded.push('|');
+        encoded.push_str(entry.source.specialization_key.as_deref().unwrap_or("none"));
+        encoded.push('|');
+        encoded.push_str(entry.source.layout_key.as_deref().unwrap_or("none"));
         encoded.push('|');
         encoded.push_str(&entry.pass_origin);
         encoded.push('|');

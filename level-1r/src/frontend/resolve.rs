@@ -764,6 +764,11 @@ fn resolve_method_call(receiver: &AlphaExpr, name: &str, facts: &mut ResolveFact
     let qualified = format!("{}.{}", receiver_path(receiver), name);
     let candidates = facts.methods.find_qualified(&qualified).to_vec();
     match candidates.as_slice() {
+        [] if is_value_receiver(receiver) => {
+            facts.resolved_calls.push(ResolvedCall::FieldCallable {
+                field: name.to_string(),
+            })
+        }
         [] => facts.diagnostics.push(ResolveDiagnostic::MissingMethod {
             receiver: None,
             name: name.to_string(),
@@ -781,6 +786,31 @@ fn resolve_method_call(receiver: &AlphaExpr, name: &str, facts: &mut ResolveFact
                 .collect(),
         }),
     }
+}
+
+fn is_value_receiver(receiver: &AlphaExpr) -> bool {
+    matches!(
+        receiver.kind,
+        AlphaExprKind::Var(_)
+            | AlphaExprKind::Call { .. }
+            | AlphaExprKind::Lambda { .. }
+            | AlphaExprKind::Tuple(_)
+            | AlphaExprKind::SliceLiteral(_)
+            | AlphaExprKind::Record(_)
+            | AlphaExprKind::RecordUpdate { .. }
+            | AlphaExprKind::AdtCtor { .. }
+            | AlphaExprKind::Field { .. }
+            | AlphaExprKind::MethodCall { .. }
+            | AlphaExprKind::Assign { .. }
+            | AlphaExprKind::Index { .. }
+            | AlphaExprKind::Range { .. }
+            | AlphaExprKind::Binary { .. }
+            | AlphaExprKind::If { .. }
+            | AlphaExprKind::IfLet { .. }
+            | AlphaExprKind::Match { .. }
+            | AlphaExprKind::Reset { .. }
+            | AlphaExprKind::Shift { .. }
+    )
 }
 
 fn has_field(receiver: &AlphaExpr, name: &str) -> bool {

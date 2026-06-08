@@ -1127,9 +1127,14 @@ fn render_backend_manifest(out: &mut String, manifest: &BackendManifest) {
     for entry in &manifest.entries {
         writeln!(
             out,
-            "symbol {} source={} origin={} role={} stable-id={} ownership={}",
+            "symbol {} source={} source-path={} owner={} item={} specialization={} layout={} origin={} role={} stable-id={} ownership={}",
             entry.final_symbol,
             entry.source_debug_name,
+            entry.source.source_path.as_deref().unwrap_or("none"),
+            entry.source.owner_namespace.as_deref().unwrap_or("none"),
+            entry.source.item_path.as_deref().unwrap_or("none"),
+            entry.source.specialization_key.as_deref().unwrap_or("none"),
+            entry.source.layout_key.as_deref().unwrap_or("none"),
             entry.pass_origin,
             entry.lowering_role,
             entry.stable_id,

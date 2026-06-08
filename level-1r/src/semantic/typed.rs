@@ -928,6 +928,20 @@ fn type_expr_with_context_and_controls(
                     ty,
                 );
             }
+            if let Some(builtin) = builtin_method_call(&receiver, name, &args) {
+                let ty = builtin_method_result_type(builtin, &receiver.ty, &args)
+                    .unwrap_or(Type::Unknown);
+                return typed(
+                    TypedExprKind::MethodCall {
+                        receiver: Box::new(receiver),
+                        name: name.clone(),
+                        args,
+                        builtin: Some(builtin),
+                        receiver_method: None,
+                    },
+                    ty,
+                );
+            }
             if let Some((access, field_ty)) =
                 field_callable_callee_type(&receiver.ty, name, context)
             {
@@ -948,25 +962,48 @@ fn type_expr_with_context_and_controls(
                     ty,
                 );
             }
-            let builtin = builtin_method_call(&receiver, name, &args);
             let receiver_method = receiver_method_target(&receiver.ty, name, &args, context);
-            let ty = builtin
-                .and_then(|builtin| builtin_method_result_type(builtin, &receiver.ty, &args))
-                .or_else(|| {
-                    receiver_method
-                        .as_ref()
-                        .map(|method| method.result_ty.clone())
-                })
-                .unwrap_or(Type::Unknown);
+            if let Some(receiver_method) = receiver_method {
+                let ty = receiver_method.result_ty.clone();
+                return typed(
+                    TypedExprKind::MethodCall {
+                        receiver: Box::new(receiver),
+                        name: name.clone(),
+                        args,
+                        builtin: None,
+                        receiver_method: Some(receiver_method.target),
+                    },
+                    ty,
+                );
+            }
+            if matches!(receiver.ty, Type::Unknown) {
+                let callee = typed(
+                    TypedExprKind::Field {
+                        receiver: Box::new(receiver),
+                        name: name.clone(),
+                        access: FieldAccessKind::RecordOrNominal,
+                    },
+                    unknown_callable_type(args.len()),
+                );
+                let args = coerce_call_args(&callee.ty, args, context);
+                let ty = call_result_type(&callee.ty, args.len());
+                return typed(
+                    TypedExprKind::Call {
+                        callee: Box::new(callee),
+                        args,
+                    },
+                    ty,
+                );
+            }
             typed(
                 TypedExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     name: name.clone(),
                     args,
-                    builtin,
-                    receiver_method: receiver_method.map(|method| method.target),
+                    builtin: None,
+                    receiver_method: None,
                 },
-                ty,
+                Type::Unknown,
             )
         }
         Expr::Assign { target, value } => {
@@ -2674,6 +2711,14 @@ fn call_result_type(callee: &Type, arity: usize) -> Type {
     current.clone()
 }
 
+fn unknown_callable_type(arity: usize) -> Type {
+    let mut ty = Type::Unknown;
+    for _ in 0..arity {
+        ty = Type::Func(Box::new(Type::Unknown), Box::new(ty), SendColor::Obligation);
+    }
+    ty
+}
+
 fn dyn_row_method_call_result_type(callee: &Type, arity: usize) -> Type {
     match (callee, arity) {
         (Type::Func(param, result, _), 0) if matches!(param.as_ref(), Type::Nominal(name) if name == "Unit") => {
@@ -2976,8 +3021,11 @@ fn builtin_method_call(
         return Some(BuiltinMethodCall::UnsafeRefNew);
     }
     if let Some(kind) = text_kind_for_type(&receiver.ty) {
-        if matches!((kind, name, args), (TextKind::String, "concat", [arg]) if text_kind_for_type(&arg.ty).is_some())
-        {
+        if matches!(
+            (kind, name, args),
+            (TextKind::String, "concat", [arg])
+                if matches!(arg.ty, Type::Unknown) || text_kind_for_type(&arg.ty).is_some()
+        ) {
             return Some(BuiltinMethodCall::StringConcat);
         }
         if matches!((kind, name, args), (TextKind::String, "to_cstr", [])) {
