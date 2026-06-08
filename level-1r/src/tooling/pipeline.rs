@@ -768,6 +768,12 @@ enum RowCallableMemberRecord {
     ReceiverMethod { param_tys: Vec<Type> },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum BackendDynRowMemberAbi {
+    Field(BackendDynRowParamFieldAbi),
+    ReceiverMethod(BackendDynRowParamMethodAbi),
+}
+
 type DynRowMethodTargets = BTreeMap<String, BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>>;
 
 fn row_callable_member_records(
@@ -2870,10 +2876,10 @@ fn backend_dyn_row_arg_expansion(
     fields: &[RecordTypeField],
     functions: &[crate::surface::InterfaceFunction],
 ) -> BackendCallableArgExpansion {
+    let members = backend_dyn_row_member_abis(&Type::DynRow(fields.to_vec()), functions);
     BackendCallableArgExpansion::DynRow {
-        fields: backend_dyn_row_field_abis(fields),
-        needs_payload: !backend_row_member_method_abis(&Type::DynRow(fields.to_vec()), functions)
-            .is_empty(),
+        fields: backend_dyn_row_field_members(&members),
+        needs_payload: backend_dyn_row_members_need_payload(&members),
     }
 }
 
@@ -3244,30 +3250,30 @@ fn backend_param_abi_with_extra_functions(
     let mut function_abis =
         backend_callable_abis_for_interface(functions, types, data, returned_callables);
     function_abis.extend(extra_functions);
-    let mut dyn_row_param_fields = backend_dyn_row_param_fields_for_signature(signature, types);
-    let mut dyn_row_param_methods =
-        backend_dyn_row_param_methods_for_signature(signature, functions);
+    let mut dyn_row_param_members =
+        backend_dyn_row_param_members_for_signature(signature, types, functions);
     if let Some(extra_dyn_param_types) = extra_dyn_param_types {
-        dyn_row_param_fields.extend(backend_dyn_row_param_fields_for_param_types(
-            extra_dyn_param_types,
-        ));
-        dyn_row_param_methods.extend(backend_dyn_row_param_methods_for_param_types(
+        dyn_row_param_members.extend(backend_dyn_row_param_members_for_param_types(
             extra_dyn_param_types,
             functions,
         ));
     }
     if let Some(extra_dyn_param_methods) = extra_dyn_param_methods {
         for (param, methods) in extra_dyn_param_methods {
-            let entry = dyn_row_param_methods
+            let entry = dyn_row_param_members
                 .entry(param.clone())
                 .or_insert_with(Vec::new);
             for method in methods {
-                if !entry.contains(method) {
-                    entry.push(method.clone());
+                let member = BackendDynRowMemberAbi::ReceiverMethod(method.clone());
+                if !entry.contains(&member) {
+                    entry.push(member);
                 }
             }
         }
     }
+    let dyn_row_param_fields = backend_dyn_row_param_field_members_by_param(&dyn_row_param_members);
+    let dyn_row_param_methods =
+        backend_dyn_row_param_method_members_by_param(&dyn_row_param_members);
     BackendParamAbi {
         params: signature
             .params
@@ -3359,38 +3365,77 @@ fn backend_callable_params_for_signature(
         .collect()
 }
 
-fn backend_dyn_row_param_fields_for_signature(
+fn backend_dyn_row_param_members_for_signature(
     signature: &TypedSignature,
     types: &[crate::surface::InterfaceType],
-) -> BTreeMap<String, Vec<BackendDynRowParamFieldAbi>> {
-    let static_row_fields = backend_static_row_fields_by_type(types);
+    functions: &[crate::surface::InterfaceFunction],
+) -> BTreeMap<String, Vec<BackendDynRowMemberAbi>> {
+    let static_row_members = backend_static_row_members_by_type(types);
     signature
         .params
         .iter()
         .filter_map(|param| {
             let ty = source_type_name_to_type(&param.ty);
-            let fields = match ty {
-                Type::DynRow(fields) | Type::Record(fields) => backend_dyn_row_field_abis(&fields),
+            let members = match ty {
+                Type::DynRow(_) => backend_dyn_row_member_abis(&ty, functions),
+                Type::Record(fields) => backend_dyn_row_field_member_abis(&fields),
                 Type::Nominal(name)
                     if !backend_nominal_is_externref(&Type::Nominal(name.clone())) =>
                 {
-                    static_row_fields.get(&name).cloned().unwrap_or_default()
+                    static_row_members.get(&name).cloned().unwrap_or_default()
                 }
                 _ => Vec::new(),
             };
-            (!fields.is_empty()).then_some((param.name.clone(), fields))
+            (!members.is_empty()).then_some((param.name.clone(), members))
         })
         .collect()
 }
 
 fn backend_dyn_row_field_abis(fields: &[RecordTypeField]) -> Vec<BackendDynRowParamFieldAbi> {
+    backend_dyn_row_field_member_abis(fields)
+        .into_iter()
+        .filter_map(|member| match member {
+            BackendDynRowMemberAbi::Field(field) => Some(field),
+            BackendDynRowMemberAbi::ReceiverMethod(_) => None,
+        })
+        .collect()
+}
+
+fn backend_dyn_row_field_member_abis(fields: &[RecordTypeField]) -> Vec<BackendDynRowMemberAbi> {
     fields
         .iter()
         .filter_map(|field| {
-            backend_storage_value_kind_for_type(&field.ty).map(|kind| BackendDynRowParamFieldAbi {
-                field: field.name.clone(),
-                kind,
+            backend_storage_value_kind_for_type(&field.ty).map(|kind| {
+                BackendDynRowMemberAbi::Field(BackendDynRowParamFieldAbi {
+                    field: field.name.clone(),
+                    kind,
+                })
             })
+        })
+        .collect()
+}
+
+fn backend_static_row_members_by_type(
+    types: &[crate::surface::InterfaceType],
+) -> BTreeMap<String, Vec<BackendDynRowMemberAbi>> {
+    types
+        .iter()
+        .filter(|ty| ty.alias_target.is_none())
+        .filter_map(|ty| {
+            let members = ty
+                .fields
+                .iter()
+                .filter_map(|field| {
+                    let field_ty = source_type_name_to_type(&field.ty);
+                    backend_storage_value_kind_for_type(&field_ty).map(|kind| {
+                        BackendDynRowMemberAbi::Field(BackendDynRowParamFieldAbi {
+                            field: field.name.clone(),
+                            kind,
+                        })
+                    })
+                })
+                .collect::<Vec<_>>();
+            (!members.is_empty()).then_some((nominal_display_name(&ty.name, &ty.generics), members))
         })
         .collect()
 }
@@ -3398,67 +3443,27 @@ fn backend_dyn_row_field_abis(fields: &[RecordTypeField]) -> Vec<BackendDynRowPa
 fn backend_static_row_fields_by_type(
     types: &[crate::surface::InterfaceType],
 ) -> BTreeMap<String, Vec<BackendDynRowParamFieldAbi>> {
-    types
-        .iter()
-        .filter(|ty| ty.alias_target.is_none())
-        .filter_map(|ty| {
-            let fields = ty
-                .fields
-                .iter()
-                .filter_map(|field| {
-                    let field_ty = source_type_name_to_type(&field.ty);
-                    backend_storage_value_kind_for_type(&field_ty).map(|kind| {
-                        BackendDynRowParamFieldAbi {
-                            field: field.name.clone(),
-                            kind,
-                        }
-                    })
-                })
-                .collect::<Vec<_>>();
-            (!fields.is_empty()).then_some((nominal_display_name(&ty.name, &ty.generics), fields))
+    backend_static_row_members_by_type(types)
+        .into_iter()
+        .filter_map(|(ty, members)| {
+            let fields = backend_dyn_row_field_members(&members);
+            (!fields.is_empty()).then_some((ty, fields))
         })
         .collect()
 }
 
-fn backend_dyn_row_param_fields_for_param_types(
+fn backend_dyn_row_param_members_for_param_types(
     param_types: &BTreeMap<String, Type>,
-) -> BTreeMap<String, Vec<BackendDynRowParamFieldAbi>> {
+    functions: &[crate::surface::InterfaceFunction],
+) -> BTreeMap<String, Vec<BackendDynRowMemberAbi>> {
     param_types
         .iter()
         .filter_map(|(param, ty)| {
-            let Type::DynRow(fields) = ty else {
+            let Type::DynRow(_) = ty else {
                 return None;
             };
-            let fields = backend_dyn_row_field_abis(fields);
-            (!fields.is_empty()).then_some((param.clone(), fields))
-        })
-        .collect()
-}
-
-fn backend_dyn_row_param_methods_for_signature(
-    signature: &TypedSignature,
-    functions: &[crate::surface::InterfaceFunction],
-) -> BTreeMap<String, Vec<BackendDynRowParamMethodAbi>> {
-    signature
-        .params
-        .iter()
-        .filter_map(|param| {
-            let ty = source_type_name_to_type(&param.ty);
-            let methods = backend_row_member_method_abis(&ty, functions);
-            (!methods.is_empty()).then_some((param.name.clone(), methods))
-        })
-        .collect()
-}
-
-fn backend_dyn_row_param_methods_for_param_types(
-    param_types: &BTreeMap<String, Type>,
-    functions: &[crate::surface::InterfaceFunction],
-) -> BTreeMap<String, Vec<BackendDynRowParamMethodAbi>> {
-    param_types
-        .iter()
-        .filter_map(|(param, ty)| {
-            let methods = backend_row_member_method_abis(ty, functions);
-            (!methods.is_empty()).then_some((param.clone(), methods))
+            let members = backend_dyn_row_member_abis(ty, functions);
+            (!members.is_empty()).then_some((param.clone(), members))
         })
         .collect()
 }
@@ -3467,28 +3472,81 @@ fn backend_dyn_row_methods_for_type(
     ty: &Type,
     functions: &[crate::surface::InterfaceFunction],
 ) -> Vec<BackendDynRowParamMethodAbi> {
-    backend_row_member_method_abis(ty, functions)
+    backend_dyn_row_method_members(&backend_dyn_row_member_abis(ty, functions))
 }
 
-fn backend_row_member_method_abis(
+fn backend_dyn_row_member_abis(
     ty: &Type,
     functions: &[crate::surface::InterfaceFunction],
-) -> Vec<BackendDynRowParamMethodAbi> {
+) -> Vec<BackendDynRowMemberAbi> {
     let Type::DynRow(fields) = ty else {
         return Vec::new();
     };
-    fields
-        .iter()
-        .filter_map(|field| {
-            let Type::Func(..) = field.ty else {
-                return None;
-            };
-            receiver_method_for_dyn_row_field(field, functions).map(|function| {
-                BackendDynRowParamMethodAbi {
-                    field: field.name.clone(),
-                    target: function.symbol.clone(),
-                }
+    let mut members = backend_dyn_row_field_member_abis(fields);
+    members.extend(fields.iter().filter_map(|field| {
+        let Type::Func(..) = field.ty else {
+            return None;
+        };
+        receiver_method_for_dyn_row_field(field, functions).map(|function| {
+            BackendDynRowMemberAbi::ReceiverMethod(BackendDynRowParamMethodAbi {
+                field: field.name.clone(),
+                target: function.symbol.clone(),
             })
+        })
+    }));
+    members
+}
+
+fn backend_dyn_row_field_members(
+    members: &[BackendDynRowMemberAbi],
+) -> Vec<BackendDynRowParamFieldAbi> {
+    members
+        .iter()
+        .filter_map(|member| match member {
+            BackendDynRowMemberAbi::Field(field) => Some(field.clone()),
+            BackendDynRowMemberAbi::ReceiverMethod(_) => None,
+        })
+        .collect()
+}
+
+fn backend_dyn_row_method_members(
+    members: &[BackendDynRowMemberAbi],
+) -> Vec<BackendDynRowParamMethodAbi> {
+    members
+        .iter()
+        .filter_map(|member| match member {
+            BackendDynRowMemberAbi::Field(_) => None,
+            BackendDynRowMemberAbi::ReceiverMethod(method) => Some(method.clone()),
+        })
+        .collect()
+}
+
+fn backend_dyn_row_members_need_payload(members: &[BackendDynRowMemberAbi]) -> bool {
+    members
+        .iter()
+        .any(|member| matches!(member, BackendDynRowMemberAbi::ReceiverMethod(_)))
+}
+
+fn backend_dyn_row_param_field_members_by_param(
+    members_by_param: &BTreeMap<String, Vec<BackendDynRowMemberAbi>>,
+) -> BTreeMap<String, Vec<BackendDynRowParamFieldAbi>> {
+    members_by_param
+        .iter()
+        .filter_map(|(param, members)| {
+            let fields = backend_dyn_row_field_members(members);
+            (!fields.is_empty()).then_some((param.clone(), fields))
+        })
+        .collect()
+}
+
+fn backend_dyn_row_param_method_members_by_param(
+    members_by_param: &BTreeMap<String, Vec<BackendDynRowMemberAbi>>,
+) -> BTreeMap<String, Vec<BackendDynRowParamMethodAbi>> {
+    members_by_param
+        .iter()
+        .filter_map(|(param, members)| {
+            let methods = backend_dyn_row_method_members(members);
+            (!methods.is_empty()).then_some((param.clone(), methods))
         })
         .collect()
 }
