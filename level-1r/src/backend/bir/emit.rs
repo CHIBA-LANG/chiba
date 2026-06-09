@@ -480,12 +480,11 @@ fn unsupported_captured_continuation_runtime_value(
     env: &RenderEnv,
 ) -> Option<BackendDiagnostic> {
     let captured_locals = collect_runtime_local_binders(&captured.ops);
-    let mut local_env = env
-        .with_params_as_locals(
-            std::iter::once(captured.param.clone())
-                .chain(captured_locals.iter().cloned())
-                .collect(),
-        );
+    let mut local_env = env.with_params_as_locals(
+        std::iter::once(captured.param.clone())
+            .chain(captured_locals.iter().cloned())
+            .collect(),
+    );
     local_env = local_env.with_captured_continuation_arg_abi(&captured.param, arg);
     let body_core = CoreProgram {
         ops: captured.ops.clone(),
@@ -2542,12 +2541,11 @@ fn render_captured_continuation_i32(
     core: &CoreProgram,
 ) -> Result<(), BackendDiagnostic> {
     let captured_locals = collect_runtime_local_binders(&captured.ops);
-    let mut env = env
-        .with_params_as_locals(
-            std::iter::once(captured.param.clone())
-                .chain(captured_locals.iter().cloned())
-                .collect(),
-        );
+    let mut env = env.with_params_as_locals(
+        std::iter::once(captured.param.clone())
+            .chain(captured_locals.iter().cloned())
+            .collect(),
+    );
     env = env.with_captured_continuation_arg_abi(&captured.param, arg);
 
     for (index, op) in captured.ops.iter().enumerate() {
@@ -5952,6 +5950,11 @@ fn pattern_condition_is_renderable(
 }
 
 fn adt_pattern_tag_is_renderable(value: &CoreValue, env: &RenderEnv) -> bool {
+    if let CoreValue::Var(name) = value {
+        if env.adt_tag_param(name).is_some() {
+            return true;
+        }
+    }
     match resolve_core_value_binding(value, env) {
         CoreValue::Adt { ctor, variants, .. } => variants.iter().any(|variant| variant == ctor),
         CoreValue::Var(name) => env.adt_tag_param(name).is_some(),
@@ -6015,12 +6018,7 @@ fn render_pattern_condition_i32(
             else {
                 return Err(unsupported_i32_render_diagnostic(value));
             };
-            if let Some(payloads) = constructor_match_payload_values(
-                resolve_core_value_binding(value, env),
-                ctor,
-                args.len(),
-                env,
-            ) {
+            if let Some(payloads) = constructor_match_payload_values(value, ctor, args.len(), env) {
                 for (pattern, payload) in args.iter().zip(payloads) {
                     if !matches!(pattern, CorePattern::Wildcard | CorePattern::Bind(_)) {
                         render_pattern_condition_i32(wat, &payload, pattern, &arm_env, indent)?;
@@ -6040,6 +6038,22 @@ fn render_adt_pattern_tag_i32_indented(
     env: &RenderEnv,
     indent: usize,
 ) -> Result<(), BackendDiagnostic> {
+    if let CoreValue::Var(name) = value {
+        if let Some(bound) = env.binding(name) {
+            if let CoreValue::Adt { ctor, variants, .. } = bound {
+                let Some(tag) = variants.iter().position(|variant| variant == ctor) else {
+                    return Err(unsupported_i32_render_diagnostic(value));
+                };
+                push_indent(wat, indent);
+                wat.push_str(&format!("i32.const {tag}\n"));
+                return Ok(());
+            }
+        } else if env.adt_tag_param(name).is_some() {
+            push_indent(wat, indent);
+            wat.push_str(&format!("local.get ${}\n", encode_debug_symbol(name)));
+            return Ok(());
+        }
+    }
     match resolve_core_value_binding(value, env) {
         CoreValue::Adt { ctor, variants, .. } => {
             let Some(tag) = variants.iter().position(|variant| variant == ctor) else {
@@ -6085,6 +6099,14 @@ fn constructor_pattern_tag(
     ctor: &str,
     env: &RenderEnv,
 ) -> Option<usize> {
+    if let CoreValue::Var(name) = value {
+        if let Some(abi) = env.adt_tag_param(name) {
+            if pattern_data.is_some_and(|pattern_data| pattern_data != abi.data) {
+                return None;
+            }
+            return abi.variants.iter().position(|variant| variant == ctor);
+        }
+    }
     match resolve_core_value_binding(value, env) {
         CoreValue::Adt { .. } => constructor_tag(value, pattern_data, ctor),
         CoreValue::Var(name) => {
