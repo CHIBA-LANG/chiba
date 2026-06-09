@@ -128,6 +128,7 @@ pub enum BackendCallableArgExpansion {
     AdtTag {
         data: String,
         variants: Vec<String>,
+        payloads: Vec<BackendAdtPayloadAbi>,
     },
     Callable {
         params: Vec<BackendValueKind>,
@@ -157,6 +158,15 @@ pub struct BackendDynRowParamFieldAbi {
 pub struct BackendAdtTagAbi {
     pub data: String,
     pub variants: Vec<String>,
+    pub payloads: Vec<BackendAdtPayloadAbi>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackendAdtPayloadAbi {
+    pub variant: String,
+    pub index: usize,
+    pub kind: BackendValueKind,
+    pub nested: Option<Box<BackendAdtTagAbi>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -313,7 +323,7 @@ fn unsupported_runtime_return_value(
         core,
         &RenderEnv::from_param_abi(params, param_kinds, param_abi).with_lifted_function_abis(core),
     );
-    let mut continuations = BTreeSet::new();
+    let mut continuations = BTreeMap::<String, (ContinuationKind, CoreCapturedContinuation)>::new();
     for (index, op) in core.ops.iter().enumerate() {
         if let Some(diagnostic) = match op {
             CoreOp::ReturnValue(value)
@@ -338,17 +348,39 @@ fn unsupported_runtime_return_value(
                 .into_iter()
                 .find_map(|value| unsupported_i32_value(value, &env)),
             CoreOp::ReturnMatch { scrutinee, arms } => unsupported_i32_match(scrutinee, arms, &env),
+            CoreOp::Match {
+                scrutinee,
+                patterns,
+            } => {
+                env = env_with_match_pattern_bindings(scrutinee, patterns, &env);
+                None
+            }
             CoreOp::TailCall { func, args }
-                if continuations.contains(effective_tailcall(core, func, args, &env).0) =>
+                if continuations.contains_key(effective_tailcall(core, func, args, &env).0) =>
             {
-                let (runtime_func, _) = effective_tailcall(core, func, args, &env);
+                let (runtime_func, runtime_args) = effective_tailcall(core, func, args, &env);
+                let (kind, captured) = continuations
+                    .get(runtime_func)
+                    .expect("checked continuation binder");
                 let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
                     return Some(BackendDiagnostic::UnsupportedContinuationRuntime {
                         op: "resume-without-result".to_string(),
-                        kind: continuation_kind_for_binder(core, runtime_func),
+                        kind: *kind,
                         binder: Some(runtime_func.to_string()),
                     });
                 };
+                let [arg] = runtime_args.as_slice() else {
+                    return Some(BackendDiagnostic::UnsupportedContinuationRuntime {
+                        op: "resume-arity".to_string(),
+                        kind: *kind,
+                        binder: Some(runtime_func.to_string()),
+                    });
+                };
+                if let Some(diagnostic) =
+                    unsupported_captured_continuation_runtime_value(captured, arg, &env)
+                {
+                    return Some(diagnostic);
+                }
                 env = env.with_local_kind(
                     binder,
                     tailcall_result_kind(core, runtime_func, &env).unwrap_or(WasmValueKind::I32),
@@ -373,8 +405,12 @@ fn unsupported_runtime_return_value(
                 env = env.with_locals(vec![binder.clone()]);
                 None
             }
-            CoreOp::CaptureContinuation { binder, .. } => {
-                continuations.insert(binder.clone());
+            CoreOp::CaptureContinuation {
+                binder,
+                kind,
+                captured,
+            } => {
+                continuations.insert(binder.clone(), (*kind, captured.clone()));
                 None
             }
             CoreOp::LiftedFunction {
@@ -438,6 +474,80 @@ fn unsupported_lifted_function_runtime_value(
     None
 }
 
+fn unsupported_captured_continuation_runtime_value(
+    captured: &CoreCapturedContinuation,
+    arg: &CoreValue,
+    env: &RenderEnv,
+) -> Option<BackendDiagnostic> {
+    let captured_locals = collect_runtime_local_binders(&captured.ops);
+    let mut local_env = env
+        .with_params_as_locals(
+            std::iter::once(captured.param.clone())
+                .chain(captured_locals.iter().cloned())
+                .collect(),
+        );
+    local_env = local_env.with_captured_continuation_arg_abi(&captured.param, arg);
+    let body_core = CoreProgram {
+        ops: captured.ops.clone(),
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+    for (index, op) in captured.ops.iter().enumerate() {
+        match op {
+            CoreOp::ReturnValue(value) => {
+                if let Some(diagnostic) = unsupported_runtime_value(value, &local_env) {
+                    return Some(diagnostic);
+                }
+            }
+            CoreOp::ReturnBranch {
+                cond,
+                then_value,
+                else_value,
+            } => {
+                if let Some(diagnostic) = [cond, then_value, else_value]
+                    .into_iter()
+                    .find_map(|value| unsupported_i32_value(value, &local_env))
+                {
+                    return Some(diagnostic);
+                }
+            }
+            CoreOp::ReturnMatch { scrutinee, arms } => {
+                if let Some(diagnostic) = unsupported_i32_match(scrutinee, arms, &local_env) {
+                    return Some(diagnostic);
+                }
+            }
+            CoreOp::TailCall { func, args } => {
+                let (runtime_func, runtime_args) =
+                    effective_tailcall(&body_core, func, args, &local_env);
+                if let Some(diagnostic) =
+                    unsupported_tailcall_args(&body_core, runtime_func, &runtime_args, &local_env)
+                {
+                    return Some(diagnostic);
+                }
+                if let Some(CoreOp::TailCallResult { binder }) = captured.ops.get(index + 1) {
+                    local_env = local_env.with_local_kind(
+                        binder,
+                        tailcall_result_kind(&body_core, runtime_func, &local_env)
+                            .unwrap_or(WasmValueKind::I32),
+                    );
+                }
+            }
+            CoreOp::TailCallResult { binder } => {
+                local_env = local_env.with_local_kind(binder, WasmValueKind::I32);
+            }
+            CoreOp::Match {
+                scrutinee,
+                patterns,
+            } => {
+                local_env = env_with_match_pattern_bindings(scrutinee, patterns, &local_env);
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 fn unsupported_runtime_value(value: &CoreValue, env: &RenderEnv) -> Option<BackendDiagnostic> {
     if core_value_is_renderable_i32(value, env)
         || core_value_is_renderable_externref(value, env)
@@ -485,6 +595,20 @@ fn return_value_is_tailcall_result(
     let CoreValue::Var(name) = value else {
         return false;
     };
+    if index >= 2
+        && matches!(
+            (core.ops.get(index - 2), core.ops.get(index - 1)),
+            (
+                Some(CoreOp::TailCall { func, args }),
+                Some(CoreOp::TailCallResult { binder }),
+            ) if binder == name && {
+                let (runtime_func, runtime_args) = effective_tailcall(core, func, args, env);
+                tailcall_args_are_renderable(core, runtime_func, &runtime_args, env)
+            }
+        )
+    {
+        return true;
+    }
     if matches!(
         index.checked_sub(1).and_then(|previous| core.ops.get(previous)),
         Some(CoreOp::TailCall { func, args }) if {
@@ -590,13 +714,15 @@ fn unsupported_expanded_tailcall_arg(
                 value: arg.debug_name(),
             })
         }
-        BackendCallableArgExpansion::AdtTag { data, variants } => {
-            (!adt_tag_arg_is_renderable_i32(arg, data, variants, env)).then(|| {
-                BackendDiagnostic::UnsupportedI32ReturnValue {
-                    value: arg.debug_name(),
-                }
-            })
-        }
+        BackendCallableArgExpansion::AdtTag {
+            data,
+            variants,
+            payloads,
+        } => (!adt_arg_is_renderable_i32(arg, data, variants, payloads, env)).then(|| {
+            BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: arg.debug_name(),
+            }
+        }),
         BackendCallableArgExpansion::Callable {
             params,
             env: callable_env,
@@ -652,7 +778,7 @@ fn unsupported_i32_match(
     arms: &[CoreMatchArm],
     env: &RenderEnv,
 ) -> Option<BackendDiagnostic> {
-    if match_uses_structural_patterns(arms) {
+    if match_uses_structural_patterns(arms) || match_uses_constructor_patterns(arms) {
         unsupported_i32_match_arms(scrutinee, arms, env)
     } else {
         unsupported_i32_value(scrutinee, env)
@@ -663,6 +789,11 @@ fn unsupported_i32_match(
 fn match_uses_structural_patterns(arms: &[CoreMatchArm]) -> bool {
     arms.iter()
         .any(|arm| matches!(arm.pattern, CorePattern::Tuple(_)))
+}
+
+fn match_uses_constructor_patterns(arms: &[CoreMatchArm]) -> bool {
+    arms.iter()
+        .any(|arm| matches!(arm.pattern, CorePattern::Constructor { .. }))
 }
 
 fn unsupported_i32_match_arms(
@@ -682,7 +813,9 @@ fn unsupported_i32_match_arms(
         CorePattern::I64(_) | CorePattern::Bool(_) => unsupported_i32_value(&first.value, env)
             .or_else(|| unsupported_i32_match_arms(scrutinee, rest, env)),
         CorePattern::Tuple(fields) => {
-            if let Some(arm_env) = tuple_pattern_env(scrutinee, fields, env) {
+            if let Some(arm_env) = tuple_pattern_env(scrutinee, fields, env)
+                .or_else(|| tuple_pattern_runtime_env(scrutinee, fields, env))
+            {
                 unsupported_i32_value(&first.value, &arm_env)
                     .or_else(|| unsupported_i32_match_arms(scrutinee, rest, env))
             } else {
@@ -691,7 +824,9 @@ fn unsupported_i32_match_arms(
         }
         CorePattern::Constructor { data, ctor, args } => {
             if let Some((_, arm_env)) =
-                constructor_match_env(scrutinee, data.as_deref(), ctor, args, env)
+                constructor_match_env(scrutinee, data.as_deref(), ctor, args, env).or_else(|| {
+                    constructor_runtime_match_env(scrutinee, data.as_deref(), ctor, args, env)
+                })
             {
                 unsupported_i32_value(&first.value, &arm_env)
                     .or_else(|| unsupported_i32_match_arms(scrutinee, rest, env))
@@ -700,6 +835,32 @@ fn unsupported_i32_match_arms(
             }
         }
     }
+}
+
+fn env_with_match_pattern_bindings(
+    scrutinee: &str,
+    patterns: &[CorePattern],
+    env: &RenderEnv,
+) -> RenderEnv {
+    let mut next = env.clone();
+    let value = CoreValue::Var(scrutinee.to_string());
+    for pattern in patterns {
+        if let Some(arm_env) = pattern_runtime_env(&value, pattern, env) {
+            next.bindings.extend(arm_env.bindings);
+            next.locals.extend(arm_env.locals);
+        }
+    }
+    next
+}
+
+fn pattern_runtime_env(
+    value: &CoreValue,
+    pattern: &CorePattern,
+    env: &RenderEnv,
+) -> Option<RenderEnv> {
+    let mut next = env.clone();
+    bind_runtime_core_pattern(pattern, value, &mut next)?;
+    Some(next)
 }
 
 fn first_return_value(core: &CoreProgram) -> Option<CoreValue> {
@@ -1579,6 +1740,11 @@ fn render_wat(
             manifest_optional_comment(entry.source.specialization_key.as_deref())
         ));
     }
+    if render_linear_match_dispatcher(&mut wat, core, &env)? {
+        render_operator_intrinsics_for_ops(&mut wat, &core.ops);
+        wat.push_str(")\n");
+        return Ok(wat);
+    }
     if render_tailcall_result_chain(&mut wat, core, &env)? {
         render_operator_intrinsics_for_ops(&mut wat, &core.ops);
         wat.push_str(")\n");
@@ -1709,6 +1875,7 @@ fn render_wat(
                 scrutinee,
                 patterns,
             } => {
+                env = env_with_match_pattern_bindings(scrutinee, patterns, &env);
                 wat.push_str(&format!(
                     "  ;; match scrutinee={} arms={}\n",
                     escape_wat_comment(scrutinee),
@@ -2219,6 +2386,11 @@ fn collect_runtime_local_binders(ops: &[CoreOp]) -> Vec<String> {
     for op in ops {
         match op {
             CoreOp::RuntimeLet { binder, .. } => binders.push(binder.clone()),
+            CoreOp::Match { patterns, .. } => {
+                for pattern in patterns {
+                    collect_core_pattern_binders(pattern, &mut binders);
+                }
+            }
             CoreOp::CaptureContinuation { captured, .. } => {
                 binders.extend(collect_runtime_local_binders(&captured.ops));
             }
@@ -2228,6 +2400,23 @@ fn collect_runtime_local_binders(ops: &[CoreOp]) -> Vec<String> {
     binders.sort();
     binders.dedup();
     binders
+}
+
+fn collect_core_pattern_binders(pattern: &CorePattern, binders: &mut Vec<String>) {
+    match pattern {
+        CorePattern::Bind(name) => binders.push(name.clone()),
+        CorePattern::Tuple(fields) => {
+            for field in fields {
+                collect_core_pattern_binders(field, binders);
+            }
+        }
+        CorePattern::Constructor { args, .. } => {
+            for arg in args {
+                collect_core_pattern_binders(arg, binders);
+            }
+        }
+        CorePattern::Wildcard | CorePattern::I64(_) | CorePattern::Bool(_) => {}
+    }
 }
 
 fn collect_runtime_local_kinds(
@@ -2255,6 +2444,18 @@ fn collect_runtime_local_kinds_into(
             CoreOp::TailCallResult { binder } => {
                 kinds.insert(binder.clone(), WasmValueKind::I32);
                 *env = env.with_local_kind(binder, WasmValueKind::I32);
+            }
+            CoreOp::Match { patterns, .. } => {
+                let mut binders = Vec::new();
+                for pattern in patterns {
+                    collect_core_pattern_binders(pattern, &mut binders);
+                }
+                binders.sort();
+                binders.dedup();
+                for binder in binders {
+                    kinds.insert(binder.clone(), WasmValueKind::I32);
+                    *env = env.with_local_kind(&binder, WasmValueKind::I32);
+                }
             }
             CoreOp::CaptureContinuation { captured, .. } => {
                 collect_runtime_local_kinds_into(&captured.ops, env, kinds);
@@ -2346,8 +2547,8 @@ fn render_captured_continuation_i32(
             std::iter::once(captured.param.clone())
                 .chain(captured_locals.iter().cloned())
                 .collect(),
-        )
-        .with_binding(&captured.param, arg.clone());
+        );
+    env = env.with_captured_continuation_arg_abi(&captured.param, arg);
 
     for (index, op) in captured.ops.iter().enumerate() {
         match op {
@@ -2437,20 +2638,6 @@ fn continuation_kind_for_captured(
                 captured: candidate,
                 ..
             } if candidate == captured => Some(*kind),
-            _ => None,
-        })
-        .unwrap_or(ContinuationKind::Cont1)
-}
-
-fn continuation_kind_for_binder(core: &CoreProgram, binder: &str) -> ContinuationKind {
-    core.ops
-        .iter()
-        .find_map(|op| match op {
-            CoreOp::CaptureContinuation {
-                binder: candidate,
-                kind,
-                ..
-            } if candidate == binder => Some(*kind),
             _ => None,
         })
         .unwrap_or(ContinuationKind::Cont1)
@@ -2802,6 +2989,146 @@ fn render_tailcall_result_chain(
     Ok(true)
 }
 
+fn render_linear_match_dispatcher(
+    wat: &mut String,
+    core: &CoreProgram,
+    env: &RenderEnv,
+) -> Result<bool, BackendDiagnostic> {
+    let Some((scrutinee, patterns, arm_bodies)) = linear_match_dispatcher_arms(core) else {
+        return Ok(false);
+    };
+    wat.push_str("  ;; linear-match-dispatcher\n");
+    wat.push_str(&format!(
+        "  ;; match scrutinee={} arms={}\n",
+        escape_wat_comment(scrutinee),
+        patterns.len()
+    ));
+    render_func_header(wat, "main", Some("main"), env);
+    render_linear_match_dispatcher_arms(
+        wat,
+        &CoreValue::Var(scrutinee.to_string()),
+        patterns,
+        &arm_bodies,
+        core,
+        env,
+        4,
+    )?;
+    wat.push_str("  )\n");
+    Ok(true)
+}
+
+fn linear_match_dispatcher_arms<'a>(
+    core: &'a CoreProgram,
+) -> Option<(&'a str, &'a [CorePattern], Vec<&'a [CoreOp]>)> {
+    let [CoreOp::Match {
+        scrutinee,
+        patterns,
+    }, rest @ ..] = core.ops.as_slice()
+    else {
+        return None;
+    };
+    if patterns.is_empty() {
+        return None;
+    }
+    let mut bodies = Vec::new();
+    let mut start = 0usize;
+    for (index, op) in rest.iter().enumerate() {
+        if matches!(op, CoreOp::ReturnValue(_)) {
+            bodies.push(&rest[start..=index]);
+            start = index + 1;
+        }
+    }
+    (bodies.len() == patterns.len() && start == rest.len()).then_some((
+        scrutinee.as_str(),
+        patterns.as_slice(),
+        bodies,
+    ))
+}
+
+fn render_linear_match_dispatcher_arms(
+    wat: &mut String,
+    scrutinee: &CoreValue,
+    patterns: &[CorePattern],
+    arm_bodies: &[&[CoreOp]],
+    core: &CoreProgram,
+    env: &RenderEnv,
+    indent: usize,
+) -> Result<(), BackendDiagnostic> {
+    let Some((pattern, rest_patterns)) = patterns.split_first() else {
+        push_indent(wat, indent);
+        wat.push_str("unreachable\n");
+        return Ok(());
+    };
+    let Some((body, rest_bodies)) = arm_bodies.split_first() else {
+        push_indent(wat, indent);
+        wat.push_str("unreachable\n");
+        return Ok(());
+    };
+    let arm_env = pattern_runtime_env(scrutinee, pattern, env).unwrap_or_else(|| env.clone());
+    if rest_patterns.is_empty() {
+        if matches!(pattern, CorePattern::Wildcard | CorePattern::Bind(_)) {
+            render_linear_match_arm_body_i32(wat, body, core, &arm_env, indent)?;
+        } else {
+            render_pattern_condition_i32(wat, scrutinee, pattern, env, indent)?;
+            push_indent(wat, indent);
+            wat.push_str("if (result i32)\n");
+            render_linear_match_arm_body_i32(wat, body, core, &arm_env, indent + 2)?;
+            push_indent(wat, indent);
+            wat.push_str("else\n");
+            push_indent(wat, indent + 2);
+            wat.push_str("unreachable\n");
+            push_indent(wat, indent);
+            wat.push_str("end\n");
+        }
+        return Ok(());
+    }
+    render_pattern_condition_i32(wat, scrutinee, pattern, env, indent)?;
+    push_indent(wat, indent);
+    wat.push_str("if (result i32)\n");
+    render_linear_match_arm_body_i32(wat, body, core, &arm_env, indent + 2)?;
+    push_indent(wat, indent);
+    wat.push_str("else\n");
+    render_linear_match_dispatcher_arms(
+        wat,
+        scrutinee,
+        rest_patterns,
+        rest_bodies,
+        core,
+        env,
+        indent + 2,
+    )?;
+    push_indent(wat, indent);
+    wat.push_str("end\n");
+    Ok(())
+}
+
+fn render_linear_match_arm_body_i32(
+    wat: &mut String,
+    body: &[CoreOp],
+    core: &CoreProgram,
+    env: &RenderEnv,
+    indent: usize,
+) -> Result<(), BackendDiagnostic> {
+    if let [.., CoreOp::TailCall { func, args }, CoreOp::TailCallResult { binder }, CoreOp::ReturnValue(CoreValue::Var(returned))] =
+        body
+    {
+        if binder == returned {
+            let (runtime_func, runtime_args) = effective_tailcall(core, func, args, env);
+            render_tailcall_args(wat, core, runtime_func, &runtime_args, env)?;
+            push_indent(wat, indent);
+            wat.push_str(&format!("call ${}\n", final_symbol(runtime_func)));
+            return Ok(());
+        }
+    }
+    if let Some(CoreOp::ReturnValue(value)) = body.last() {
+        render_core_value_i32_indented(wat, value, env, indent)?;
+        return Ok(());
+    }
+    Err(BackendDiagnostic::UnsupportedI32ReturnValue {
+        value: "linear-match-arm".to_string(),
+    })
+}
+
 fn render_tailcall_result_store(
     wat: &mut String,
     binder: &str,
@@ -2895,14 +3222,22 @@ fn env_with_tailcall_result_facts(core: &CoreProgram, env: &RenderEnv) -> Render
         next = next.with_locals(vec![binder]);
     }
     for (index, op) in core.ops.iter().enumerate() {
-        let CoreOp::TailCall { func, args } = op else {
-            continue;
-        };
-        let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
-            continue;
-        };
-        let (runtime_func, _) = effective_tailcall(core, func, args, &next);
-        next = env_after_tailcall_result(binder, runtime_func, &next);
+        match op {
+            CoreOp::Match {
+                scrutinee,
+                patterns,
+            } => {
+                next = env_with_match_pattern_bindings(scrutinee, patterns, &next);
+            }
+            CoreOp::TailCall { func, args } => {
+                let Some(CoreOp::TailCallResult { binder }) = core.ops.get(index + 1) else {
+                    continue;
+                };
+                let (runtime_func, _) = effective_tailcall(core, func, args, &next);
+                next = env_after_tailcall_result(binder, runtime_func, &next);
+            }
+            _ => {}
+        }
     }
     for (binder, kind) in tailcall_result_kinds(core, env) {
         next = next.with_local_kind(&binder, kind);
@@ -3104,12 +3439,31 @@ impl RenderEnv {
 
     fn with_adt_tag_params(&self, adt_tag_params: BTreeMap<String, BackendAdtTagAbi>) -> Self {
         let mut next = self.clone();
+        for (param, abi) in &adt_tag_params {
+            register_adt_payload_lanes(&mut next.locals, param, &abi.payloads);
+        }
         next.adt_tag_params = adt_tag_params;
         next
     }
 
+    fn with_captured_continuation_arg_abi(&self, param: &str, arg: &CoreValue) -> Self {
+        let mut next = self.clone();
+        next.bindings.insert(param.to_string(), arg.clone());
+        let Some(abi) = adt_tag_abi_from_value(arg) else {
+            return next;
+        };
+        register_adt_payload_lanes(&mut next.locals, param, &abi.payloads);
+        next.adt_tag_params.insert(param.to_string(), abi);
+        bind_adt_payload_lanes_from_value(param, arg, &mut next.bindings);
+        next
+    }
+
     fn adt_tag_param(&self, param: &str) -> Option<&BackendAdtTagAbi> {
-        self.adt_tag_params.get(param)
+        self.adt_tag_params.get(param).or_else(|| {
+            self.adt_tag_params
+                .iter()
+                .find_map(|(base, abi)| nested_adt_tag_param(base, abi, param))
+        })
     }
 
     fn with_dyn_row_param_fields(
@@ -3302,7 +3656,14 @@ impl RenderEnv {
     fn signature(&self) -> String {
         let mut out = String::new();
         for param in &self.param_order {
-            if self.dyn_row_param_fields.contains_key(param)
+            if let Some(abi) = self.adt_tag_params.get(param) {
+                out.push_str(&format!(
+                    " (param ${} {})",
+                    encode_debug_symbol(param),
+                    self.param_kind(param).wat_type()
+                ));
+                render_adt_payload_signature(&mut out, param, &abi.payloads);
+            } else if self.dyn_row_param_fields.contains_key(param)
                 || self.dyn_row_param_methods.contains_key(param)
             {
                 if self.dyn_row_param_methods.contains_key(param) {
@@ -3589,9 +3950,11 @@ fn tailcall_args_are_renderable(
                     WasmValueKind::I32 => arg_value_is_renderable_i32(arg, env),
                     WasmValueKind::ExternRef => core_value_is_renderable_externref(arg, env),
                 },
-                BackendCallableArgExpansion::AdtTag { data, variants } => {
-                    adt_tag_arg_is_renderable_i32(arg, data, variants, env)
-                }
+                BackendCallableArgExpansion::AdtTag {
+                    data,
+                    variants,
+                    payloads,
+                } => adt_arg_is_renderable_i32(arg, data, variants, payloads, env),
                 BackendCallableArgExpansion::Callable {
                     params,
                     env: callable_env,
@@ -3760,9 +4123,11 @@ fn render_tailcall_args(
                     WasmValueKind::I32 => render_i32_arg_value(wat, arg, env)?,
                     WasmValueKind::ExternRef => render_core_value_externref(wat, arg, env)?,
                 },
-                BackendCallableArgExpansion::AdtTag { data, variants } => {
-                    render_adt_tag_arg_i32(wat, arg, data, variants, env)?
-                }
+                BackendCallableArgExpansion::AdtTag {
+                    data,
+                    variants,
+                    payloads,
+                } => render_adt_arg_i32(wat, arg, data, variants, payloads, env)?,
                 BackendCallableArgExpansion::Callable {
                     params,
                     env: callable_env,
@@ -3988,6 +4353,112 @@ fn render_lifted_function_wat(
 
 fn dyn_row_param_field_lane(param: &str, field: &str) -> String {
     format!("{param}__{field}")
+}
+
+fn adt_payload_param_lane(param: &str, variant: &str, index: usize) -> String {
+    format!("{param}__{variant}_{index}")
+}
+
+fn register_adt_payload_lanes(
+    locals: &mut BTreeMap<String, WasmValueKind>,
+    base: &str,
+    payloads: &[BackendAdtPayloadAbi],
+) {
+    for payload in payloads {
+        let lane = adt_payload_param_lane(base, &payload.variant, payload.index);
+        locals.insert(lane.clone(), WasmValueKind::from(payload.kind));
+        if let Some(nested) = &payload.nested {
+            register_adt_payload_lanes(locals, &lane, &nested.payloads);
+        }
+    }
+}
+
+fn adt_tag_abi_from_value(value: &CoreValue) -> Option<BackendAdtTagAbi> {
+    let CoreValue::Adt {
+        data,
+        variants,
+        args,
+        ctor,
+    } = value
+    else {
+        return None;
+    };
+    Some(BackendAdtTagAbi {
+        data: data.clone(),
+        variants: variants.clone(),
+        payloads: args
+            .iter()
+            .enumerate()
+            .map(|(index, arg)| BackendAdtPayloadAbi {
+                variant: ctor.clone(),
+                index,
+                kind: backend_value_kind_for_core_value(arg),
+                nested: adt_tag_abi_from_value(arg).map(Box::new),
+            })
+            .collect(),
+    })
+}
+
+fn backend_value_kind_for_core_value(value: &CoreValue) -> BackendValueKind {
+    match value {
+        CoreValue::TextLiteral { .. }
+        | CoreValue::SliceLiteral { .. }
+        | CoreValue::Range { .. }
+        | CoreValue::Record { .. }
+        | CoreValue::RecordUpdate { .. }
+        | CoreValue::DynRowPackage { .. }
+        | CoreValue::LiftedFunction { .. }
+        | CoreValue::BuiltinRuntimeCall { .. } => BackendValueKind::ExternRef,
+        _ => BackendValueKind::I32,
+    }
+}
+
+fn bind_adt_payload_lanes_from_value(
+    base: &str,
+    value: &CoreValue,
+    bindings: &mut BTreeMap<String, CoreValue>,
+) {
+    let CoreValue::Adt { ctor, args, .. } = value else {
+        return;
+    };
+    for (index, arg) in args.iter().enumerate() {
+        let lane = adt_payload_param_lane(base, ctor, index);
+        bindings.insert(lane.clone(), arg.clone());
+        bind_adt_payload_lanes_from_value(&lane, arg, bindings);
+    }
+}
+
+fn render_adt_payload_signature(out: &mut String, base: &str, payloads: &[BackendAdtPayloadAbi]) {
+    for payload in payloads {
+        let lane = adt_payload_param_lane(base, &payload.variant, payload.index);
+        out.push_str(&format!(
+            " (param ${} {})",
+            encode_debug_symbol(&lane),
+            WasmValueKind::from(payload.kind).wat_type()
+        ));
+        if let Some(nested) = &payload.nested {
+            render_adt_payload_signature(out, &lane, &nested.payloads);
+        }
+    }
+}
+
+fn nested_adt_tag_param<'a>(
+    base: &str,
+    abi: &'a BackendAdtTagAbi,
+    param: &str,
+) -> Option<&'a BackendAdtTagAbi> {
+    for payload in &abi.payloads {
+        let lane = adt_payload_param_lane(base, &payload.variant, payload.index);
+        if let Some(nested) = &payload.nested {
+            if lane == param {
+                return Some(nested);
+            }
+            if let Some(found) = nested_adt_tag_param(&lane, nested, param) {
+                return Some(found);
+            }
+        }
+    }
+    None
 }
 
 fn callable_param_env_lane(param: &str, index: usize) -> String {
@@ -4342,22 +4813,63 @@ fn arg_value_is_renderable_i32(value: &CoreValue, env: &RenderEnv) -> bool {
         .unwrap_or_else(|| core_value_is_renderable_i32(value, env))
 }
 
-fn render_adt_tag_arg_i32(
+fn render_adt_arg_i32(
     wat: &mut String,
     value: &CoreValue,
     data: &str,
     variants: &[String],
+    payloads: &[BackendAdtPayloadAbi],
     env: &RenderEnv,
 ) -> Result<(), BackendDiagnostic> {
-    match adt_tag_arg_const_i32(value, data, variants, env) {
-        Some(tag) => {
-            wat.push_str(&format!("    i32.const {tag}\n"));
-            Ok(())
-        }
+    match adt_arg_tag_const_i32(value, data, variants, env) {
+        Some(tag) => wat.push_str(&format!("    i32.const {tag}\n")),
         None if adt_tag_arg_is_renderable_i32(value, data, variants, env) => {
-            render_i32_arg_value(wat, value, env)
+            render_i32_arg_value(wat, value, env)?
         }
-        None => Err(unsupported_i32_render_diagnostic(value)),
+        None => return Err(unsupported_i32_render_diagnostic(value)),
+    }
+    for payload in payloads {
+        render_adt_payload_arg(wat, value, data, payload, env)?;
+    }
+    Ok(())
+}
+
+fn render_adt_payload_arg(
+    wat: &mut String,
+    value: &CoreValue,
+    data: &str,
+    payload: &BackendAdtPayloadAbi,
+    env: &RenderEnv,
+) -> Result<(), BackendDiagnostic> {
+    let payload_value = adt_payload_arg_value(value, data, &payload.variant, payload.index, env);
+    if let Some(payload_value) = payload_value {
+        if let Some(nested) = &payload.nested {
+            render_adt_arg_i32(
+                wat,
+                &payload_value,
+                &nested.data,
+                &nested.variants,
+                &nested.payloads,
+                env,
+            )?;
+            return Ok(());
+        }
+        match WasmValueKind::from(payload.kind) {
+            WasmValueKind::I32 => render_i32_arg_value(wat, &payload_value, env)?,
+            WasmValueKind::ExternRef => render_core_value_externref(wat, &payload_value, env)?,
+        }
+    } else {
+        render_zero_adt_payload_arg(wat, payload);
+    }
+    Ok(())
+}
+
+fn render_zero_adt_payload_arg(wat: &mut String, payload: &BackendAdtPayloadAbi) {
+    wat.push_str("    i32.const 0\n");
+    if let Some(nested) = &payload.nested {
+        for nested_payload in &nested.payloads {
+            render_zero_adt_payload_arg(wat, nested_payload);
+        }
     }
 }
 
@@ -4378,7 +4890,84 @@ fn adt_tag_arg_is_renderable_i32(
     }
 }
 
+fn adt_arg_is_renderable_i32(
+    value: &CoreValue,
+    data: &str,
+    variants: &[String],
+    payloads: &[BackendAdtPayloadAbi],
+    env: &RenderEnv,
+) -> bool {
+    (adt_arg_tag_const_i32(value, data, variants, env).is_some()
+        || adt_tag_arg_is_renderable_i32(value, data, variants, env))
+        && payloads
+            .iter()
+            .all(|payload| adt_payload_arg_is_renderable(value, data, payload, env))
+}
+
+fn adt_payload_arg_is_renderable(
+    value: &CoreValue,
+    data: &str,
+    payload: &BackendAdtPayloadAbi,
+    env: &RenderEnv,
+) -> bool {
+    adt_payload_arg_value(value, data, &payload.variant, payload.index, env)
+        .map(|payload_value| {
+            if let Some(nested) = &payload.nested {
+                return adt_arg_is_renderable_i32(
+                    &payload_value,
+                    &nested.data,
+                    &nested.variants,
+                    &nested.payloads,
+                    env,
+                );
+            }
+            match WasmValueKind::from(payload.kind) {
+                WasmValueKind::I32 => arg_value_is_renderable_i32(&payload_value, env),
+                WasmValueKind::ExternRef => core_value_is_renderable_externref(&payload_value, env),
+            }
+        })
+        .unwrap_or(true)
+}
+
+fn adt_payload_arg_value(
+    value: &CoreValue,
+    data: &str,
+    variant: &str,
+    index: usize,
+    env: &RenderEnv,
+) -> Option<CoreValue> {
+    let CoreValue::Adt {
+        data: actual_data,
+        ctor,
+        args,
+        ..
+    } = resolve_core_value_binding(value, env)
+    else {
+        return None;
+    };
+    if actual_data != data || ctor != variant {
+        return None;
+    }
+    args.get(index).cloned()
+}
+
 fn adt_tag_arg_const_i32(
+    value: &CoreValue,
+    data: &str,
+    variants: &[String],
+    env: &RenderEnv,
+) -> Option<usize> {
+    let value = resolve_core_value_binding(value, env);
+    let CoreValue::Adt { args, .. } = &value else {
+        return None;
+    };
+    if !args.is_empty() {
+        return None;
+    }
+    adt_arg_tag_const_i32(&value, data, variants, env)
+}
+
+fn adt_arg_tag_const_i32(
     value: &CoreValue,
     data: &str,
     variants: &[String],
@@ -4388,10 +4977,9 @@ fn adt_tag_arg_const_i32(
         CoreValue::Adt {
             data: actual_data,
             ctor,
-            args,
             ..
         } => {
-            if actual_data != data || !args.is_empty() {
+            if actual_data != data {
                 return None;
             }
             variants.iter().position(|variant| variant == ctor)
@@ -5167,14 +5755,12 @@ fn render_match_arm_i32(
             }
         }
         CorePattern::Constructor { data, ctor, args } => {
-            if let Some((tag, arm_env)) =
-                constructor_match_env(scrutinee, data.as_deref(), ctor, args, env)
+            if let Some((_, arm_env)) =
+                constructor_match_env(scrutinee, data.as_deref(), ctor, args, env).or_else(|| {
+                    constructor_runtime_match_env(scrutinee, data.as_deref(), ctor, args, env)
+                })
             {
-                render_core_value_i32_indented(wat, scrutinee, env, indent)?;
-                push_indent(wat, indent);
-                wat.push_str(&format!("i32.const {tag}\n"));
-                push_indent(wat, indent);
-                wat.push_str("i32.eq\n");
+                render_pattern_condition_i32(wat, scrutinee, &arm.pattern, env, indent)?;
                 push_indent(wat, indent);
                 wat.push_str("if (result i32)\n");
                 render_core_value_i32_indented(wat, &arm.value, &arm_env, indent + 2)?;
@@ -5199,18 +5785,69 @@ fn constructor_match_env(
     env: &RenderEnv,
 ) -> Option<(usize, RenderEnv)> {
     let scrutinee = resolve_core_value_binding(scrutinee, env);
-    let tag = constructor_tag(scrutinee, pattern_data, ctor)?;
-    let CoreValue::Adt { args: payloads, .. } = scrutinee else {
+    if !matches!(scrutinee, CoreValue::Adt { .. }) {
         return None;
-    };
+    }
+    let tag = constructor_tag(scrutinee, pattern_data, ctor)?;
+    let payloads = constructor_match_payload_values(scrutinee, ctor, args.len(), env)?;
     if args.len() != payloads.len() {
         return None;
     }
     let mut next = env.clone();
     for (pattern, payload) in args.iter().zip(payloads) {
-        bind_core_pattern(pattern, payload, &mut next)?;
+        bind_runtime_core_pattern(pattern, &payload, &mut next)?;
     }
     Some((tag, next))
+}
+
+fn constructor_runtime_match_env(
+    scrutinee: &CoreValue,
+    pattern_data: Option<&str>,
+    ctor: &str,
+    args: &[CorePattern],
+    env: &RenderEnv,
+) -> Option<(usize, RenderEnv)> {
+    let tag = constructor_pattern_tag(scrutinee, pattern_data, ctor, env)?;
+    let payloads = constructor_match_payload_values(scrutinee, ctor, args.len(), env)?;
+    if args.len() != payloads.len() {
+        return None;
+    }
+    let mut next = env.clone();
+    for (pattern, payload) in args.iter().zip(payloads) {
+        bind_runtime_core_pattern(pattern, &payload, &mut next)?;
+    }
+    Some((tag, next))
+}
+
+fn constructor_match_payload_values(
+    scrutinee: &CoreValue,
+    ctor: &str,
+    arity: usize,
+    env: &RenderEnv,
+) -> Option<Vec<CoreValue>> {
+    match scrutinee {
+        CoreValue::Adt { args, .. } => Some(args.clone()),
+        CoreValue::Var(name) => {
+            let abi = env.adt_tag_param(name)?;
+            let mut payloads = Vec::new();
+            for index in 0..arity {
+                let Some(payload_abi) = abi
+                    .payloads
+                    .iter()
+                    .find(|payload| payload.variant == ctor && payload.index == index)
+                else {
+                    return None;
+                };
+                let lane = adt_payload_param_lane(name, ctor, index);
+                if !env.locals.contains_key(&lane) && payload_abi.nested.is_none() {
+                    return None;
+                }
+                payloads.push(CoreValue::Var(lane));
+            }
+            Some(payloads)
+        }
+        _ => None,
+    }
 }
 
 fn tuple_pattern_env(
@@ -5278,8 +5915,14 @@ fn bind_runtime_core_pattern(
             }
             Some(())
         }
-        CorePattern::Constructor { args, .. } if args.is_empty() => Some(()),
-        CorePattern::I64(_) | CorePattern::Bool(_) | CorePattern::Constructor { .. } => Some(()),
+        CorePattern::Constructor { data, ctor, args } => {
+            constructor_match_env(value, data.as_deref(), ctor, args, env)
+                .or_else(|| constructor_runtime_match_env(value, data.as_deref(), ctor, args, env))
+                .map(|(_, next)| {
+                    *env = next;
+                })
+        }
+        CorePattern::I64(_) | CorePattern::Bool(_) => Some(()),
     }
 }
 
@@ -5302,8 +5945,17 @@ fn pattern_condition_is_renderable(
                     .all(|(pattern, value)| pattern_condition_is_renderable(value, pattern, env))
         }
         CorePattern::Constructor { data, ctor, args } => {
-            args.is_empty() && constructor_pattern_tag(value, data.as_deref(), ctor, env).is_some()
+            adt_pattern_tag_is_renderable(value, env)
+                && constructor_runtime_match_env(value, data.as_deref(), ctor, args, env).is_some()
         }
+    }
+}
+
+fn adt_pattern_tag_is_renderable(value: &CoreValue, env: &RenderEnv) -> bool {
+    match resolve_core_value_binding(value, env) {
+        CoreValue::Adt { ctor, variants, .. } => variants.iter().any(|variant| variant == ctor),
+        CoreValue::Var(name) => env.adt_tag_param(name).is_some(),
+        _ => false,
     }
 }
 
@@ -5350,20 +6002,60 @@ fn render_pattern_condition_i32(
             }
         }
         CorePattern::Constructor { data, ctor, args } => {
-            if !args.is_empty() {
-                return Err(unsupported_i32_render_diagnostic(value));
-            }
             let Some(tag) = constructor_pattern_tag(value, data.as_deref(), ctor, env) else {
                 return Err(unsupported_i32_render_diagnostic(value));
             };
-            render_core_value_i32_indented(wat, value, env, indent)?;
+            render_adt_pattern_tag_i32_indented(wat, value, env, indent)?;
             push_indent(wat, indent);
             wat.push_str(&format!("i32.const {tag}\n"));
             push_indent(wat, indent);
             wat.push_str("i32.eq\n");
+            let Some((_, arm_env)) =
+                constructor_runtime_match_env(value, data.as_deref(), ctor, args, env)
+            else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            };
+            if let Some(payloads) = constructor_match_payload_values(
+                resolve_core_value_binding(value, env),
+                ctor,
+                args.len(),
+                env,
+            ) {
+                for (pattern, payload) in args.iter().zip(payloads) {
+                    if !matches!(pattern, CorePattern::Wildcard | CorePattern::Bind(_)) {
+                        render_pattern_condition_i32(wat, &payload, pattern, &arm_env, indent)?;
+                        push_indent(wat, indent);
+                        wat.push_str("i32.and\n");
+                    }
+                }
+            }
         }
     }
     Ok(())
+}
+
+fn render_adt_pattern_tag_i32_indented(
+    wat: &mut String,
+    value: &CoreValue,
+    env: &RenderEnv,
+    indent: usize,
+) -> Result<(), BackendDiagnostic> {
+    match resolve_core_value_binding(value, env) {
+        CoreValue::Adt { ctor, variants, .. } => {
+            let Some(tag) = variants.iter().position(|variant| variant == ctor) else {
+                return Err(unsupported_i32_render_diagnostic(value));
+            };
+            push_indent(wat, indent);
+            wat.push_str(&format!("i32.const {tag}\n"));
+            Ok(())
+        }
+        CoreValue::Var(name) if env.adt_tag_param(name).is_some() => {
+            push_indent(wat, indent);
+            wat.push_str(&format!("local.get ${}\n", encode_debug_symbol(name)));
+            Ok(())
+        }
+        _ => Err(unsupported_i32_render_diagnostic(value)),
+    }
 }
 
 fn bind_core_pattern(pattern: &CorePattern, value: &CoreValue, env: &mut RenderEnv) -> Option<()> {

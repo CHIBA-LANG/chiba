@@ -247,9 +247,18 @@ fn exhaustiveness(
             Pattern::Lit(_) => {}
         }
     }
+    let structurally_exhaustive = patterns_cover_type(
+        &arms
+            .iter()
+            .map(|arm| arm.pattern.clone())
+            .collect::<Vec<_>>(),
+        &scrutinee.ty,
+        context,
+    );
     let exhaustive = has_wildcard
         || bool_is_exhaustive(&scrutinee.ty, &covered_literals)
-        || adt_is_exhaustive(&scrutinee.ty, &covered_constructors, context);
+        || adt_is_exhaustive(&scrutinee.ty, &covered_constructors, context)
+        || structurally_exhaustive;
     MatchExhaustivenessFact {
         scrutinee_type: scrutinee.ty.clone(),
         covered_literals,
@@ -312,6 +321,180 @@ fn missing_patterns(fact: &MatchExhaustivenessFact) -> Vec<Pattern> {
             .map(|variant| Pattern::qualified_ctor(name.clone(), variant.clone(), vec![]))
             .collect(),
         _ => vec![Pattern::Wildcard],
+    }
+}
+
+fn patterns_cover_type(patterns: &[Pattern], ty: &Type, context: &TypeContext) -> bool {
+    if patterns.iter().any(pattern_covers_all) {
+        return true;
+    }
+    match ty {
+        Type::Bool => {
+            pattern_list_covers_literal(patterns, &Literal::Bool(true), ty, context)
+                && pattern_list_covers_literal(patterns, &Literal::Bool(false), ty, context)
+        }
+        Type::Tuple(fields) => tuple_patterns_cover_fields(patterns, fields, context),
+        _ => {
+            let Some((_, variants)) = context.adt_variants_for_type(ty) else {
+                return false;
+            };
+            variants.iter().all(|variant| {
+                let variant_patterns = patterns
+                    .iter()
+                    .filter_map(|pattern| constructor_payload_patterns(pattern, variant))
+                    .collect::<Vec<_>>();
+                if variant_patterns.is_empty() {
+                    return false;
+                }
+                let payload_tys = context
+                    .constructor_payload_types_for_pattern(ty, None, variant)
+                    .unwrap_or_default();
+                if payload_tys.is_empty() {
+                    return true;
+                }
+                payload_tys.iter().enumerate().all(|(index, payload_ty)| {
+                    let nested = variant_patterns
+                        .iter()
+                        .filter_map(|payloads| payloads.get(index).cloned())
+                        .collect::<Vec<_>>();
+                    patterns_cover_type(&nested, payload_ty, context)
+                })
+            })
+        }
+    }
+}
+
+fn tuple_patterns_cover_fields(
+    patterns: &[Pattern],
+    fields: &[Type],
+    context: &TypeContext,
+) -> bool {
+    let tuples = patterns
+        .iter()
+        .map(coverage_pattern)
+        .filter_map(|pattern| match pattern {
+            Pattern::Tuple(items) if items.len() == fields.len() => Some(items.as_slice()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if tuples.is_empty() {
+        return false;
+    }
+    tuple_patterns_cover_prefix(&tuples, fields, context)
+}
+
+fn tuple_patterns_cover_prefix(
+    tuples: &[&[Pattern]],
+    fields: &[Type],
+    context: &TypeContext,
+) -> bool {
+    let Some((field_ty, rest_tys)) = fields.split_first() else {
+        return true;
+    };
+    let Some(cases) = pattern_domain_cases(field_ty, context) else {
+        return tuples.iter().any(|tuple| {
+            let Some((head, tail)) = tuple.split_first() else {
+                return false;
+            };
+            pattern_covers_all(head) && tuple_tail_covers_unbounded(tail, rest_tys, context)
+        });
+    };
+    cases.iter().all(|case| {
+        let narrowed = tuples
+            .iter()
+            .filter_map(|tuple| {
+                let (head, tail) = tuple.split_first()?;
+                pattern_matches_case(head, case, field_ty, context).then_some(tail)
+            })
+            .collect::<Vec<_>>();
+        !narrowed.is_empty() && tuple_patterns_cover_prefix(&narrowed, rest_tys, context)
+    })
+}
+
+fn tuple_tail_covers_unbounded(tail: &[Pattern], fields: &[Type], context: &TypeContext) -> bool {
+    if tail.len() != fields.len() {
+        return false;
+    }
+    tail.iter().zip(fields).all(|(pattern, ty)| {
+        pattern_covers_all(pattern) || patterns_cover_type(&[pattern.clone()], ty, context)
+    })
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PatternDomainCase {
+    Literal(Literal),
+    Constructor(String),
+}
+
+fn pattern_domain_cases(ty: &Type, context: &TypeContext) -> Option<Vec<PatternDomainCase>> {
+    match ty {
+        Type::Bool => Some(vec![
+            PatternDomainCase::Literal(Literal::Bool(true)),
+            PatternDomainCase::Literal(Literal::Bool(false)),
+        ]),
+        _ => context.adt_variants_for_type(ty).map(|(_, variants)| {
+            variants
+                .into_iter()
+                .map(PatternDomainCase::Constructor)
+                .collect()
+        }),
+    }
+}
+
+fn pattern_matches_case(
+    pattern: &Pattern,
+    case: &PatternDomainCase,
+    ty: &Type,
+    context: &TypeContext,
+) -> bool {
+    if pattern_covers_all(pattern) {
+        return true;
+    }
+    match case {
+        PatternDomainCase::Literal(lit) => match coverage_pattern(pattern) {
+            Pattern::Lit(candidate) => candidate == lit,
+            _ => false,
+        },
+        PatternDomainCase::Constructor(ctor) => {
+            let Some(payloads) = constructor_payload_patterns(pattern, ctor) else {
+                return false;
+            };
+            let payload_tys = context
+                .constructor_payload_types_for_pattern(ty, None, ctor)
+                .unwrap_or_default();
+            payload_tys.iter().enumerate().all(|(index, payload_ty)| {
+                payloads.get(index).is_some_and(|nested| {
+                    patterns_cover_type(&[nested.clone()], payload_ty, context)
+                })
+            })
+        }
+    }
+}
+
+fn pattern_list_covers_literal(
+    patterns: &[Pattern],
+    lit: &Literal,
+    ty: &Type,
+    context: &TypeContext,
+) -> bool {
+    patterns.iter().any(|pattern| {
+        pattern_matches_case(
+            pattern,
+            &PatternDomainCase::Literal(lit.clone()),
+            ty,
+            context,
+        )
+    })
+}
+
+fn constructor_payload_patterns<'a>(pattern: &'a Pattern, ctor: &str) -> Option<&'a [Pattern]> {
+    match coverage_pattern(pattern) {
+        Pattern::Constructor {
+            ctor: candidate,
+            args,
+            ..
+        } if candidate == ctor => Some(args.as_slice()),
+        _ => None,
     }
 }
 

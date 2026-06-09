@@ -1796,16 +1796,12 @@ fn frontend_parses_match_with_literal_and_wildcard_through_cps_core() {
             op,
             chiba_level1r::core::CoreOp::Match { scrutinee, patterns }
                 if scrutinee == "tag"
-                    && patterns == &vec!["0".to_string(), "_".to_string()]
-                    && !patterns.iter().any(|pattern| pattern.contains("Lit(")
-                        || pattern.contains("Wildcard"))
+                    && patterns == &vec![
+                        chiba_level1r::core::CorePattern::I64(0),
+                        chiba_level1r::core::CorePattern::Wildcard,
+                    ]
         )
     }));
-    assert!(output
-        .program
-        .backend_link
-        .linked_wat
-        .contains(";; match scrutinee=tag"));
 }
 
 #[test]

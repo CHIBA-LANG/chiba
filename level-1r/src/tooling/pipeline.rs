@@ -8,8 +8,8 @@ use crate::ast::{
 };
 use crate::backend::{
     backend_cache_key, emit_wasm_gc_with_param_abi, link_backend_artifacts, sort_dedup_imports,
-    BackendAdtTagAbi, BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendCallableAbi,
-    BackendCallableArgExpansion, BackendDiagnostic, BackendDynRowParamFieldAbi,
+    BackendAdtPayloadAbi, BackendAdtTagAbi, BackendArtifact, BackendCacheConfig, BackendCacheKey,
+    BackendCallableAbi, BackendCallableArgExpansion, BackendDiagnostic, BackendDynRowParamFieldAbi,
     BackendDynRowParamMethodAbi, BackendExternAbi, BackendExternImport, BackendLinkDiagnostic,
     BackendLinkedBundle, BackendParamAbi, BackendReturnedCallableAbi, BackendValueKind,
 };
@@ -263,6 +263,7 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &[],
         &[],
         &[],
+        &[],
         &TypeEnv::new(),
     )
 }
@@ -283,6 +284,7 @@ fn compile_expr_with_indexes_and_generics(
     interface_functions: &[crate::surface::InterfaceFunction],
     interface_types: &[crate::surface::InterfaceType],
     interface_data: &[crate::surface::InterfaceData],
+    interface_constructors: &[crate::surface::InterfaceConstructor],
     interface_statics: &[crate::surface::InterfaceStatic],
     function_env: &TypeEnv,
 ) -> CompileOutput {
@@ -438,6 +440,7 @@ fn compile_expr_with_indexes_and_generics(
                 interface_functions,
                 interface_types,
                 interface_data,
+                interface_constructors,
                 interface_statics,
             );
             emit_wasm_gc_with_param_abi(&core, &core_validation, &param_names, &param_abi)
@@ -2435,6 +2438,7 @@ fn compile_program_defs(
                         &interface.functions,
                         &interface.types,
                         &interface.data,
+                        &interface.constructors,
                         &interface.statics,
                         &function_env,
                     );
@@ -2460,13 +2464,6 @@ fn refresh_program_backends_with_lifted_callables(
     let returned = program_returned_callable_abis(defs);
     let dyn_contracts = program_dyn_row_contract_param_types(defs);
     let dyn_method_targets = program_dyn_row_method_targets(defs);
-    if lifted.is_empty()
-        && returned.is_empty()
-        && dyn_contracts.is_empty()
-        && dyn_method_targets.is_empty()
-    {
-        return;
-    }
     let dyn_function_abis = program_dyn_row_contract_function_abis(
         defs,
         interface,
@@ -2482,6 +2479,7 @@ fn refresh_program_backends_with_lifted_callables(
             &interface.functions,
             &interface.types,
             &interface.data,
+            &interface.constructors,
             &interface.statics,
             extra_functions,
             &returned,
@@ -2810,6 +2808,7 @@ fn program_dyn_row_contract_function_abis(
         &interface.functions,
         &interface.types,
         &interface.data,
+        &interface.constructors,
         returned_callables,
     );
     defs.iter()
@@ -2888,7 +2887,11 @@ fn backend_arg_expansion_param_kinds(
 ) -> Vec<BackendValueKind> {
     match expansion {
         BackendCallableArgExpansion::Direct(kind) => vec![*kind],
-        BackendCallableArgExpansion::AdtTag { .. } => vec![BackendValueKind::I32],
+        BackendCallableArgExpansion::AdtTag { payloads, .. } => {
+            let mut params = vec![BackendValueKind::I32];
+            params.extend(payloads.iter().flat_map(backend_adt_payload_param_kinds));
+            params
+        }
         BackendCallableArgExpansion::Callable { env, .. } => {
             let mut params = vec![BackendValueKind::I32];
             params.extend(env.iter().copied());
@@ -2909,6 +2912,19 @@ fn backend_arg_expansion_param_kinds(
             fields.iter().map(|field| field.kind).collect()
         }
     }
+}
+
+fn backend_adt_payload_param_kinds(payload: &BackendAdtPayloadAbi) -> Vec<BackendValueKind> {
+    let mut kinds = vec![payload.kind];
+    if let Some(nested) = &payload.nested {
+        kinds.extend(
+            nested
+                .payloads
+                .iter()
+                .flat_map(backend_adt_payload_param_kinds),
+        );
+    }
+    kinds
 }
 
 fn program_lifted_callable_abis(defs: &[ProgramDefOutput]) -> BTreeMap<String, BackendCallableAbi> {
@@ -3221,6 +3237,7 @@ fn backend_param_abi(
     functions: &[crate::surface::InterfaceFunction],
     types: &[crate::surface::InterfaceType],
     data: &[crate::surface::InterfaceData],
+    constructors: &[crate::surface::InterfaceConstructor],
     statics: &[crate::surface::InterfaceStatic],
 ) -> BackendParamAbi {
     backend_param_abi_with_extra_functions(
@@ -3228,6 +3245,7 @@ fn backend_param_abi(
         functions,
         types,
         data,
+        constructors,
         statics,
         BTreeMap::new(),
         &BTreeMap::new(),
@@ -3241,14 +3259,20 @@ fn backend_param_abi_with_extra_functions(
     functions: &[crate::surface::InterfaceFunction],
     types: &[crate::surface::InterfaceType],
     data: &[crate::surface::InterfaceData],
+    constructors: &[crate::surface::InterfaceConstructor],
     statics: &[crate::surface::InterfaceStatic],
     extra_functions: BTreeMap<String, BackendCallableAbi>,
     returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
     extra_dyn_param_types: Option<&BTreeMap<String, Type>>,
     extra_dyn_param_methods: Option<&BTreeMap<String, Vec<BackendDynRowParamMethodAbi>>>,
 ) -> BackendParamAbi {
-    let mut function_abis =
-        backend_callable_abis_for_interface(functions, types, data, returned_callables);
+    let mut function_abis = backend_callable_abis_for_interface(
+        functions,
+        types,
+        data,
+        constructors,
+        returned_callables,
+    );
     function_abis.extend(extra_functions);
     let mut dyn_row_param_members =
         backend_dyn_row_param_members_for_signature(signature, types, functions);
@@ -3292,7 +3316,7 @@ fn backend_param_abi_with_extra_functions(
         functions: function_abis,
         statics: backend_static_abis_for_interface(statics),
         static_ref_cell_lanes: backend_static_ref_cell_lanes_for_interface(statics),
-        adt_tag_params: backend_adt_tag_params_for_signature(signature, data),
+        adt_tag_params: backend_adt_tag_params_for_signature(signature, data, constructors),
         dyn_row_param_fields,
         dyn_row_param_methods,
         aggregate_element_lanes: backend_aggregate_element_lanes_for_signature(signature)
@@ -3307,33 +3331,190 @@ fn backend_param_abi_with_extra_functions(
 fn backend_adt_tag_params_for_signature(
     signature: &TypedSignature,
     data: &[crate::surface::InterfaceData],
+    constructors: &[crate::surface::InterfaceConstructor],
 ) -> BTreeMap<String, BackendAdtTagAbi> {
-    let data_variants = data
-        .iter()
-        .map(|data| (data.name.clone(), data.variants.clone()))
-        .collect::<BTreeMap<_, _>>();
     signature
         .params
         .iter()
         .filter_map(|param| {
             let ty = source_type_name_to_type(&param.ty);
-            let (name, variants) = match ty {
-                Type::Adt { name, variants } => (name, variants),
-                Type::Nominal(name) => {
-                    let variants = data_variants.get(&name)?.clone();
-                    (name, variants)
-                }
+            let abi = match ty {
+                Type::Adt { .. } | Type::Nominal(_) => interface_data_for_type(data, &ty)
+                    .map(|data| backend_adt_tag_abi_for_type(data, constructors, &ty))?,
                 _ => return None,
             };
-            Some((
-                param.name.clone(),
-                BackendAdtTagAbi {
-                    data: name,
-                    variants,
-                },
-            ))
+            Some((param.name.clone(), abi))
         })
         .collect()
+}
+
+fn backend_adt_tag_abi_for_data(
+    data: &crate::surface::InterfaceData,
+    constructors: &[crate::surface::InterfaceConstructor],
+) -> BackendAdtTagAbi {
+    backend_adt_tag_abi_for_type(data, constructors, &Type::Nominal(data.name.clone()))
+}
+
+fn backend_adt_tag_abi_for_type(
+    data: &crate::surface::InterfaceData,
+    constructors: &[crate::surface::InterfaceConstructor],
+    ty: &Type,
+) -> BackendAdtTagAbi {
+    backend_adt_tag_abi_for_type_with_depth(data, constructors, ty, 4)
+}
+
+fn backend_adt_tag_abi_for_type_with_depth(
+    data: &crate::surface::InterfaceData,
+    constructors: &[crate::surface::InterfaceConstructor],
+    ty: &Type,
+    depth: usize,
+) -> BackendAdtTagAbi {
+    let substitutions = adt_type_substitutions(data, ty);
+    BackendAdtTagAbi {
+        data: data.name.clone(),
+        variants: data.variants.clone(),
+        payloads: constructors
+            .iter()
+            .filter(|ctor| ctor.data_symbol == data.symbol)
+            .flat_map(|ctor| {
+                ctor.payload_types
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, payload)| {
+                        let ty = substitute_backend_type_params(
+                            &source_type_name_to_type(payload),
+                            &substitutions,
+                        );
+                        backend_adt_payload_abi_for_type(
+                            data,
+                            constructors,
+                            &ctor.name,
+                            index,
+                            &ty,
+                            depth,
+                        )
+                    })
+            })
+            .collect(),
+    }
+}
+
+fn backend_adt_payload_abi_for_type(
+    data: &crate::surface::InterfaceData,
+    constructors: &[crate::surface::InterfaceConstructor],
+    variant: &str,
+    index: usize,
+    ty: &Type,
+    depth: usize,
+) -> Option<BackendAdtPayloadAbi> {
+    if let Some(kind) = backend_storage_value_kind_for_type(ty) {
+        return Some(BackendAdtPayloadAbi {
+            variant: variant.to_string(),
+            index,
+            kind,
+            nested: None,
+        });
+    }
+    if depth == 0 || interface_data_for_type(std::slice::from_ref(data), ty).is_none() {
+        return None;
+    }
+    Some(BackendAdtPayloadAbi {
+        variant: variant.to_string(),
+        index,
+        kind: BackendValueKind::I32,
+        nested: Some(Box::new(backend_adt_tag_abi_for_type_with_depth(
+            data,
+            constructors,
+            ty,
+            depth - 1,
+        ))),
+    })
+}
+
+fn adt_type_substitutions(
+    data: &crate::surface::InterfaceData,
+    ty: &Type,
+) -> BTreeMap<String, Type> {
+    let Some(base) = nominal_base_name_for_type(ty) else {
+        return BTreeMap::new();
+    };
+    if base != data.name && base != data.symbol {
+        return BTreeMap::new();
+    }
+    data.generics
+        .iter()
+        .cloned()
+        .zip(nominal_type_args_for_type(ty).unwrap_or_default())
+        .collect()
+}
+
+fn substitute_backend_type_params(ty: &Type, substitutions: &BTreeMap<String, Type>) -> Type {
+    match ty {
+        Type::Nominal(name) => substitutions
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| Type::Nominal(name.clone())),
+        Type::Tuple(fields) => Type::Tuple(
+            fields
+                .iter()
+                .map(|field| substitute_backend_type_params(field, substitutions))
+                .collect(),
+        ),
+        Type::Record(fields) => Type::Record(
+            fields
+                .iter()
+                .map(|field| RecordTypeField {
+                    name: field.name.clone(),
+                    ty: substitute_backend_type_params(&field.ty, substitutions),
+                })
+                .collect(),
+        ),
+        Type::DynRow(fields) => Type::DynRow(
+            fields
+                .iter()
+                .map(|field| RecordTypeField {
+                    name: field.name.clone(),
+                    ty: substitute_backend_type_params(&field.ty, substitutions),
+                })
+                .collect(),
+        ),
+        Type::Func(param, result, send) => Type::Func(
+            Box::new(substitute_backend_type_params(param, substitutions)),
+            Box::new(substitute_backend_type_params(result, substitutions)),
+            *send,
+        ),
+        Type::Continuation {
+            input,
+            answer,
+            multi,
+        } => Type::Continuation {
+            input: Box::new(substitute_backend_type_params(input, substitutions)),
+            answer: Box::new(substitute_backend_type_params(answer, substitutions)),
+            multi: *multi,
+        },
+        Type::Adt { name, variants } => Type::Adt {
+            name: name.clone(),
+            variants: variants.clone(),
+        },
+        Type::Unknown | Type::I64 | Type::Rune | Type::Bool => ty.clone(),
+    }
+}
+
+fn backend_adt_arg_expansion(abi: &BackendAdtTagAbi) -> BackendCallableArgExpansion {
+    BackendCallableArgExpansion::AdtTag {
+        data: abi.data.clone(),
+        variants: abi.variants.clone(),
+        payloads: abi.payloads.clone(),
+    }
+}
+
+fn interface_data_for_type<'a>(
+    data: &'a [crate::surface::InterfaceData],
+    ty: &Type,
+) -> Option<&'a crate::surface::InterfaceData> {
+    let base = nominal_base_name_for_type(ty)?;
+    data.iter()
+        .find(|item| base == item.name || base == item.symbol)
 }
 
 fn backend_callable_params_for_signature(
@@ -3653,13 +3834,19 @@ fn backend_callable_abis_for_interface(
     functions: &[crate::surface::InterfaceFunction],
     types: &[crate::surface::InterfaceType],
     data: &[crate::surface::InterfaceData],
+    constructors: &[crate::surface::InterfaceConstructor],
     returned_callables: &BTreeMap<String, BackendReturnedCallableAbi>,
 ) -> BTreeMap<String, BackendCallableAbi> {
     let mut abis = BTreeMap::new();
     let static_row_fields = backend_static_row_fields_by_type(types);
-    let data_variants = data
+    let data_abis = data
         .iter()
-        .map(|data| (data.name.clone(), data.variants.clone()))
+        .map(|data| {
+            (
+                data.name.clone(),
+                backend_adt_tag_abi_for_data(data, constructors),
+            )
+        })
         .collect::<BTreeMap<_, _>>();
     for function in functions.iter() {
         let arg_expansions = function
@@ -3667,17 +3854,39 @@ fn backend_callable_abis_for_interface(
             .iter()
             .map(|param| {
                 let ty = param.as_deref().map(source_type_name_to_type);
-                match ty {
+                match &ty {
                     Some(Type::DynRow(fields)) => backend_dyn_row_arg_expansion(&fields, functions),
-                    Some(Type::Adt { name, variants }) => BackendCallableArgExpansion::AdtTag {
-                        data: name,
-                        variants,
-                    },
-                    Some(Type::Nominal(ref name)) if data_variants.contains_key(name) => {
-                        BackendCallableArgExpansion::AdtTag {
-                            data: name.clone(),
-                            variants: data_variants.get(name).cloned().unwrap_or_default(),
-                        }
+                    Some(Type::Adt { .. }) => {
+                        interface_data_for_type(data, ty.as_ref().expect("matched Some"))
+                            .map(|data| {
+                                backend_adt_tag_abi_for_type(
+                                    data,
+                                    constructors,
+                                    ty.as_ref().expect("matched Some"),
+                                )
+                            })
+                            .map(|abi| backend_adt_arg_expansion(&abi))
+                            .unwrap_or(BackendCallableArgExpansion::Direct(BackendValueKind::I32))
+                    }
+                    Some(Type::Nominal(_))
+                        if ty
+                            .as_ref()
+                            .and_then(nominal_base_name_for_type)
+                            .is_some_and(|name| {
+                                data_abis.contains_key(name)
+                                    || data.iter().any(|data| data.symbol == name)
+                            }) =>
+                    {
+                        interface_data_for_type(data, ty.as_ref().expect("matched Some"))
+                            .map(|data| {
+                                backend_adt_tag_abi_for_type(
+                                    data,
+                                    constructors,
+                                    ty.as_ref().expect("matched Some"),
+                                )
+                            })
+                            .map(|abi| backend_adt_arg_expansion(&abi))
+                            .unwrap_or(BackendCallableArgExpansion::Direct(BackendValueKind::I32))
                     }
                     Some(Type::Record(fields)) => BackendCallableArgExpansion::StaticRowFields(
                         backend_dyn_row_field_abis(&fields),
@@ -3712,7 +3921,11 @@ fn backend_callable_abis_for_interface(
             .iter()
             .flat_map(|expansion| match expansion {
                 BackendCallableArgExpansion::Direct(kind) => vec![*kind],
-                BackendCallableArgExpansion::AdtTag { .. } => vec![BackendValueKind::I32],
+                BackendCallableArgExpansion::AdtTag { payloads, .. } => {
+                    let mut params = vec![BackendValueKind::I32];
+                    params.extend(payloads.iter().flat_map(backend_adt_payload_param_kinds));
+                    params
+                }
                 BackendCallableArgExpansion::Callable { env, .. } => {
                     let mut params = vec![BackendValueKind::I32];
                     params.extend(env.iter().copied());

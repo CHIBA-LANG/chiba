@@ -1,4 +1,3 @@
-use crate::ast::render_source_pattern;
 use crate::closure::{CaptureFact, ClosureFacts, ClosureStorageKind};
 use crate::control::{ContinuationFact, ContinuationKind, ReplaySafety};
 use crate::cps::{CpsAtom, CpsProgram, CpsTerm, OperatorKind};
@@ -97,7 +96,7 @@ pub enum CoreOp {
     },
     Match {
         scrutinee: String,
-        patterns: Vec<String>,
+        patterns: Vec<CorePattern>,
     },
     TupleConstruct {
         nominal: String,
@@ -952,7 +951,7 @@ fn lower_term(
                 scrutinee: render_atom(scrutinee),
                 patterns: arms
                     .iter()
-                    .map(|arm| render_source_pattern(&arm.pattern))
+                    .filter_map(|arm| core_pattern(&arm.pattern))
                     .collect(),
             });
             for arm in arms {

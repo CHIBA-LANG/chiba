@@ -5,8 +5,8 @@
 ## 强制工程规则
 
 这两个目录是 level-1 的 spec 目录
-- `/home/lemonhx/Desktop/LJVM/chiba-org-web/src/content/chiba-level1-spec`
-- `/home/lemonhx/Desktop/LJVM/chiba-org-web/src/content/type_system`
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec`
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/type_system`
 
 阅读前参考: [level-1r](./level-1r.md)
 

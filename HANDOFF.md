@@ -1,120 +1,194 @@
 # Handoff — Level-1R Rust Baseline Compiler
 
-Date: 2026-06-03
+Date: 2026-06-09
 
-This handoff is intentionally short. The old 2026-06-01 level-1b checkpoint log was removed; use git history if needed.
+## Objective
 
-## Current Objective
+Continue the `level-1r` Rust reference compiler toward P0: real source programs should pass through parser, typed/pattern/control/CPS/Core, backend WAT, and runtime execution with visible diagnostics. The current handoff is for an unfinished ADT payload pattern dispatch slice that is blocked by one `ContN` backend case.
 
-Build the `level-1r` Rust reference compiler with dense tests, visible nanopass/debug reports, and executable WAT slices. The Rust baseline should become the implementation reference before porting back to Chiba self-bootstrap.
-
-## Current Branch / Git State
+## Git State
 
 Branch: `level-1r`
 
-Latest committed work:
+Latest good commits:
 
 ```text
-2f3b506 level-1r: run repeated pipe placeholder through operator wat
-77ecedb level-1r: run source pipe through executable wat
-b734cc5 level-1r: expose non exhaustive source match diagnostics
-3864797 level-1r: show continuation storage in cli visual
-fc3e8a6 level-1r: expose callable storage in visual reports
+2884218 level-1r: unify dyn row backend member abi
+966df94 level-1r: unify row callable member records
+f8717ff level-1r: preserve dyn row method receiver identity
+5b0e556 level-1r: lower zero-arg adt parameter patterns
+51ede47 level-1r: lower tuple match patterns
 ```
 
-Working tree currently has uncommitted implementation work in:
+Current dirty files:
 
 ```text
-level-1r/src/backend/bir/emit.rs
-level-1r/src/backend/cir/core.rs
-level-1r/tests/backend_emit_baseline.rs
-level-1r/tests/program_pipeline_baseline.rs
+M AGENTS.md                         # user-owned; do not touch/stage/revert
+M level-1r/src/backend/bir/emit.rs
+M level-1r/src/backend/cir/core.rs
+M level-1r/src/semantic/pattern.rs
+M level-1r/src/semantic/typed.rs
+M level-1r/src/tooling/debug.rs
+M level-1r/src/tooling/pipeline.rs
+M level-1r/tests/frontend_pipeline_baseline.rs
+M level-1r/tests/program_pipeline_baseline.rs
+?? wasm32_target_nogc.TODO.md        # unrelated; ignore unless asked
 ```
 
-Do not discard those changes. They are the active arithmetic/nested-call executable WAT slice.
+Do not commit yet. A focused test is still failing.
 
-## Active Uncommitted Slice
+## Active Slice
 
-Purpose:
+Purpose: support function parameter pattern clauses and ADT payload/nested payload backend execution.
 
-- Support nested call results without backend guessing `w0` / `w1` string shapes.
-- Carry call-result binding as explicit Core fact:
+New/changed tests in `level-1r/tests/program_pipeline_baseline.rs` include:
 
-```rust
-CoreOp::TailCallResult { binder }
+```text
+source_pattern_clause_defs_dispatch_payload_adt_parameters_to_executable_wat
+source_pattern_clause_defs_dispatch_nested_payload_adt_parameters_to_executable_wat
+program_contn_repeated_resume_replays_captured_adt_match_context  # currently failing
 ```
 
-- Let backend preflight and WAT emission consume that Core fact.
-- Emit sequential WAT locals for multi-step call-result chains.
-- Prove source-level `-`, `*`, `/` can compile through nested calls and run in WAT.
+Important implementation changes already in the dirty tree:
 
-Important behavior:
+- `CoreOp::Match.patterns` now stores `Vec<CorePattern>`, not debug strings.
+- Frontend/debug tests were updated for structured match patterns.
+- Constructor payload typing now handles nested payload binders.
+- Pattern coverage handles tuple/product and constructor payloads recursively.
+- Backend ADT ABI now carries payload lanes and nested payload ABI.
+- Pipeline builds nested ADT payload lanes with a depth cap of 4.
+- Backend rendering can register ADT payload lanes and render source pattern-clause dispatch for payload ADTs.
+- Captured continuation support was partially extended with `RenderEnv::with_captured_continuation_arg_abi`.
 
-- Single tailcall rendering remains on the existing path, preserving old direct-call tests and `;; tailcall ...` comments.
-- Multi-call chains use `;; tailcall-result-chain` and local bindings.
-- This follows `AGENTS.md`: no backend semantic inference from string shape.
+## Current Failure
 
-## Validation Already Run
-
-These passed after the latest implementation changes:
+Command:
 
 ```sh
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline -- --nocapture
-cargo test --manifest-path level-1r/Cargo.toml --test backend_emit_baseline -- --nocapture
-git diff --check
+cargo test --manifest-path level-1r/Cargo.toml \
+  --test program_pipeline_baseline \
+  program_contn_repeated_resume_replays_captured_adt_match_context \
+  -- --nocapture
 ```
 
-Observed results:
+Failure:
 
 ```text
-program_pipeline_baseline: 71 passed
-backend_emit_baseline: 24 passed
+assertion failed: bundle.backend_link.diagnostics.is_empty()
 ```
 
-Also scanned touched files for obvious forbidden shortcuts:
+Visual repro:
 
 ```sh
-rg -n "starts_with\\(|is_ascii|TODO|gate|stub|fake" \
-  level-1r/src/backend/bir/emit.rs \
-  level-1r/src/backend/cir/core.rs \
-  level-1r/tests/backend_emit_baseline.rs \
-  level-1r/tests/program_pipeline_baseline.rs
+cat >/tmp/chiba-contn-p0.chiba <<'EOF'
+data Option[T] = { Some(T), None }
+def main() = resetn { match shift retry { retry(Option.Some(7)) + retry(Option.None) } { Option.Some(value) => value, Option.None => 0 } }
+EOF
+
+cargo run --manifest-path level-1r/Cargo.toml -- --visual /tmp/chiba-contn-p0.chiba |
+  rg -n "backend:|diagnostic|return-match|resume0|capture-continuation|wat-lines" -C 4
 ```
 
-Only test names / harmless WAT-prefix assertions were reported. No backend `operator::` string-shape semantic inference remains in this slice.
-
-## Before Commit
-
-Run once more if any file changed:
-
-```sh
-cargo fmt --manifest-path level-1r/Cargo.toml
-cargo test --manifest-path level-1r/Cargo.toml --test backend_emit_baseline -- --nocapture
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline -- --nocapture
-git diff --check
-```
-
-Suggested commit message:
+Current backend diagnostic:
 
 ```text
-level-1r: run nested arithmetic calls through wat
+diagnostic unsupported i32 return value resume0
 ```
 
-## Next Work
+Core shape:
 
-Continue with real vertical slices, not more gates.
+```text
+op 1 capture-continuation retry kind=contn param=resume0
+  ops=[return-match scrutinee=resume0 arms=[Option.Some(value) => value, Option.None() => 0]]
+```
 
-Good next slices:
+## What Was Tried
 
-- make `TailCallResult` / call-result chain lowering cleaner in Core and visual reports,
-- add executable WAT tests for branch or match arms that call functions,
-- expand operator intrinsic facts beyond the current i64 arithmetic baseline,
-- add source-level closure/callable storage runtime tests,
-- add continuation runtime tests only when they execute real Rust reference lowering, not a placeholder.
+In `level-1r/src/backend/bir/emit.rs`:
 
-## Do Not Do
+- Added/adjusted `RenderEnv::with_captured_continuation_arg_abi`.
+- It now inserts the captured param binding and registers ADT payload lanes from the resume argument.
+- Added helpers around ADT tag/payload facts:
+  - `adt_tag_abi_from_value`
+  - `backend_value_kind_for_core_value`
+  - `bind_adt_payload_lanes_from_value`
+  - `adt_pattern_tag_is_renderable`
+  - `render_adt_pattern_tag_i32_indented`
+- Removed the dead `continuation_kind_for_binder`.
+- Changed `constructor_runtime_match_env` to avoid immediately resolving the runtime scrutinee to a single concrete resume argument.
 
-- Do not reintroduce `ExprI32Add`, `TypedExprTailCallI32Const`, `CoreExprParam0`, or similar narrow fake nodes.
-- Do not make backend infer semantic meaning from string prefixes/suffixes.
-- Do not add checkpoint gates to hide missing implementation.
-- Do not treat old level-1b generated-parser WAT success as self-bootstrap completion.
+These changes compile, but the focused `ContN` test still fails with the same diagnostic. The next agent should inspect the preflight path first, especially:
+
+```text
+unsupported_runtime_return_value
+unsupported_captured_continuation_runtime_value
+unsupported_i32_match
+unsupported_i32_match_arms
+constructor_runtime_match_env
+constructor_match_payload_values
+core_value_is_renderable_i32
+render_pattern_condition_i32
+```
+
+Likely issue: the backend preflight still treats `resume0` as an ordinary i32 renderable value somewhere instead of recognizing the structured ADT tag parameter plus payload lanes. Another possible issue is that `resolve_core_value_binding` collapses the captured parameter to the first concrete resume argument too early for a multi-shot continuation.
+
+## Constraints For The Fix
+
+Do not use string-shape inference. In particular, do not special-case:
+
+```text
+resume0
+Option
+Some
+None
+_payload_
+lane name prefixes/suffixes
+```
+
+The fix must consume structured facts:
+
+```text
+CoreValue::Adt
+CorePattern
+BackendAdtTagAbi
+BackendAdtPayloadAbi
+RenderEnv locals/bindings/adt_tag_params
+```
+
+For `ContN`, do not let one concrete resume argument permanently specialize the captured continuation body. The captured body must remain valid for all resume calls represented by the continuation ABI.
+
+## Verification Before Commit
+
+Run:
+
+```sh
+cargo check --manifest-path level-1r/Cargo.toml
+cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline program_contn_repeated_resume_replays_captured_adt_match_context -- --nocapture
+cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline source_pattern_clause_defs_dispatch_nested_payload_adt_parameters_to_executable_wat -- --nocapture
+cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline program_adt_payload_literal_pattern_checks_payload_before_arm_body -- --nocapture
+cargo fmt --manifest-path level-1r/Cargo.toml --check
+cargo test --manifest-path level-1r/Cargo.toml
+```
+
+Only after green, stage the relevant `level-1r` files. Do not stage `AGENTS.md` or `wasm32_target_nogc.TODO.md`.
+
+Suggested commit:
+
+```text
+level-1r: lower ADT payload pattern dispatch
+```
+
+## Next P0 Work After Commit
+
+After this slice is committed, continue with unified member and row behavior:
+
+- `[T:{r| f: (x) -> y}]` accepts ordinary type `X` with method `f` but no field `f`;
+- `dyn {f: (x) -> y}` works through field and method adapters;
+- ordinary type `Y` with field `f` works when `f` is function/closure/cont1/contn;
+- dependent `[F, T:{r| f: F}]` works;
+- negative tests reject non-callable field `f` and method `f` with mismatched signature;
+- field access wins over same-named receiver method;
+- callable/closure/continuation values stored then called are tested, including captures;
+- `Cont1` multiple-use should be compiler error where statically known, or boxed one-shot runtime trap only for escaped storage.
+
+P0 is not done until these are executable or have explicit compiler diagnostics, not just visual gates.

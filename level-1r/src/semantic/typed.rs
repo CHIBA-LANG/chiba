@@ -541,11 +541,7 @@ impl TypeContext {
     }
 
     pub fn pattern_bindings_for(&self, pattern: &Pattern, subject: &Type) -> Vec<(String, Type)> {
-        let subject_data =
-            nominal_type_name(subject).map(|name| nominal_base_name(name).to_string());
-        let substitutions = nominal_type_name(subject)
-            .and_then(|nominal| self.substitutions_for_subject(nominal))
-            .unwrap_or_default();
+        let (subject_data, substitutions) = self.pattern_subject_context(subject);
         self.pattern_bindings(
             pattern,
             subject.clone(),
@@ -575,6 +571,25 @@ impl TypeContext {
             }
             _ => None,
         }
+    }
+
+    pub fn constructor_payload_types_for_pattern(
+        &self,
+        subject: &Type,
+        pattern_data: Option<&str>,
+        ctor: &str,
+    ) -> Option<Vec<Type>> {
+        let (subject_data, substitutions) = self.pattern_subject_context(subject);
+        let data = pattern_data.or(subject_data.as_deref())?;
+        let payloads = self
+            .constructors
+            .get(&(data.to_string(), ctor.to_string()))?;
+        Some(
+            payloads
+                .iter()
+                .map(|ty| substitute_type_params(ty, &substitutions))
+                .collect(),
+        )
     }
 
     fn instantiated_data_constructor_type(
@@ -641,7 +656,14 @@ impl TypeContext {
                             .get(index)
                             .map(|field| substitute_type_params(field, substitutions))
                             .unwrap_or(Type::Unknown);
-                        self.pattern_bindings(arg, field_ty, subject_data, substitutions)
+                        let (field_data, field_substitutions) =
+                            self.pattern_subject_context(&field_ty);
+                        self.pattern_bindings(
+                            arg,
+                            field_ty,
+                            field_data.as_deref(),
+                            &field_substitutions,
+                        )
                     })
                     .collect()
             }
@@ -684,6 +706,14 @@ impl TypeContext {
                 .zip(args.iter().map(ParsedTypeHeader::to_type))
                 .collect(),
         )
+    }
+
+    fn pattern_subject_context(&self, ty: &Type) -> (Option<String>, BTreeMap<String, Type>) {
+        let subject_data = nominal_type_name(ty).map(|name| nominal_base_name(name).to_string());
+        let substitutions = nominal_type_name(ty)
+            .and_then(|nominal| self.substitutions_for_subject(nominal))
+            .unwrap_or_default();
+        (subject_data, substitutions)
     }
 }
 

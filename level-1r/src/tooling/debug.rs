@@ -357,7 +357,11 @@ fn render_core_op(op: &CoreOp) -> String {
         } => {
             format!(
                 "match scrutinee={scrutinee} patterns=[{}]",
-                patterns.join(", ")
+                patterns
+                    .iter()
+                    .map(render_core_pattern)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         }
         CoreOp::TupleConstruct {

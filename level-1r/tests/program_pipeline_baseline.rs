@@ -2,7 +2,7 @@ use chiba_level1r::ast::{
     BinaryOp, DataDecl, DataVariant, ExternAbi, ExternDecl, ItemAttr, MethodReceiver,
     NamespaceDecl, ParamDecl, SourceItem, SourceProgram, TypeDecl, TypeField, UseDecl, Visibility,
 };
-use chiba_level1r::core::{CoreOp, CoreValue};
+use chiba_level1r::core::{CoreOp, CorePattern, CoreValue};
 use chiba_level1r::pattern::PatternDiagnostic;
 use chiba_level1r::typed::{AggregateKind, SendColor, Type, TypedExprKind};
 use chiba_level1r::{
@@ -9064,10 +9064,43 @@ def main(): i64 = match (Bit.On, Bit.Off) { (Bit.On, Bit.On) => 11, (Bit.On, Bit
                     && scrutinee.contains("value2")
                     && patterns
                         == &vec![
-                            "(On(), On())".to_string(),
-                            "(On(), Off())".to_string(),
-                            "(Off(), On())".to_string(),
-                            "(_, _)".to_string(),
+                            CorePattern::Tuple(vec![
+                                CorePattern::Constructor {
+                                    data: None,
+                                    ctor: "On".to_string(),
+                                    args: Vec::new(),
+                                },
+                                CorePattern::Constructor {
+                                    data: None,
+                                    ctor: "On".to_string(),
+                                    args: Vec::new(),
+                                },
+                            ]),
+                            CorePattern::Tuple(vec![
+                                CorePattern::Constructor {
+                                    data: None,
+                                    ctor: "On".to_string(),
+                                    args: Vec::new(),
+                                },
+                                CorePattern::Constructor {
+                                    data: None,
+                                    ctor: "Off".to_string(),
+                                    args: Vec::new(),
+                                },
+                            ]),
+                            CorePattern::Tuple(vec![
+                                CorePattern::Constructor {
+                                    data: None,
+                                    ctor: "Off".to_string(),
+                                    args: Vec::new(),
+                                },
+                                CorePattern::Constructor {
+                                    data: None,
+                                    ctor: "On".to_string(),
+                                    args: Vec::new(),
+                                },
+                            ]),
+                            CorePattern::Tuple(vec![CorePattern::Wildcard, CorePattern::Wildcard]),
                         ]
             }
             _ => false,
@@ -9104,6 +9137,70 @@ def main(): i64 = pick(Bit.On, Bit.On) * 1000 + pick(Bit.On, Bit.Off) * 100 + pi
     assert_eq!(pick.output.pattern.matches.len(), 1);
     assert!(pick.output.pattern.matches[0].exhaustive);
     assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "12432");
+}
+
+#[test]
+fn source_pattern_clause_defs_dispatch_payload_adt_parameters_to_executable_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "data Option[T] = { Some(T), None }
+def unwrap_or(Some(x): Option[i64], fallback: i64): i64 = x
+def unwrap_or(None: Option[i64], fallback: i64): i64 = fallback
+def main(): i64 = unwrap_or(Option.Some(7), 99) * 10 + unwrap_or(Option.None, 5)",
+    )
+    .expect("compile source payload ADT parameter pattern clauses");
+    let bundle = output.program;
+    let unwrap_or = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "unwrap_or")
+        .expect("unwrap_or dispatcher");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(
+        bundle
+            .defs
+            .iter()
+            .filter(|def| def.name == "unwrap_or")
+            .count(),
+        1
+    );
+    assert_eq!(
+        unwrap_or.params,
+        vec!["value".to_string(), "value2".to_string()]
+    );
+    assert_eq!(unwrap_or.output.pattern.matches.len(), 1);
+    assert!(unwrap_or.output.pattern.matches[0].exhaustive);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "75");
+}
+
+#[test]
+fn source_pattern_clause_defs_dispatch_nested_payload_adt_parameters_to_executable_wat() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "data Option[T] = { Some(T), None }
+def score(Some(Some(x)): Option[Option[i64]]): i64 = x + 100
+def score(Some(None): Option[Option[i64]]): i64 = 20
+def score(None: Option[Option[i64]]): i64 = 3
+def main(): i64 = score(Option.Some(Option.Some(4))) * 100 + score(Option.Some(Option.None)) * 10 + score(Option.None)",
+    )
+    .expect("compile source nested payload ADT parameter pattern clauses");
+    let bundle = output.program;
+    let score = bundle
+        .defs
+        .iter()
+        .find(|def| def.name == "score")
+        .expect("score dispatcher");
+
+    assert_eq!(bundle.diagnostics, vec![]);
+    assert_backend_link_clean_all(&bundle);
+    assert_eq!(
+        bundle.defs.iter().filter(|def| def.name == "score").count(),
+        1
+    );
+    assert_eq!(score.params, vec!["value".to_string()]);
+    assert_eq!(score.output.pattern.matches.len(), 1);
+    assert!(score.output.pattern.matches[0].exhaustive);
+    assert_eq!(run_wat_text(&bundle.backend_link.linked_wat), "10603");
 }
 
 #[test]
