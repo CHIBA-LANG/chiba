@@ -1,0 +1,11 @@
+// expect: accept
+// Boundary: tuple field access is ordinary field access with typed tuple-positional-row fact.
+
+namespace demo.field_boundary
+
+type NamedTupleLike = {
+	_1: i64,
+	_2: i64,
+}
+
+def record_underscore_field(v: NamedTupleLike): i64 = v._1

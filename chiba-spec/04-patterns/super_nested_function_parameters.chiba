@@ -1,0 +1,54 @@
+// expect: accept
+// expect: fact function parameter patterns are source-level language, not private desugar
+// expect: fact nested parameter pattern binders are scoped only to the clause body
+// expect: fact duplicate binders are rejected before typed body checking
+// expect: fact pattern matrix handles tuple, record, ADT, at-pattern, wildcard, literal, and nested payloads
+// expect: fact pattern dispatcher preserves source clause order only where semantic coverage allows it
+// expect: runtime eval(Envelope.Some(({head: 1, tail: (2, Payload.Value(3))}, 4))) == 10
+// expect: reject duplicate-pattern-binding
+// expect: reject non-exhaustive-function-pattern-clauses
+
+namespace spec.patterns.super_nested_function_parameters
+
+data Payload[T] = {
+	Value(T)
+	Missing
+}
+
+data Envelope[T] = {
+	Some(T)
+	None
+}
+
+def eval(
+	Envelope.Some(
+		whole @ (
+			{head: a, tail: (b, Payload.Value(c))},
+			d
+		)
+	): Envelope[({head: i64, tail: (i64, Payload[i64])}, i64)]
+): i64 =
+	a + b + c + d
+
+def eval(Envelope.Some(({head: _, tail: (_, Payload.Missing)}, fallback)): Envelope[({head: i64, tail: (i64, Payload[i64])}, i64)]): i64 =
+	fallback
+
+def eval(Envelope.None: Envelope[({head: i64, tail: (i64, Payload[i64])}, i64)]): i64 =
+	0
+
+def nested_at_alias(
+	outer @ Envelope.Some(
+		inner @ (
+			{head: head @ 1, tail: (middle, Payload.Value(last))},
+			_
+		)
+	): Envelope[({head: i64, tail: (i64, Payload[i64])}, i64)]
+): i64 =
+	head + middle + last
+// expect: fact at-pattern aliases whole matched value and inner sub-pattern without rebinding names
+
+def duplicate_nested((x, {left: (x, _)}, _): (i64, {left: (i64, i64)}, i64)): i64 = x
+// expect: reject duplicate-pattern-binding
+
+def not_exhaustive(Envelope.Some(Payload.Value(x)): Envelope[Payload[i64]]): i64 = x
+// expect: reject non-exhaustive-function-pattern-clauses

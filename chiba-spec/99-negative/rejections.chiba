@@ -1,0 +1,27 @@
+// expect: reject aggregate-file
+// This file intentionally collects negative snippets. A future runner may split them.
+
+namespace demo.negative
+
+public use demo.prelude.*
+// expect: reject public-glob-reexport
+
+def bad_template[T, F](value: T): F = value
+// expect: reject rigid-template-return-mismatch
+
+def bad_ref() = Ref.new(None)
+// expect: reject unconstrained-polymorphic-mutable-ref
+
+def bad_let(value) = {
+	let Some(x) = value
+	x
+}
+// expect: reject refutable-pattern-in-let
+
+private def hidden(): i64 = 0
+
+namespace demo.other {
+	use demo.negative.hidden
+	def leak(): i64 = hidden()
+}
+// expect: reject private-item-import

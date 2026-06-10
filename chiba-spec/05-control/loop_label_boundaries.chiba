@@ -1,0 +1,27 @@
+// expect: reject aggregate-file
+// Boundary: loop tags are scoped control facts, not string labels guessed later.
+
+namespace demo.loop_boundary
+
+def ok(): i64 = {
+	for :outer {
+		for :inner {
+			break :outer
+		}
+	}
+	1
+}
+// expect: accept
+// expect: runtime ok == 1
+
+def missing_label(): i64 = {
+	break :missing
+	0
+}
+// expect: reject unknown-loop-label
+
+def continue_outside(): i64 = {
+	continue
+	0
+}
+// expect: reject continue-outside-loop

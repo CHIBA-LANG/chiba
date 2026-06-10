@@ -1,0 +1,33 @@
+// expect: reject aggregate-file
+// Boundary: operator resolution is typed/obligation-level, not parser-level guessing.
+
+namespace left.ops
+
+type Amount = {
+	value: i64,
+}
+
+def Amount.op_add(self: Self, other: Self): Self = {value: self.value + other.value}
+
+namespace right.ops
+
+type Amount = {
+	value: i64,
+}
+
+def Amount.op_add(self: Self, other: Self): Self = {value: self.value + other.value}
+
+namespace demo.op_boundary {
+	use left.ops.Amount
+	use right.ops.Amount
+
+	def ambiguous(a: Amount, b: Amount): Amount = a + b
+	// expect: reject ambiguous-operator-resolution
+
+	def wrong_operand(a: left.ops.Amount, b: i64): left.ops.Amount = a + b
+	// expect: reject wrong-operator-operand
+
+	def precedence(): i64 = 1 + 2 * 3 == 7 && true
+	// expect: accept
+	// expect: runtime precedence == true
+}

@@ -1,0 +1,20 @@
+// expect: accept
+// Boundary: function parameter patterns are language surface, not handwritten desugar.
+
+namespace demo.pattern_args
+
+data Option[T] = {
+	Some(T)
+	None
+}
+
+def unwrap_or_zero(Some(x): Option[i64]): i64 = x
+def unwrap_or_zero(None: Option[i64]): i64 = 0
+// expect: fact clauses lower to one dispatcher without duplicate def
+// expect: fact binding x exists only in Some clause body
+
+def whole_payload(whole @ Some(x): Option[i64]): i64 = x
+// expect: accept at-pattern parameter when support matrix permits it
+
+def duplicate((x, x): (i64, i64)): i64 = x
+// expect: reject duplicate-pattern-binding

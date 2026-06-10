@@ -1,0 +1,22 @@
+// expect: accept
+// expect: fact omitted parameter type can auto-generalize to checked template
+// expect: fact explicit [T] is rigid in definition body
+// expect: fact row shorthand records field obligation only, not nominal method proof
+// expect: fact dyn row packages through adapter at expected type boundary
+
+namespace demo.types
+
+def id(x) = x
+// expect: fact id auto-template [T](x: T): T
+
+def explicit[T](x: T): T = x
+// expect: fact T is rigid explicit template parameter
+
+def get_name(v: {r | name: String}) = v.name
+// expect: fact get_name has static row field obligation name: String
+
+def call_field(v: {r | run: (i64) -> i64}): i64 = v.run(3)
+// expect: fact field-callable route is allowed from row fact
+
+def accepts_dyn(v: dyn {r | name: String}): String = v.name
+// expect: fact concrete record at dyn expected type injects adapter package

@@ -1,0 +1,25 @@
+// expect: reject aggregate-file
+// Boundary: string prefixes are literal-layer protocol, not semantic string-shape inference.
+
+namespace demo.string_boundary
+
+def standard(): String = "line\nvalue"
+// expect: accept escaped newline in standard string
+
+def raw(): String = r#"line\nvalue"#
+// expect: accept raw string keeps backslash-n bytes
+
+def multiline(): String = """
+first
+second
+"""
+// expect: accept multiline standard string
+
+def c_good(): cstr = c"hello"
+// expect: accept cstr without interior nul
+
+def c_bad(): cstr = c"bad\0nul"
+// expect: reject cstr-interior-nul
+
+def prefix_unknown(): String = sql"select 1"
+// expect: reject unknown-string-literal-handler unless handler is in lexical/literal registry

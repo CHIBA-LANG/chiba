@@ -1,0 +1,50 @@
+// expect: reject aggregate-file
+// expect: fact no semantic pass may infer syntax, identifier class, namespace, callable, static/global name, tuple, method, or intrinsic identity from string shape
+// expect: fact lexer/chibalex/regex tokenization and shared XID tables are the only identifier legality authorities
+// expect: reject ascii-case-constructor-guess
+// expect: reject underscore-tuple-field-guess-outside-typed-row
+// expect: reject prefix-based-intrinsic-guess
+// expect: reject name-suffix-callable-guess
+
+namespace spec.negative.no_string_shape_semantics_extremes
+
+type LooksLikeTupleField {
+	_1: i64
+}
+
+def ordinary_field(value: LooksLikeTupleField): i64 =
+	value._1
+// expect: fact `_1` is an ordinary declared field here, not tuple-field semantics guessed from spelling
+
+type NotTuple {
+	field_1: i64
+}
+
+def no_tuple_guess(value: NotTuple): i64 =
+	value._1
+// expect: reject underscore-tuple-field-guess-outside-typed-row
+
+def compiler_intrinsic_tuple_to_adt(value): i64 =
+	0
+
+def ordinary_name_is_not_intrinsic(value): i64 =
+	compiler_intrinsic_tuple_to_adt(value)
+// expect: fact source name prefix does not grant compiler intrinsic identity
+
+type CallableLookingName {
+	callback_fn: i64
+}
+
+def no_callable_suffix_guess(value: CallableLookingName): i64 =
+	value.callback_fn(1)
+// expect: reject name-suffix-callable-guess
+
+data Ünicode = {
+	ÄVariant(i64)
+}
+
+def no_ascii_ctor_guess(value): i64 =
+	match value {
+		AVariant(x) => x
+	}
+// expect: reject ascii-case-constructor-guess

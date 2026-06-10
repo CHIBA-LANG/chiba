@@ -1,0 +1,27 @@
+// expect: accept
+// expect: fact reset + shift captures Cont1
+// expect: fact resetn + shift captures ContN
+// expect: fact continuation kind comes from delimiter, not callable storage
+// expect: fact ContN is usage N and lowers to multi-shot continuation package
+
+namespace demo.cont
+
+def one_shot(): i64 =
+	reset {
+		shift k {
+			0
+		}
+	}
+// expect: fact k: Cont1
+
+def multi_shot(): i64 =
+	resetn {
+		shift retry {
+			0
+		}
+	}
+// expect: fact retry: ContN
+// expect: fact retry usage color N
+
+def stored_contn(slot: (i64) -> i64): i64 = slot(1)
+// expect: fact ordinary callable storage can represent ContN but remains !send

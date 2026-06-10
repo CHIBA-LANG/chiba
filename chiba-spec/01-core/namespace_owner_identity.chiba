@@ -1,0 +1,31 @@
+// expect: accept
+// Boundary: same source-facing name across namespaces remains distinct by owner identity.
+
+namespace alpha.core
+
+type Token = {
+	value: i64,
+}
+
+def make(): Token = {value: 1}
+
+namespace beta.core
+
+type Token = {
+	value: i64,
+}
+
+def make(): Token = {value: 2}
+
+namespace gamma.app {
+	use alpha.core.make
+	use beta.core.Token
+
+	def main(): i64 = {
+		let a = alpha.core.make()
+		let b: beta.core.Token = {value: 3}
+		a.value + b.value
+	}
+	// expect: runtime main == 4
+	// expect: fact alpha.core::Token and beta.core::Token do not unify by source name
+}

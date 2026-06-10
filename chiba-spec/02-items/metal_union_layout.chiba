@@ -1,0 +1,23 @@
+#![Metal]
+
+// expect: accept
+// Boundary: union is only legal in Metal mode and uses field-style low-level layout.
+
+namespace demo.metal_union
+
+type LayoutMarker = i64
+
+union Word {
+	i32v: i32,
+	i64v: i64,
+	_: LayoutMarker,
+}
+// expect: fact union is low-level layout, not managed data
+// expect: fact phantom _ field is not an ordinary union member
+// expect: fact union does not introduce data constructors or pattern matching entry
+
+union CBits {
+	#[cname(field="_")]
+	field: u32,
+}
+// expect: fact ABI cname can map Chiba field to C member named "_"

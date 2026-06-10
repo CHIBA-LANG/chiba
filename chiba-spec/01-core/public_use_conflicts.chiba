@@ -1,0 +1,31 @@
+// expect: reject aggregate-file
+// Boundary: re-export aliases must be stable public interface edges, not merge-order guesses.
+
+namespace left.math {
+	def value(): i64 = 1
+}
+namespace right.math {
+	def value(): i64 = 2
+}
+
+
+namespace bad.prelude {
+	public use left.math.value
+	public use right.math.value
+}
+// expect: reject duplicate-public-reexport-name value
+// expect: fact diagnostic is order-independent
+
+namespace bad.glob {
+	public use left.math.*
+}
+// expect: reject public-glob-reexport
+
+namespace bad.private_source
+
+private def hidden(): i64 = 9
+
+namespace bad.leak {
+	public use bad.private_source.hidden
+}
+// expect: reject reexport-private-item

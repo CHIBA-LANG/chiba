@@ -1,0 +1,35 @@
+// expect: reject aggregate-file
+// Boundary: pattern support matrix must reject refutable or ambiguous positions.
+
+namespace demo.pattern_fail
+
+data Option[T] = {
+	Some(T)
+	None
+}
+
+def refutable_let(value: Option[i64]): i64 = {
+	let Some(x) = value
+	x
+}
+// expect: reject refutable-pattern-in-let
+
+def duplicate_tuple(value: (i64, i64)): i64 = {
+	let (x, x) = value
+	x
+}
+// expect: reject duplicate-pattern-binding
+
+def iflet_no_else(value: Option[i64]): i64 =
+	if let Some(x) = value {
+		x
+	}
+// expect: reject if-let-missing-else
+
+def leak_binding(value: Option[i64]): i64 =
+	if let Some(x) = value {
+		x
+	} else {
+		x
+	}
+// expect: reject if-let-success-binding-leaks-to-failure

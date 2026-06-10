@@ -1,0 +1,24 @@
+// expect: accept
+// expect: fact a |> f == f(a)
+// expect: fact placeholder appears twice and substitutes input twice
+// expect: fact a |> Box.wrap is receiver-first desugar
+
+namespace demo.pipe
+
+type Box = {
+	value: i64,
+}
+
+def Box.wrap(self: Self): i64 = self.value + 1
+
+def add(a: i64, b: i64): i64 = a + b
+def inc(a: i64): i64 = a + 1
+
+def simple(): i64 = 3 |> inc
+// expect: runtime simple == 4
+
+def holes(): i64 = 5 |> add(_, _)
+// expect: runtime holes == 10
+
+def method_pipe(): i64 = {value: 8} |> Box.wrap
+// expect: runtime method_pipe == 9

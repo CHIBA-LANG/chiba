@@ -1,0 +1,22 @@
+// expect: accept
+// Boundary: Self with generics preserves nominal identity and substituted fields.
+
+namespace demo.self_boundary
+
+type Box[T] = {
+	value: T,
+}
+
+def Box[T].replace(self: Self, value: T): Self = {self | value: value}
+// expect: fact Self resolves to Box[T]
+// expect: fact record update preserves nominal receiver type
+
+def use_i64(box: Box[i64]): i64 = box.replace(10).value
+// expect: runtime use_i64({value: 1}) == 10
+
+type SameShape = {
+	value: i64,
+}
+
+def not_same_nominal(box: Box[i64]): SameShape = box
+// expect: reject same-shape-nominal-not-implicitly-convertible

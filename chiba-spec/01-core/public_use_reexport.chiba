@@ -1,0 +1,19 @@
+// expect: accept
+// expect: fact demo.prelude exposes add through re-export
+// expect: fact re-exported add owner remains demo.math
+// expect: fact public use creates alias edge, not copied definition
+
+namespace demo.math
+
+def add(a: i64, b: i64): i64 = a + b
+
+namespace demo.prelude {
+	public use demo.math.add
+}
+
+namespace demo.app {
+	use demo.prelude.add
+
+	def main(): i64 = add(2, 3)
+	// expect: runtime main == 5
+}

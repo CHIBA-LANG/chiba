@@ -1,0 +1,17 @@
+// expect: accept
+// Boundary: Core/CIR facts remain target neutral; backend layout consumes facts only.
+
+namespace demo.cir_boundary
+
+def no_wasm_terms(x: i64): i64 = x + 1
+// expect: fact CIR contains operator/call/ownership facts
+// expect: fact CIR contains no funcref eqref struct.new WAT opcode Binaryen feature
+
+def ownership(x): i64 = {
+	let y = x
+	y
+}
+// expect: fact ownership decision is StackValue or InplaceReuse when usage color is 1 and non-escaping
+
+def final_symbol(): i64 = 1
+// expect: fact final symbol map can reverse to demo.cir_boundary::final_symbol

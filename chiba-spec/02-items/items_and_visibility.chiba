@@ -1,0 +1,36 @@
+// expect: accept
+// expect: fact public_value visible outside demo.items
+// expect: fact hidden not visible outside demo.items
+// expect: fact static VALUE is top-level value, not zero-arg function
+
+namespace demo.items
+
+private def hidden(): i64 = 0
+def public_value(): i64 = 7
+def VALUE: i64 = 11
+
+type PairMarker = i64
+
+type Pair[T] = {
+	left: T,
+	right: T,
+	_: PairMarker,
+}
+
+data Option[T] = {
+	Some(T)
+	None
+}
+
+def pair_sum(pair: Pair[i64]): i64 = pair.left + pair.right
+// expect: fact Pair is nominal row type; fields are consumed by field access
+
+def option_value(value: Option[i64]): i64 =
+	match value {
+		Some(x) => x
+		None => 0
+	}
+// expect: fact data constructors are consumed by match
+
+def main(): i64 = public_value() + VALUE + pair_sum({left: 1, right: 2}) + option_value(Some(3))
+// expect: runtime main == 24

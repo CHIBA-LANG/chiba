@@ -1,0 +1,19 @@
+// expect: accept
+// expect: fact numeric literal prefixes parse as stable numeric values
+// expect: fact string literal handler selection is prefix-based in lexer/literal layer only
+// expect: fact c-string has ABI boundary rules
+
+namespace demo.literals
+
+def ints(): i64 = 0b1010 + 0o10 + 0x10 + 10
+// expect: runtime ints == 44
+
+def booleans(): bool = true && !false
+// expect: runtime booleans == true
+
+def atom(): Symbol = :http_error
+// expect: fact atom literal is symbol value, not namespace path
+
+def strings(): String = "hello"
+def raw(): String = r#"hello\nraw"#
+def c_string(): cstr = c"hello"

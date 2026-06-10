@@ -1,0 +1,23 @@
+// expect: accept
+// expect: fact block is expression
+// expect: fact tuple field access is ordinary field access with tuple positional row fact
+// expect: fact record update preserves canonical row field identity
+// expect: runtime main == 10
+
+namespace demo.expr
+
+def main(): i64 = {
+	let tuple = (1, 2, 3)
+	let record = {x: tuple._1, y: tuple._2}
+	let updated = {record | x: 8}
+	updated.x + updated.y
+}
+
+def grouped(): i64 = (1 + 2) * 3
+// expect: runtime grouped == 9
+
+def one_tuple(): i64 = {
+	let value = (42,)
+	value._1
+}
+// expect: runtime one_tuple == 42

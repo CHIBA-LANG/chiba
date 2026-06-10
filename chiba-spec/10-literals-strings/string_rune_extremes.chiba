@@ -1,0 +1,45 @@
+// expect: accept
+// expect: fact rune is a u32 scalar value representing exactly one Unicode scalar
+// expect: fact rune literal rejects empty, multi-scalar, surrogate, and invalid escapes
+// expect: fact String indexing uses UTF-8 byte indexing
+// expect: fact String.char_at(n) returns rune at Unicode scalar index
+// expect: fact String builder supports push_rune(rune)
+// expect: fact raw strings preserve interpolation text literally
+// expect: runtime byte_index == 195
+// expect: runtime char_at == 233
+// expect: runtime builder_roundtrip == 233
+// expect: reject multi-scalar-rune-literal
+// expect: reject invalid-rune-escape
+// expect: reject string-byte-index-out-of-bounds
+
+namespace spec.text.string_rune_extremes
+
+def byte_index(): i64 =
+	"é"[0]
+
+def char_at(): rune =
+	"é".char_at(0)
+
+def builder_roundtrip(): rune =
+	String.new().push_rune('é').char_at(0)
+
+def raw_keeps_interpolation_text(): String =
+	r#"hello ${name}"#
+// expect: runtime raw_keeps_interpolation_text == "hello ${name}"
+
+def interpolation_runtime(name: String): String =
+	"hello ${name}"
+// expect: fact interpolation lowers to String builder or concat chain, not lexer string guessing
+
+def bad_empty_rune(): rune = ''
+// expect: reject empty-rune-literal
+
+def bad_multi_rune(): rune = 'ab'
+// expect: reject multi-scalar-rune-literal
+
+def bad_escape(): rune = '\u{110000}'
+// expect: reject invalid-rune-escape
+
+def bad_byte_index(): i64 =
+	"é"[99]
+// expect: reject string-byte-index-out-of-bounds

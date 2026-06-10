@@ -1,0 +1,21 @@
+// expect: accept
+// expect: fact precedence and associativity are parser-fixed
+// expect: fact abstract + creates op_add obligation instead of defaulting numeric
+// expect: fact indexing lowers through op_index and slicing through op_index_slice
+
+namespace demo.operators
+
+def arithmetic(): i64 = 1 + 2 * 3 - 4 / 2
+// expect: runtime arithmetic == 5
+
+def compare(): bool = 1 + 2 == 3 && !(4 < 3)
+// expect: runtime compare == true
+
+def generic_add(a, b) = a + b
+// expect: fact generic_add has operator obligation op_add
+
+def first(values) = values[0]
+// expect: fact first has operator obligation op_index
+
+def window(values, start, end) = values[start..end]
+// expect: fact window has operator obligation op_index_slice

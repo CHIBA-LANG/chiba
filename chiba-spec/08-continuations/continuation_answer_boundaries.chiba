@@ -1,0 +1,39 @@
+// expect: reject aggregate-file
+// Boundary: answer type and continuation kind are delimiter facts.
+
+namespace demo.cont_answer
+
+def cont1_ok(): i64 =
+	reset {
+		shift k {
+			0
+		}
+	}
+// expect: accept
+// expect: fact k: Cont1
+
+def contn_ok(): i64 =
+	resetn {
+		shift retry {
+			0
+		}
+	}
+// expect: accept
+// expect: fact retry: ContN
+
+def shift_without_reset(): i64 =
+	shift k {
+		0
+	}
+// expect: reject shift-without-reset
+
+def answer_mismatch(): i64 =
+	reset {
+		shift k {
+			true
+		}
+	}
+// expect: reject continuation-answer-type-mismatch
+
+def cont_send_bad(k: ContN[i64, i64] send): i64 = k(1)
+// expect: reject continuation-is-not-send

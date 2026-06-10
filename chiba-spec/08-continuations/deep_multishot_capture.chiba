@@ -1,0 +1,76 @@
+// expect: accept
+// expect: fact deeply nested resetn captures ContN from nearest resetn delimiter
+// expect: fact ContN capture includes local, global, parameter, branch, match, tuple, record, ADT payload, closure env
+// expect: fact multi-shot resume replays captured pure context for each resume
+// expect: fact ContN captured Ref[T] uses shared-reference semantics only when replay-safe or rollback-managed
+// expect: fact UnsafeRef[T], FFI handles, Atomic mutation, world-local state, and thread-local state are replay-unsafe captures
+// expect: fact captured continuation package records replay safety for each captured cell
+// expect: runtime deep_replay(10) == 155
+// expect: reject contn-captures-unsafe-ref-in-replayed-context
+// expect: reject contn-captures-world-local-state
+// expect: reject contn-captures-atomic-mutation-without-rollback
+
+namespace spec.cont.deep_multishot_capture
+
+def GLOBAL: i64 = 5
+
+data Option[T] = {
+	Some(T)
+	None
+}
+
+type Box[T] {
+	value: T
+}
+
+def add_global(x: i64): i64 = x + GLOBAL
+
+def deep_replay(seed: i64): i64 =
+	resetn {
+		let local = seed + 1
+		let pair = (local, {right: add_global(local)})
+		let boxed = Box[i64] {value: pair._1 + pair._2}
+		let choose = Option.Some(boxed)
+		match choose {
+			Option.Some(Box {value: captured}) =>
+				if captured > 0 {
+					shift retry {
+						let once = retry(captured + 1)
+						let twice = retry(captured + 2)
+						once + twice + captured
+					}
+				} else {
+					0
+				}
+			Option.None => 0
+		}
+	}
+
+def deep_replay_with_shared_ref(cell: Ref[i64], seed: i64): i64 =
+	resetn {
+		let before = cell.*
+		shift retry {
+			cell := cell.* + 1
+			retry(seed) + retry(before)
+		}
+	}
+// expect: fact Ref capture is shared cell, not snapshot or rollback by default
+// expect: fact repeated resume observes mutation according to shared-reference semantics
+
+def illegal_unsafe_ref_capture(ptr: UnsafeRef[i64]): i64 =
+	resetn {
+		let local = ptr.*
+		shift retry {
+			ptr.* + retry(local)
+		}
+	}
+// expect: reject contn-captures-unsafe-ref-in-replayed-context
+
+def illegal_atomic_capture(counter: Atomic[i64]): i64 =
+	resetn {
+		shift retry {
+			counter.store(counter.load() + 1)
+			retry(counter.load())
+		}
+	}
+// expect: reject contn-captures-atomic-mutation-without-rollback

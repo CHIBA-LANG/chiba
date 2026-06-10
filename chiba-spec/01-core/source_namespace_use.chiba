@@ -1,0 +1,11 @@
+// expect: accept
+// expect: fact namespace demo.core
+// expect: fact local-use demo.math.add does not re-export
+// expect: fact public-use demo.math.Option re-exports without changing owner namespace
+
+namespace demo.core
+
+use demo.math.add
+public use demo.math.Option
+
+def main(): i64 = 1

@@ -1,0 +1,67 @@
+// expect: accept
+// expect: fact row member obligation accepts either callable field or receiver method
+// expect: fact field access wins before receiver method when both exist
+// expect: fact dyn row package stores payload plus adapter, not global impl search
+// expect: fact dependent [F, T:{r| f: F}] preserves F exactly across field and method cases
+// expect: fact function, closure, boxed Cont1, and ContN callable fields satisfy callable member obligations according to usage/send rules
+// expect: reject non-callable-field-for-callable-row-member
+// expect: reject method-signature-mismatch-for-row-member
+// expect: reject dyn-row-to-nominal-without-explicit-checked-conversion
+
+namespace spec.types.row_dyn_method_field_extremes
+
+type MethodOnly {
+	x: i64
+}
+
+def MethodOnly.f(self: Self, delta: i64): i64 = self.x + delta
+
+type FieldAndMethod {
+	f: (i64) -> i64
+	x: i64
+}
+
+def FieldAndMethod.f(self: Self, delta: i64): i64 = self.x + delta + 1000
+
+def call_member[T: {r | f: (i64) -> i64}](value: T): i64 =
+	value.f(7)
+
+def keep_member_type[F, T: {r | f: F}](value: T): F =
+	value.f
+
+def dynamic_call(value: dyn {r | f: (i64) -> i64}): i64 =
+	value.f(7)
+
+def method_only_runtime(): i64 =
+	call_member(MethodOnly {x: 35})
+// expect: runtime method_only_runtime == 42
+
+def field_wins_runtime(): i64 =
+	call_member(FieldAndMethod {x: 35, f: fn(y) { y + 1 }})
+// expect: runtime field_wins_runtime == 8
+
+def dyn_method_runtime(): i64 =
+	dynamic_call(MethodOnly {x: 35})
+// expect: runtime dyn_method_runtime == 42
+
+def dyn_field_runtime(): i64 =
+	dynamic_call({f: fn(y) { y + 1 }})
+// expect: runtime dyn_field_runtime == 8
+
+type BadField {
+	f: i64
+}
+
+def bad_field(value: BadField): i64 =
+	call_member(value)
+// expect: reject non-callable-field-for-callable-row-member
+
+type BadMethod {
+	x: i64
+}
+
+def BadMethod.f(self: Self, text: String): String = text
+
+def bad_method(value: BadMethod): i64 =
+	call_member(value)
+// expect: reject method-signature-mismatch-for-row-member

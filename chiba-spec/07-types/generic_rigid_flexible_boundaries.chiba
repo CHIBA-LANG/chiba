@@ -1,0 +1,25 @@
+// expect: reject aggregate-file
+// Boundary: explicit [T] is rigid; omitted annotations are flexible until legal generalization.
+
+namespace demo.generic_boundary
+
+def id(x) = x
+// expect: accept
+// expect: fact synthetic auto-generic [T]
+
+def explicit_id[T](x: T): T = x
+// expect: accept
+// expect: fact explicit T source=explicit-header
+
+def rigid_bad[T, F](x: T): F = x
+// expect: reject rigid-template-return-mismatch
+
+def ref_none_bad() = Ref.new(None)
+// expect: reject cannot-generalize-polymorphic-mutable-ref
+
+def row_shorthand(v: {r | x: i64}): i64 = v.x
+// expect: accept
+// expect: fact fresh synthetic template param with row obligation x: i64
+
+def row_does_not_prove_method(v: {r | x: i64}): i64 = v.len()
+// expect: reject row-fact-does-not-prove-nominal-method

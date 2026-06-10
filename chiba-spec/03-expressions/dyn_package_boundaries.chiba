@@ -1,0 +1,21 @@
+// expect: accept
+// Boundary: dyn row is adapter package, not implicit nominal guessing.
+
+namespace demo.dyn_boundary
+
+type Person = {
+	name: String,
+}
+
+def as_dyn(p: Person): dyn {r | name: String} = p
+// expect: fact expected dyn type injects adapter package
+
+def get_name(v: dyn {r | name: String}): String = v.name
+// expect: fact field access goes through DynRowAdapterAccess
+
+def no_auto_nominal(v: dyn {r | name: String}): Person = v
+// expect: reject dyn-to-nominal-without-explicit-checked-conversion
+
+def no_runtime_search(v): dyn {r | name: String} = v
+// expect: reject or obligation until concrete expected-type packaging point
+// expect: fact no runtime global impl search

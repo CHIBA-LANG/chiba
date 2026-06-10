@@ -1,0 +1,23 @@
+// expect: reject aggregate-file
+// Boundary: safe mutation, world-local state, send, and Atomic are distinct capability facts.
+
+namespace demo.memory_boundary
+
+def GLOBAL: Ref[i64] = Ref.new(0)
+// expect: reject top-level-ref-without-world-local
+
+#[world_local]
+def WORLD_CELL: Ref[i64] = Ref.new(0)
+// expect: accept
+// expect: fact one cell per world
+// expect: fact Ref remains !send
+
+def send_ref(cell: Ref[i64] send): i64 = cell.*
+// expect: reject Ref-is-not-send
+
+def atomic_ok(counter: Atomic[i64] send): i64 = counter.load(.SeqCst)
+// expect: accept
+// expect: fact Atomic is explicit shared mutation capability
+
+def unsafe_cross_world(ptr: UnsafeRef[i64] send): i64 = ptr.*
+// expect: reject unless unsafe protocol explicitly proves send

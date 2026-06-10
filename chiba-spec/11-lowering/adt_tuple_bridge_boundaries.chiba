@@ -1,0 +1,21 @@
+// expect: accept
+// Boundary: ADT tuple bridge is compiler intrinsic with typed identity preserved.
+
+namespace demo.adt_bridge
+
+data HttpResult = {
+	Ok(i64)
+	HttpError(i64, String)
+}
+
+def to_tuple(value: HttpResult) = adt_to_tuple[HttpResult](value)
+// expect: fact adt_to_tuple is compiler intrinsic, not std helper
+// expect: fact HttpError(400, "...") roundtrips to (:http_error, 400, "...")
+
+def from_tuple(tuple): HttpResult = tuple_to_adt[HttpResult](tuple)
+// expect: fact tuple_to_adt is compiler intrinsic
+// expect: fact typed layer keeps ADT ctor/bridge identity
+
+def roundtrip(value: HttpResult): HttpResult =
+	tuple_to_adt[HttpResult](adt_to_tuple[HttpResult](value))
+// expect: fact stable bidirectional roundtrip

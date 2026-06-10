@@ -1,0 +1,14 @@
+// expect: accept
+// expect: fact source/typed/usage/CPS/Core/layout/final symbol map are inspectable
+// expect: fact CPS is one-pass CBV with administrative beta reduction
+// expect: fact CIR is target-neutral and contains no Wasm-GC/WAT terms
+// expect: fact final symbol can map back to source namespace/item/specialization
+
+namespace demo.lowering
+
+def helper(x: i64): i64 = x + 1
+
+def main(): i64 = helper(41)
+// expect: runtime main == 42
+// expect: fact CPS for helper(41) has no administrative LetCont/AppCont chain
+// expect: fact final symbol manifest maps main to demo.lowering::main

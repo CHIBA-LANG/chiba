@@ -1,0 +1,22 @@
+// expect: accept
+// expect: fact ordinary values are immutable managed values
+// expect: fact Ref[T] is safe mutation entry
+// expect: fact Ref[T] is not send by default
+// expect: fact Atomic is minimal shared mutation capability
+
+namespace demo.memory
+
+def ref_update(cell: Ref[i64]): i64 = {
+	cell := 3
+	cell.*
+}
+// expect: runtime ref_update(Ref.new(0)) == 3
+
+def row_field_update(cell: Ref[{x: i64, y: i64}]): i64 = {
+	cell.x := 8
+	cell.*.x
+}
+// expect: fact cell.x := 8 lowers to whole-value replacement through Ref row
+
+def send_value(x: i64 send): i64 = x
+// expect: fact send annotation is capability fact, not nominal interface

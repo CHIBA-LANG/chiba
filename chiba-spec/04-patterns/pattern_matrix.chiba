@@ -1,0 +1,32 @@
+// expect: accept
+// expect: fact match supports deep tuple, record, constructor, literal, wildcard, at pattern
+// expect: fact if-let failure branch does not introduce success bindings
+// expect: fact let destruct accepts irrefutable tuple/record subset
+
+namespace demo.patterns
+
+data Option[T] = {
+	Some(T)
+	None
+}
+
+def from_option(value: Option[(i64, {tail: i64})]): i64 =
+	match value {
+		Some(whole @ (head, {tail: rest})) => head + rest
+		None => 0
+	}
+// expect: fact Option payload type matches deep tuple/record pattern
+// expect: runtime from_option(Some((1, {tail: 2}))) == 3
+
+def destruct(): i64 = {
+	let (a, {b: c}) = (1, {b: 2})
+	a + c
+}
+// expect: runtime destruct == 3
+
+def if_let_scope(value: Option[i64]): i64 =
+	if let Some(x) = value {
+		x
+	} else {
+		0
+	}

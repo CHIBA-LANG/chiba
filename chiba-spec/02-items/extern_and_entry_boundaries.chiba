@@ -1,0 +1,24 @@
+// expect: reject aggregate-file
+// Boundary: extern ABI declarations must be fully typed and ABI names canonical.
+
+namespace demo.externs
+
+#[entry]
+def main(): i64 = 0
+// expect: accept entry attribute on zero-arg function
+
+def fd_write(fd: i64, ptr: Ptr[u8], len: i64): i64 = extern "wasi" "fd_write"
+// expect: accept wasi extern with explicit ABI types
+
+def c_abs(x: i64): i64 = extern "C" "abs"
+// expect: accept C and c canonicalize to same ABI
+
+def missing_type(x) = extern "c" "missing_type"
+// expect: reject extern-implicit-parameter-type
+
+def unknown_abi(x: i64): i64 = extern "posix" "read"
+// expect: reject unknown-extern-abi
+
+#[entry]
+def second_entry(): i64 = 1
+// expect: reject multiple-entry

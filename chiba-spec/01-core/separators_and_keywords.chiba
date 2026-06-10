@@ -1,0 +1,26 @@
+// expect: accept
+// Boundary: newline and semicolon are separators; keywords remain reserved only in keyword positions.
+
+namespace demo.separators
+
+def semicolon_block(): i64 = {
+	let a = 1;
+	let b = 2
+	a + b
+}
+// expect: runtime semicolon_block == 3
+
+def newline_block(): i64 = {
+	let a = 10
+	let b = 20
+	a + b
+}
+// expect: runtime newline_block == 30
+
+def keyword_boundaries(): i64 = {
+	let private_value = 1
+	let public_value = 2
+	private_value + public_value
+}
+// expect: runtime keyword_boundaries == 3
+// expect: fact private_value and public_value are identifiers, not visibility modifiers

@@ -1,0 +1,35 @@
+// expect: accept
+// Boundary: project surface scan sees headers and item signatures only, not function body semantics.
+
+namespace demo.surface
+
+use demo.other.visible
+public use demo.public_api.exported
+
+type HeaderOnly[T] = {
+	value: T,
+}
+
+data Shape = {
+	Circle(i64)
+	Square(i64)
+}
+
+def shape_area(shape: Shape): i64 =
+	match shape {
+		Circle(r) => r * r
+		Square(x) => x * x
+	}
+// expect: fact data Shape constructors are consumed in InterfaceSummary and PatternElaboration
+
+def exported(x: i64): i64 = {
+	// Surface scan must not parse this body for semantic facts.
+	unknown_body_symbol + x
+}
+
+private def hidden(): i64 = 0
+
+def ENTRY: i64 = 1
+// expect: fact ProjectSurface stable order independent of filesystem traversal
+// expect: fact InterfaceSummary hash changes on exported signature change
+// expect: fact InterfaceSummary hash does not change on non-exported body change

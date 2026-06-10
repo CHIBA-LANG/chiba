@@ -1,0 +1,26 @@
+// expect: accept
+// Boundary: record update changes row shape by facts, never by source string.
+
+namespace demo.record_update_boundary
+
+def update_existing(): i64 = {
+	let r = {x: 1, y: 2}
+	let s = {r | x: 10}
+	s.x + s.y
+}
+// expect: runtime update_existing == 12
+
+def extend_record(): i64 = {
+	let r = {x: 1}
+	let s = {r | y: 2}
+	s.x + s.y
+}
+// expect: runtime extend_record == 3
+// expect: fact row fields are canonicalized independent of source order
+
+def update_missing_base(): i64 = {
+	let base = unknown_record()
+	let s = {base | x: 1}
+	s.x
+}
+// expect: reject or obligation unknown_record, not fake row

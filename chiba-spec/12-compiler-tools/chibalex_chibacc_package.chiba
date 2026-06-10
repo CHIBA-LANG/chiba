@@ -1,0 +1,20 @@
+// expect: accept
+// expect: fact chibalex uses maximal munch and rule-order tie break
+// expect: fact chibalex identifier policy delegates to UTF-8/XID shared table
+// expect: fact chibacc supports backtracking by token stream position
+// expect: fact package manifest determines compilation unit graph deterministically
+// expect: fact compiler plugins may hook before-bir and before-lir without changing CIR language facts
+
+namespace demo.compiler_tools
+
+def lexer_contract(): i64 = 1
+// expect: fact no non-lexer pass infers identifier legality from string shape
+
+def parser_contract(): i64 = 1
+// expect: fact parser emits AST facts; semantic passes consume AST/symbol/typed facts only
+
+def package_contract(): i64 = 1
+// expect: fact package build order is deterministic and independent of filesystem traversal
+
+def plugin_contract(): i64 = 1
+// expect: fact plugin rewrite/takeover/error protocol is explicit and ordered

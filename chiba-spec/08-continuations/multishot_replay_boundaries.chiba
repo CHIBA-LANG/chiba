@@ -1,0 +1,32 @@
+// expect: reject aggregate-file
+// Boundary: ContN can resume repeatedly only when captured state is replay-safe or rollback-managed.
+
+namespace demo.cont_replay
+
+def parser_choice(input): i64 =
+	resetn {
+		shift retry {
+			retry(0) + retry(1)
+		}
+	}
+// expect: accept
+// expect: fact retry usage N
+// expect: fact continuation package clone_on_resume true
+
+def captures_ref(cell: Ref[i64]): i64 =
+	resetn {
+		shift retry {
+			cell := cell.* + 1
+			retry(0)
+		}
+	}
+// expect: reject contn-captures-non-replay-safe-ref
+// expect: fact Ref capture is shared-reference semantics, not snapshot
+
+def captures_unsafe(ptr: UnsafeRef[i64]): i64 =
+	resetn {
+		shift retry {
+			ptr.* + retry(0)
+		}
+	}
+// expect: reject contn-captures-unsafe-world-state
