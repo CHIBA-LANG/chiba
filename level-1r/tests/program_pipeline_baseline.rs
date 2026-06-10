@@ -12155,6 +12155,7 @@ fn program_summary_contains_program_level_nanopass_events() {
     assert!(summary.contains("defs=1"));
     assert!(summary.contains("entry=main"));
     assert!(summary.contains("P1ProjectSurface: SourceProgram -> ProjectSurface"));
+    assert!(summary.contains("P1ProjectSurface: SourceProgram -> ProjectSurface ("));
     assert!(summary.contains("P2InterfaceSummary: ProjectSurface -> InterfaceSummary"));
     assert!(summary.contains("P3ProgramDiagnostics: ProjectSurface -> ProgramDiagnostics"));
     assert!(summary.contains("P4GlobalInit: SourceProgram+ProjectSurface -> GlobalInitPlan"));
@@ -12164,6 +12165,7 @@ fn program_summary_contains_program_level_nanopass_events() {
         "P7ProgramBackendLink: ProgramDefOutput+EntrySelection+GlobalInitPlan -> BackendLinkedBundle"
     ));
     assert!(summary.contains("P8ProgramBackendCacheKey: BackendLinkedBundle -> BackendCacheKey"));
+    assert!(summary.contains("us)"));
     assert!(summary.contains("global-init:"));
     assert!(summary.contains("statics=0"));
     assert!(summary.contains("init-order=[]"));

@@ -6989,8 +6989,11 @@ impl ProgramCompileOutput {
         out.push_str("  passes:\n");
         for event in &self.passes.events {
             out.push_str(&format!(
-                "    {}: {} -> {}\n",
-                event.name, event.input, event.output
+                "    {}: {} -> {} ({}us)\n",
+                event.name,
+                event.input,
+                event.output,
+                event.elapsed.as_micros()
             ));
         }
         out
