@@ -451,6 +451,13 @@ fn unsupported_lifted_function_runtime_value(
     local_env = local_env.with_local_kind(param, WasmValueKind::I32);
     for op in body {
         match op {
+            CoreOp::RuntimeLet { binder, value } => {
+                if let Some(diagnostic) = unsupported_runtime_value(value, &local_env) {
+                    return Some(diagnostic);
+                }
+                local_env =
+                    local_env.with_local_kind(binder, runtime_local_value_kind(value, &local_env));
+            }
             CoreOp::ReturnValue(value) => {
                 if let Some(diagnostic) = unsupported_runtime_value(value, &local_env) {
                     return Some(diagnostic);
@@ -494,6 +501,13 @@ fn unsupported_captured_continuation_runtime_value(
     };
     for (index, op) in captured.ops.iter().enumerate() {
         match op {
+            CoreOp::RuntimeLet { binder, value } => {
+                if let Some(diagnostic) = unsupported_runtime_value(value, &local_env) {
+                    return Some(diagnostic);
+                }
+                local_env =
+                    local_env.with_local_kind(binder, runtime_local_value_kind(value, &local_env));
+            }
             CoreOp::ReturnValue(value) => {
                 if let Some(diagnostic) = unsupported_runtime_value(value, &local_env) {
                     return Some(diagnostic);
@@ -2557,6 +2571,7 @@ fn render_captured_continuation_i32(
                     escape_wat_comment(&value.debug_name())
                 ));
                 render_runtime_let_value(wat, binder, value, &env)?;
+                env = env.with_local_kind(binder, runtime_local_value_kind(value, &env));
             }
             CoreOp::TailCall { func, args } => {
                 let (runtime_func, runtime_args) = effective_tailcall(core, func, args, &env);
