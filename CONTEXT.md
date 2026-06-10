@@ -25,6 +25,7 @@ This repository is on the `level-1r` Rust reference compiler route. The practica
 ## Recent Good Commits
 
 ```text
+f15c75c level-1r: expose program pass timings
 381518c level-1r: preserve runtime local kinds in captured continuations
 2884218 level-1r: unify dyn row backend member abi
 966df94 level-1r: unify row callable member records
@@ -34,6 +35,8 @@ f8717ff level-1r: preserve dyn row method receiver identity
 ```
 
 The `381518c` slice fixed captured continuation runtime local kind propagation. It keeps `ContN` ADT match replay and `Cont1` captured Ref/UnsafeRef mutation replay executable.
+
+The `f15c75c` slice made program-level pass timings visible in summaries and updated handoff/context to remove stale continuation blockers.
 
 ## Verified State
 
@@ -63,8 +66,7 @@ source_pattern_clause_defs_dispatch_nested_payload_adt_parameters_to_executable_
 The old `ContN` ADT match blocker is closed. Remaining P0 work is not just more feature fixtures:
 
 - Performance gate: `program_pipeline_baseline` takes about `real 33.46s` hot, and single executable WAT tests are around `0.4s-0.7s`.
-- Program-level timing visibility: summaries should expose pass elapsed times, not just pass names.
-- P0 audit: map each `AGENTS.md` checklist item to concrete tests/evidence or an explicit gap.
+- P0 audit gate: `P0_AUDIT.md` maps each `AGENTS.md` checklist item to evidence/gaps, and `spec_alignment` checks every top-level checkpoint item is covered.
 - Parallel/incremental story: Pass 00-22 describe namespace/body/specialization parallelism and cache behavior; the Rust reference has pieces, but production-grade scheduling/cache evidence is not complete.
 - Self-bootstrap boundary: `level-1r` is a Rust reference compiler. If P0 includes Chiba self-hosting, that is not done.
 
@@ -90,7 +92,7 @@ Interpretation: the slow path is repeated end-to-end source/program pipeline plu
 
 ## Next High-Value Work
 
-1. Add durable performance evidence to program summaries and tests.
-2. Build a P0 audit table from `AGENTS.md` checklist to test evidence.
-3. Profile and reduce repeated WAT runtime setup in `program_pipeline_baseline`.
+1. Keep `P0_AUDIT.md` synchronized with `AGENTS.md` as items close.
+2. Profile and reduce repeated WAT runtime setup in `program_pipeline_baseline`.
+3. Add pass/runtime timing thresholds once the slow path is split cleanly.
 4. Continue real executable gaps only where the audit shows missing evidence.

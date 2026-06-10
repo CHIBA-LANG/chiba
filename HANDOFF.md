@@ -13,13 +13,14 @@ Branch: `level-1r`
 Latest relevant commits:
 
 ```text
+f15c75c level-1r: expose program pass timings
 381518c level-1r: preserve runtime local kinds in captured continuations
 2884218 level-1r: unify dyn row backend member abi
 966df94 level-1r: unify row callable member records
 f8717ff level-1r: preserve dyn row method receiver identity
 ```
 
-At the time of this handoff, `cargo test --manifest-path level-1r/Cargo.toml` was observed passing after `381518c`.
+At the time of this handoff, `cargo test --manifest-path level-1r/Cargo.toml` was observed passing after `381518c`. Focused timing-summary and continuation regression tests were observed passing after `f15c75c`.
 
 ## Closed Blockers
 
@@ -32,12 +33,12 @@ The fix was to preserve runtime local kinds inside captured continuation preflig
 
 ## Current Active Slice
 
-The current work should focus on P0 auditability and performance evidence:
+The current work should focus on P0 auditability and performance:
 
-- update program summaries so pass lines include elapsed time;
-- keep `CONTEXT.md` / `HANDOFF.md` aligned with current verified state;
-- add tests proving program summary timing appears;
-- then profile/optimize repeated WAT runtime setup in `program_pipeline_baseline`.
+- `P0_AUDIT.md` maps every `AGENTS.md` checkpoint item to evidence and remaining gaps;
+- `level-1r/tests/spec_alignment.rs` should keep that audit from drifting when AGENTS changes;
+- next implementation target should be profiling/optimizing repeated WAT runtime setup in `program_pipeline_baseline`;
+- do not mark P0 complete until the Missing/Partial rows are actually closed with evidence.
 
 ## Known Performance Problem
 
@@ -64,6 +65,12 @@ cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline 
 cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline program_cont1_replays_captured_ref_and_unsafe_ref_mutations_once -- --nocapture
 ```
 
+After any P0 audit edit:
+
+```sh
+cargo test --manifest-path level-1r/Cargo.toml --test spec_alignment p0_audit_covers_every_agents_checkpoint_item -- --nocapture
+```
+
 Run full suite before committing behavior changes:
 
 ```sh
@@ -73,14 +80,12 @@ cargo test --manifest-path level-1r/Cargo.toml
 ## Do Not Do
 
 - Do not reintroduce semantic string-shape inference in backend/lowering.
-- Do not treat green full tests as proof of P0 completion without an AGENTS checklist audit.
+- Do not treat green full tests as proof of P0 completion without closing the `P0_AUDIT.md` Missing/Partial rows.
 - Do not preserve obsolete blocker notes in handoff/context files.
 - Do not optimize by weakening executable WAT coverage. The goal is faster evidence, not less evidence.
 
-## Recommended Next Commit
-
-Suggested message for the timing-summary/documentation slice:
+Suggested message for the audit slice:
 
 ```text
-level-1r: expose program pass timings
+level-1r: add p0 audit gate
 ```
