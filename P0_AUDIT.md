@@ -21,6 +21,7 @@ symbol/debug manifest, and no-GC wasm/ownership lowering.
 
 Recent evidence:
 
+- Batch WAT test runner keeps executable WAT coverage while avoiding per-assertion Node startup.
 - `f15c75c level-1r: expose program pass timings`
 - `381518c level-1r: preserve runtime local kinds in captured continuations`
 - `cargo test --manifest-path level-1r/Cargo.toml` was observed passing on 2026-06-10 before the timing-audit slice.
@@ -95,7 +96,7 @@ Recent evidence:
 
 | Gate | Status | Evidence | Remaining P0 gap |
 | --- | --- | --- | --- |
-| Performance | Missing | `ProgramCompileOutput::render_summary()` now exposes pass timings. Hot `program_pipeline_baseline` was measured around 33s. | Split compile/backend/WAT runtime setup timings, define a threshold, and reduce repeated runtime setup without weakening executable coverage. |
+| Performance | Partial | `ProgramCompileOutput::render_summary()` now exposes pass timings. Batch WAT runner reduced hot `program_pipeline_baseline` from about 33s to about 1.07s while keeping executable WAT assertions. | Split compile/backend/WAT runtime setup timings into stable reports and define a threshold gate. |
 | Self-bootstrap | Missing | `level-1r` is a Rust reference compiler. | Chiba self-hosting path is not complete. |
 | Wasm target completeness | Partial | Executable WAT coverage is broad. | Full wasm-gc production target, future no-GC wasm target, manifest, and ownership runtime decisions are not complete. |
 | Spec alignment | Partial | Specs have been updated for recent rune/string and continuation decisions in separate docs. | Audit must keep code/spec/test rows synchronized as items close. |

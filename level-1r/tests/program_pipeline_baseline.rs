@@ -11,7 +11,10 @@ use chiba_level1r::{
     compile_source_program_bundle, parse_source_program, project_surface_many, Expr,
     ProgramCompileOutput, ProgramDiagnostic,
 };
-use std::process::Command;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 fn def(name: &str, params: Vec<&str>, body: Expr) -> SourceItem {
     SourceItem::Def {
@@ -11630,10 +11633,127 @@ fn run_wat_text(wat: &str) -> String {
 }
 
 fn run_wat_export(wat: &str, export: &str) -> String {
+    static WAT_FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
-        "level1r-global-init-{}-{}.wat",
+        "level1r-program-{}-{}-{}.wat",
         std::process::id(),
-        std::thread::current().name().unwrap_or("test")
+        std::thread::current().name().unwrap_or("test"),
+        WAT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::write(&path, wat).expect("write generated wat fixture");
+    wat_runner()
+        .lock()
+        .expect("wat runner lock")
+        .run(&path, export, wat)
+}
+
+fn wat_runner() -> &'static Mutex<BatchWatRunner> {
+    static RUNNER: OnceLock<Mutex<BatchWatRunner>> = OnceLock::new();
+    RUNNER.get_or_init(|| Mutex::new(BatchWatRunner::spawn()))
+}
+
+struct BatchWatRunner {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+}
+
+impl BatchWatRunner {
+    fn spawn() -> Self {
+        let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("level-1r parent repo root");
+        let mut child = Command::new("node")
+            .arg("tools/node/run-wat-batch.mjs")
+            .current_dir(repo_root)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("spawn batch wat runner");
+        let stdin = child.stdin.take().expect("batch wat runner stdin");
+        let stdout = BufReader::new(child.stdout.take().expect("batch wat runner stdout"));
+        Self {
+            child,
+            stdin,
+            stdout,
+        }
+    }
+
+    fn run(&mut self, path: &std::path::Path, export: &str, wat: &str) -> String {
+        if let Some(status) = self.child.try_wait().expect("poll batch wat runner") {
+            panic!("batch WAT runner exited before request: {status}");
+        }
+        writeln!(
+            self.stdin,
+            "RUN\t{}\t{}",
+            path.to_string_lossy(),
+            export.replace('\t', "")
+        )
+        .expect("send batch wat request");
+        self.stdin.flush().expect("flush batch wat request");
+
+        let mut line = String::new();
+        self.stdout
+            .read_line(&mut line)
+            .expect("read batch wat response");
+        let line = line.trim_end_matches(['\r', '\n']);
+        let Some((status, payload)) = line.split_once('\t') else {
+            panic!("malformed batch WAT response: {line}");
+        };
+        let decoded = decode_base64(payload).expect("decode batch WAT response");
+        match status {
+            "OK" => decoded,
+            "ERR" => panic!("generated WAT failed\nstderr:\n{}\nwat:\n{}", decoded, wat),
+            _ => panic!("unknown batch WAT response status: {status}"),
+        }
+    }
+}
+
+fn decode_base64(input: &str) -> Result<String, String> {
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 4];
+    let mut chunk_len = 0;
+    for byte in input.bytes().filter(|byte| !byte.is_ascii_whitespace()) {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => 64,
+            _ => return Err(format!("invalid base64 byte {byte}")),
+        };
+        chunk[chunk_len] = value;
+        chunk_len += 1;
+        if chunk_len == 4 {
+            if chunk[0] == 64 || chunk[1] == 64 {
+                return Err("invalid base64 padding".to_string());
+            }
+            bytes.push((chunk[0] << 2) | (chunk[1] >> 4));
+            if chunk[2] != 64 {
+                bytes.push((chunk[1] << 4) | (chunk[2] >> 2));
+            }
+            if chunk[3] != 64 {
+                bytes.push((chunk[2] << 6) | chunk[3]);
+            }
+            chunk_len = 0;
+        }
+    }
+    if chunk_len != 0 {
+        return Err("truncated base64 payload".to_string());
+    }
+    String::from_utf8(bytes).map_err(|error| error.to_string())
+}
+
+#[allow(dead_code)]
+fn run_wat_export_once(wat: &str, export: &str) -> String {
+    static WAT_FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "level1r-program-once-{}-{}-{}.wat",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("test"),
+        WAT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed)
     ));
     std::fs::write(&path, wat).expect("write generated wat fixture");
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

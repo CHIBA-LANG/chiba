@@ -66,6 +66,7 @@ source_pattern_clause_defs_dispatch_nested_payload_adt_parameters_to_executable_
 The old `ContN` ADT match blocker is closed. Remaining P0 work is not just more feature fixtures:
 
 - Performance gate: `program_pipeline_baseline` takes about `real 33.46s` hot, and single executable WAT tests are around `0.4s-0.7s`.
+- Performance fix in progress: program WAT tests now use a persistent Node batch runner, reducing hot `program_pipeline_baseline` to about `real 1.07s` while keeping executable WAT coverage.
 - P0 audit gate: `P0_AUDIT.md` maps each `AGENTS.md` checklist item to evidence/gaps, and `spec_alignment` checks every top-level checkpoint item is covered.
 - Parallel/incremental story: Pass 00-22 describe namespace/body/specialization parallelism and cache behavior; the Rust reference has pieces, but production-grade scheduling/cache evidence is not complete.
 - Self-bootstrap boundary: `level-1r` is a Rust reference compiler. If P0 includes Chiba self-hosting, that is not done.
@@ -86,6 +87,14 @@ cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline 
 
 cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline source_
   130 passed, real 34.58s
+
+After the batch WAT runner:
+
+cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline
+  327 passed, real 1.07s
+
+cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline global_init_
+  34 passed, real 0.64s
 ```
 
 Interpretation: the slow path is repeated end-to-end source/program pipeline plus backend/link plus WAT runtime execution, not a single known semantic pass. The next optimization should separate compile pipeline timing from WAT runtime setup/execution timing.

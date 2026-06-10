@@ -37,7 +37,8 @@ The current work should focus on P0 auditability and performance:
 
 - `P0_AUDIT.md` maps every `AGENTS.md` checkpoint item to evidence and remaining gaps;
 - `level-1r/tests/spec_alignment.rs` should keep that audit from drifting when AGENTS changes;
-- next implementation target should be profiling/optimizing repeated WAT runtime setup in `program_pipeline_baseline`;
+- repeated WAT runtime setup in `program_pipeline_baseline` now uses a persistent Node batch runner instead of per-assertion Node processes;
+- next implementation target should be a stable timing/threshold gate and then the remaining `P0_AUDIT.md` Missing rows;
 - do not mark P0 complete until the Missing/Partial rows are actually closed with evidence.
 
 ## Known Performance Problem
@@ -52,7 +53,14 @@ source_ subset: real 34.58s for 130 tests
 single executable WAT tests: roughly 0.4s-0.7s
 ```
 
-The largest current P0 risk is not that a single nanopass is known to be slow. The risk is that the executable test path repeatedly performs full pipeline + backend/link + WAT runtime process/setup. A compiler intended to feel Go-fast cannot treat this as acceptable.
+After the batch WAT runner:
+
+```text
+program_pipeline_baseline full suite: real 1.07s for 327 tests
+global_init_ subset: real 0.64s for 34 tests
+```
+
+The old largest test-time cost was repeated Node process startup for executable WAT assertions. That has been removed without weakening executable WAT coverage. Remaining performance work should create a stable threshold/timing gate and then attack real compiler pass costs.
 
 ## Next Commands
 

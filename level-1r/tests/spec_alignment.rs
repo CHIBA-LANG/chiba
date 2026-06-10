@@ -41,7 +41,7 @@ fn p0_audit_covers_every_agents_checkpoint_item() {
         );
     }
 
-    assert!(audit.contains("| Performance | Missing |"));
+    assert!(audit.contains("| Performance | Partial |"));
     assert!(audit.contains("| Self-bootstrap | Missing |"));
     assert!(audit.contains("| **并发实例化注册表** | Missing |"));
     assert!(audit.contains("| **增量缓存** | Missing |"));
