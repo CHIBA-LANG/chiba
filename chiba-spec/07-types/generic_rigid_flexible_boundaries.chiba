@@ -11,6 +11,20 @@ def explicit_id[T](x: T): T = x
 // expect: accept
 // expect: fact explicit T source=explicit-header
 
+def pair[T, F](x: T, y: F): T = x
+
+def explicit_instantiation_ok(): i64 = explicit_id[i64](1)
+// expect: accept
+// expect: fact explicit instantiation arity matches checked-template header
+
+def explicit_instantiation_arity_bad(): i64 = pair[i64](1, true)
+// expect: reject explicit-instantiation-arity-mismatch
+
+def concrete_one(): i64 = 1
+
+def explicit_instantiation_non_template_bad(): i64 = concrete_one[i64]()
+// expect: reject explicit-instantiation-of-non-template
+
 def rigid_bad[T, F](x: T): F = x
 // expect: reject rigid-template-return-mismatch
 

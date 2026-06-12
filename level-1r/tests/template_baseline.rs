@@ -4,7 +4,7 @@ use chiba_level1r::template::{
     TemplateObligation, TemplateParam, TemplateParamSource,
 };
 use chiba_level1r::typed::{SendColor, Type, TypedExprKind, UsageColor};
-use chiba_level1r::{compile_expr, Expr};
+use chiba_level1r::{compile_expr, Expr, ProgramDiagnostic};
 
 #[test]
 fn row_shape_canonicalization_ignores_source_field_order() {
@@ -362,4 +362,63 @@ fn open_row_generic_bound_enters_template_member_obligations() {
             shape: canonical_open_row(vec![("f", ShapeType::Named("F".to_string()))]),
             field: "f".to_string(),
         }));
+}
+
+#[test]
+fn explicit_instantiation_arity_mismatch_is_program_diagnostic() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def pair[T, F](x: T, y: F): T = x
+def main(): i64 = pair[i64](1, true)",
+    )
+    .expect("compile source");
+
+    assert!(output.program.diagnostics.contains(
+        &ProgramDiagnostic::ExplicitInstantiationArityMismatch {
+            def: "main".to_string(),
+            callee: "pair".to_string(),
+            expected: 2,
+            actual: 1,
+        }
+    ));
+    assert!(output
+        .program
+        .render_summary()
+        .contains("explicit instantiation arity mismatch main: pair expected 2 got 1"));
+}
+
+#[test]
+fn explicit_instantiation_of_non_template_is_program_diagnostic() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def one(): i64 = 1
+def main(): i64 = one[i64]()",
+    )
+    .expect("compile source");
+
+    assert!(output.program.diagnostics.contains(
+        &ProgramDiagnostic::ExplicitInstantiationOfNonTemplate {
+            def: "main".to_string(),
+            callee: "one".to_string(),
+        }
+    ));
+    assert!(output
+        .program
+        .render_summary()
+        .contains("explicit instantiation of non-template main: one"));
+}
+
+#[test]
+fn explicit_instantiation_with_matching_template_arity_has_no_arity_diagnostic() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def id[T](x: T): T = x
+def main(): i64 = id[i64](1)",
+    )
+    .expect("compile source");
+
+    assert!(
+        !output.program.diagnostics.iter().any(|diagnostic| matches!(
+            diagnostic,
+            ProgramDiagnostic::ExplicitInstantiationArityMismatch { .. }
+                | ProgramDiagnostic::ExplicitInstantiationOfNonTemplate { .. }
+        ))
+    );
 }

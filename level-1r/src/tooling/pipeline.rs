@@ -194,6 +194,16 @@ pub enum ProgramDiagnostic {
         previous_type_args: Vec<String>,
         type_args: Vec<String>,
     },
+    ExplicitInstantiationArityMismatch {
+        def: String,
+        callee: String,
+        expected: usize,
+        actual: usize,
+    },
+    ExplicitInstantiationOfNonTemplate {
+        def: String,
+        callee: String,
+    },
     ShiftOutsideReset {
         def: String,
         binder: String,
@@ -661,6 +671,7 @@ fn compile_program_bundle_internal(
     ));
     all_diagnostics.extend(global_init.diagnostics.iter().cloned().map(Into::into));
     all_diagnostics.extend(template_diagnostics(&defs));
+    all_diagnostics.extend(explicit_instantiation_diagnostics(&defs));
     all_diagnostics.extend(control_diagnostics(&defs));
     all_diagnostics.extend(cps_usage_diagnostics(&defs));
     let send_diagnostics = send_callable_diagnostics(&defs);
@@ -4551,6 +4562,39 @@ fn template_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
         .collect()
 }
 
+fn explicit_instantiation_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
+    let mut template_arities = BTreeMap::new();
+    for def in defs {
+        if def.receiver.is_none() {
+            template_arities.insert(def.name.clone(), def.output.template.explicit_params.len());
+        }
+    }
+
+    let mut diagnostics = Vec::new();
+    for def in defs {
+        for instantiation in &def.output.template.explicit_instantiations {
+            let Some(expected) = template_arities.get(&instantiation.callee) else {
+                continue;
+            };
+            let actual = instantiation.type_args.len();
+            if *expected == 0 {
+                diagnostics.push(ProgramDiagnostic::ExplicitInstantiationOfNonTemplate {
+                    def: def.name.clone(),
+                    callee: instantiation.callee.clone(),
+                });
+            } else if *expected != actual {
+                diagnostics.push(ProgramDiagnostic::ExplicitInstantiationArityMismatch {
+                    def: def.name.clone(),
+                    callee: instantiation.callee.clone(),
+                    expected: *expected,
+                    actual,
+                });
+            }
+        }
+    }
+    diagnostics
+}
+
 fn control_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
     defs.iter()
         .flat_map(|def| {
@@ -7417,6 +7461,17 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
             previous_type_args.join(", "),
             type_args.join(", ")
         ),
+        ProgramDiagnostic::ExplicitInstantiationArityMismatch {
+            def,
+            callee,
+            expected,
+            actual,
+        } => format!(
+            "explicit instantiation arity mismatch {def}: {callee} expected {expected} got {actual}"
+        ),
+        ProgramDiagnostic::ExplicitInstantiationOfNonTemplate { def, callee } => {
+            format!("explicit instantiation of non-template {def}: {callee}")
+        }
         ProgramDiagnostic::ShiftOutsideReset { def, binder } => {
             format!("shift outside reset {def}: {binder}")
         }
