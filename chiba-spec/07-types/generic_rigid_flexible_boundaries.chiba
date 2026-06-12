@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: explicit [T] is rigid; omitted annotations are flexible until legal generalization.
 
 namespace demo.generic_boundary

@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: re-export aliases must be stable public interface edges, not merge-order guesses.
 
 namespace left.math {

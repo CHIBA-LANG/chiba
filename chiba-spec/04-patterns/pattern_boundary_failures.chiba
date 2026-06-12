@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: pattern support matrix must reject refutable or ambiguous positions.
 
 namespace demo.pattern_fail

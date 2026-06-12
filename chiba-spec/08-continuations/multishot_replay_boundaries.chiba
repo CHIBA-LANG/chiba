@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: ContN can resume repeatedly only when captured state is replay-safe or rollback-managed.
 
 namespace demo.cont_replay

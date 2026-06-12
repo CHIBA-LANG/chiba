@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: loop tags are scoped control facts, not string labels guessed later.
 
 namespace demo.loop_boundary

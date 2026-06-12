@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: string prefixes are literal-layer protocol, not semantic string-shape inference.
 
 namespace demo.string_boundary
@@ -22,4 +22,4 @@ def c_bad(): cstr = c"bad\0nul"
 // expect: reject cstr-interior-nul
 
 def prefix_unknown(): String = sql"select 1"
-// expect: reject unknown-string-literal-handler unless handler is in lexical/literal registry
+// expect: reject unknown-string-literal-handler

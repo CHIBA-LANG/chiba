@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: non-lexer passes must never infer semantics from identifier spelling.
 
 namespace demo.no_string_shape
@@ -6,7 +6,7 @@ namespace demo.no_string_shape
 def UppercaseLooksLikeCtor(): i64 = 1
 
 def uses_as_ctor(): i64 = UppercaseLooksLikeCtor(1)
-// expect: reject function-arity-mismatch or missing-constructor
+// expect: reject function-arity-mismatch
 // expect: fact no uppercase heuristic for constructor detection
 
 type TupleLooksLikeTuple = {
@@ -18,5 +18,5 @@ def tuple_by_name(v: TupleLooksLikeTuple): i64 = v._1
 // expect: fact no nominal-name string parse for tuple fields
 
 def static_like_name(): i64 = GLOBAL_VALUE
-// expect: reject unresolved-name unless symbol table has GLOBAL_VALUE
+// expect: reject unresolved-name
 // expect: fact no all-caps heuristic for static/global

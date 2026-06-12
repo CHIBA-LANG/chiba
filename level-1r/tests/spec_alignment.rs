@@ -25,27 +25,44 @@ fn todo_records_current_wasm_gc_and_future_no_gc_wasm_targets() {
 }
 
 #[test]
-fn p0_audit_covers_every_agents_checkpoint_item() {
+fn agents_records_current_p0_step1_and_step2_work() {
     let agents = fs::read_to_string(repo_root().join("AGENTS.md")).unwrap();
-    let audit = fs::read_to_string(repo_root().join("P0_AUDIT.md")).unwrap();
 
-    for line in agents.lines().filter(|line| line.starts_with("- [ ] ")) {
-        let item = line
-            .trim_start_matches("- [ ] ")
-            .trim()
-            .trim_matches('*')
-            .trim();
+    assert!(agents.contains("## P0 Step 1：非性能剩余落地"));
+    assert!(agents.contains("## P0 Step 2：编译加速 / 并行 / 增量"));
+
+    for required in [
+        "checked generics / template 完整化",
+        "continuation / callable / capability 安全矩阵",
+        "ownership / layout / runtime lowering 完整化",
+        "symbol manifest / debug map / namespace ownership",
+        "multi-namespace backend / link / ABI",
+        "no-GC wasm 或共享 target-neutral lowering 证明",
+        "legacy lowering shortcut 清理",
+        "稳定 timing / threshold gate",
+        "ProjectSurface / InterfaceSummary 增量缓存",
+        "并发实例化注册表",
+        "namespace / body 并行区",
+        "specialization 并行区",
+    ] {
         assert!(
-            audit.contains(item),
-            "P0_AUDIT.md is missing AGENTS checkpoint item: {item}"
+            agents.contains(required),
+            "AGENTS.md is missing current P0 work item: {required}"
         );
     }
 
-    assert!(audit.contains("| Performance | Partial |"));
-    assert!(audit.contains("| Self-bootstrap | Missing |"));
-    assert!(audit.contains("| **并发实例化注册表** | Missing |"));
-    assert!(audit.contains("| **增量缓存** | Missing |"));
-    assert!(audit.contains("| **namespace 并行区** | Missing |"));
+    let step1 = agents
+        .split("## P0 Step 1：非性能剩余落地")
+        .nth(1)
+        .and_then(|rest| rest.split("## P0 Step 2：编译加速 / 并行 / 增量").next())
+        .unwrap();
+    let step2 = agents
+        .split("## P0 Step 2：编译加速 / 并行 / 增量")
+        .nth(1)
+        .unwrap();
+
+    assert!(step1.contains("non-escaping") || step1.contains("非逃逸") || step1.contains("语义"));
+    assert!(step2.contains("性能优化不能通过削弱 executable WAT 覆盖"));
 }
 
 #[test]
@@ -93,6 +110,104 @@ fn chiba_spec_tree_is_tracked_and_every_fixture_has_expectations() {
     }
 }
 
+#[test]
+fn chiba_spec_oracles_use_stable_categories() {
+    let spec_root = repo_root().join("chiba-spec");
+    let fixtures = collect_chiba_spec_fixtures(&spec_root);
+    let readme = fs::read_to_string(spec_root.join("README.md")).unwrap();
+
+    assert!(readme.contains("// expect: mixed-outcomes"));
+    assert!(readme.contains("// expect: warning ..."));
+
+    let forbidden = [
+        "aggregate-file",
+        "reject or",
+        " or missing-",
+        " unless ",
+        "future runner",
+        "current level-1",
+        "when support matrix permits",
+    ];
+
+    for path in &fixtures {
+        let source = fs::read_to_string(path).unwrap();
+        let relative = path.strip_prefix(repo_root()).unwrap().display();
+        for (line_index, line) in source.lines().enumerate() {
+            if !line.contains("// expect:") {
+                continue;
+            }
+            for pattern in forbidden {
+                assert!(
+                    !line.contains(pattern),
+                    "{relative}:{} contains unstable oracle wording `{pattern}`: {line}",
+                    line_index + 1
+                );
+            }
+            let oracle = line.split_once("// expect:").unwrap().1.trim();
+            let kind = oracle.split_whitespace().next().unwrap_or("");
+            assert!(
+                matches!(
+                    kind,
+                    "accept" | "reject" | "warning" | "runtime" | "fact" | "mixed-outcomes"
+                ),
+                "{relative}:{} uses unknown oracle kind `{kind}`",
+                line_index + 1
+            );
+            if kind == "reject" {
+                assert!(
+                    oracle.split_whitespace().nth(1).is_some(),
+                    "{relative}:{} reject oracle must include a stable diagnostic category",
+                    line_index + 1
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn aggregate_declaration_examples_use_equals_before_body() {
+    let root = repo_root();
+    let mut files = Vec::new();
+
+    collect_files_with_extensions(&root.join("chiba-spec"), &["chiba", "md"], &mut files);
+    collect_files_with_extensions(
+        &root
+            .join("../chiba-org-web/src/content/chiba-level1-spec")
+            .canonicalize()
+            .unwrap(),
+        &["md", "chiba"],
+        &mut files,
+    );
+    collect_files_with_extensions(
+        &root
+            .join("../chiba-org-web/src/content/type_system")
+            .canonicalize()
+            .unwrap(),
+        &["md", "chiba"],
+        &mut files,
+    );
+    collect_files_with_extensions(&root.join("level-1r/src"), &["rs"], &mut files);
+    collect_files_with_extensions(&root.join("level-1r/tests"), &["rs"], &mut files);
+    files.push(root.join("AGENTS.md"));
+
+    let mut bad = Vec::new();
+    for path in files {
+        let source = fs::read_to_string(&path).unwrap();
+        for (line_index, line) in source.lines().enumerate() {
+            if aggregate_decl_line_without_equals(line) {
+                let relative = path.strip_prefix(&root).unwrap_or(&path);
+                bad.push(format!("{}:{}", relative.display(), line_index + 1));
+            }
+        }
+    }
+
+    assert!(
+        bad.is_empty(),
+        "aggregate declarations must use `type/data/union Name = {{ ... }}`: {}",
+        bad.join(", ")
+    );
+}
+
 fn collect_chiba_spec_fixtures(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     collect_chiba_spec_fixtures_into(root, &mut out);
@@ -109,4 +224,52 @@ fn collect_chiba_spec_fixtures_into(dir: &Path, out: &mut Vec<PathBuf>) {
             out.push(path);
         }
     }
+}
+
+fn collect_files_with_extensions(root: &Path, extensions: &[&str], out: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            collect_files_with_extensions(&path, extensions, out);
+        } else if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| extensions.contains(&ext))
+        {
+            out.push(path);
+        }
+    }
+}
+
+fn aggregate_decl_line_without_equals(line: &str) -> bool {
+    let trimmed = line.trim_start_matches(|ch: char| {
+        ch.is_whitespace()
+            || matches!(
+                ch,
+                '"' | '`' | '\'' | '-' | '*' | '>' | ':' | '(' | '[' | '{'
+            )
+    });
+    let Some(rest) = trimmed
+        .strip_prefix("type ")
+        .or_else(|| trimmed.strip_prefix("data "))
+        .or_else(|| trimmed.strip_prefix("union "))
+    else {
+        return false;
+    };
+    let Some(body_start) = rest.find('{') else {
+        return false;
+    };
+    let header = rest[..body_start].trim();
+    if header.is_empty()
+        || header.contains('`')
+        || header.contains("{}")
+        || header.contains("::")
+        || !header
+            .chars()
+            .next()
+            .is_some_and(|ch| ch == '_' || ch.is_alphabetic())
+    {
+        return false;
+    }
+    !header.contains('=')
 }

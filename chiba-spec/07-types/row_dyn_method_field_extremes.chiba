@@ -10,13 +10,13 @@
 
 namespace spec.types.row_dyn_method_field_extremes
 
-type MethodOnly {
+type MethodOnly = {
 	x: i64
 }
 
 def MethodOnly.f(self: Self, delta: i64): i64 = self.x + delta
 
-type FieldAndMethod {
+type FieldAndMethod = {
 	f: (i64) -> i64
 	x: i64
 }
@@ -48,7 +48,7 @@ def dyn_field_runtime(): i64 =
 	dynamic_call({f: fn(y) { y + 1 }})
 // expect: runtime dyn_field_runtime == 8
 
-type BadField {
+type BadField = {
 	f: i64
 }
 
@@ -56,7 +56,7 @@ def bad_field(value: BadField): i64 =
 	call_member(value)
 // expect: reject non-callable-field-for-callable-row-member
 
-type BadMethod {
+type BadMethod = {
 	x: i64
 }
 

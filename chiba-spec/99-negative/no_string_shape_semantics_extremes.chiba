@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // expect: fact no semantic pass may infer syntax, identifier class, namespace, callable, static/global name, tuple, method, or intrinsic identity from string shape
 // expect: fact lexer/chibalex/regex tokenization and shared XID tables are the only identifier legality authorities
 // expect: reject ascii-case-constructor-guess
@@ -8,7 +8,7 @@
 
 namespace spec.negative.no_string_shape_semantics_extremes
 
-type LooksLikeTupleField {
+type LooksLikeTupleField = {
 	_1: i64
 }
 
@@ -16,7 +16,7 @@ def ordinary_field(value: LooksLikeTupleField): i64 =
 	value._1
 // expect: fact `_1` is an ordinary declared field here, not tuple-field semantics guessed from spelling
 
-type NotTuple {
+type NotTuple = {
 	field_1: i64
 }
 
@@ -31,7 +31,7 @@ def ordinary_name_is_not_intrinsic(value): i64 =
 	compiler_intrinsic_tuple_to_adt(value)
 // expect: fact source name prefix does not grant compiler intrinsic identity
 
-type CallableLookingName {
+type CallableLookingName = {
 	callback_fn: i64
 }
 

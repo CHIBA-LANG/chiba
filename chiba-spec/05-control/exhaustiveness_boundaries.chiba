@@ -30,4 +30,4 @@ def missing(value: Tri): i64 =
 		B => 2
 	}
 // expect: warning non-exhaustive-match missing C
-// expect: fact current level-1 policy is warning, not hard error
+// expect: fact non-exhaustive match is accepted with warning, not runtime trap

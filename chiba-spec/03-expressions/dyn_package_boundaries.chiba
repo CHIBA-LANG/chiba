@@ -17,5 +17,5 @@ def no_auto_nominal(v: dyn {r | name: String}): Person = v
 // expect: reject dyn-to-nominal-without-explicit-checked-conversion
 
 def no_runtime_search(v): dyn {r | name: String} = v
-// expect: reject or obligation until concrete expected-type packaging point
+// expect: reject unconstrained-dyn-row-packaging
 // expect: fact no runtime global impl search

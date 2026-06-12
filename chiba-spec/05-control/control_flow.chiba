@@ -1,6 +1,6 @@
 // expect: accept
 // expect: fact if and match are expressions
-// expect: fact non-exhaustive match reports warning in current level-1 policy
+// expect: fact non-exhaustive match reports warning rather than runtime trap
 // expect: fact loop tags resolve break/continue target structurally
 
 namespace demo.control

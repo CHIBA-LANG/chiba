@@ -14,7 +14,7 @@ def unwrap_or_zero(None: Option[i64]): i64 = 0
 // expect: fact binding x exists only in Some clause body
 
 def whole_payload(whole @ Some(x): Option[i64]): i64 = x
-// expect: accept at-pattern parameter when support matrix permits it
+// expect: accept at-pattern parameter
 
 def duplicate((x, x): (i64, i64)): i64 = x
 // expect: reject duplicate-pattern-binding

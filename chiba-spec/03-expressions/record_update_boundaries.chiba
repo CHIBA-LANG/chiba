@@ -23,4 +23,5 @@ def update_missing_base(): i64 = {
 	let s = {base | x: 1}
 	s.x
 }
-// expect: reject or obligation unknown_record, not fake row
+// expect: reject unresolved-record-base
+// expect: fact unresolved base does not synthesize a fake row

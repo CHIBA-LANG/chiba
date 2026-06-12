@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: extern ABI declarations must be fully typed and ABI names canonical.
 
 namespace demo.externs

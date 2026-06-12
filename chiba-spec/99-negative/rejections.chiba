@@ -1,5 +1,5 @@
-// expect: reject aggregate-file
-// This file intentionally collects negative snippets. A future runner may split them.
+// expect: mixed-outcomes
+// This file intentionally collects independent negative snippets.
 
 namespace demo.negative
 

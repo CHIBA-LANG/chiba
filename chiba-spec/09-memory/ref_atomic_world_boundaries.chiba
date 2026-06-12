@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: safe mutation, world-local state, send, and Atomic are distinct capability facts.
 
 namespace demo.memory_boundary
@@ -20,4 +20,4 @@ def atomic_ok(counter: Atomic[i64] send): i64 = counter.load(.SeqCst)
 // expect: fact Atomic is explicit shared mutation capability
 
 def unsafe_cross_world(ptr: UnsafeRef[i64] send): i64 = ptr.*
-// expect: reject unless unsafe protocol explicitly proves send
+// expect: reject unsafe-ref-send-without-explicit-protocol

@@ -33,13 +33,13 @@ The fix was to preserve runtime local kinds inside captured continuation preflig
 
 ## Current Active Slice
 
-The current work should focus on P0 auditability and performance:
+The current work should focus on P0 Step 1 in `AGENTS.md` first, then compile acceleration:
 
-- `P0_AUDIT.md` maps every `AGENTS.md` checkpoint item to evidence and remaining gaps;
-- `level-1r/tests/spec_alignment.rs` should keep that audit from drifting when AGENTS changes;
+- `P0_AUDIT.md` has been removed; remaining P0 work is listed directly in `AGENTS.md`;
+- `level-1r/tests/spec_alignment.rs` should keep the AGENTS Step 1/Step 2 structure from drifting;
 - repeated WAT runtime setup in `program_pipeline_baseline` now uses a persistent Node batch runner instead of per-assertion Node processes;
-- next implementation target should be a stable timing/threshold gate and then the remaining `P0_AUDIT.md` Missing rows;
-- do not mark P0 complete until the Missing/Partial rows are actually closed with evidence.
+- next implementation target should be remaining non-performance Step 1 items unless the user explicitly switches to Step 2 timing/cache work;
+- do not mark P0 complete until the AGENTS Step 1 and Step 2 rows are actually closed with evidence.
 
 ## Known Performance Problem
 
@@ -73,10 +73,10 @@ cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline 
 cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline program_cont1_replays_captured_ref_and_unsafe_ref_mutations_once -- --nocapture
 ```
 
-After any P0 audit edit:
+After any AGENTS Step 1/Step 2 edit:
 
 ```sh
-cargo test --manifest-path level-1r/Cargo.toml --test spec_alignment p0_audit_covers_every_agents_checkpoint_item -- --nocapture
+cargo test --manifest-path level-1r/Cargo.toml --test spec_alignment agents_records_current_p0_step1_and_step2_work -- --nocapture
 ```
 
 Run full suite before committing behavior changes:
@@ -88,12 +88,12 @@ cargo test --manifest-path level-1r/Cargo.toml
 ## Do Not Do
 
 - Do not reintroduce semantic string-shape inference in backend/lowering.
-- Do not treat green full tests as proof of P0 completion without closing the `P0_AUDIT.md` Missing/Partial rows.
+- Do not treat green full tests as proof of P0 completion without closing the `AGENTS.md` Step 1/Step 2 rows.
 - Do not preserve obsolete blocker notes in handoff/context files.
 - Do not optimize by weakening executable WAT coverage. The goal is faster evidence, not less evidence.
 
-Suggested message for the audit slice:
+Suggested message for this documentation slice:
 
 ```text
-level-1r: add p0 audit gate
+level-1r: move p0 gaps into agents
 ```

@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: answer type and continuation kind are delimiter facts.
 
 namespace demo.cont_answer

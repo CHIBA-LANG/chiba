@@ -1,4 +1,4 @@
-// expect: reject aggregate-file
+// expect: mixed-outcomes
 // Boundary: operator resolution is typed/obligation-level, not parser-level guessing.
 
 namespace left.ops

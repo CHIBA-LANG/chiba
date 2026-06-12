@@ -19,7 +19,7 @@ data Option[T] = {
 	None
 }
 
-type Box[T] {
+type Box[T] = {
 	value: T
 }
 

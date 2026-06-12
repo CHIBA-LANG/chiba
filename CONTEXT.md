@@ -67,7 +67,7 @@ The old `ContN` ADT match blocker is closed. Remaining P0 work is not just more 
 
 - Performance gate: `program_pipeline_baseline` takes about `real 33.46s` hot, and single executable WAT tests are around `0.4s-0.7s`.
 - Performance fix in progress: program WAT tests now use a persistent Node batch runner, reducing hot `program_pipeline_baseline` to about `real 1.07s` while keeping executable WAT coverage.
-- P0 audit gate: `P0_AUDIT.md` maps each `AGENTS.md` checklist item to evidence/gaps, and `spec_alignment` checks every top-level checkpoint item is covered.
+- P0 remaining work now lives directly in `AGENTS.md` as Step 1 non-performance landing work and Step 2 compile acceleration / parallel / incremental work. `P0_AUDIT.md` was removed.
 - Parallel/incremental story: Pass 00-22 describe namespace/body/specialization parallelism and cache behavior; the Rust reference has pieces, but production-grade scheduling/cache evidence is not complete.
 - Self-bootstrap boundary: `level-1r` is a Rust reference compiler. If P0 includes Chiba self-hosting, that is not done.
 
@@ -101,7 +101,7 @@ Interpretation: the slow path is repeated end-to-end source/program pipeline plu
 
 ## Next High-Value Work
 
-1. Keep `P0_AUDIT.md` synchronized with `AGENTS.md` as items close.
-2. Profile and reduce repeated WAT runtime setup in `program_pipeline_baseline`.
-3. Add pass/runtime timing thresholds once the slow path is split cleanly.
-4. Continue real executable gaps only where the audit shows missing evidence.
+1. Keep `AGENTS.md` Step 1 synchronized with actual remaining non-performance P0 work.
+2. Finish Step 1 semantic / middle-end / backend evidence before treating compile acceleration as the main work.
+3. Step 2 starts with stable pass/backend/runtime timing thresholds, then parallel/incremental cache work.
+4. Continue real executable gaps only where the AGENTS Step 1 list shows missing evidence.
