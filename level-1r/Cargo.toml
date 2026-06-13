@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Rust reference compiler for Chiba level-1 bootstrap"
 license = "MIT"
+autotests = false
 
 [lib]
 name = "chiba_level1r"
@@ -12,5 +13,9 @@ path = "src/lib.rs"
 [[bin]]
 name = "chiba-level1r"
 path = "src/main.rs"
+
+[[test]]
+name = "all"
+path = "tests/all.rs"
 
 [dependencies]

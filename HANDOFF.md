@@ -36,7 +36,8 @@ The fix was to preserve runtime local kinds inside captured continuation preflig
 The current work should focus on P0 Step 1 in `AGENTS.md` first, then compile acceleration:
 
 - `P0_AUDIT.md` has been removed; remaining P0 work is listed directly in `AGENTS.md`;
-- `level-1r/tests/spec_alignment.rs` should keep the AGENTS Step 1/Step 2 structure from drifting;
+- `level-1r/tests/all.rs` is the single integration-test harness; module paths preserve the old baseline grouping;
+- `level-1r/tests/spec_alignment.rs` is included through `tests/all.rs` and should keep the AGENTS Step 1/Step 2 structure from drifting;
 - repeated WAT runtime setup in `program_pipeline_baseline` now uses a persistent Node batch runner instead of per-assertion Node processes;
 - next implementation target should be remaining non-performance Step 1 items unless the user explicitly switches to Step 2 timing/cache work;
 - do not mark P0 complete until the AGENTS Step 1 and Step 2 rows are actually closed with evidence.
@@ -60,7 +61,15 @@ program_pipeline_baseline full suite: real 1.07s for 327 tests
 global_init_ subset: real 0.64s for 34 tests
 ```
 
-The old largest test-time cost was repeated Node process startup for executable WAT assertions. That has been removed without weakening executable WAT coverage. Remaining performance work should create a stable threshold/timing gate and then attack real compiler pass costs.
+After grouping integration tests into a single `--test all` harness:
+
+```text
+cargo test --manifest-path level-1r/Cargo.toml -- --list: real 4.79s
+cargo test --manifest-path level-1r/Cargo.toml --quiet: real 10.48s
+tests/all.rs internal run: 676 tests, finished in 1.81s
+```
+
+The old largest test-time cost was repeated Node process startup for executable WAT assertions. The later full-suite cost was Cargo/libtest startup for many integration test binaries; `tests/all.rs` removes that split without weakening coverage. Remaining performance work should create a stable threshold/timing gate and then attack real compiler pass costs.
 
 ## Next Commands
 
@@ -68,15 +77,15 @@ After any timing-summary edit:
 
 ```sh
 cargo fmt --manifest-path level-1r/Cargo.toml --check
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline program_summary_contains_program_level_nanopass_events -- --nocapture
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline program_contn_repeated_resume_replays_captured_adt_match_context -- --nocapture
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline program_cont1_replays_captured_ref_and_unsafe_ref_mutations_once -- --nocapture
+cargo test --manifest-path level-1r/Cargo.toml --test all program_pipeline_baseline::program_summary_contains_program_level_nanopass_events -- --nocapture
+cargo test --manifest-path level-1r/Cargo.toml --test all program_pipeline_baseline::program_contn_repeated_resume_replays_captured_adt_match_context -- --nocapture
+cargo test --manifest-path level-1r/Cargo.toml --test all program_pipeline_baseline::program_cont1_replays_captured_ref_and_unsafe_ref_mutations_once -- --nocapture
 ```
 
 After any AGENTS Step 1/Step 2 edit:
 
 ```sh
-cargo test --manifest-path level-1r/Cargo.toml --test spec_alignment agents_records_current_p0_step1_and_step2_work -- --nocapture
+cargo test --manifest-path level-1r/Cargo.toml --test all spec_alignment::agents_records_current_p0_step1_and_step2_work -- --nocapture
 ```
 
 Run full suite before committing behavior changes:

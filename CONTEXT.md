@@ -65,8 +65,7 @@ source_pattern_clause_defs_dispatch_nested_payload_adt_parameters_to_executable_
 
 The old `ContN` ADT match blocker is closed. Remaining P0 work is not just more feature fixtures:
 
-- Performance gate: `program_pipeline_baseline` takes about `real 33.46s` hot, and single executable WAT tests are around `0.4s-0.7s`.
-- Performance fix in progress: program WAT tests now use a persistent Node batch runner, reducing hot `program_pipeline_baseline` to about `real 1.07s` while keeping executable WAT coverage.
+- Performance fix: program WAT tests use a persistent Node batch runner, and integration tests are grouped into one `tests/all.rs` harness instead of 32 separate Cargo test binaries.
 - P0 remaining work now lives directly in `AGENTS.md` as Step 1 non-performance landing work and Step 2 compile acceleration / parallel / incremental work. `P0_AUDIT.md` was removed.
 - Parallel/incremental story: Pass 00-22 describe namespace/body/specialization parallelism and cache behavior; the Rust reference has pieces, but production-grade scheduling/cache evidence is not complete.
 - Self-bootstrap boundary: `level-1r` is a Rust reference compiler. If P0 includes Chiba self-hosting, that is not done.
@@ -76,28 +75,20 @@ The old `ContN` ADT match blocker is closed. Remaining P0 work is not just more 
 Measured hot test timings:
 
 ```text
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline
-  327 passed, real 33.46s
+Before WAT batching:
+  program_pipeline_baseline full suite: 327 passed, real 33.46s
 
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline global_init_
-  34 passed, real 21.41s
+After WAT batching:
+  program_pipeline_baseline full suite: 327 passed, real 1.07s
+  global_init_ subset: 34 passed, real 0.64s
 
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline program_
-  132 passed, real 31.26s
-
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline source_
-  130 passed, real 34.58s
-
-After the batch WAT runner:
-
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline
-  327 passed, real 1.07s
-
-cargo test --manifest-path level-1r/Cargo.toml --test program_pipeline_baseline global_init_
-  34 passed, real 0.64s
+After grouping integration tests into `--test all`:
+  cargo test --manifest-path level-1r/Cargo.toml -- --list: real 4.79s
+  cargo test --manifest-path level-1r/Cargo.toml --quiet: real 10.48s
+  tests/all.rs internal run: 676 tests, finished in 1.81s
 ```
 
-Interpretation: the slow path is repeated end-to-end source/program pipeline plus backend/link plus WAT runtime execution, not a single known semantic pass. The next optimization should separate compile pipeline timing from WAT runtime setup/execution timing.
+Interpretation: current hot full-suite cost is dominated by Cargo/libtest harness startup and doctest/bin/lib fixed overhead. The Chiba program pipeline itself is no longer the observed slow path.
 
 ## Next High-Value Work
 
