@@ -1,7 +1,8 @@
 use chiba_level1r::backend::{
-    backend_cache_key, emit_wasm_gc, emit_wasm_gc_with_params, link_backend_artifacts,
-    BackendCacheConfig, BackendDiagnostic, BackendExternAbi, BackendExternImport,
-    BackendLinkDiagnostic, BackendTarget,
+    backend_cache_key, emit_wasm32_nogc, emit_wasm_gc, emit_wasm_gc_with_params,
+    link_backend_artifacts, BackendCacheConfig, BackendDiagnostic, BackendExternAbi,
+    BackendExternImport, BackendLayoutPolicy, BackendLinkDiagnostic, BackendOwnershipRuntime,
+    BackendTarget,
 };
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
@@ -908,6 +909,57 @@ fn backend_link_rejects_duplicate_final_symbols() {
 }
 
 #[test]
+fn backend_target_matrix_emits_scalar_wasm_gc_and_wasm32_nogc() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::I64(42))],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let wasm_gc = emit_wasm_gc(&core, &CoreValidation::default());
+    let wasm32_nogc = emit_wasm32_nogc(&core, &CoreValidation::default());
+
+    assert_eq!(wasm_gc.target, BackendTarget::WasmGc);
+    assert_eq!(wasm32_nogc.target, BackendTarget::Wasm32NoGc);
+    assert_eq!(wasm_gc.diagnostics, vec![]);
+    assert_eq!(wasm32_nogc.diagnostics, vec![]);
+    assert!(wasm_gc
+        .wat
+        .contains("(func $main (export \"main\") (result i32)"));
+    assert!(wasm32_nogc
+        .wat
+        .contains("(func $main (export \"main\") (result i32)"));
+    assert!(!wasm32_nogc.wat.contains("externref"));
+    assert!(!wasm32_nogc.wat.contains("struct.new"));
+    assert!(!wasm32_nogc.wat.contains("array.new"));
+}
+
+#[test]
+fn backend_link_rejects_mixed_target_matrix_artifacts() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::I64(7))],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let wasm_gc = emit_wasm_gc(&core, &CoreValidation::default());
+    let wasm32_nogc = emit_wasm32_nogc(&core, &CoreValidation::default());
+    let bundle = link_backend_artifacts(vec![wasm_gc, wasm32_nogc]);
+
+    assert_eq!(
+        bundle.diagnostics,
+        vec![BackendLinkDiagnostic::TargetMismatch {
+            artifact_index: 1,
+            expected: BackendTarget::WasmGc,
+            actual: BackendTarget::Wasm32NoGc,
+        }]
+    );
+    assert_eq!(bundle.linked_wat, "");
+}
+
+#[test]
 fn backend_utf8_final_symbols_are_encoded_without_collision() {
     let first = emit_wasm_gc(
         &CoreProgram {
@@ -1057,6 +1109,38 @@ fn backend_cache_key_distinguishes_target_features_and_imports() {
     assert_eq!(
         output.backend_cache_key,
         backend_cache_key(&output.backend_link, &BackendCacheConfig::default())
+    );
+}
+
+#[test]
+fn backend_cache_key_distinguishes_requested_target_and_layout_policy() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::I64(1))],
+        layouts: vec![],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+    let wasm_gc_bundle =
+        link_backend_artifacts(vec![emit_wasm_gc(&core, &CoreValidation::default())]);
+    let wasm32_bundle =
+        link_backend_artifacts(vec![emit_wasm32_nogc(&core, &CoreValidation::default())]);
+    let wasm_gc_config = BackendCacheConfig::default();
+    let mut wasm32_config = BackendCacheConfig::default();
+    wasm32_config.target = BackendTarget::Wasm32NoGc;
+    wasm32_config.layout_policy = BackendLayoutPolicy::LinearMemoryNoGc;
+    wasm32_config.ownership_runtime = BackendOwnershipRuntime::RcArcHelpers;
+
+    assert_ne!(
+        backend_cache_key(&wasm_gc_bundle, &wasm_gc_config),
+        backend_cache_key(&wasm32_bundle, &wasm32_config)
+    );
+
+    let mut requested_native = wasm32_config.clone();
+    requested_native.target = BackendTarget::Native;
+    requested_native.layout_policy = BackendLayoutPolicy::NativeAbi;
+    assert_ne!(
+        backend_cache_key(&wasm32_bundle, &wasm32_config),
+        backend_cache_key(&wasm32_bundle, &requested_native)
     );
 }
 

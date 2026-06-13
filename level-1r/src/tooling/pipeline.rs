@@ -7298,6 +7298,8 @@ fn render_backend_link_diagnostic(diagnostic: &BackendLinkDiagnostic) -> String 
 fn render_backend_target(target: crate::backend::BackendTarget) -> &'static str {
     match target {
         crate::backend::BackendTarget::WasmGc => "wasm-gc",
+        crate::backend::BackendTarget::Wasm32NoGc => "wasm32-nogc",
+        crate::backend::BackendTarget::Native => "native",
     }
 }
 

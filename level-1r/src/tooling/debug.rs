@@ -1246,6 +1246,8 @@ fn render_backend_link_diagnostic(diagnostic: &BackendLinkDiagnostic) -> String 
 fn render_backend_target(target: BackendTarget) -> &'static str {
     match target {
         BackendTarget::WasmGc => "wasm-gc",
+        BackendTarget::Wasm32NoGc => "wasm32-nogc",
+        BackendTarget::Native => "native",
     }
 }
 

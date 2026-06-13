@@ -30,6 +30,8 @@ pub struct BackendLinkedBundle {
 pub enum BackendTarget {
     #[default]
     WasmGc,
+    Wasm32NoGc,
+    Native,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -184,7 +186,9 @@ pub enum BackendValueKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BackendCacheConfig {
     pub compiler_version: String,
+    pub target: BackendTarget,
     pub features: BackendTargetFeatures,
+    pub layout_policy: BackendLayoutPolicy,
     pub ownership_runtime: BackendOwnershipRuntime,
     pub imports: Vec<BackendExternImport>,
 }
@@ -194,6 +198,13 @@ pub struct BackendTargetFeatures {
     pub tailcall: bool,
     pub wasi: bool,
     pub thread: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BackendLayoutPolicy {
+    WasmGc,
+    LinearMemoryNoGc,
+    NativeAbi,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -227,11 +238,13 @@ impl Default for BackendCacheConfig {
     fn default() -> Self {
         Self {
             compiler_version: "level-1r-baseline".to_string(),
+            target: BackendTarget::WasmGc,
             features: BackendTargetFeatures {
                 tailcall: true,
                 wasi: true,
                 thread: false,
             },
+            layout_policy: BackendLayoutPolicy::WasmGc,
             ownership_runtime: BackendOwnershipRuntime::WasmGc,
             imports: vec![],
         }
@@ -256,9 +269,46 @@ pub fn emit_wasm_gc_with_param_abi(
     params: &[String],
     param_abi: &BackendParamAbi,
 ) -> BackendArtifact {
+    emit_with_target(BackendTarget::WasmGc, core, validation, params, param_abi)
+}
+
+pub fn emit_wasm32_nogc(core: &CoreProgram, validation: &CoreValidation) -> BackendArtifact {
+    emit_wasm32_nogc_with_params(core, validation, &[])
+}
+
+pub fn emit_wasm32_nogc_with_params(
+    core: &CoreProgram,
+    validation: &CoreValidation,
+    params: &[String],
+) -> BackendArtifact {
+    emit_wasm32_nogc_with_param_abi(core, validation, params, &BackendParamAbi::default())
+}
+
+pub fn emit_wasm32_nogc_with_param_abi(
+    core: &CoreProgram,
+    validation: &CoreValidation,
+    params: &[String],
+    param_abi: &BackendParamAbi,
+) -> BackendArtifact {
+    emit_with_target(
+        BackendTarget::Wasm32NoGc,
+        core,
+        validation,
+        params,
+        param_abi,
+    )
+}
+
+fn emit_with_target(
+    target: BackendTarget,
+    core: &CoreProgram,
+    validation: &CoreValidation,
+    params: &[String],
+    param_abi: &BackendParamAbi,
+) -> BackendArtifact {
     if !validation.is_ok() {
         return BackendArtifact {
-            target: BackendTarget::WasmGc,
+            target,
             wat: String::new(),
             manifest: BackendManifest::default(),
             diagnostics: vec![BackendDiagnostic::CoreValidationFailed {
@@ -272,7 +322,7 @@ pub fn emit_wasm_gc_with_param_abi(
     let manifest = manifest_for_core(core, params, &param_kinds, param_abi);
     if let Some(diagnostic) = unsupported_extern_import_signature(&manifest) {
         return BackendArtifact {
-            target: BackendTarget::WasmGc,
+            target,
             wat: String::new(),
             manifest,
             diagnostics: vec![diagnostic],
@@ -284,7 +334,7 @@ pub fn emit_wasm_gc_with_param_abi(
         unsupported_runtime_return_value(core, params, &param_kinds, param_abi)
     {
         return BackendArtifact {
-            target: BackendTarget::WasmGc,
+            target,
             wat: String::new(),
             manifest,
             diagnostics: vec![diagnostic],
@@ -295,7 +345,7 @@ pub fn emit_wasm_gc_with_param_abi(
         Ok(wat) => wat,
         Err(diagnostic) => {
             return BackendArtifact {
-                target: BackendTarget::WasmGc,
+                target,
                 wat: String::new(),
                 manifest,
                 diagnostics: vec![diagnostic],
@@ -305,7 +355,7 @@ pub fn emit_wasm_gc_with_param_abi(
     };
 
     BackendArtifact {
-        target: BackendTarget::WasmGc,
+        target,
         wat,
         manifest,
         diagnostics: vec![],
@@ -6273,6 +6323,9 @@ pub fn backend_cache_key(
     encoded.push_str("compiler=");
     encoded.push_str(&config.compiler_version);
     encoded.push('\n');
+    encoded.push_str("requested-target=");
+    encoded.push_str(backend_target_name(config.target));
+    encoded.push('\n');
     encoded.push_str("target=");
     encoded.push_str(backend_target_name(bundle.target));
     encoded.push('\n');
@@ -6297,6 +6350,9 @@ pub fn backend_cache_key(
     encoded.push('\n');
     encoded.push_str("ownership-runtime=");
     encoded.push_str(ownership_runtime_name(config.ownership_runtime));
+    encoded.push('\n');
+    encoded.push_str("layout-policy=");
+    encoded.push_str(layout_policy_name(config.layout_policy));
     encoded.push('\n');
 
     let mut imports = config.imports.clone();
@@ -6357,6 +6413,16 @@ pub fn sort_dedup_imports(imports: &mut Vec<BackendExternImport>) {
 fn backend_target_name(target: BackendTarget) -> &'static str {
     match target {
         BackendTarget::WasmGc => "wasm-gc",
+        BackendTarget::Wasm32NoGc => "wasm32-nogc",
+        BackendTarget::Native => "native",
+    }
+}
+
+fn layout_policy_name(policy: BackendLayoutPolicy) -> &'static str {
+    match policy {
+        BackendLayoutPolicy::WasmGc => "wasm-gc",
+        BackendLayoutPolicy::LinearMemoryNoGc => "linear-memory-nogc",
+        BackendLayoutPolicy::NativeAbi => "native-abi",
     }
 }
 
