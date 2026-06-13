@@ -1,8 +1,9 @@
 use chiba_level1r::backend::{
     backend_cache_key, emit_wasm32_nogc, emit_wasm_gc, emit_wasm_gc_with_params,
-    link_backend_artifacts, BackendCacheConfig, BackendDiagnostic, BackendExternAbi,
-    BackendExternImport, BackendLayoutPolicy, BackendLinkDiagnostic, BackendOwnershipRuntime,
-    BackendTarget,
+    link_backend_artifacts, render_target_layout_plan, render_target_neutral_layout_plan,
+    target_layout_plan, target_neutral_layout_plan, BackendCacheConfig, BackendDiagnostic,
+    BackendExternAbi, BackendExternImport, BackendLayoutPolicy, BackendLinkDiagnostic,
+    BackendOwnershipRuntime, BackendTarget, TargetNeutralLayoutKind, TargetPhysicalLayout,
 };
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
@@ -933,6 +934,53 @@ fn backend_target_matrix_emits_scalar_wasm_gc_and_wasm32_nogc() {
     assert!(!wasm32_nogc.wat.contains("externref"));
     assert!(!wasm32_nogc.wat.contains("struct.new"));
     assert!(!wasm32_nogc.wat.contains("array.new"));
+}
+
+#[test]
+fn backend_layout_plan_matrix_keeps_neutral_and_target_layouts_separate() {
+    let core = CoreProgram {
+        ops: vec![CoreOp::RecordConstruct {
+            layout: "record::x+y".to_string(),
+            fields: vec!["x".to_string(), "y".to_string()],
+        }],
+        layouts: vec![LayoutFact {
+            key: "record::x+y".to_string(),
+            hash: 17,
+            kind: LayoutKind::RecordStruct(chiba_level1r::core::RecordLayout {
+                fields: vec!["x".to_string(), "y".to_string()],
+            }),
+        }],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let neutral = target_neutral_layout_plan(&core);
+    let neutral_dump = render_target_neutral_layout_plan(&neutral);
+    assert_eq!(neutral.entries.len(), 1);
+    assert_eq!(
+        neutral.entries[0].kind,
+        TargetNeutralLayoutKind::RecordStruct
+    );
+    assert!(neutral_dump.contains("neutral-layout record::x+y hash=17 kind=record-struct"));
+    assert!(!neutral_dump.contains("wasm"));
+    assert!(!neutral_dump.contains("native"));
+    assert!(!neutral_dump.contains("funcref"));
+    assert!(!neutral_dump.contains("eqref"));
+
+    let wasm_gc = target_layout_plan(&neutral, BackendTarget::WasmGc);
+    let wasm32_nogc = target_layout_plan(&neutral, BackendTarget::Wasm32NoGc);
+    assert!(matches!(
+        &wasm_gc.entries[0].physical,
+        TargetPhysicalLayout::WasmGcRef { descriptor }
+            if descriptor == "record-struct::record::x+y"
+    ));
+    assert!(matches!(
+        &wasm32_nogc.entries[0].physical,
+        TargetPhysicalLayout::Wasm32LinearMemory { descriptor }
+            if descriptor == "record-struct::record::x+y"
+    ));
+    assert!(render_target_layout_plan(&wasm_gc).contains("physical=wasm-gc-ref"));
+    assert!(render_target_layout_plan(&wasm32_nogc).contains("physical=wasm32-linear-memory"));
 }
 
 #[test]

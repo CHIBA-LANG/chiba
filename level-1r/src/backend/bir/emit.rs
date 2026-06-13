@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::control::ContinuationKind;
 use crate::core::{
     CoreCapturedContinuation, CoreExternAbi, CoreMatchArm, CoreOp, CorePattern, CoreProgram,
-    CoreRefCellLane, CoreValidation, CoreValue, OperatorIntrinsic, OwnershipDecision, RangeField,
-    SliceField, TextField,
+    CoreRefCellLane, CoreValidation, CoreValue, LayoutFact, LayoutKind, OperatorIntrinsic,
+    OwnershipDecision, RangeField, SliceField, TextField,
 };
 use crate::symbol::encode_debug_symbol;
 use crate::typed::{AggregateKind, BuiltinMethodCall, TextKind, Type};
@@ -24,6 +24,49 @@ pub struct BackendLinkedBundle {
     pub linked_wat: String,
     pub manifest: BackendManifest,
     pub diagnostics: Vec<BackendLinkDiagnostic>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TargetNeutralLayoutPlan {
+    pub entries: Vec<TargetNeutralLayoutEntry>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TargetNeutralLayoutEntry {
+    pub key: String,
+    pub hash: u64,
+    pub kind: TargetNeutralLayoutKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TargetNeutralLayoutKind {
+    RowShape,
+    DynRowPackage,
+    ContinuationPackage,
+    Cont1StateMachine,
+    ClosureEnv,
+    TupleStruct,
+    RecordStruct,
+    AdtShape,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TargetLayoutPlan {
+    pub target: BackendTarget,
+    pub entries: Vec<TargetLayoutEntry>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TargetLayoutEntry {
+    pub neutral_key: String,
+    pub physical: TargetPhysicalLayout,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TargetPhysicalLayout {
+    WasmGcRef { descriptor: String },
+    Wasm32LinearMemory { descriptor: String },
+    NativeAbi { descriptor: String },
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -248,6 +291,101 @@ impl Default for BackendCacheConfig {
             ownership_runtime: BackendOwnershipRuntime::WasmGc,
             imports: vec![],
         }
+    }
+}
+
+pub fn target_neutral_layout_plan(core: &CoreProgram) -> TargetNeutralLayoutPlan {
+    TargetNeutralLayoutPlan {
+        entries: core
+            .layouts
+            .iter()
+            .map(target_neutral_layout_entry)
+            .collect(),
+    }
+}
+
+pub fn target_layout_plan(
+    neutral: &TargetNeutralLayoutPlan,
+    target: BackendTarget,
+) -> TargetLayoutPlan {
+    TargetLayoutPlan {
+        target,
+        entries: neutral
+            .entries
+            .iter()
+            .map(|entry| TargetLayoutEntry {
+                neutral_key: entry.key.clone(),
+                physical: physical_layout_for(target, entry),
+            })
+            .collect(),
+    }
+}
+
+pub fn render_target_neutral_layout_plan(plan: &TargetNeutralLayoutPlan) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("neutral-layouts={}\n", plan.entries.len()));
+    for entry in &plan.entries {
+        out.push_str(&format!(
+            "neutral-layout {} hash={} kind={}\n",
+            entry.key,
+            entry.hash,
+            target_neutral_layout_kind_name(&entry.kind)
+        ));
+    }
+    out
+}
+
+pub fn render_target_layout_plan(plan: &TargetLayoutPlan) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "target-layout target={} entries={}\n",
+        backend_target_name(plan.target),
+        plan.entries.len()
+    ));
+    for entry in &plan.entries {
+        out.push_str(&format!(
+            "target-layout-entry neutral={} physical={}\n",
+            entry.neutral_key,
+            target_physical_layout_name(&entry.physical)
+        ));
+    }
+    out
+}
+
+fn target_neutral_layout_entry(layout: &LayoutFact) -> TargetNeutralLayoutEntry {
+    TargetNeutralLayoutEntry {
+        key: layout.key.clone(),
+        hash: layout.hash,
+        kind: target_neutral_layout_kind(&layout.kind),
+    }
+}
+
+fn target_neutral_layout_kind(kind: &LayoutKind) -> TargetNeutralLayoutKind {
+    match kind {
+        LayoutKind::RowShape(_) => TargetNeutralLayoutKind::RowShape,
+        LayoutKind::DynRowPackage(_) => TargetNeutralLayoutKind::DynRowPackage,
+        LayoutKind::ContinuationPackage(_) => TargetNeutralLayoutKind::ContinuationPackage,
+        LayoutKind::Cont1StateMachine(_) => TargetNeutralLayoutKind::Cont1StateMachine,
+        LayoutKind::ClosureEnv(_) => TargetNeutralLayoutKind::ClosureEnv,
+        LayoutKind::TupleStruct(_) => TargetNeutralLayoutKind::TupleStruct,
+        LayoutKind::RecordStruct(_) => TargetNeutralLayoutKind::RecordStruct,
+        LayoutKind::AdtShape(_) => TargetNeutralLayoutKind::AdtShape,
+    }
+}
+
+fn physical_layout_for(
+    target: BackendTarget,
+    entry: &TargetNeutralLayoutEntry,
+) -> TargetPhysicalLayout {
+    let descriptor = format!(
+        "{}::{}",
+        target_neutral_layout_kind_name(&entry.kind),
+        entry.key
+    );
+    match target {
+        BackendTarget::WasmGc => TargetPhysicalLayout::WasmGcRef { descriptor },
+        BackendTarget::Wasm32NoGc => TargetPhysicalLayout::Wasm32LinearMemory { descriptor },
+        BackendTarget::Native => TargetPhysicalLayout::NativeAbi { descriptor },
     }
 }
 
@@ -6415,6 +6553,33 @@ fn backend_target_name(target: BackendTarget) -> &'static str {
         BackendTarget::WasmGc => "wasm-gc",
         BackendTarget::Wasm32NoGc => "wasm32-nogc",
         BackendTarget::Native => "native",
+    }
+}
+
+fn target_neutral_layout_kind_name(kind: &TargetNeutralLayoutKind) -> &'static str {
+    match kind {
+        TargetNeutralLayoutKind::RowShape => "row-shape",
+        TargetNeutralLayoutKind::DynRowPackage => "dyn-row-package",
+        TargetNeutralLayoutKind::ContinuationPackage => "continuation-package",
+        TargetNeutralLayoutKind::Cont1StateMachine => "cont1-state-machine",
+        TargetNeutralLayoutKind::ClosureEnv => "closure-env",
+        TargetNeutralLayoutKind::TupleStruct => "tuple-struct",
+        TargetNeutralLayoutKind::RecordStruct => "record-struct",
+        TargetNeutralLayoutKind::AdtShape => "adt-shape",
+    }
+}
+
+fn target_physical_layout_name(layout: &TargetPhysicalLayout) -> String {
+    match layout {
+        TargetPhysicalLayout::WasmGcRef { descriptor } => {
+            format!("wasm-gc-ref({descriptor})")
+        }
+        TargetPhysicalLayout::Wasm32LinearMemory { descriptor } => {
+            format!("wasm32-linear-memory({descriptor})")
+        }
+        TargetPhysicalLayout::NativeAbi { descriptor } => {
+            format!("native-abi({descriptor})")
+        }
     }
 }
 
