@@ -259,6 +259,11 @@ pub enum ProgramDiagnostic {
         name: String,
         candidates: Vec<String>,
     },
+    AmbiguousOperatorResolution {
+        receiver: String,
+        op: String,
+        candidates: Vec<String>,
+    },
     InvalidOperatorOperands {
         def: String,
         op: String,
@@ -683,10 +688,12 @@ fn compile_program_bundle_internal(
         || select_program_entry(&defs),
     );
     let mut all_diagnostics = diagnostics;
-    all_diagnostics.extend(receiver_method_ambiguity_diagnostics(
-        &checked_interface,
-        &normalized_program,
+    let receiver_ambiguity_diagnostics =
+        receiver_method_ambiguity_diagnostics(&checked_interface, &normalized_program);
+    all_diagnostics.extend(ambiguous_operator_resolution_diagnostics(
+        &receiver_ambiguity_diagnostics,
     ));
+    all_diagnostics.extend(receiver_ambiguity_diagnostics);
     all_diagnostics.extend(global_init.diagnostics.iter().cloned().map(Into::into));
     all_diagnostics.extend(template_diagnostics(&defs));
     all_diagnostics.extend(explicit_instantiation_diagnostics(&defs));
@@ -4556,6 +4563,43 @@ fn receiver_method_ambiguity_diagnostics(
         .collect()
 }
 
+fn ambiguous_operator_resolution_diagnostics(
+    diagnostics: &[ProgramDiagnostic],
+) -> Vec<ProgramDiagnostic> {
+    diagnostics
+        .iter()
+        .filter_map(|diagnostic| {
+            let ProgramDiagnostic::AmbiguousReceiverMethod {
+                receiver,
+                name,
+                candidates,
+            } = diagnostic
+            else {
+                return None;
+            };
+            operator_protocol_source(name).map(|op| {
+                ProgramDiagnostic::AmbiguousOperatorResolution {
+                    receiver: receiver.clone(),
+                    op: op.to_string(),
+                    candidates: candidates.clone(),
+                }
+            })
+        })
+        .collect()
+}
+
+fn operator_protocol_source(protocol: &str) -> Option<&'static str> {
+    match protocol {
+        "op_add" => Some("+"),
+        "op_sub" => Some("-"),
+        "op_mul" => Some("*"),
+        "op_div" => Some("/"),
+        "op_index" => Some("[]"),
+        "op_index_slice" => Some("[..]"),
+        _ => None,
+    }
+}
+
 impl From<GlobalInitDiagnostic> for ProgramDiagnostic {
     fn from(diagnostic: GlobalInitDiagnostic) -> Self {
         match diagnostic {
@@ -7648,6 +7692,14 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
             candidates,
         } => format!(
             "ambiguous receiver method {receiver}.{name}: [{}]",
+            candidates.join(", ")
+        ),
+        ProgramDiagnostic::AmbiguousOperatorResolution {
+            receiver,
+            op,
+            candidates,
+        } => format!(
+            "ambiguous operator resolution {receiver} {op}: [{}]",
             candidates.join(", ")
         ),
         ProgramDiagnostic::InvalidOperatorOperands { def, op, lhs, rhs } => {

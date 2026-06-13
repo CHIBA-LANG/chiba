@@ -374,6 +374,90 @@ fn program_reports_ambiguous_external_receiver_methods_before_typed_context_can_
 }
 
 #[test]
+fn program_reports_ambiguous_operator_resolution_as_operator_category() {
+    let consumer = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["consumer".to_string()])),
+        Vec::new(),
+        vec![TypeDecl::new(
+            "X",
+            Vec::new(),
+            vec![TypeField::new("x", "i64")],
+        )],
+        Vec::new(),
+        vec![SourceItem::def(
+            "main",
+            Vec::new(),
+            Vec::new(),
+            Some("X".to_string()),
+            Expr::binary(
+                BinaryOp::Add,
+                Expr::nominal("X", Expr::record(vec![("x", Expr::i64(1))])),
+                Expr::nominal("X", Expr::record(vec![("x", Expr::i64(2))])),
+            ),
+        )],
+    );
+    let left = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["left".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::method_def(
+            MethodReceiver::new("X", Vec::new()),
+            "op_add",
+            vec![
+                ParamDecl::new("self", Some("Self".to_string())),
+                ParamDecl::new("other", Some("Self".to_string())),
+            ],
+            Some("X".to_string()),
+            Expr::var("self"),
+        )],
+    );
+    let right = SourceProgram::with_surface(
+        Some(NamespaceDecl::new(vec!["right".to_string()])),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![SourceItem::method_def(
+            MethodReceiver::new("X", Vec::new()),
+            "op_add",
+            vec![
+                ParamDecl::new("self", Some("Self".to_string())),
+                ParamDecl::new("other", Some("Self".to_string())),
+            ],
+            Some("X".to_string()),
+            Expr::var("other"),
+        )],
+    );
+    let interface =
+        build_interface_summary(&project_surface_many(&[right, consumer.clone(), left]));
+
+    let bundle = compile_program_bundle_with_interface(&consumer, &interface);
+
+    assert!(
+        bundle.diagnostics.iter().any(|diagnostic| {
+            matches!(
+                diagnostic,
+                ProgramDiagnostic::AmbiguousOperatorResolution {
+                    receiver,
+                    op,
+                    candidates,
+                } if receiver == "X"
+                    && op == "+"
+                    && candidates.as_slice() == [
+                        "left::X.op_add".to_string(),
+                        "right::X.op_add".to_string()
+                    ]
+            )
+        }),
+        "{:?}",
+        bundle.diagnostics
+    );
+    assert!(bundle
+        .render_summary()
+        .contains("ambiguous operator resolution X +: [left::X.op_add, right::X.op_add]"));
+}
+
+#[test]
 fn program_reports_duplicate_local_receiver_methods_as_ambiguous_method_surface() {
     let program = SourceProgram::with_surface(
         None,
