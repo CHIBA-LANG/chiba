@@ -938,6 +938,42 @@ fn backend_target_matrix_emits_scalar_wasm_gc_and_wasm32_nogc() {
 }
 
 #[test]
+fn wasm32_nogc_rejects_managed_layout_without_ownership_runtime_facts() {
+    let core = CoreProgram {
+        ops: vec![
+            CoreOp::RecordConstruct {
+                layout: "record::x+y".to_string(),
+                fields: vec!["x".to_string(), "y".to_string()],
+            },
+            CoreOp::ReturnValue(CoreValue::I64(1)),
+        ],
+        layouts: vec![LayoutFact {
+            key: "record::x+y".to_string(),
+            hash: 17,
+            kind: LayoutKind::RecordStruct(chiba_level1r::core::RecordLayout {
+                fields: vec!["x".to_string(), "y".to_string()],
+            }),
+        }],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let artifact = emit_wasm32_nogc(&core, &CoreValidation::default());
+
+    assert_eq!(artifact.target, BackendTarget::Wasm32NoGc);
+    assert_eq!(artifact.wat, "");
+    assert_eq!(
+        artifact.diagnostics,
+        vec![BackendDiagnostic::UnsupportedTargetLayout {
+            target: BackendTarget::Wasm32NoGc,
+            layout: "record::x+y".to_string(),
+            reason: "managed layout requires ownership/runtime layout facts before no-GC emission"
+                .to_string(),
+        }]
+    );
+}
+
+#[test]
 fn source_pipeline_can_select_wasm_gc_or_wasm32_nogc_backend_target() {
     let source = "def main(): i64 = 40 + 2";
     let wasm_gc =

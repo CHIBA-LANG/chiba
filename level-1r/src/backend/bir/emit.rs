@@ -135,6 +135,11 @@ pub enum BackendDiagnostic {
         symbol: String,
         signature: String,
     },
+    UnsupportedTargetLayout {
+        target: BackendTarget,
+        layout: String,
+        reason: String,
+    },
     Cont1ResumedMoreThanOnce {
         binder: String,
     },
@@ -706,6 +711,16 @@ fn emit_with_target(
         };
     }
 
+    if let Some(diagnostic) = unsupported_target_layout(target, core) {
+        return BackendArtifact {
+            target,
+            wat: String::new(),
+            manifest,
+            diagnostics: vec![diagnostic],
+            return_value: first_return_value(core),
+        };
+    }
+
     if let Some(diagnostic) =
         unsupported_runtime_return_value(core, params, &param_kinds, param_abi)
     {
@@ -737,6 +752,52 @@ fn emit_with_target(
         diagnostics: vec![],
         return_value: first_return_value(core),
     }
+}
+
+fn unsupported_target_layout(
+    target: BackendTarget,
+    core: &CoreProgram,
+) -> Option<BackendDiagnostic> {
+    match target {
+        BackendTarget::WasmGc => None,
+        BackendTarget::Wasm32NoGc => first_wasm32_nogc_unsupported_layout(core),
+        BackendTarget::Native => first_native_unsupported_layout(core),
+    }
+}
+
+fn first_wasm32_nogc_unsupported_layout(core: &CoreProgram) -> Option<BackendDiagnostic> {
+    core.layouts
+        .iter()
+        .find(|layout| wasm32_nogc_layout_requires_runtime_support(&layout.kind))
+        .map(|layout| BackendDiagnostic::UnsupportedTargetLayout {
+            target: BackendTarget::Wasm32NoGc,
+            layout: layout.key.clone(),
+            reason: "managed layout requires ownership/runtime layout facts before no-GC emission"
+                .to_string(),
+        })
+}
+
+fn first_native_unsupported_layout(core: &CoreProgram) -> Option<BackendDiagnostic> {
+    core.layouts
+        .first()
+        .map(|layout| BackendDiagnostic::UnsupportedTargetLayout {
+            target: BackendTarget::Native,
+            layout: layout.key.clone(),
+            reason: "native target is layout-plan only and has no emitter yet".to_string(),
+        })
+}
+
+fn wasm32_nogc_layout_requires_runtime_support(kind: &LayoutKind) -> bool {
+    matches!(
+        kind,
+        LayoutKind::DynRowPackage(_)
+            | LayoutKind::ContinuationPackage(_)
+            | LayoutKind::Cont1StateMachine(_)
+            | LayoutKind::ClosureEnv(_)
+            | LayoutKind::TupleStruct(_)
+            | LayoutKind::RecordStruct(_)
+            | LayoutKind::AdtShape(_)
+    )
 }
 
 fn unsupported_runtime_return_value(

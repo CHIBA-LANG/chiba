@@ -1222,6 +1222,18 @@ fn render_backend_diagnostic(diagnostic: &BackendDiagnostic) -> String {
         BackendDiagnostic::UnsupportedExternImportSignature { symbol, signature } => {
             format!("unsupported extern import signature {symbol} {signature}")
         }
+        BackendDiagnostic::UnsupportedTargetLayout {
+            target,
+            layout,
+            reason,
+        } => {
+            format!(
+                "unsupported target layout target={} layout={} reason={}",
+                render_backend_target(*target),
+                layout,
+                reason
+            )
+        }
         BackendDiagnostic::Cont1ResumedMoreThanOnce { binder } => {
             format!("cont1 resumed more than once {binder}")
         }
