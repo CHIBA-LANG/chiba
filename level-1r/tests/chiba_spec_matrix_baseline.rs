@@ -35,6 +35,22 @@ fn chiba_spec_backend_matrix_compiles_marked_fixtures() {
                 path.strip_prefix(repo_root()).unwrap_or(&path).display(),
                 output.program.diagnostics
             );
+            assert!(
+                output
+                    .program
+                    .defs
+                    .iter()
+                    .all(|def| def.output.backend.diagnostics.is_empty()),
+                "{} produced backend diagnostics for {target:?}: {}",
+                path.strip_prefix(repo_root()).unwrap_or(&path).display(),
+                render_def_backend_diagnostics(&output.program.defs)
+            );
+            assert!(
+                output.program.backend_link.diagnostics.is_empty(),
+                "{} produced backend link diagnostics for {target:?}: {:?}",
+                path.strip_prefix(repo_root()).unwrap_or(&path).display(),
+                output.program.backend_link.diagnostics
+            );
             assert_eq!(
                 output.program.backend_link.target,
                 target,
@@ -86,6 +102,28 @@ fn chiba_spec_backend_matrix_metadata_uses_known_targets() {
             }
         }
     }
+}
+
+#[test]
+fn chiba_spec_backend_matrix_runner_does_not_spawn_nested_cargo() {
+    let source =
+        fs::read_to_string(repo_root().join("level-1r/tests/chiba_spec_matrix_baseline.rs"))
+            .unwrap();
+
+    let double_quoted = ["Command::new(", "\"cargo\"", ")"].join("");
+    let single_quoted = ["Command::new(", "'cargo'", ")"].join("");
+    assert!(
+        !source.contains(&double_quoted) && !source.contains(&single_quoted),
+        "backend matrix tests must use in-process target APIs instead of nested cargo"
+    );
+}
+
+fn render_def_backend_diagnostics(defs: &[chiba_level1r::ProgramDefOutput]) -> String {
+    defs.iter()
+        .filter(|def| !def.output.backend.diagnostics.is_empty())
+        .map(|def| format!("{}={:?}", def.name, def.output.backend.diagnostics))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn strip_chiba_spec_metadata_comments(source: &str) -> String {
