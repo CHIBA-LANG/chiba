@@ -4,6 +4,8 @@ mod adt_baseline;
 mod alpha_baseline;
 #[path = "backend_emit_baseline.rs"]
 mod backend_emit_baseline;
+#[path = "chiba_spec_matrix_baseline.rs"]
+mod chiba_spec_matrix_baseline;
 #[path = "chibacc_baseline.rs"]
 mod chibacc_baseline;
 #[path = "chibalex_baseline.rs"]

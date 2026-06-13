@@ -10,6 +10,10 @@ Each `.chiba` file is intentionally self-describing:
 - `// expect: runtime ...` means an executable backend should produce that observable result.
 - `// expect: fact ...` means typed/lowered/visual facts should contain that language-level fact.
 - `// expect: mixed-outcomes` means the file intentionally contains independent accept/reject/warning snippets.
+- `// backend-matrix: wasm-gc, wasm32-nogc` means the current compiler test runner
+  must compile this whole fixture for each listed backend target. Fixtures
+  without this line remain lifecycle conformance material and are not forced
+  through the current implementation yet.
 
 No separate oracle files are provided yet. The expected behavior is written next to the source so the first runner can decide how to materialize parser, typed, runtime, and lowering checks.
 

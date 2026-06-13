@@ -3,6 +3,7 @@
 // expect: fact CPS is one-pass CBV with administrative beta reduction
 // expect: fact CIR is target-neutral and contains no Wasm-GC/WAT terms
 // expect: fact final symbol can map back to source namespace/item/specialization
+// backend-matrix: wasm-gc, wasm32-nogc
 
 namespace demo.lowering
 

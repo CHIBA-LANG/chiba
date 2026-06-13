@@ -118,6 +118,7 @@ fn chiba_spec_oracles_use_stable_categories() {
 
     assert!(readme.contains("// expect: mixed-outcomes"));
     assert!(readme.contains("// expect: warning ..."));
+    assert!(readme.contains("// backend-matrix: wasm-gc, wasm32-nogc"));
 
     let forbidden = [
         "aggregate-file",
@@ -162,6 +163,25 @@ fn chiba_spec_oracles_use_stable_categories() {
             }
         }
     }
+}
+
+#[test]
+fn chiba_spec_marks_current_backend_matrix_fixtures() {
+    let spec_root = repo_root().join("chiba-spec");
+    let fixtures = collect_chiba_spec_fixtures(&spec_root);
+    let marked = fixtures
+        .iter()
+        .filter(|path| {
+            fs::read_to_string(path)
+                .unwrap()
+                .contains("// backend-matrix:")
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        !marked.is_empty(),
+        "at least one chiba-spec fixture must opt into current backend matrix"
+    );
 }
 
 #[test]
