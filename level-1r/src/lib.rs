@@ -74,9 +74,12 @@ pub use frontend::{
     SourceSpan,
 };
 pub use pipeline::{
-    compile_expr, compile_program, compile_program_bundle, compile_program_bundle_with_interface,
-    compile_program_with_interface, compile_source_program_bundle, CompileOutput,
-    ProgramCompileOutput, ProgramDefOutput, ProgramDiagnostic, SourceCompileOutput,
+    compile_expr, compile_expr_for_target, compile_program, compile_program_bundle,
+    compile_program_bundle_for_target, compile_program_bundle_with_interface,
+    compile_program_bundle_with_interface_for_target, compile_program_for_target,
+    compile_program_with_interface, compile_source_program_bundle,
+    compile_source_program_bundle_for_target, CompileOutput, ProgramCompileOutput,
+    ProgramDefOutput, ProgramDiagnostic, SourceCompileOutput,
 };
 pub use resolve::{resolve_expr, resolve_expr_with_names, MethodIndex, NameIndex, ResolveFacts};
 pub use specialize::{plan_specialization, SpecializationFacts};

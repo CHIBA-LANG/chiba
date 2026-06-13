@@ -7,13 +7,14 @@ use crate::ast::{
     ParamDecl, Pattern, SourceItem, SourceProgram, UseDecl, Visibility,
 };
 use crate::backend::{
-    backend_cache_key, dyn_row_arg_expansion_from_layout_entries, emit_wasm_gc_with_param_abi,
-    link_backend_artifacts, sort_dedup_imports, BackendAdtPayloadAbi, BackendAdtTagAbi,
-    BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendCallableAbi,
+    backend_cache_key, dyn_row_arg_expansion_from_layout_entries, emit_wasm32_nogc_with_param_abi,
+    emit_wasm_gc_with_param_abi, link_backend_artifacts, sort_dedup_imports, BackendAdtPayloadAbi,
+    BackendAdtTagAbi, BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendCallableAbi,
     BackendCallableArgExpansion, BackendDiagnostic, BackendDynRowParamFieldAbi,
-    BackendDynRowParamMethodAbi, BackendExternAbi, BackendExternImport, BackendLinkDiagnostic,
-    BackendLinkedBundle, BackendParamAbi, BackendReturnedCallableAbi, BackendValueKind,
-    TargetNeutralDynAdapterEntry, TargetNeutralDynAdapterEntryKind,
+    BackendDynRowParamMethodAbi, BackendExternAbi, BackendExternImport, BackendLayoutPolicy,
+    BackendLinkDiagnostic, BackendLinkedBundle, BackendOwnershipRuntime, BackendParamAbi,
+    BackendReturnedCallableAbi, BackendTarget, BackendValueKind, TargetNeutralDynAdapterEntry,
+    TargetNeutralDynAdapterEntryKind,
 };
 use crate::closure::{analyze_alpha_closures_with_params, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -280,6 +281,10 @@ pub enum ProgramDiagnostic {
 }
 
 pub fn compile_expr(expr: &Expr) -> CompileOutput {
+    compile_expr_for_target(expr, BackendTarget::WasmGc)
+}
+
+pub fn compile_expr_for_target(expr: &Expr, backend_target: BackendTarget) -> CompileOutput {
     let type_aliases = TypeAliasIndex::default();
     compile_expr_with_indexes_and_generics(
         "<expr>",
@@ -300,7 +305,34 @@ pub fn compile_expr(expr: &Expr) -> CompileOutput {
         &[],
         &[],
         &TypeEnv::new(),
+        backend_target,
     )
+}
+
+fn emit_with_target_param_abi(
+    backend_target: BackendTarget,
+    core: &CoreProgram,
+    core_validation: &CoreValidation,
+    params: &[String],
+    param_abi: &BackendParamAbi,
+) -> BackendArtifact {
+    match backend_target {
+        BackendTarget::WasmGc => {
+            emit_wasm_gc_with_param_abi(core, core_validation, params, param_abi)
+        }
+        BackendTarget::Wasm32NoGc => {
+            emit_wasm32_nogc_with_param_abi(core, core_validation, params, param_abi)
+        }
+        BackendTarget::Native => BackendArtifact {
+            target: BackendTarget::Native,
+            wat: String::new(),
+            manifest: Default::default(),
+            diagnostics: vec![BackendDiagnostic::UnsupportedI32ReturnValue {
+                value: "native target emission is layout-only for now".to_string(),
+            }],
+            return_value: None,
+        },
+    }
 }
 
 fn compile_expr_with_indexes_and_generics(
@@ -322,6 +354,7 @@ fn compile_expr_with_indexes_and_generics(
     interface_constructors: &[crate::surface::InterfaceConstructor],
     interface_statics: &[crate::surface::InterfaceStatic],
     function_env: &TypeEnv,
+    backend_target: BackendTarget,
 ) -> CompileOutput {
     let mut passes = PassReport::default();
     let alpha = passes.record("L1Alpha", "SourceExpr", "AlphaFacts", || {
@@ -478,7 +511,13 @@ fn compile_expr_with_indexes_and_generics(
                 interface_constructors,
                 interface_statics,
             );
-            emit_wasm_gc_with_param_abi(&core, &core_validation, &param_names, &param_abi)
+            emit_with_target_param_abi(
+                backend_target,
+                &core,
+                &core_validation,
+                &param_names,
+                &param_abi,
+            )
         },
     );
     let backend_link = passes.record(
@@ -491,7 +530,12 @@ fn compile_expr_with_indexes_and_generics(
         "L24BackendCacheKey",
         "BackendLinkedBundle",
         "BackendCacheKey",
-        || backend_cache_key(&backend_link, &BackendCacheConfig::default()),
+        || {
+            backend_cache_key(
+                &backend_link,
+                &backend_cache_config_for_target(backend_target),
+            )
+        },
     );
     let visual = visual_report(
         expr,
@@ -573,23 +617,53 @@ pub fn compile_program(program: &SourceProgram) -> Vec<CompileOutput> {
         .collect()
 }
 
+pub fn compile_program_for_target(
+    program: &SourceProgram,
+    backend_target: BackendTarget,
+) -> Vec<CompileOutput> {
+    compile_program_bundle_for_target(program, backend_target)
+        .defs
+        .into_iter()
+        .map(|def| def.output)
+        .collect()
+}
+
 pub fn compile_program_bundle_with_interface(
     program: &SourceProgram,
     interface: &InterfaceSummary,
 ) -> ProgramCompileOutput {
-    compile_program_bundle_internal(program, Some(interface.clone()))
+    compile_program_bundle_with_interface_for_target(program, interface, BackendTarget::WasmGc)
+}
+
+pub fn compile_program_bundle_with_interface_for_target(
+    program: &SourceProgram,
+    interface: &InterfaceSummary,
+    backend_target: BackendTarget,
+) -> ProgramCompileOutput {
+    compile_program_bundle_internal(program, Some(interface.clone()), backend_target)
 }
 
 pub fn compile_program_with_interface(
     program: &SourceProgram,
     interface: &InterfaceSummary,
 ) -> Vec<ProgramDefOutput> {
-    compile_program_defs(&normalize_pattern_clause_defs(program), interface)
+    compile_program_defs(
+        &normalize_pattern_clause_defs(program),
+        interface,
+        BackendTarget::WasmGc,
+    )
 }
 
 pub fn compile_source_program_bundle(source: &str) -> Result<SourceCompileOutput, FrontendError> {
+    compile_source_program_bundle_for_target(source, BackendTarget::WasmGc)
+}
+
+pub fn compile_source_program_bundle_for_target(
+    source: &str,
+    backend_target: BackendTarget,
+) -> Result<SourceCompileOutput, FrontendError> {
     let frontend = parse_source_program(source)?;
-    let mut program = compile_program_bundle(&frontend.program);
+    let mut program = compile_program_bundle_for_target(&frontend.program, backend_target);
     attach_source_item_spans_to_visuals(&mut program, &frontend.item_spans);
     Ok(SourceCompileOutput { frontend, program })
 }
@@ -628,12 +702,20 @@ fn render_source_item_span(span: &SourceItemSpan) -> String {
 }
 
 pub fn compile_program_bundle(program: &SourceProgram) -> ProgramCompileOutput {
-    compile_program_bundle_internal(program, None)
+    compile_program_bundle_for_target(program, BackendTarget::WasmGc)
+}
+
+pub fn compile_program_bundle_for_target(
+    program: &SourceProgram,
+    backend_target: BackendTarget,
+) -> ProgramCompileOutput {
+    compile_program_bundle_internal(program, None, backend_target)
 }
 
 fn compile_program_bundle_internal(
     program: &SourceProgram,
     interface_override: Option<InterfaceSummary>,
+    backend_target: BackendTarget,
 ) -> ProgramCompileOutput {
     let initial_program = normalize_pattern_clause_defs(program);
     let initial_surface = project_surface(&initial_program);
@@ -680,9 +762,9 @@ fn compile_program_bundle_internal(
         "P5ProgramDefs",
         "SourceProgram+InterfaceSummary",
         "ProgramDefOutput",
-        || compile_program_defs(&normalized_program, &checked_interface),
+        || compile_program_defs(&normalized_program, &checked_interface, backend_target),
     );
-    refresh_program_backends_with_lifted_callables(&mut defs, &checked_interface);
+    refresh_program_backends_with_lifted_callables(&mut defs, &checked_interface, backend_target);
     let entry = passes.record(
         "P6ProgramEntry",
         "ProgramDefOutput",
@@ -747,10 +829,9 @@ fn compile_program_bundle_internal(
         "BackendLinkedBundle",
         "BackendCacheKey",
         || {
-            backend_cache_key(
-                &backend_link,
-                &backend_cache_config_for_interface(&interface),
-            )
+            let mut config = backend_cache_config_for_interface(&interface);
+            apply_backend_target_to_cache_config(&mut config, backend_target);
+            backend_cache_key(&backend_link, &config)
         },
     );
     ProgramCompileOutput {
@@ -2125,9 +2206,33 @@ fn source_expr_static_type(expr: &Expr) -> Option<Type> {
 }
 
 fn backend_cache_config_for_interface(interface: &InterfaceSummary) -> BackendCacheConfig {
-    let mut config = BackendCacheConfig::default();
+    let mut config = backend_cache_config_for_target(BackendTarget::WasmGc);
     config.imports = backend_extern_imports_for_interface(interface);
     config
+}
+
+fn backend_cache_config_for_target(target: BackendTarget) -> BackendCacheConfig {
+    let mut config = BackendCacheConfig::default();
+    apply_backend_target_to_cache_config(&mut config, target);
+    config
+}
+
+fn apply_backend_target_to_cache_config(config: &mut BackendCacheConfig, target: BackendTarget) {
+    config.target = target;
+    match target {
+        BackendTarget::WasmGc => {
+            config.layout_policy = BackendLayoutPolicy::WasmGc;
+            config.ownership_runtime = BackendOwnershipRuntime::WasmGc;
+        }
+        BackendTarget::Wasm32NoGc => {
+            config.layout_policy = BackendLayoutPolicy::LinearMemoryNoGc;
+            config.ownership_runtime = BackendOwnershipRuntime::RcArcHelpers;
+        }
+        BackendTarget::Native => {
+            config.layout_policy = BackendLayoutPolicy::NativeAbi;
+            config.ownership_runtime = BackendOwnershipRuntime::RcArcHelpers;
+        }
+    }
 }
 
 fn attach_extern_function_targets(
@@ -2503,6 +2608,7 @@ fn dispatcher_param_name(index: usize) -> String {
 fn compile_program_defs(
     program: &SourceProgram,
     interface: &InterfaceSummary,
+    backend_target: BackendTarget,
 ) -> Vec<ProgramDefOutput> {
     let current_namespace = program
         .namespace
@@ -2554,6 +2660,7 @@ fn compile_program_defs(
                         &interface.constructors,
                         &interface.statics,
                         &function_env,
+                        backend_target,
                     );
                     output
                         .core
@@ -2572,6 +2679,7 @@ fn compile_program_defs(
 fn refresh_program_backends_with_lifted_callables(
     defs: &mut [ProgramDefOutput],
     interface: &InterfaceSummary,
+    backend_target: BackendTarget,
 ) {
     let lifted = program_lifted_callable_abis(defs);
     let returned = program_returned_callable_abis(defs);
@@ -2599,14 +2707,18 @@ fn refresh_program_backends_with_lifted_callables(
             dyn_contracts.get(&def.name),
             dyn_method_targets.get(&def.name),
         );
-        let backend = emit_wasm_gc_with_param_abi(
+        let backend = emit_with_target_param_abi(
+            backend_target,
             &def.output.core,
             &def.output.core_validation,
             &def.params,
             &param_abi,
         );
         let backend_link = link_backend_artifacts(vec![backend.clone()]);
-        let backend_cache_key = backend_cache_key(&backend_link, &BackendCacheConfig::default());
+        let backend_cache_key = backend_cache_key(
+            &backend_link,
+            &backend_cache_config_for_target(backend_target),
+        );
         def.output.backend = backend;
         def.output.backend_link = backend_link;
         def.output.backend_cache_key = backend_cache_key;

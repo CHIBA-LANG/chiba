@@ -938,6 +938,51 @@ fn backend_target_matrix_emits_scalar_wasm_gc_and_wasm32_nogc() {
 }
 
 #[test]
+fn source_pipeline_can_select_wasm_gc_or_wasm32_nogc_backend_target() {
+    let source = "def main(): i64 = 40 + 2";
+    let wasm_gc =
+        chiba_level1r::compile_source_program_bundle_for_target(source, BackendTarget::WasmGc)
+            .expect("compile wasm-gc source");
+    let wasm32_nogc =
+        chiba_level1r::compile_source_program_bundle_for_target(source, BackendTarget::Wasm32NoGc)
+            .expect("compile wasm32-nogc source");
+
+    assert_eq!(wasm_gc.program.backend_link.target, BackendTarget::WasmGc);
+    assert_eq!(
+        wasm32_nogc.program.backend_link.target,
+        BackendTarget::Wasm32NoGc
+    );
+    assert_eq!(
+        wasm_gc.program.backend_cache_key.target,
+        BackendTarget::WasmGc
+    );
+    assert_eq!(
+        wasm32_nogc.program.backend_cache_key.target,
+        BackendTarget::Wasm32NoGc
+    );
+    assert!(wasm_gc
+        .program
+        .backend_link
+        .linked_wat
+        .contains("(func $main"));
+    assert!(wasm32_nogc
+        .program
+        .backend_link
+        .linked_wat
+        .contains("(func $main"));
+    assert!(!wasm32_nogc
+        .program
+        .backend_link
+        .linked_wat
+        .contains("externref"));
+    assert!(!wasm32_nogc
+        .program
+        .backend_link
+        .linked_wat
+        .contains("struct.new"));
+}
+
+#[test]
 fn backend_layout_plan_matrix_keeps_neutral_and_target_layouts_separate() {
     let core = CoreProgram {
         ops: vec![CoreOp::RecordConstruct {
