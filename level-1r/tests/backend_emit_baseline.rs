@@ -984,6 +984,53 @@ fn backend_layout_plan_matrix_keeps_neutral_and_target_layouts_separate() {
 }
 
 #[test]
+fn backend_neutral_layout_plan_records_dyn_adapter_contract_entries() {
+    let output = compile_expr(&Expr::field(Expr::var("user"), "name"));
+    let mut template = chiba_level1r::template::TemplateFacts::default();
+    template
+        .dyn_contracts
+        .push(chiba_level1r::template::dyn_row_contract(vec![
+            (
+                "x",
+                chiba_level1r::template::ShapeType::Named("i64".to_string()),
+            ),
+            (
+                "y",
+                chiba_level1r::template::ShapeType::Named("(Unit) -> i64".to_string()),
+            ),
+        ]));
+    let facts = chiba_level1r::specialize::plan_specialization("use_dyn", &template);
+    let core = chiba_level1r::core::lower_core_with_facts(
+        &output.cps,
+        &output.control.continuations,
+        &chiba_level1r::closure::ClosureFacts::default(),
+        &[],
+        &chiba_level1r::lambda_lift::LambdaLiftFacts::default(),
+        &facts,
+        &chiba_level1r::usage::UsageFacts::default(),
+    );
+
+    let neutral = target_neutral_layout_plan(&core);
+    let dyn_entry = neutral
+        .entries
+        .iter()
+        .find(|entry| entry.key.starts_with("dyn-row::"))
+        .expect("dyn row neutral layout");
+    let TargetNeutralLayoutKind::DynRowPackage { adapter_entries } = &dyn_entry.kind else {
+        panic!("expected dyn row package layout");
+    };
+    assert_eq!(
+        adapter_entries
+            .iter()
+            .map(|entry| entry.member.as_str())
+            .collect::<Vec<_>>(),
+        vec!["x", "y"]
+    );
+    let dump = render_target_neutral_layout_plan(&neutral);
+    assert!(dump.contains("kind=dyn-row-package adapter=[x:contract-member, y:contract-member]"));
+}
+
+#[test]
 fn backend_link_rejects_mixed_target_matrix_artifacts() {
     let core = CoreProgram {
         ops: vec![CoreOp::ReturnValue(CoreValue::I64(7))],
@@ -1101,6 +1148,29 @@ fn visual_report_records_neutral_and_target_layout_plans() {
     assert!(!output.visual.target_neutral_layout.contains("native"));
     assert!(!output.visual.target_neutral_layout.contains("funcref"));
     assert!(!output.visual.target_neutral_layout.contains("eqref"));
+}
+
+#[test]
+fn visual_report_records_dyn_package_adapter_entries_in_neutral_layout() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        r#"
+def use_dyn(v: dyn {x: i64, y: (Unit) -> i64}): i64 = 0
+def main(): i64 = 0
+"#,
+    )
+    .expect("compile dyn visual");
+    let use_dyn = output
+        .program
+        .defs
+        .iter()
+        .find(|def| def.name == "use_dyn")
+        .expect("use_dyn def");
+
+    assert!(use_dyn
+        .output
+        .visual
+        .target_neutral_layout
+        .contains("kind=dyn-row-package adapter=[x:contract-member, y:contract-member]"));
 }
 
 #[test]

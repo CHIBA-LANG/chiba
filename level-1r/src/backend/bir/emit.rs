@@ -41,13 +41,26 @@ pub struct TargetNeutralLayoutEntry {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TargetNeutralLayoutKind {
     RowShape,
-    DynRowPackage,
+    DynRowPackage {
+        adapter_entries: Vec<TargetNeutralDynAdapterEntry>,
+    },
     ContinuationPackage,
     Cont1StateMachine,
     ClosureEnv,
     TupleStruct,
     RecordStruct,
     AdtShape,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TargetNeutralDynAdapterEntry {
+    pub member: String,
+    pub kind: TargetNeutralDynAdapterEntryKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TargetNeutralDynAdapterEntryKind {
+    ContractMember,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -326,10 +339,10 @@ pub fn render_target_neutral_layout_plan(plan: &TargetNeutralLayoutPlan) -> Stri
     out.push_str(&format!("neutral-layouts={}\n", plan.entries.len()));
     for entry in &plan.entries {
         out.push_str(&format!(
-            "neutral-layout {} hash={} kind={}\n",
+            "neutral-layout {} hash={} {}\n",
             entry.key,
             entry.hash,
-            target_neutral_layout_kind_name(&entry.kind)
+            render_target_neutral_layout_kind(&entry.kind)
         ));
     }
     out
@@ -363,7 +376,17 @@ fn target_neutral_layout_entry(layout: &LayoutFact) -> TargetNeutralLayoutEntry 
 fn target_neutral_layout_kind(kind: &LayoutKind) -> TargetNeutralLayoutKind {
     match kind {
         LayoutKind::RowShape(_) => TargetNeutralLayoutKind::RowShape,
-        LayoutKind::DynRowPackage(_) => TargetNeutralLayoutKind::DynRowPackage,
+        LayoutKind::DynRowPackage(contract) => TargetNeutralLayoutKind::DynRowPackage {
+            adapter_entries: contract
+                .shape
+                .fields
+                .iter()
+                .map(|field| TargetNeutralDynAdapterEntry {
+                    member: field.name.clone(),
+                    kind: TargetNeutralDynAdapterEntryKind::ContractMember,
+                })
+                .collect(),
+        },
         LayoutKind::ContinuationPackage(_) => TargetNeutralLayoutKind::ContinuationPackage,
         LayoutKind::Cont1StateMachine(_) => TargetNeutralLayoutKind::Cont1StateMachine,
         LayoutKind::ClosureEnv(_) => TargetNeutralLayoutKind::ClosureEnv,
@@ -6559,13 +6582,41 @@ fn backend_target_name(target: BackendTarget) -> &'static str {
 fn target_neutral_layout_kind_name(kind: &TargetNeutralLayoutKind) -> &'static str {
     match kind {
         TargetNeutralLayoutKind::RowShape => "row-shape",
-        TargetNeutralLayoutKind::DynRowPackage => "dyn-row-package",
+        TargetNeutralLayoutKind::DynRowPackage { .. } => "dyn-row-package",
         TargetNeutralLayoutKind::ContinuationPackage => "continuation-package",
         TargetNeutralLayoutKind::Cont1StateMachine => "cont1-state-machine",
         TargetNeutralLayoutKind::ClosureEnv => "closure-env",
         TargetNeutralLayoutKind::TupleStruct => "tuple-struct",
         TargetNeutralLayoutKind::RecordStruct => "record-struct",
         TargetNeutralLayoutKind::AdtShape => "adt-shape",
+    }
+}
+
+fn render_target_neutral_layout_kind(kind: &TargetNeutralLayoutKind) -> String {
+    match kind {
+        TargetNeutralLayoutKind::DynRowPackage { adapter_entries } => {
+            let entries = adapter_entries
+                .iter()
+                .map(|entry| {
+                    format!(
+                        "{}:{}",
+                        entry.member,
+                        target_neutral_dyn_adapter_entry_kind_name(&entry.kind)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("kind=dyn-row-package adapter=[{entries}]")
+        }
+        _ => format!("kind={}", target_neutral_layout_kind_name(kind)),
+    }
+}
+
+fn target_neutral_dyn_adapter_entry_kind_name(
+    kind: &TargetNeutralDynAdapterEntryKind,
+) -> &'static str {
+    match kind {
+        TargetNeutralDynAdapterEntryKind::ContractMember => "contract-member",
     }
 }
 
