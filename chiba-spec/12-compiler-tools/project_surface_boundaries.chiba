@@ -11,13 +11,13 @@ type HeaderOnly[T] = {
 }
 
 data Shape = {
-	Circle(i64)
+	Circle(i64),
 	Square(i64)
 }
 
 def shape_area(shape: Shape): i64 =
 	match shape {
-		Circle(r) => r * r
+		Circle(r) => r * r,
 		Square(x) => x * x
 	}
 // expect: fact data Shape constructors are consumed in InterfaceSummary and PatternElaboration
