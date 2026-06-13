@@ -241,6 +241,19 @@ pub enum ProgramDiagnostic {
         field: String,
         actual: String,
     },
+    NonCallableFieldForCallableRowMember {
+        def: String,
+        callee: String,
+        field: String,
+        actual: String,
+        field_type: String,
+    },
+    MethodSignatureMismatchForRowMember {
+        def: String,
+        callee: String,
+        field: String,
+        actual: String,
+    },
     AmbiguousReceiverMethod {
         receiver: String,
         name: String,
@@ -1617,24 +1630,56 @@ fn row_callable_arg_has_callable_field(
     row_callable: &RowCallableDef,
     member_records: &RowCallableMemberRecords,
 ) -> bool {
+    row_callable_arg_check(arg, row_callable, member_records).is_satisfied()
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RowCallableArgCheck {
+    Satisfied,
+    NonCallableField { field_type: Type },
+    SignatureMismatch,
+    MissingMember,
+}
+
+impl RowCallableArgCheck {
+    fn is_satisfied(&self) -> bool {
+        matches!(self, Self::Satisfied)
+    }
+}
+
+fn row_callable_arg_check(
+    arg: &Expr,
+    row_callable: &RowCallableDef,
+    member_records: &RowCallableMemberRecords,
+) -> RowCallableArgCheck {
     match arg {
-        Expr::Record(fields) => fields.iter().any(|candidate| {
-            candidate.name == row_callable.field
-                && expr_accepts_row_callable_args(&candidate.value, &row_callable.args)
-        }),
+        Expr::Record(fields) => fields
+            .iter()
+            .find(|candidate| candidate.name == row_callable.field)
+            .map(|candidate| {
+                if expr_accepts_row_callable_args(&candidate.value, &row_callable.args) {
+                    RowCallableArgCheck::Satisfied
+                } else {
+                    source_expr_static_type(&candidate.value)
+                        .map(|field_type| RowCallableArgCheck::NonCallableField { field_type })
+                        .unwrap_or(RowCallableArgCheck::SignatureMismatch)
+                }
+            })
+            .unwrap_or(RowCallableArgCheck::MissingMember),
         Expr::Nominal { name, .. } => member_records
             .members
             .get(name)
             .and_then(|members| members.get(&row_callable.field))
-            .is_some_and(|members| row_member_records_accept_callable_args(members, row_callable)),
-        _ => false,
+            .map(|members| row_member_records_callable_check(members, row_callable))
+            .unwrap_or(RowCallableArgCheck::MissingMember),
+        _ => RowCallableArgCheck::MissingMember,
     }
 }
 
-fn row_member_records_accept_callable_args(
+fn row_member_records_callable_check(
     members: &[RowCallableMemberRecord],
     row_callable: &RowCallableDef,
-) -> bool {
+) -> RowCallableArgCheck {
     let field_members = members
         .iter()
         .filter_map(|member| match member {
@@ -1643,16 +1688,34 @@ fn row_member_records_accept_callable_args(
         })
         .collect::<Vec<_>>();
     if !field_members.is_empty() {
-        return field_members
+        if field_members
             .iter()
-            .any(|ty| type_accepts_row_callable_args(ty, &row_callable.args));
+            .any(|ty| type_accepts_row_callable_args(ty, &row_callable.args))
+        {
+            return RowCallableArgCheck::Satisfied;
+        }
+        return RowCallableArgCheck::NonCallableField {
+            field_type: field_members
+                .first()
+                .map(|ty| (*ty).clone())
+                .unwrap_or(Type::Unknown),
+        };
     }
-    members.iter().any(|member| match member {
+    if members.iter().any(|member| match member {
         RowCallableMemberRecord::Field { .. } => false,
         RowCallableMemberRecord::ReceiverMethod { param_tys } => {
             row_callable_args_match_types(&row_callable.args, param_tys)
         }
-    })
+    }) {
+        RowCallableArgCheck::Satisfied
+    } else if members
+        .iter()
+        .any(|member| matches!(member, RowCallableMemberRecord::ReceiverMethod { .. }))
+    {
+        RowCallableArgCheck::SignatureMismatch
+    } else {
+        RowCallableArgCheck::MissingMember
+    }
 }
 
 fn expr_is_callable_value(expr: &Expr) -> bool {
@@ -1724,13 +1787,37 @@ fn collect_row_member_callable_diagnostics(
             if let Expr::Var(callee_name) = callee.as_ref() {
                 if let Some(row_callable) = row_callables.get(callee_name) {
                     if let [arg] = args.as_slice() {
-                        if !row_callable_arg_has_callable_field(arg, row_callable, member_records) {
-                            diagnostics.push(ProgramDiagnostic::RowMemberCallableUnsatisfied {
-                                def: def.to_string(),
-                                callee: callee_name.clone(),
-                                field: row_callable.field.clone(),
-                                actual: render_source_expr(arg),
-                            });
+                        match row_callable_arg_check(arg, row_callable, member_records) {
+                            RowCallableArgCheck::Satisfied => {}
+                            RowCallableArgCheck::NonCallableField { field_type } => {
+                                diagnostics.push(
+                                    ProgramDiagnostic::NonCallableFieldForCallableRowMember {
+                                        def: def.to_string(),
+                                        callee: callee_name.clone(),
+                                        field: row_callable.field.clone(),
+                                        actual: render_source_expr(arg),
+                                        field_type: program_type_name(&field_type),
+                                    },
+                                );
+                            }
+                            RowCallableArgCheck::SignatureMismatch => {
+                                diagnostics.push(
+                                    ProgramDiagnostic::MethodSignatureMismatchForRowMember {
+                                        def: def.to_string(),
+                                        callee: callee_name.clone(),
+                                        field: row_callable.field.clone(),
+                                        actual: render_source_expr(arg),
+                                    },
+                                );
+                            }
+                            RowCallableArgCheck::MissingMember => {
+                                diagnostics.push(ProgramDiagnostic::RowMemberCallableUnsatisfied {
+                                    def: def.to_string(),
+                                    callee: callee_name.clone(),
+                                    field: row_callable.field.clone(),
+                                    actual: render_source_expr(arg),
+                                });
+                            }
                         }
                     }
                 }
@@ -7538,6 +7625,23 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
         } => {
             format!("row member callable unsatisfied {def}: {callee}.{field} for {actual}")
         }
+        ProgramDiagnostic::NonCallableFieldForCallableRowMember {
+            def,
+            callee,
+            field,
+            actual,
+            field_type,
+        } => format!(
+            "non-callable field for callable row member {def}: {callee}.{field} for {actual} has {field_type}"
+        ),
+        ProgramDiagnostic::MethodSignatureMismatchForRowMember {
+            def,
+            callee,
+            field,
+            actual,
+        } => format!(
+            "method signature mismatch for row member {def}: {callee}.{field} for {actual}"
+        ),
         ProgramDiagnostic::AmbiguousReceiverMethod {
             receiver,
             name,

@@ -1270,17 +1270,18 @@ def main(): i64 = 0
         "row-bound rejection took {:?}",
         start.elapsed()
     );
-    assert!(bundle
-        .diagnostics
-        .contains(&ProgramDiagnostic::RowMemberCallableUnsatisfied {
+    assert!(bundle.diagnostics.contains(
+        &ProgramDiagnostic::NonCallableFieldForCallableRowMember {
             def: "bad_field".to_string(),
             callee: "call_f".to_string(),
             field: "f".to_string(),
             actual: "Z({f: 1})".to_string(),
-        }));
+            field_type: "i64".to_string(),
+        }
+    ));
     assert!(bundle
         .diagnostics
-        .contains(&ProgramDiagnostic::RowMemberCallableUnsatisfied {
+        .contains(&ProgramDiagnostic::MethodSignatureMismatchForRowMember {
             def: "bad_record".to_string(),
             callee: "call_f".to_string(),
             field: "f".to_string(),
@@ -1288,12 +1289,18 @@ def main(): i64 = 0
         }));
     assert!(bundle
         .diagnostics
-        .contains(&ProgramDiagnostic::RowMemberCallableUnsatisfied {
+        .contains(&ProgramDiagnostic::MethodSignatureMismatchForRowMember {
             def: "bad_method".to_string(),
             callee: "call_f".to_string(),
             field: "f".to_string(),
             actual: "M({x: 1})".to_string(),
         }));
+    let summary = bundle.render_summary();
+    assert!(summary.contains(
+        "non-callable field for callable row member bad_field: call_f.f for Z({f: 1}) has i64"
+    ));
+    assert!(summary
+        .contains("method signature mismatch for row member bad_method: call_f.f for M({x: 1})"));
     assert!(
         !bundle.backend_link.diagnostics.is_empty(),
         "expected backend/link diagnostics for unsatisfied row callable member"
