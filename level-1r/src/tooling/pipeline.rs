@@ -7,11 +7,13 @@ use crate::ast::{
     ParamDecl, Pattern, SourceItem, SourceProgram, UseDecl, Visibility,
 };
 use crate::backend::{
-    backend_cache_key, emit_wasm_gc_with_param_abi, link_backend_artifacts, sort_dedup_imports,
-    BackendAdtPayloadAbi, BackendAdtTagAbi, BackendArtifact, BackendCacheConfig, BackendCacheKey,
-    BackendCallableAbi, BackendCallableArgExpansion, BackendDiagnostic, BackendDynRowParamFieldAbi,
+    backend_cache_key, dyn_row_arg_expansion_from_layout_entries, emit_wasm_gc_with_param_abi,
+    link_backend_artifacts, sort_dedup_imports, BackendAdtPayloadAbi, BackendAdtTagAbi,
+    BackendArtifact, BackendCacheConfig, BackendCacheKey, BackendCallableAbi,
+    BackendCallableArgExpansion, BackendDiagnostic, BackendDynRowParamFieldAbi,
     BackendDynRowParamMethodAbi, BackendExternAbi, BackendExternImport, BackendLinkDiagnostic,
     BackendLinkedBundle, BackendParamAbi, BackendReturnedCallableAbi, BackendValueKind,
+    TargetNeutralDynAdapterEntry, TargetNeutralDynAdapterEntryKind,
 };
 use crate::closure::{analyze_alpha_closures_with_params, ClosureFacts};
 use crate::closure_core_usage::{analyze_closure_core_usage, ClosureCoreUsageFacts};
@@ -2987,10 +2989,29 @@ fn backend_dyn_row_arg_expansion(
     functions: &[crate::surface::InterfaceFunction],
 ) -> BackendCallableArgExpansion {
     let members = backend_dyn_row_member_abis(&Type::DynRow(fields.to_vec()), functions);
-    BackendCallableArgExpansion::DynRow {
-        fields: backend_dyn_row_field_members(&members),
-        needs_payload: backend_dyn_row_members_need_payload(&members),
-    }
+    let entries = backend_dyn_row_members_to_layout_entries(&members);
+    dyn_row_arg_expansion_from_layout_entries(&entries)
+}
+
+fn backend_dyn_row_members_to_layout_entries(
+    members: &[BackendDynRowMemberAbi],
+) -> Vec<TargetNeutralDynAdapterEntry> {
+    members
+        .iter()
+        .map(|member| match member {
+            BackendDynRowMemberAbi::Field(field) => TargetNeutralDynAdapterEntry {
+                member: field.field.clone(),
+                kind: TargetNeutralDynAdapterEntryKind::FieldGetter { kind: field.kind },
+            },
+            BackendDynRowMemberAbi::ReceiverMethod(method) => TargetNeutralDynAdapterEntry {
+                member: method.field.clone(),
+                kind: TargetNeutralDynAdapterEntryKind::ReceiverMethodThunk {
+                    symbol: method.target.clone(),
+                    runtime_target: method.field.clone(),
+                },
+            },
+        })
+        .collect()
 }
 
 fn backend_arg_expansion_param_kinds(
@@ -3811,12 +3832,6 @@ fn backend_dyn_row_method_members(
             BackendDynRowMemberAbi::ReceiverMethod(method) => Some(method.clone()),
         })
         .collect()
-}
-
-fn backend_dyn_row_members_need_payload(members: &[BackendDynRowMemberAbi]) -> bool {
-    members
-        .iter()
-        .any(|member| matches!(member, BackendDynRowMemberAbi::ReceiverMethod(_)))
 }
 
 fn backend_dyn_row_param_field_members_by_param(

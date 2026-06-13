@@ -61,7 +61,9 @@ pub struct TargetNeutralDynAdapterEntry {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TargetNeutralDynAdapterEntryKind {
     ContractMember,
-    FieldGetter,
+    FieldGetter {
+        kind: BackendValueKind,
+    },
     ReceiverMethodThunk {
         symbol: String,
         runtime_target: String,
@@ -242,6 +244,32 @@ pub struct BackendDynRowParamMethodAbi {
 pub enum BackendValueKind {
     I32,
     ExternRef,
+}
+
+pub fn dyn_row_arg_expansion_from_layout_entries(
+    entries: &[TargetNeutralDynAdapterEntry],
+) -> BackendCallableArgExpansion {
+    BackendCallableArgExpansion::DynRow {
+        fields: entries
+            .iter()
+            .filter_map(|entry| match entry.kind {
+                TargetNeutralDynAdapterEntryKind::FieldGetter { kind } => {
+                    Some(BackendDynRowParamFieldAbi {
+                        field: entry.member.clone(),
+                        kind,
+                    })
+                }
+                TargetNeutralDynAdapterEntryKind::ContractMember
+                | TargetNeutralDynAdapterEntryKind::ReceiverMethodThunk { .. } => None,
+            })
+            .collect(),
+        needs_payload: entries.iter().any(|entry| {
+            matches!(
+                entry.kind,
+                TargetNeutralDynAdapterEntryKind::ReceiverMethodThunk { .. }
+            )
+        }),
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -565,7 +593,9 @@ fn target_neutral_dyn_adapter_entry(field: &CoreDynRowField) -> TargetNeutralDyn
     TargetNeutralDynAdapterEntry {
         member: field.name.clone(),
         kind: match &field.source {
-            CoreDynRowFieldSource::Field => TargetNeutralDynAdapterEntryKind::FieldGetter,
+            CoreDynRowFieldSource::Field => TargetNeutralDynAdapterEntryKind::FieldGetter {
+                kind: BackendValueKind::I32,
+            },
             CoreDynRowFieldSource::ContractObligation { .. } => {
                 TargetNeutralDynAdapterEntryKind::ContractMember
             }
@@ -6802,7 +6832,7 @@ fn target_neutral_dyn_adapter_entry_kind_name(
 ) -> &'static str {
     match kind {
         TargetNeutralDynAdapterEntryKind::ContractMember => "contract-member",
-        TargetNeutralDynAdapterEntryKind::FieldGetter => "field-getter",
+        TargetNeutralDynAdapterEntryKind::FieldGetter { .. } => "field-getter",
         TargetNeutralDynAdapterEntryKind::ReceiverMethodThunk { .. } => "receiver-method-thunk",
     }
 }
@@ -6810,7 +6840,7 @@ fn target_neutral_dyn_adapter_entry_kind_name(
 fn render_target_neutral_dyn_adapter_entry_kind(kind: &TargetNeutralDynAdapterEntryKind) -> String {
     match kind {
         TargetNeutralDynAdapterEntryKind::ContractMember
-        | TargetNeutralDynAdapterEntryKind::FieldGetter => {
+        | TargetNeutralDynAdapterEntryKind::FieldGetter { .. } => {
             target_neutral_dyn_adapter_entry_kind_name(kind).to_string()
         }
         TargetNeutralDynAdapterEntryKind::ReceiverMethodThunk {
