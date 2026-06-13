@@ -51,9 +51,9 @@ use crate::symbol::encode_debug_symbol;
 use crate::template::{analyze_template_with_source, TemplateDiagnostic, TemplateFacts};
 use crate::template_audit::{audit_checked_templates, TemplateAuditReport};
 use crate::typed::{
-    nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_to_type,
-    type_expr_with_context, type_expr_with_expected, IndexAccessKind, ReceiverMethodSummary,
-    RecordTypeField, Type, TypeContext, TypeEnv, TypedExpr, TypedExprKind,
+    nominal_base_name_for_type, nominal_type_args_for_type, source_type_name_for_type,
+    source_type_name_to_type, type_expr_with_context, type_expr_with_expected, IndexAccessKind,
+    ReceiverMethodSummary, RecordTypeField, Type, TypeContext, TypeEnv, TypedExpr, TypedExprKind,
 };
 use crate::usage::{analyze_alpha_usage, UsageFacts};
 use crate::usage_audit::{audit_usage_lowering, UsageAuditReport};
@@ -203,6 +203,11 @@ pub enum ProgramDiagnostic {
     ExplicitInstantiationOfNonTemplate {
         def: String,
         callee: String,
+    },
+    DefinitionReturnTypeMismatch {
+        def: String,
+        expected: String,
+        actual: String,
     },
     ShiftOutsideReset {
         def: String,
@@ -672,6 +677,7 @@ fn compile_program_bundle_internal(
     all_diagnostics.extend(global_init.diagnostics.iter().cloned().map(Into::into));
     all_diagnostics.extend(template_diagnostics(&defs));
     all_diagnostics.extend(explicit_instantiation_diagnostics(&defs));
+    all_diagnostics.extend(definition_return_type_diagnostics(&defs));
     all_diagnostics.extend(control_diagnostics(&defs));
     all_diagnostics.extend(cps_usage_diagnostics(&defs));
     let send_diagnostics = send_callable_diagnostics(&defs);
@@ -4595,6 +4601,31 @@ fn explicit_instantiation_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramD
     diagnostics
 }
 
+fn definition_return_type_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
+    defs.iter()
+        .filter_map(|def| {
+            let expected = def.output.typed_signature.return_type.as_deref()?;
+            let expected_ty = source_type_name_to_type(expected);
+            let actual_ty = &def.output.typed.ty;
+            if definition_return_types_match(&expected_ty, actual_ty) {
+                return None;
+            }
+            Some(ProgramDiagnostic::DefinitionReturnTypeMismatch {
+                def: def.name.clone(),
+                expected: source_type_name_for_type(&expected_ty),
+                actual: source_type_name_for_type(actual_ty),
+            })
+        })
+        .collect()
+}
+
+fn definition_return_types_match(expected: &Type, actual: &Type) -> bool {
+    matches!(expected, Type::Unknown)
+        || matches!(actual, Type::Unknown)
+        || expected == actual
+        || matches!(expected, Type::DynRow(_))
+}
+
 fn control_diagnostics(defs: &[ProgramDefOutput]) -> Vec<ProgramDiagnostic> {
     defs.iter()
         .flat_map(|def| {
@@ -7471,6 +7502,13 @@ fn render_program_diagnostic(diagnostic: &ProgramDiagnostic) -> String {
         ),
         ProgramDiagnostic::ExplicitInstantiationOfNonTemplate { def, callee } => {
             format!("explicit instantiation of non-template {def}: {callee}")
+        }
+        ProgramDiagnostic::DefinitionReturnTypeMismatch {
+            def,
+            expected,
+            actual,
+        } => {
+            format!("definition return type mismatch {def}: expected {expected} got {actual}")
         }
         ProgramDiagnostic::ShiftOutsideReset { def, binder } => {
             format!("shift outside reset {def}: {binder}")

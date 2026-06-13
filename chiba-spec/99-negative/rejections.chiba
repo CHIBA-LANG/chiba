@@ -7,7 +7,8 @@ public use demo.prelude.*
 // expect: reject public-glob-reexport
 
 def bad_template[T, F](value: T): F = value
-// expect: reject rigid-template-return-mismatch
+// expect: reject definition-return-type-mismatch
+// expect: fact generic body return mismatch is diagnosed at definition time
 
 def bad_ref() = Ref.new(None)
 // expect: reject unconstrained-polymorphic-mutable-ref

@@ -26,7 +26,8 @@ def explicit_instantiation_non_template_bad(): i64 = concrete_one[i64]()
 // expect: reject explicit-instantiation-of-non-template
 
 def rigid_bad[T, F](x: T): F = x
-// expect: reject rigid-template-return-mismatch
+// expect: reject definition-return-type-mismatch
+// expect: fact generic body return mismatch is diagnosed at definition time
 
 def ref_none_bad() = Ref.new(None)
 // expect: reject cannot-generalize-polymorphic-mutable-ref

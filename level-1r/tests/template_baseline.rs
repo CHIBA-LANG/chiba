@@ -365,6 +365,27 @@ fn open_row_generic_bound_enters_template_member_obligations() {
 }
 
 #[test]
+fn generic_body_return_mismatch_is_definition_time_diagnostic() {
+    let output = chiba_level1r::compile_source_program_bundle(
+        "def bad[T](x: T): Bool = 1
+def main(): i64 = 0",
+    )
+    .expect("compile source");
+
+    assert!(output.program.diagnostics.contains(
+        &ProgramDiagnostic::DefinitionReturnTypeMismatch {
+            def: "bad".to_string(),
+            expected: "bool".to_string(),
+            actual: "i64".to_string(),
+        }
+    ));
+    assert!(output
+        .program
+        .render_summary()
+        .contains("definition return type mismatch bad: expected bool got i64"));
+}
+
+#[test]
 fn explicit_instantiation_arity_mismatch_is_program_diagnostic() {
     let output = chiba_level1r::compile_source_program_bundle(
         "def pair[T, F](x: T, y: F): T = x
