@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::control::ContinuationKind;
 use crate::core::{
-    CoreCapturedContinuation, CoreExternAbi, CoreMatchArm, CoreOp, CorePattern, CoreProgram,
-    CoreRefCellLane, CoreValidation, CoreValue, LayoutFact, LayoutKind, OperatorIntrinsic,
-    OwnershipDecision, RangeField, SliceField, TextField,
+    CoreCapturedContinuation, CoreDynRowField, CoreDynRowFieldSource, CoreExternAbi, CoreMatchArm,
+    CoreOp, CorePattern, CoreProgram, CoreRefCellLane, CoreValidation, CoreValue, LayoutFact,
+    LayoutKind, OperatorIntrinsic, OwnershipDecision, RangeField, SliceField, TextField,
 };
 use crate::symbol::encode_debug_symbol;
 use crate::typed::{AggregateKind, BuiltinMethodCall, TextKind, Type};
@@ -61,6 +61,11 @@ pub struct TargetNeutralDynAdapterEntry {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TargetNeutralDynAdapterEntryKind {
     ContractMember,
+    FieldGetter,
+    ReceiverMethodThunk {
+        symbol: String,
+        runtime_target: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -308,11 +313,12 @@ impl Default for BackendCacheConfig {
 }
 
 pub fn target_neutral_layout_plan(core: &CoreProgram) -> TargetNeutralLayoutPlan {
+    let dyn_adapter_entries = dyn_adapter_entries_by_layout(core);
     TargetNeutralLayoutPlan {
         entries: core
             .layouts
             .iter()
-            .map(target_neutral_layout_entry)
+            .map(|layout| target_neutral_layout_entry(layout, &dyn_adapter_entries))
             .collect(),
     }
 }
@@ -365,27 +371,35 @@ pub fn render_target_layout_plan(plan: &TargetLayoutPlan) -> String {
     out
 }
 
-fn target_neutral_layout_entry(layout: &LayoutFact) -> TargetNeutralLayoutEntry {
+fn target_neutral_layout_entry(
+    layout: &LayoutFact,
+    dyn_adapter_entries: &BTreeMap<String, Vec<TargetNeutralDynAdapterEntry>>,
+) -> TargetNeutralLayoutEntry {
     TargetNeutralLayoutEntry {
         key: layout.key.clone(),
         hash: layout.hash,
-        kind: target_neutral_layout_kind(&layout.kind),
+        kind: target_neutral_layout_kind(&layout.kind, dyn_adapter_entries.get(&layout.key)),
     }
 }
 
-fn target_neutral_layout_kind(kind: &LayoutKind) -> TargetNeutralLayoutKind {
+fn target_neutral_layout_kind(
+    kind: &LayoutKind,
+    dyn_adapter_entries: Option<&Vec<TargetNeutralDynAdapterEntry>>,
+) -> TargetNeutralLayoutKind {
     match kind {
         LayoutKind::RowShape(_) => TargetNeutralLayoutKind::RowShape,
         LayoutKind::DynRowPackage(contract) => TargetNeutralLayoutKind::DynRowPackage {
-            adapter_entries: contract
-                .shape
-                .fields
-                .iter()
-                .map(|field| TargetNeutralDynAdapterEntry {
-                    member: field.name.clone(),
-                    kind: TargetNeutralDynAdapterEntryKind::ContractMember,
-                })
-                .collect(),
+            adapter_entries: dyn_adapter_entries.cloned().unwrap_or_else(|| {
+                contract
+                    .shape
+                    .fields
+                    .iter()
+                    .map(|field| TargetNeutralDynAdapterEntry {
+                        member: field.name.clone(),
+                        kind: TargetNeutralDynAdapterEntryKind::ContractMember,
+                    })
+                    .collect()
+            }),
         },
         LayoutKind::ContinuationPackage(_) => TargetNeutralLayoutKind::ContinuationPackage,
         LayoutKind::Cont1StateMachine(_) => TargetNeutralLayoutKind::Cont1StateMachine,
@@ -393,6 +407,177 @@ fn target_neutral_layout_kind(kind: &LayoutKind) -> TargetNeutralLayoutKind {
         LayoutKind::TupleStruct(_) => TargetNeutralLayoutKind::TupleStruct,
         LayoutKind::RecordStruct(_) => TargetNeutralLayoutKind::RecordStruct,
         LayoutKind::AdtShape(_) => TargetNeutralLayoutKind::AdtShape,
+    }
+}
+
+fn dyn_adapter_entries_by_layout(
+    core: &CoreProgram,
+) -> BTreeMap<String, Vec<TargetNeutralDynAdapterEntry>> {
+    let mut facts = BTreeMap::new();
+    for op in &core.ops {
+        collect_dyn_adapter_entries_from_op(op, core, &mut facts);
+    }
+    facts
+}
+
+fn collect_dyn_adapter_entries_from_op(
+    op: &CoreOp,
+    core: &CoreProgram,
+    facts: &mut BTreeMap<String, Vec<TargetNeutralDynAdapterEntry>>,
+) {
+    match op {
+        CoreOp::ReturnValue(value)
+        | CoreOp::RuntimeLet { value, .. }
+        | CoreOp::CallableAlias { value, .. } => {
+            collect_dyn_adapter_entries_from_value(value, core, facts)
+        }
+        CoreOp::ReturnBranch {
+            cond,
+            then_value,
+            else_value,
+        } => {
+            collect_dyn_adapter_entries_from_value(cond, core, facts);
+            collect_dyn_adapter_entries_from_value(then_value, core, facts);
+            collect_dyn_adapter_entries_from_value(else_value, core, facts);
+        }
+        CoreOp::ReturnMatch { scrutinee, arms } => {
+            collect_dyn_adapter_entries_from_value(scrutinee, core, facts);
+            for arm in arms {
+                collect_dyn_adapter_entries_from_value(&arm.value, core, facts);
+            }
+        }
+        CoreOp::TailCall { args, .. } => {
+            for arg in args {
+                collect_dyn_adapter_entries_from_value(arg, core, facts);
+            }
+        }
+        CoreOp::CaptureContinuation { captured, .. } => {
+            for captured_op in &captured.ops {
+                collect_dyn_adapter_entries_from_op(captured_op, core, facts);
+            }
+        }
+        CoreOp::LiftedFunction { body, .. } => {
+            for body_op in body {
+                collect_dyn_adapter_entries_from_op(body_op, core, facts);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_dyn_adapter_entries_from_value(
+    value: &CoreValue,
+    core: &CoreProgram,
+    facts: &mut BTreeMap<String, Vec<TargetNeutralDynAdapterEntry>>,
+) {
+    match value {
+        CoreValue::DynRowPackage { payload, fields } => {
+            if let Some(layout_key) = dyn_layout_key_for_fields(core, fields) {
+                facts.insert(
+                    layout_key,
+                    fields
+                        .iter()
+                        .map(target_neutral_dyn_adapter_entry)
+                        .collect(),
+                );
+            }
+            collect_dyn_adapter_entries_from_value(payload, core, facts);
+        }
+        CoreValue::DynRowField { package, .. } => {
+            collect_dyn_adapter_entries_from_value(package, core, facts);
+        }
+        CoreValue::Tuple { fields } | CoreValue::SliceLiteral { items: fields } => {
+            for field in fields {
+                collect_dyn_adapter_entries_from_value(field, core, facts);
+            }
+        }
+        CoreValue::TupleField { tuple, .. } => {
+            collect_dyn_adapter_entries_from_value(tuple, core, facts);
+        }
+        CoreValue::Range { start, end } => {
+            collect_dyn_adapter_entries_from_value(start, core, facts);
+            collect_dyn_adapter_entries_from_value(end, core, facts);
+        }
+        CoreValue::Record { fields } => {
+            for field in fields {
+                collect_dyn_adapter_entries_from_value(&field.value, core, facts);
+            }
+        }
+        CoreValue::RecordUpdate { base, fields } => {
+            collect_dyn_adapter_entries_from_value(base, core, facts);
+            for field in fields {
+                collect_dyn_adapter_entries_from_value(&field.value, core, facts);
+            }
+        }
+        CoreValue::RecordField { record, .. }
+        | CoreValue::ReceiverMethod {
+            receiver: record, ..
+        }
+        | CoreValue::RangeField { range: record, .. }
+        | CoreValue::AggregateField { value: record, .. }
+        | CoreValue::TextField { value: record, .. } => {
+            collect_dyn_adapter_entries_from_value(record, core, facts);
+        }
+        CoreValue::AggregateIndex { value, index, .. }
+        | CoreValue::TextIndex { value, index, .. } => {
+            collect_dyn_adapter_entries_from_value(value, core, facts);
+            collect_dyn_adapter_entries_from_value(index, core, facts);
+        }
+        CoreValue::AggregateSlice { value, range, .. }
+        | CoreValue::TextSlice { value, range, .. } => {
+            collect_dyn_adapter_entries_from_value(value, core, facts);
+            collect_dyn_adapter_entries_from_value(range, core, facts);
+        }
+        CoreValue::BuiltinRuntimeCall { args, .. }
+        | CoreValue::Adt { args, .. }
+        | CoreValue::AdtTuple { fields: args, .. } => {
+            for arg in args {
+                collect_dyn_adapter_entries_from_value(arg, core, facts);
+            }
+        }
+        CoreValue::Unit
+        | CoreValue::I64(_)
+        | CoreValue::Bool(_)
+        | CoreValue::TextLiteral { .. }
+        | CoreValue::Var(_)
+        | CoreValue::LiftedFunction { .. }
+        | CoreValue::Rendered { .. } => {}
+    }
+}
+
+fn dyn_layout_key_for_fields(core: &CoreProgram, fields: &[CoreDynRowField]) -> Option<String> {
+    core.layouts.iter().find_map(|layout| {
+        let LayoutKind::DynRowPackage(contract) = &layout.kind else {
+            return None;
+        };
+        let matches_fields = contract.shape.fields.len() == fields.len()
+            && contract
+                .shape
+                .fields
+                .iter()
+                .zip(fields)
+                .all(|(contract_field, field)| contract_field.name == field.name);
+        matches_fields.then(|| layout.key.clone())
+    })
+}
+
+fn target_neutral_dyn_adapter_entry(field: &CoreDynRowField) -> TargetNeutralDynAdapterEntry {
+    TargetNeutralDynAdapterEntry {
+        member: field.name.clone(),
+        kind: match &field.source {
+            CoreDynRowFieldSource::Field => TargetNeutralDynAdapterEntryKind::FieldGetter,
+            CoreDynRowFieldSource::ContractObligation { .. } => {
+                TargetNeutralDynAdapterEntryKind::ContractMember
+            }
+            CoreDynRowFieldSource::ReceiverMethod {
+                symbol,
+                runtime_target,
+                ..
+            } => TargetNeutralDynAdapterEntryKind::ReceiverMethodThunk {
+                symbol: symbol.clone(),
+                runtime_target: runtime_target.clone(),
+            },
+        },
     }
 }
 
@@ -6601,7 +6786,7 @@ fn render_target_neutral_layout_kind(kind: &TargetNeutralLayoutKind) -> String {
                     format!(
                         "{}:{}",
                         entry.member,
-                        target_neutral_dyn_adapter_entry_kind_name(&entry.kind)
+                        render_target_neutral_dyn_adapter_entry_kind(&entry.kind)
                     )
                 })
                 .collect::<Vec<_>>()
@@ -6617,6 +6802,23 @@ fn target_neutral_dyn_adapter_entry_kind_name(
 ) -> &'static str {
     match kind {
         TargetNeutralDynAdapterEntryKind::ContractMember => "contract-member",
+        TargetNeutralDynAdapterEntryKind::FieldGetter => "field-getter",
+        TargetNeutralDynAdapterEntryKind::ReceiverMethodThunk { .. } => "receiver-method-thunk",
+    }
+}
+
+fn render_target_neutral_dyn_adapter_entry_kind(kind: &TargetNeutralDynAdapterEntryKind) -> String {
+    match kind {
+        TargetNeutralDynAdapterEntryKind::ContractMember
+        | TargetNeutralDynAdapterEntryKind::FieldGetter => {
+            target_neutral_dyn_adapter_entry_kind_name(kind).to_string()
+        }
+        TargetNeutralDynAdapterEntryKind::ReceiverMethodThunk {
+            symbol,
+            runtime_target,
+        } => {
+            format!("receiver-method-thunk({symbol}->{runtime_target})")
+        }
     }
 }
 

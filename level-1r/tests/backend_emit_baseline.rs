@@ -7,8 +7,9 @@ use chiba_level1r::backend::{
 };
 use chiba_level1r::control::ContinuationKind;
 use chiba_level1r::core::{
-    ClosureEnvField, ClosureEnvLayout, CoreCapturedContinuation, CoreDiagnostic, CoreOp,
-    CoreProgram, CoreValidation, CoreValue, LayoutFact, LayoutKind, OperatorIntrinsic, SliceField,
+    ClosureEnvField, ClosureEnvLayout, CoreCapturedContinuation, CoreDiagnostic, CoreDynRowField,
+    CoreDynRowFieldSource, CoreOp, CoreProgram, CoreValidation, CoreValue, LayoutFact, LayoutKind,
+    OperatorIntrinsic, SliceField,
 };
 use chiba_level1r::typed::{AggregateKind, SendColor, UsageColor};
 use chiba_level1r::{compile_expr, Expr};
@@ -1171,6 +1172,52 @@ def main(): i64 = 0
         .visual
         .target_neutral_layout
         .contains("kind=dyn-row-package adapter=[x:contract-member, y:contract-member]"));
+}
+
+#[test]
+fn backend_layout_plan_refines_dyn_adapter_entries_from_core_package_provenance() {
+    let contract = chiba_level1r::template::dyn_row_contract(vec![
+        (
+            "x",
+            chiba_level1r::template::ShapeType::Named("i64".to_string()),
+        ),
+        (
+            "y",
+            chiba_level1r::template::ShapeType::Named("(Unit) -> i64".to_string()),
+        ),
+    ]);
+    let core = CoreProgram {
+        ops: vec![CoreOp::ReturnValue(CoreValue::DynRowPackage {
+            payload: Box::new(CoreValue::Var("value".to_string())),
+            fields: vec![
+                CoreDynRowField {
+                    name: "x".to_string(),
+                    source: CoreDynRowFieldSource::Field,
+                },
+                CoreDynRowField {
+                    name: "y".to_string(),
+                    source: CoreDynRowFieldSource::ReceiverMethod {
+                        symbol: "root::X.y".to_string(),
+                        runtime_target: "y".to_string(),
+                        param_ty: chiba_level1r::typed::Type::Nominal("Unit".to_string()),
+                        result_ty: chiba_level1r::typed::Type::I64,
+                    },
+                },
+            ],
+        })],
+        layouts: vec![LayoutFact {
+            key: "dyn-row::open::x:i64::y:(Unit) -> i64".to_string(),
+            hash: 101,
+            kind: LayoutKind::DynRowPackage(contract),
+        }],
+        ownership: vec![],
+        callable_storage: vec![],
+    };
+
+    let neutral = target_neutral_layout_plan(&core);
+    let dump = render_target_neutral_layout_plan(&neutral);
+    assert!(dump.contains("x:field-getter"));
+    assert!(dump.contains("y:receiver-method-thunk(root::X.y->y)"));
 }
 
 #[test]
