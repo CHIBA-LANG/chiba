@@ -1084,6 +1084,26 @@ fn pipeline_records_backend_link_artifact() {
 }
 
 #[test]
+fn visual_report_records_neutral_and_target_layout_plans() {
+    let output = compile_expr(&Expr::record(vec![
+        ("x", Expr::i64(1)),
+        ("y", Expr::bool(true)),
+    ]));
+    let visual = output.render_visual();
+
+    assert!(visual.contains("target-neutral-layout:"));
+    assert!(visual.contains("neutral-layout record::x+y"));
+    assert!(visual.contains("kind=record-struct"));
+    assert!(visual.contains("target-layout:"));
+    assert!(visual.contains("target-layout target=wasm-gc"));
+    assert!(visual.contains("target-layout-entry neutral=record::x+y physical=wasm-gc-ref"));
+    assert!(!output.visual.target_neutral_layout.contains("wasm"));
+    assert!(!output.visual.target_neutral_layout.contains("native"));
+    assert!(!output.visual.target_neutral_layout.contains("funcref"));
+    assert!(!output.visual.target_neutral_layout.contains("eqref"));
+}
+
+#[test]
 fn backend_cache_key_is_stable_across_manifest_order() {
     let first = emit_wasm_gc(
         &CoreProgram {

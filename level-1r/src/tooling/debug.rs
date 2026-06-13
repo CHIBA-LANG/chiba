@@ -5,8 +5,9 @@ use crate::ast::{
     render_source_binary_op, render_source_expr, render_source_literal, render_source_pattern, Expr,
 };
 use crate::backend::{
-    BackendArtifact, BackendCacheKey, BackendDiagnostic, BackendExternAbi, BackendLinkDiagnostic,
-    BackendLinkedBundle, BackendManifest, BackendTarget,
+    render_target_layout_plan, render_target_neutral_layout_plan, target_layout_plan,
+    target_neutral_layout_plan, BackendArtifact, BackendCacheKey, BackendDiagnostic,
+    BackendExternAbi, BackendLinkDiagnostic, BackendLinkedBundle, BackendManifest, BackendTarget,
 };
 use crate::closure::{ClosureFacts, ClosureStorageKind};
 use crate::closure_core_usage::ClosureCoreUsageFacts;
@@ -66,6 +67,8 @@ pub struct VisualReport {
     pub closure: String,
     pub lambda_lift: String,
     pub core: String,
+    pub target_neutral_layout: String,
+    pub target_layout: String,
     pub callable_storage: String,
     pub closure_core_usage: String,
     pub closure_simplification: String,
@@ -119,6 +122,14 @@ pub fn render_visual_report(report: &VisualReport) -> String {
     writeln!(out, "  {}", report.lambda_lift).unwrap();
     writeln!(out, "core:").unwrap();
     writeln!(out, "  {}", report.core).unwrap();
+    writeln!(out, "target-neutral-layout:").unwrap();
+    for line in report.target_neutral_layout.lines() {
+        writeln!(out, "  {line}").unwrap();
+    }
+    writeln!(out, "target-layout:").unwrap();
+    for line in report.target_layout.lines() {
+        writeln!(out, "  {line}").unwrap();
+    }
     writeln!(out, "callable-storage:").unwrap();
     for line in report.callable_storage.lines() {
         writeln!(out, "  {line}").unwrap();
@@ -176,6 +187,8 @@ pub fn visual_report(
     backend_cache_key: &BackendCacheKey,
     passes: &PassReport,
 ) -> VisualReport {
+    let target_neutral_layout = target_neutral_layout_plan(core);
+    let target_layout = target_layout_plan(&target_neutral_layout, backend.target);
     VisualReport {
         source: render_source_expr(source),
         alpha: render_alpha_facts(alpha),
@@ -198,6 +211,8 @@ pub fn visual_report(
         closure: render_closure_facts(closure),
         lambda_lift: render_lambda_lift_facts(lambda_lift),
         core: render_core_program(core),
+        target_neutral_layout: render_target_neutral_layout_plan(&target_neutral_layout),
+        target_layout: render_target_layout_plan(&target_layout),
         callable_storage: callable_storage.to_string(),
         closure_core_usage: render_closure_core_usage(closure_core_usage),
         closure_simplification: render_closure_simplification(closure_simplification),
