@@ -208,6 +208,53 @@ fn aggregate_declaration_examples_use_equals_before_body() {
     );
 }
 
+#[test]
+fn non_lexer_passes_do_not_use_ascii_shape_semantics() {
+    let root = repo_root();
+    let src = root.join("level-1r/src");
+    let mut files = Vec::new();
+    collect_files_with_extensions(&src, &["rs"], &mut files);
+
+    let allowed_paths = [
+        "level-1r/src/chibalex/",
+        "level-1r/src/frontend/",
+        "level-1r/src/regex/",
+        "level-1r/src/tooling/symbol.rs",
+    ];
+    let forbidden = [
+        ".is_ascii",
+        "is_ascii_",
+        "to_ascii_",
+        "make_ascii_",
+        "to_uppercase()",
+        "to_lowercase()",
+    ];
+    let mut bad = Vec::new();
+
+    for path in files {
+        let relative = path.strip_prefix(&root).unwrap();
+        let relative_text = relative.to_string_lossy();
+        if allowed_paths
+            .iter()
+            .any(|allowed| relative_text.starts_with(allowed))
+        {
+            continue;
+        }
+        let source = fs::read_to_string(&path).unwrap();
+        for (line_index, line) in source.lines().enumerate() {
+            if forbidden.iter().any(|pattern| line.contains(pattern)) {
+                bad.push(format!("{}:{}", relative.display(), line_index + 1));
+            }
+        }
+    }
+
+    assert!(
+        bad.is_empty(),
+        "semantic/backend/lowering passes must not infer semantics from ASCII string shape: {}",
+        bad.join(", ")
+    );
+}
+
 fn collect_chiba_spec_fixtures(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     collect_chiba_spec_fixtures_into(root, &mut out);
