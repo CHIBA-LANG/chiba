@@ -1,78 +1,24 @@
 # wasm32 no-GC / Native Layout Spine TODO
 
-This file tracks the work needed to make `wasm32-nogc` possible without turning it
-into a second compiler. The same work is also the foundation for a future native
-backend.
+This document is the execution plan for adding `wasm32-nogc` without creating a
+second compiler. It also defines the spine that a future native backend must
+reuse.
 
-The thesis is deliberately stronger than "add a wasm32 backend":
+## Thesis
 
-> `wasm32-nogc` is the first proof target for Chiba's ownership, storage, layout,
-> dyn adapter, continuation, arena, RC/ARC, and FBIP model. It must consume
-> target-neutral facts. It must not infer language semantics in the emitter.
+`wasm32-nogc` should start now, but only as a layout/ownership proof target.
+It must not become an alternate semantic lowering path.
 
-If this system is excellent six months from now, `wasm-gc`, `wasm32-nogc`, and a
-native backend all consume the same CoreIR ownership/storage/layout facts. They
-only differ in physical representation, runtime helper ABI, and final emission.
+The real work is not "emit another WAT dialect". The real work is to make
+ownership, storage, arena/reset regions, dyn adapters, callable storage,
+continuations, RC/ARC, and FBIP explicit before emission. Once those facts are
+explicit, `wasm-gc`, `wasm32-nogc`, and future native targets are just different
+physical layout consumers.
 
-Relevant spec anchors:
-
-- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/03-memory-and-lifetimes/minimal-lifetime-commitments.md`
-- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/memory-model.md`
-- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/03-memory-and-lifetimes/escape-semantics.md`
-- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/03-memory-and-lifetimes/promotion-rules.md`
-- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/03-memory-and-lifetimes/uniqueness.md`
-- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/10-ir-and-lowering/passes-and-placement.md`
-- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/10-ir-and-lowering/cir-cps-ir.md`
-- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/10-ir-and-lowering/cir-to-bir-lowering.md`
-- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/blog/chiba2.md`
-
-## Non-Negotiable Principles
-
-- [ ] CoreIR / CIR stays target-neutral. It may carry language facts such as usage,
-      send, escape, region, ownership decision, continuation kind, replay safety,
-      callable storage kind, dyn row access kind, and target-neutral layout ids.
-      It must not carry Wasm-GC struct layout, `funcref`, `eqref`, WAT opcodes,
-      Binaryen flags, wasm32 linear-memory offsets, native pointer sizes, or
-      platform ABI alignment.
-- [ ] Backend emitters are dumb. `wasm-gc`, `wasm32-nogc`, and future native
-      backends may choose different physical layouts, but none of them may
-      re-infer type, escape, send, replay, ownership, callable, method, row, or
-      identifier semantics.
-- [ ] Dyn row adapters are layout artifacts, not runtime method lookup. Field,
-      method, callable-field, closure, `Cont1`, and `ContN` member selection must
-      be resolved before layout planning.
-- [ ] Arena is a region / reset-boundary fact, not a malloc wrapper optimization.
-      It participates in escape, replay safety, continuation, dyn package, and
-      ownership decisions.
-- [ ] FBIP / inplace reuse, RC, ARC, arena, `Cont1`, `ContN`, and dyn package
-      storage are one ownership/storage system. They must not be implemented as
-      independent backend tricks.
-- [ ] No semantic pass after lexer/tokenization may infer legality from string
-      shape. Identifier, callable, namespace, method, row, and type facts must
-      come from AST, symbol table, typed facts, CoreIR facts, or shared lexer/XID
-      tables.
-- [ ] Cache keys and manifests must include backend target, target features,
-      target layout policy, ownership runtime mode, and layout plan hash.
-
-## Kill List
-
-- [ ] Kill backend-local semantic dyn ABI inference. Current backend-side
-      construction of dyn row field/method ABI must move into target-neutral
-      layout planning.
-- [ ] Kill direct codegen from CoreIR to target-specific object representation for
-      managed values. Codegen must go through layout plans.
-- [ ] Kill any fallback where an emitter sees a type/row/method shape and silently
-      decides ownership, adapter entries, or callable storage.
-- [ ] Kill the idea that `wasm32-nogc` is a special alternate lowering pipeline.
-      It is a target family consuming the same language facts as every other
-      backend.
-
-## Target Architecture
-
-The backend path should become:
+If this system is excellent six months from now, the pipeline looks like this:
 
 ```text
-Typed / resolved language facts
+Resolved / typed language facts
   -> CoreIR semantic facts
   -> OwnershipStoragePlan
   -> TargetNeutralLayoutPlan
@@ -80,89 +26,150 @@ Typed / resolved language facts
   -> Emit
 ```
 
-Layer responsibilities:
+The emitters only print target code from layout facts. They do not perform type
+lookup, method lookup, dyn row lookup, escape analysis, send analysis,
+identifier validation, callable classification, or ownership inference.
 
-- [ ] `CoreIR semantic facts`: value/type facts, row access kind, dyn package ops,
-      continuation kind, callable storage kind, usage/send/escape/replay colors,
-      arena/reset boundary ids, intrinsic ownership namespace.
-- [ ] `OwnershipStoragePlan`: target-neutral decision for each managed value,
-      aggregate, closure env, continuation frame/package, callable storage, dyn
-      package, string, array, slice, vec, and builder.
-- [ ] `TargetNeutralLayoutPlan`: abstract object shapes such as record fields,
-      tuple fields, ADT variants, closure captures, continuation env slots,
-      erased callable variants, dyn package entries, drop requirements, region
-      requirements, and layout ids.
-- [ ] `TargetLayoutPlan`: physical representation for a target family, such as
-      Wasm-GC struct/funcref, wasm32 linear-memory offsets/helper ABI, or native
-      pointer/alignment/calling convention.
-- [ ] `Emit`: prints WAT/object/native IR from target layout only. Missing layout
-      is a diagnostic, not an invitation to infer.
+## Current State
+
+- [x] `BackendTarget::{WasmGc, Wasm32NoGc, Native}` exists.
+- [x] Backend cache config includes target/layout policy/runtime mode.
+- [x] Scalar `emit_wasm32_nogc` exists.
+- [x] `TargetNeutralLayoutPlan` and `TargetLayoutPlan` exist.
+- [x] Visual report exposes neutral and target layout dumps.
+- [x] Dyn row neutral layout records adapter entries.
+- [x] Dyn row adapter provenance distinguishes field getter vs receiver method
+      thunk in the neutral layout.
+- [x] Dyn row backend ABI expansion is routed through layout entries.
+- [ ] Layout facts are still incomplete for real managed values.
+- [ ] Dyn row adapter entries still need exact value lanes from type/layout facts
+      instead of conservative placeholders.
+- [ ] `wasm32-nogc` currently proves the target spine only for scalar/simple
+      cases; it is not yet a full managed runtime backend.
+- [ ] Pipeline/CLI target matrix is not complete. Unit tests cover backend
+      helpers, but normal compile/run tests still need selectable backend
+      execution.
+
+## Non-Negotiable Rules
+
+- [ ] CoreIR / CIR stays target-neutral. It may carry language facts such as
+      usage, send, escape, region, ownership decision, continuation kind, replay
+      safety, callable storage kind, dyn row access kind, and layout ids. It must
+      not carry Wasm-GC structs, `funcref`, `eqref`, WAT opcodes, wasm32 linear
+      memory offsets, native pointer sizes, or platform ABI alignment.
+- [ ] Backend emitters are dumb. They consume `TargetLayoutPlan`; missing layout
+      facts are diagnostics, not an invitation to infer.
+- [ ] Dyn row adapters are layout artifacts. Field/method/callable-field/closure
+      / boxed `Cont1` / `ContN` member selection must be resolved before target
+      layout and emission.
+- [ ] Arena is a region/reset-boundary fact, not a malloc wrapper. Arena legality
+      participates in escape, replay safety, continuation capture, dyn package
+      storage, and ownership decisions.
+- [ ] FBIP, RC, ARC, arena, `Cont1`, `ContN`, callable storage, and dyn package
+      storage are one ownership/storage system. They must not be implemented as
+      independent backend tricks.
+- [ ] No semantic pass after lexer/tokenization may infer legality from string
+      shape. Identifier, callable, namespace, method, row, and type facts must
+      come from AST, symbol tables, typed facts, CoreIR facts, or shared lexer/XID
+      tables.
+- [ ] Cache keys and manifests include backend target, target features, target
+      layout policy, ownership runtime mode, and layout plan hash.
+
+## Kill List
+
+- [ ] Kill backend-local dyn ABI discovery.
+- [ ] Kill direct codegen from CoreIR to target object representation for managed
+      values.
+- [ ] Kill emitter-side method lookup, row lookup, callable classification,
+      ownership inference, and identifier/string-shape inference.
+- [ ] Kill the idea that `wasm32-nogc` has its own semantic pipeline.
+- [ ] Kill any test that only proves the current backend accidentally accepts a
+      case while bypassing neutral ownership/layout facts.
+
+## Reuse Strategy
+
+The no-GC backend reuses the existing compiler by adding missing facts between
+CoreIR and emission:
+
+- [ ] Reuse parser, resolver, typed, row poly, dynamic row typing, continuation
+      typing, and CoreIR lowering.
+- [ ] Reuse the same CoreIR for `wasm-gc`, `wasm32-nogc`, and future native.
+- [ ] Reuse `TargetNeutralLayoutPlan` as the single abstract object model.
+- [ ] Reuse `TargetLayoutPlan` as the target-specific physical representation
+      layer.
+- [ ] Reuse visual reports and manifests as the proof that each target consumed
+      the same semantic facts.
+- [ ] Add backend-specific runtime helpers only after ownership/layout facts are
+      explicit.
+
+What must not be reused:
+
+- [ ] Do not reuse Wasm-GC reference types as CoreIR assumptions.
+- [ ] Do not encode wasm32 offsets into neutral layout.
+- [ ] Do not let native pointer/alignment decisions leak into CoreIR.
+- [ ] Do not preserve transitional backend-local dyn ABI machinery once layout
+      entries can carry the same facts.
 
 ## P0 Outcome
 
+P0 for this document is not "the full language runs on no-GC". P0 is the
+smallest proof that the architecture is correct and irreversible:
+
 - [ ] Existing scalar programs still compile and run on `wasm-gc`.
-- [ ] The same target-neutral CoreIR can produce a `wasm-gc` target layout and a
-      `wasm32-nogc` target layout for scalar-only programs.
+- [ ] The same target-neutral CoreIR can produce both `wasm-gc` and
+      `wasm32-nogc` target layouts.
 - [ ] A scalar-only `wasm32-nogc` artifact emits no Wasm-GC constructs.
-- [ ] A record / tuple / ADT allocation inside an implicit function reset has an
-      ownership decision, neutral layout, target layout, and runnable no-GC
-      lowering.
-- [ ] A returned aggregate is promoted out of the callee region into a legal
-      caller region, outer arena, RC/ARC heap, or is rejected.
-- [ ] An escaping closure env is promoted and callable under `wasm32-nogc`.
-- [ ] `N && !send` values lower to RC, `N && send` values lower to ARC or are
+- [ ] Managed values cannot be emitted for `wasm32-nogc` unless they have
+      ownership decisions, neutral layouts, target layouts, and runtime helper
+      requirements.
+- [ ] A record/tuple/ADT allocation inside an implicit function reset has a
+      region, ownership decision, neutral layout, target layout, and either
+      runnable lowering or a precise rejection.
+- [ ] Returned aggregates are promoted to a legal caller/outer arena/RC/ARC
+      storage location or rejected.
+- [ ] Escaping closure environments and callable storage lower through the same
+      ownership/layout path as aggregates.
+- [ ] `N && !send` values lower to RC; `N && send` values lower to ARC or are
       rejected when the type cannot be sent.
-- [ ] A unique record update or ADT destruct/reconstruct can produce
-      `InplaceReuse` / FBIP.
-- [ ] Capturing the same value in `ContN` blocks unsafe inplace reuse unless a
-      replay-safe immutable or rollback-region proof exists.
-- [ ] A dyn package created from a concrete value carries a package layout, adapter
+- [ ] Unique update paths can become `InplaceReuse` / FBIP.
+- [ ] `ContN` capture blocks unsafe inplace reuse unless replay safety or a
+      rollback region proves it safe.
+- [ ] Dyn packages created from concrete values carry package layout, adapter
       entries, payload ownership, and target layout. Access goes through adapter
       entries, not backend method lookup.
 
-## 1. Target Families And Configuration
+## Milestone 1: Target Spine And Matrix
 
-- [ ] Replace single-target assumptions with stable target families:
+- [x] Add target family enum.
+- [x] Add target/layout/runtime to backend cache key.
+- [x] Add scalar no-GC emitter.
+- [x] Add backend target matrix unit tests.
+- [ ] Make pipeline/CLI accept a backend target.
+- [ ] Make compile/run tests parameterized by backend target.
+- [ ] Default to `wasm-gc` until no-GC has managed value support.
+- [ ] Add a test harness mode that runs every eligible test under:
   - `wasm-gc`
-  - `wasm32-nogc`
-  - `native`
-- [ ] Keep `wasm-gc` as the current production target.
-- [ ] Add `wasm32-nogc` as the first non-GC proof target.
-- [ ] Reserve `native` as a layout consumer, not an immediate emitter requirement.
-- [ ] Define target features:
-  - `tailcall`
-  - `bulk-memory`
-  - `reference-types` only for host interop, not managed Chiba values
-  - `threads`
-  - `atomics`
-  - native pointer width
-  - native ABI family
-- [ ] Define ownership runtime modes:
-  - `none`
-  - `arena-only`
-  - `rc`
-  - `rc-arc`
-  - `rc-arc-fbip`
-- [ ] Include target family, target features, layout policy, and ownership runtime
-      mode in backend cache keys.
-- [ ] Include target family, target layout id, ownership decision, and runtime
-      helper dependency in manifests and visual dumps.
+  - `wasm32-nogc` when the fixture is marked no-GC-ready
+  - future `native` layout-only checks when available
+- [ ] Ensure full matrix tests are parallelized by test case, not by nested Cargo
+      invocations that fight the Cargo lock.
 
-## 2. OwnershipStoragePlan
+## Milestone 2: OwnershipStoragePlan
 
-- [ ] Define one target-neutral ownership/storage plan rather than scattered
-      backend decisions.
-- [ ] The plan must cover:
+- [ ] Define one target-neutral ownership/storage plan.
+- [ ] Cover:
   - binders
   - values
   - aggregate allocations
-  - closure env allocations
-  - continuation frames / packages
+  - closure envs
+  - continuation frames/packages
+  - boxed `Cont1`
+  - `ContN`
   - erased callable storage
-  - dynamic row packages
+  - dyn row packages
   - strings / arrays / slices / vecs
   - builders
-- [ ] Track these facts per subject:
+- [ ] Track per subject:
   - usage color
   - send color
   - escape color
@@ -182,51 +189,51 @@ Layer responsibilities:
   - `StaticData`
   - `BorrowedView`
   - `DynPackage`
-- [ ] Add a validator that rejects:
-  - missing ownership decision on managed allocations
-  - `send` values lowered to non-atomic RC
-  - continuation values crossing world/thread boundaries
-  - arena-local values returned or stored past their region
-  - escaping dyn payload that remains stack-only or callee-arena-only
+- [ ] Validate:
+  - missing decision on managed allocations
+  - `send` value lowered to non-atomic RC
+  - continuation crossing world/thread boundary
+  - arena-local value returned or stored past its region
+  - escaping dyn payload left stack-only/callee-arena-only
   - `ContN` capture of non-replay-safe mutable state without rollback region
-  - target-specific facts leaking into CoreIR or the neutral plan
+  - target-specific facts leaking into CoreIR or neutral layout
 
-## 3. Region, Arena, And Reset Boundary
+## Milestone 3: Region, Arena, Reset Boundary
 
-- [ ] Represent explicit `reset` / `resetn` as region boundaries.
-- [ ] Represent implicit function call and closure call boundaries.
+Arena should be introduced as the concrete consequence of region facts:
+
+- [ ] Treat explicit `reset` / `resetn` as region boundaries.
+- [ ] Treat function and closure calls as implicit regions.
 - [ ] Assign every managed allocation site to an initial region.
-- [ ] Model nested regions and determine the innermost region that covers each
-      value lifetime.
+- [ ] Model nested region containment.
 - [ ] Track per region:
   - region id
   - parent region id
-  - boundary kind: explicit reset / resetn / function call / closure call
+  - boundary kind
   - answer type
   - replay safety
   - rollback capability
   - world/thread locality
-- [ ] Treat arena allocation as a consequence of region facts and ownership plan,
-      not as an emitter choice.
 - [ ] Define promotion paths:
-  - callee region to caller region
-  - inner reset to outer arena
-  - arena to RC
-  - arena to ARC
+  - callee region -> caller region
+  - inner reset -> outer arena
+  - arena -> RC
+  - arena -> ARC
   - illegal world/thread crossing
-- [ ] Add visual dumps for region assignment, promotion, and illegal escape.
-- [ ] Add tests for:
-  - local aggregate freed with function arena
-  - value escaping inner reset but not outer reset
-  - value returned from function cannot reference callee arena
-  - `ContN` replay with rollback-region-managed local state
-  - `ContN` replay rejection without rollback or immutable proof
+- [ ] Reject values that outlive their region without promotion.
+- [ ] Reject `ContN` replay over unsafe mutable arena state unless rollback
+      region semantics are explicit.
+- [ ] Dump region assignment, promotion, and illegal escape.
 
-## 4. TargetNeutralLayoutPlan
+## Milestone 4: TargetNeutralLayoutPlan
 
-- [ ] Introduce a layout planning module after CoreIR / ownership planning and
-      before target-specific backend layout.
-- [ ] Define neutral layout ids and stable layout hashes.
+- [x] Add neutral layout plan type.
+- [x] Add target layout plan type.
+- [x] Generate neutral layouts from current Core layout facts.
+- [x] Render neutral and target layout dumps.
+- [x] Record dyn row package entries in neutral layout.
+- [ ] Move all remaining managed representation facts into neutral layout.
+- [ ] Define stable layout ids and layout hashes.
 - [ ] Generate neutral layouts for:
   - records
   - tuples
@@ -240,7 +247,7 @@ Layer responsibilities:
   - strings / arrays / slices / vecs
   - arena objects
   - RC/ARC heap objects
-- [ ] Track layout metadata:
+- [ ] Track:
   - field/member order
   - payload slots
   - callable variants
@@ -250,22 +257,17 @@ Layer responsibilities:
   - send requirement
   - replay requirement
   - region requirement
-- [ ] Ensure neutral layout does not contain:
-  - Wasm-GC `struct`, `array`, `funcref`, `eqref`
-  - wasm32 linear-memory offsets
-  - native pointer width
-  - target ABI alignment
-  - WAT opcodes
-- [ ] Add a neutral layout dump and golden tests.
-- [ ] Add diagnostics for missing or mismatched neutral layouts.
+- [ ] Ensure neutral layout contains no Wasm-GC, wasm32 offset, native pointer,
+      target ABI, or WAT concepts.
+- [ ] Add diagnostics for missing/mismatched neutral layouts.
 
-## 5. TargetLayoutPlan
+## Milestone 5: TargetLayoutPlan
 
-- [ ] Define target-specific physical layout as a separate step from neutral layout.
+- [ ] Define target-specific physical layout as a required step before emission.
 - [ ] For `wasm-gc`, map neutral layouts to:
   - struct / array shapes
   - reference types
-  - funcref or equivalent callable representation
+  - callable representation
   - manifest/debug layout names
 - [ ] For `wasm32-nogc`, map neutral layouts to:
   - linear-memory block headers
@@ -279,15 +281,19 @@ Layer responsibilities:
   - platform calling convention
   - function pointer / vtable representation
   - runtime helper ABI
-- [ ] Add a target layout validator that rejects missing physical layouts and
-      target-incompatible layout features.
-- [ ] Add a gate proving that `wasm32-nogc` output uses no Wasm-GC constructs.
+- [ ] Add a target layout validator.
+- [ ] Add a no-GC gate proving emitted WAT contains no Wasm-GC constructs.
 
-## 6. Dynamic Rows And Method Adapters
+## Milestone 6: Dynamic Rows And Method Adapters
 
-- [ ] Treat `dyn {r | ...}` as a package boundary with
-      `OwnershipDecision::DynPackage`.
-- [ ] Represent dyn packages target-neutrally as:
+`dyn {r | ...}` is a package boundary, not a runtime global method search.
+
+- [x] Neutral layout can record dyn adapter entries.
+- [x] Field getter vs receiver method thunk provenance is visible in layout dump.
+- [x] Backend ABI expansion consumes layout entries.
+- [ ] Delete the remaining backend-local dyn member abstraction once layout
+      entries carry all required facts.
+- [ ] Represent dyn packages target-neutrally:
   - contract id
   - payload slot
   - adapter layout
@@ -295,44 +301,31 @@ Layer responsibilities:
   - payload ownership
   - package ownership
   - send / escape / replay facts
-- [ ] Represent adapter entries target-neutrally:
+- [ ] Represent adapter entries:
   - field getter
   - receiver method thunk
   - callable field thunk
   - closure callable thunk
   - boxed `Cont1` callable thunk
   - `ContN` callable thunk
-- [ ] Preserve diagnostic provenance for whether a member came from a field,
-      method, callable field, closure, `Cont1`, or `ContN`.
-- [ ] Ensure dyn access in CoreIR distinguishes:
+- [ ] Preserve diagnostic provenance for field/method/callable-field/closure/
+      continuation sources.
+- [ ] CoreIR must distinguish:
   - `StaticRowAccess`
   - `DynRowAdapterAccess`
   - backend-only shape optimization candidate
-- [ ] Ensure dyn adapter access never performs runtime global method search.
-- [ ] Expected-type injection from static value to dyn package must build:
-  - payload
-  - adapter entries
-  - payload ownership facts
-  - package layout fact
-- [ ] `dyn` back to concrete nominal type must require explicit checked
-      conversion; never infer nominal type from shape.
+- [ ] Expected-type injection from static value to dyn package builds payload,
+      adapter entries, ownership facts, and package layout.
+- [ ] Dyn-to-concrete nominal conversion requires explicit checked conversion.
 - [ ] Target mappings:
-  - `wasm-gc`: payload ref + adapter struct/table/funcref representation
+  - `wasm-gc`: payload ref + adapter structure/table
   - `wasm32-nogc`: `{payload_ptr, adapter_ptr, contract_id}` or equivalent
   - `native`: `{void* payload, const DynAdapter* adapter}` or equivalent
-- [ ] Add tests for:
-  - dyn created from record field
-  - dyn created from nominal method
-  - dyn created from callable field
-  - dyn callable member backed by function / closure / boxed `Cont1` / `ContN`
-  - escaping dyn payload cannot remain stack-only
-  - method extraction does not require backend lookup
 
-## 7. Callable Storage, Closures, And Continuations
+## Milestone 7: Callable Storage, Closures, Continuations
 
-- [ ] Lower no-capture closures to direct functions / target-neutral direct callable
-      facts.
-- [ ] Lower escaping closure envs according to ownership decisions.
+- [ ] Lower no-capture closures to direct callable facts.
+- [ ] Lower escaping closure envs through ownership/layout.
 - [ ] Lower stored `(A) -> B` to erased callable storage with variants:
   - direct function
   - no-capture closure
@@ -342,22 +335,19 @@ Layer responsibilities:
 - [ ] Direct-resume non-escaping exactly-once `Cont1` without allocation.
 - [ ] Box escaping `Cont1` as a one-shot consumed-state machine.
 - [ ] Lower `ContN` as a multi-shot package.
-- [ ] Ensure `((A) -> B) send` excludes `Cont1`, boxed `Cont1`, `ContN`, and
-      all `!send` closures.
+- [ ] Ensure `((A) -> B) send` excludes `Cont1`, boxed `Cont1`, `ContN`, and all
+      `!send` closures.
 - [ ] Ensure `ContN` captured state is replay-safe, immutable/persistent, or
       rollback-region-managed.
 - [ ] Reject:
-  - cross-world continuation capture / resume
+  - cross-world continuation capture/resume
   - `send` continuation storage
   - multi-shot capture of unsafe mutation state
   - FBIP over replayed captured state
-- [ ] Add tests for local/global/param capture, `Ref`, `UnsafeRef`, closure
-      capture, stored callable invocation, boxed `Cont1` repeated-call trap, and
-      repeated `ContN` resume.
 
-## 8. Perceus RC/ARC And Precise Ownership Ops
+## Milestone 8: RC/ARC And Perceus Ops
 
-- [ ] Extend usage analysis beyond `1 | N | Unknown` where needed:
+- [ ] Extend usage analysis with:
   - last use point
   - owned consume
   - borrowed read
@@ -372,23 +362,17 @@ Layer responsibilities:
   - `Borrow`
   - `ReturnOwned`
   - `StoreOwned`
-- [ ] Insert precise `dup` / `drop` before target-specific layout emission.
+- [ ] Insert exact `dup` / `drop` before target layout emission.
 - [ ] Prove inserted ops are balanced per control path.
-- [ ] Account for branch, match, early return, loop, closure capture,
-      continuation capture, callable storage, and dyn package storage.
-- [ ] Add visual dump showing exact Perceus operations.
-- [ ] Add tests for:
-  - last-use drop
-  - branch-balanced drop
-  - shared closure capture causing dup
-  - callable storage causing RC
-  - dyn package causing payload ownership handling
-  - no extra dup/drop for single-use local value
+- [ ] Cover branch, match, early return, loop, closure capture, continuation
+      capture, callable storage, and dyn package storage.
+- [ ] Dump exact Perceus operations.
 
-## 9. Uniqueness And FBIP
+## Milestone 9: Uniqueness And FBIP
 
-- [ ] Define uniqueness as an internal compiler fact, not a mandatory source-level
-      type constructor.
+Uniqueness is an internal compiler fact first. It does not need to start as a
+source-level type constructor.
+
 - [ ] Track uniqueness over:
   - local binders
   - aggregate allocations
@@ -398,33 +382,30 @@ Layer responsibilities:
   - closure envs
   - dyn row packages
 - [ ] Detect FBIP candidates:
-  - record update `{old | field: new}`
-  - ADT match destruct followed by reconstruct of same layout
-  - tuple/product update when layout-compatible
-  - builder freeze / append patterns where ownership is unique
+  - record update
+  - ADT match destruct followed by same-layout reconstruct
+  - tuple/product update
+  - builder freeze / append
 - [ ] Reject FBIP when:
   - value has live aliases
   - value is captured by `ContN`
   - value crosses world/thread
-  - value is stored in shared callable / dyn package
+  - value is stored in shared callable/dyn package
   - value contains non-replay-safe state
-  - layout is not compatible
-- [ ] Add CoreIR rewrite from functional update to `InplaceReuse`.
-- [ ] Add tests showing:
-  - pure functional code emits inplace update under unique ownership
-  - shared value falls back to RC allocation
-  - `ContN` replay blocks inplace update
-  - dyn package storage blocks unsafe uniqueness assumptions
+  - layout is incompatible
+- [ ] Rewrite CoreIR functional updates to `InplaceReuse` only after proof.
 
-## 10. Runtime Object Layout For wasm32-nogc
+## Milestone 10: Runtime Object Layout For wasm32-nogc
 
-- [ ] Define a wasm32 backend-layer linear-memory block header:
+This layer is backend-specific. None of it belongs in CoreIR or neutral layout.
+
+- [ ] Define linear-memory block header:
   - layout id
   - strong count
   - flags
   - size or payload size
-  - optional drop descriptor / layout descriptor pointer
-- [ ] Define separate RC and ARC count behavior.
+  - optional drop/layout descriptor pointer
+- [ ] Define RC and ARC count behavior.
 - [ ] Define alignment and pointer representation.
 - [ ] Define null / unit / immediate representation.
 - [ ] Define fat pointer representation for:
@@ -435,9 +416,9 @@ Layer responsibilities:
   - closure package
   - continuation package
   - array / vec
-- [ ] Ensure this layout is not visible in CoreIR or neutral layout.
+- [ ] Add target layout validation for pointer/fat-pointer shape.
 
-## 11. Runtime Helpers
+## Milestone 11: Runtime Helpers
 
 - [ ] Specify stable helper names and ABIs:
   - `chiba_alloc`
@@ -452,14 +433,16 @@ Layer responsibilities:
   - `chiba_arena_alloc`
   - `chiba_arena_reset`
   - `chiba_panic`
-- [ ] Decide whether helpers are imported, linked from a runtime module, or emitted
-      per bundle.
+- [ ] Decide helper delivery:
+  - imported host ABI
+  - linked runtime module
+  - emitted per bundle
 - [ ] Add helper manifest entries.
 - [ ] Add golden tests for helper symbol names and signatures.
-- [ ] Add a minimal standalone runtime for tests.
-- [ ] Reserve native helper ABI decisions for the native target layout layer.
+- [ ] Add minimal standalone runtime for tests.
+- [ ] Reserve native helper ABI details for native target layout.
 
-## 12. Layout Metadata And Destructors
+## Milestone 12: Layout Metadata And Destructors
 
 - [ ] Generate layout metadata for:
   - record
@@ -485,7 +468,7 @@ Layer responsibilities:
 - [ ] Reject or promote arena values that would leak RC fields or longer-lived
       references.
 
-## 13. Strings, Arrays, Slices, Vec
+## Milestone 13: Strings, Arrays, Slices, Vec
 
 - [ ] Define target-neutral ownership facts for:
   - `str` borrowed view
@@ -495,18 +478,17 @@ Layer responsibilities:
   - `Slice[T]` borrowed view
   - `Vec[T]` growable owned value
 - [ ] Under `wasm32-nogc`, define linear-memory layouts and helper ABIs.
-- [ ] Under future native, reuse the same neutral layout and choose native physical
-      representation in target layout.
-- [ ] Ensure `String.char_at(n)` returns `rune` / `u32` and has correct UTF-8
-      traversal semantics.
+- [ ] Under future native, reuse the same neutral layout and choose native
+      physical representation in target layout.
+- [ ] Ensure `String.char_at(n)` returns `rune` / `u32` and uses UTF-8 traversal.
 - [ ] Keep `String[i]` byte-oriented if the spec says byte indexing.
 - [ ] Add RC / uniqueness behavior for builders and append operations.
 - [ ] Add FBIP candidate tests for unique builder / vec append paths.
 
-## 14. BIR And Emission
+## Milestone 14: BIR And Emission
 
-- [ ] BIR must consume target layout, not infer layout from source-level type.
-- [ ] BIR must distinguish:
+- [ ] BIR consumes target layout, not source-level type guesses.
+- [ ] BIR distinguishes:
   - scalar values
   - owned pointers
   - borrowed pointers
@@ -523,11 +505,11 @@ Layer responsibilities:
 - [ ] Reserve native emission behind the same target layout interface.
 - [ ] Add WAT validation tests.
 - [ ] Add wasmtime execution tests.
-- [ ] Add negative tests ensuring emitters refuse missing ownership or layout facts.
+- [ ] Add negative tests ensuring emitters refuse missing ownership/layout facts.
 
-## 15. Debuggability And Visualization
+## Milestone 15: Visualization And Manifest
 
-- [ ] Dump these layers:
+- [ ] Dump:
   - typed
   - usage-colored typed
   - region assignment
@@ -540,7 +522,7 @@ Layer responsibilities:
   - CoreIR ownership validation
   - BIR runtime ops
   - final symbols
-- [ ] Manifest must map final symbols back to:
+- [ ] Manifest maps final symbols back to:
   - source path
   - namespace
   - item
@@ -553,7 +535,11 @@ Layer responsibilities:
 - [ ] Add gates preventing target-specific terms from appearing in CoreIR and
       neutral layout dumps.
 
-## 16. Test Plan
+## Milestone 16: Test Matrix
+
+Tests should prove the lifecycle contract, not only the current implementation.
+Some fixtures may be marked expected-fail for the current compiler if they are
+valid Chiba lifecycle spec cases.
 
 - [ ] Scalar no-GC smoke:
   - arithmetic
@@ -561,8 +547,8 @@ Layer responsibilities:
   - branch
   - match
 - [ ] Layout spine smoke:
-  - same CoreIR produces wasm-gc target layout
-  - same CoreIR produces wasm32-nogc target layout
+  - same CoreIR produces `wasm-gc` target layout
+  - same CoreIR produces `wasm32-nogc` target layout
   - neutral layout dump contains no target-specific terms
   - emit fails when target layout is missing
 - [ ] Arena smoke:
@@ -607,26 +593,50 @@ Layer responsibilities:
   - layout metadata present
   - destructor drops nested RC fields
   - arena purity enforced
+- [ ] Evil depth smoke:
+  - deep `ContN` nesting
+  - deeply nested pattern as expression
+  - deeply nested pattern as function parameter
+  - deeply nested row/dyn adapter contract
+  - deep closure/continuation capture chain
 
 ## First Proof Point
 
-- [ ] Add `TargetNeutralLayoutPlan` and `TargetLayoutPlan` dumps for an existing
-      scalar + record program.
-- [ ] Move dyn row field/method ABI discovery out of backend emit and into neutral
-      layout planning.
-- [ ] Add a `wasm32-nogc` scalar-only target layout and emit path that rejects all
-      managed values until their ownership and target layout facts exist.
-- [ ] Add a diagnostic test proving emitters do not infer missing dyn adapter,
-      ownership, or layout facts.
+The next implementation proof should be deliberately narrow:
 
-## Falsifier
+- [ ] Finish replacing backend-local dyn row ABI machinery with neutral layout
+      entries.
+- [ ] Give dyn field getter entries exact backend value lanes from typed/layout
+      facts.
+- [ ] Add a no-GC scalar target layout/emission gate that rejects managed values
+      without ownership/layout facts.
+- [ ] Add pipeline target selection for `wasm-gc` vs `wasm32-nogc`.
+- [ ] Add a small target-matrix test runner that exercises the same source under
+      all eligible backends.
+- [ ] Add diagnostic tests proving emitters refuse to infer missing dyn adapter,
+      ownership, callable, continuation, or layout facts.
 
-This direction is wrong or incomplete if any of these become necessary:
+## What Would Falsify This Direction
 
-- A backend emitter must inspect source-level row/method/type syntax to decide dyn
-  adapter entries.
-- `wasm32-nogc` needs different CoreIR semantics from `wasm-gc`.
-- Native layout cannot consume the same neutral layout plan because the neutral
-  plan already contains Wasm-specific or wasm32-specific representation details.
-- `ContN`, dyn package, arena, and FBIP rules cannot be validated before target
-  layout.
+- If a managed no-GC value cannot be emitted without redoing method/type/row
+  lookup in the backend, the middle-end facts are incomplete and must be fixed.
+- If native requires different semantic lowering from `wasm32-nogc`, the layout
+  boundary is wrong.
+- If arena legality cannot be expressed before emission, arena has been placed at
+  the wrong layer.
+- If `ContN` replay safety cannot block FBIP/unsafe mutation before emission,
+  continuation and ownership facts are not yet integrated.
+- If dyn method extraction needs runtime global lookup, dyn row adapters are not
+  being built at the correct phase.
+
+## Spec Anchors
+
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/03-memory-and-lifetimes/minimal-lifetime-commitments.md`
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/memory-model.md`
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/03-memory-and-lifetimes/escape-semantics.md`
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/03-memory-and-lifetimes/promotion-rules.md`
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/03-memory-and-lifetimes/uniqueness.md`
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/10-ir-and-lowering/passes-and-placement.md`
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/10-ir-and-lowering/cir-cps-ir.md`
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/chiba-level1-spec/10-ir-and-lowering/cir-to-bir-lowering.md`
+- `/Users/yoli/Desktop/lemon/CHIBA/chiba-org-web/src/content/blog/chiba2.md`
