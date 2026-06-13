@@ -7319,6 +7319,9 @@ impl ProgramCompileOutput {
         out.push_str(&format!("  entry={}\n", render_program_entry(&self.entry)));
         out.push_str(&render_program_diagnostics_summary(&self.diagnostics));
         out.push_str(&render_program_backend_link_summary(&self.backend_link));
+        out.push_str(&render_program_backend_cache_key_summary(
+            &self.backend_cache_key,
+        ));
         out.push_str("  passes:\n");
         for event in &self.passes.events {
             out.push_str(&format!(
@@ -7336,6 +7339,10 @@ impl ProgramCompileOutput {
 fn render_program_backend_link_summary(bundle: &BackendLinkedBundle) -> String {
     let mut out = String::new();
     out.push_str("  backend-link:\n");
+    out.push_str(&format!(
+        "    target={}\n",
+        render_backend_target_name(bundle.target)
+    ));
     out.push_str(&format!(
         "    linked-wat-lines={}\n",
         bundle.linked_wat.lines().count()
@@ -7385,6 +7392,22 @@ fn render_program_backend_link_summary(bundle: &BackendLinkedBundle) -> String {
         ));
     }
     out
+}
+
+fn render_program_backend_cache_key_summary(key: &BackendCacheKey) -> String {
+    format!(
+        "  backend-cache-key:\n    target={}\n    digest={}\n",
+        render_backend_target_name(key.target),
+        key.digest
+    )
+}
+
+fn render_backend_target_name(target: BackendTarget) -> &'static str {
+    match target {
+        BackendTarget::WasmGc => "wasm-gc",
+        BackendTarget::Wasm32NoGc => "wasm32-nogc",
+        BackendTarget::Native => "native",
+    }
 }
 
 fn render_ownership_decision(decision: crate::core::OwnershipDecision) -> &'static str {

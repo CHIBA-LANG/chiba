@@ -63,6 +63,49 @@ def main() = 7",
 }
 
 #[test]
+fn cli_can_compile_source_for_wasm32_nogc_target() {
+    let source = write_fixture(
+        "wasm32-nogc-target",
+        "namespace cli.target
+def main(): i64 = 40 + 2",
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_chiba-level1r"))
+        .arg("--target")
+        .arg("wasm32-nogc")
+        .arg(&source)
+        .output()
+        .expect("run cli");
+
+    assert_cli_success(&output);
+    let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
+    assert!(stdout.contains("namespace=cli.target"));
+    assert!(stdout.contains("backend-link:"));
+    assert!(stdout.contains("target=wasm32-nogc"));
+    assert!(stdout.contains("backend-cache-key:"));
+    assert!(!stdout.contains("externref"));
+    assert!(!stdout.contains("struct.new"));
+}
+
+#[test]
+fn cli_rejects_unknown_backend_target() {
+    let source = write_fixture("bad-target", "def main(): i64 = 1");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_chiba-level1r"))
+        .arg("--target=wat")
+        .arg(&source)
+        .output()
+        .expect("run cli");
+
+    assert_cli_failure(&output);
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(
+        stderr.contains("unknown backend target `wat`; expected wasm-gc, wasm32-nogc, or native"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn cli_visual_flag_prints_per_def_nanopass_report() {
     let source = write_fixture(
         "visual",
